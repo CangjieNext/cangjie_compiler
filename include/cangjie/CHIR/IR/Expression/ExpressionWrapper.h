@@ -135,19 +135,6 @@ private:
     const IntOpWithException* exprE;
 };
 
-class SpawnBase : public ExpressionBase {
-public:
-    explicit SpawnBase(const Expression* e);
-    explicit SpawnBase(const Spawn* expr);
-    explicit SpawnBase(const SpawnWithException* exprE);
-
-    Value* GetObject() const;
-    bool IsExecuteClosure() const;
-private:
-    const Spawn* expr;
-    const SpawnWithException* exprE;
-};
-
 class IntrinsicBase : public ExpressionBase {
 public:
     explicit IntrinsicBase(const Expression* e);
@@ -163,30 +150,6 @@ private:
     const IntrinsicWithException* exprE;
 };
 
-class AllocateBase : public ExpressionBase {
-public:
-    explicit AllocateBase(const Expression* e);
-    explicit AllocateBase(const Allocate* expr);
-    explicit AllocateBase(const AllocateWithException* exprE);
-
-    Type* GetType() const;
-private:
-    const Allocate* expr;
-    const AllocateWithException* exprE;
-};
-
-class RawArrayAllocateBase : public ExpressionBase {
-public:
-    explicit RawArrayAllocateBase(const Expression* e);
-    explicit RawArrayAllocateBase(const RawArrayAllocate* expr);
-    explicit RawArrayAllocateBase(const RawArrayAllocateWithException* exprE);
-
-    Type* GetElementType() const;
-    Value* GetSize() const;
-private:
-    const RawArrayAllocate* expr;
-    const RawArrayAllocateWithException* exprE;
-};
 }
 }
 

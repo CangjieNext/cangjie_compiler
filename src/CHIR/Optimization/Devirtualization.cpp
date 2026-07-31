@@ -179,7 +179,7 @@ bool Devirtualization::RewriteToBuiltinOp(CHIRBuilder& builder, const RewriteInf
     std::vector<Expression*> castExprs;
     std::function<void(LocalVar&)> findThisValue = [&thisValue, &castExprs, &findThisValue](LocalVar& tempVar) {
         auto expr = tempVar.GetExpr();
-        if (expr->GetExprKind() == ExprKind::BOX || expr->GetExprKind() == ExprKind::TYPECAST) {
+        if (expr->GetExprKind() == ExprKind::BOX || expr->GetExprKind() == ExprKind::CLASS_STATIC_CAST) {
             castExprs.emplace_back(expr);
             thisValue = expr->GetOperand(0);
             if (auto localVar = DynamicCast<LocalVar*>(thisValue)) {

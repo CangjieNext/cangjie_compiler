@@ -285,7 +285,7 @@ llvm::Value* HandleMemoryExpression(IRBuilder2& irBuilder, const CHIR::Expressio
                 return retValueStorage;
             }
             irBuilder.EmitLocation(CHIRExprWrapper(alloca));
-            auto result = GenerateAllocate(irBuilder, CHIRAllocateWrapper(alloca));
+            auto result = GenerateAllocate(irBuilder, alloca);
             TryEmitNullInitForDebugLocalClass(irBuilder, alloca, result);
             return result;
         }

@@ -77,7 +77,7 @@ void RangePropagation::RunOnFunc(const Ptr<const Function>& func, bool isDebug)
                 return (void)toBeRewrited.emplace_back(expr, index, GenerateConstExpr(exprType, absVal));
             }
         } else if ((exprType->IsInteger() || exprType->IsBoolean()) &&
-            (expr->IsLoad() || expr->IsTypeCast() || expr->IsField())) {
+            (expr->IsLoad() || expr->IsNumericCast() || expr->IsField())) {
             if (auto absVal = state.CheckAbstractValue(expr->GetResult()); absVal && !exprType->IsString()) {
                 toBeRewrited.emplace_back(expr, index, GenerateConstExpr(exprType, absVal));
                 RecordEffectMap(expr, func);

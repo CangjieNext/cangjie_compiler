@@ -523,8 +523,9 @@ Value* CastTypeFromAutoEnvRefToFuncType(FuncType& srcFuncType, Value& autoEnvObj
                 func goo<T>(a: T) {a}
                 return goo<Int32>
             }
-            lambda goo's return type is `T`, we can't generate UnBox like: UnBox(Class-$Auto_Env_xxx&, (T)->T)
-            UnBox(Class-$Auto_Env_xxx&, (Int32)->Int32) is correct
+            lambda goo's return type is `T`, we can't generate UnBoxToValue like:
+            UnBoxToValue(Class-$Auto_Env_xxx&, (T)->T),
+            actually UnBoxToValue(Class-$Auto_Env_xxx&, (Int32)->Int32) is correct
         */
         unboxRetTy = ReplaceRawGenericArgType(*unboxRetTy, replaceMap, builder);
     } else {
@@ -546,7 +547,7 @@ Value* CastTypeFromAutoEnvRefToFuncType(FuncType& srcFuncType, Value& autoEnvObj
         unboxRetTy = GetFuncTypeWithoutThisPtrFromAutoEnvType(*autoEnvObjTy, builder);
     }
     // typecast from Class-$Auto_Env_xxx& to func type
-    auto castExpr = builder.CreateExpression<UnBox>(unboxRetTy, &autoEnvObj, user.GetParentBlock());
+    auto castExpr = builder.CreateExpression<UnBoxToValue>(unboxRetTy, &autoEnvObj, user.GetParentBlock());
     castExpr->MoveBefore(&user);
     return castExpr->GetResult();
 }
@@ -585,24 +586,24 @@ bool ApplyWithExceptionNeedConvertToInvokeWithException(Expression& e)
 
 bool TypeCastNeedConvertToBox(Expression& e)
 {
-    if (e.GetExprKind() != CHIR::ExprKind::TYPECAST) {
+    if (e.GetExprKind() != CHIR::ExprKind::CLASS_STATIC_CAST) {
         return false;
     }
     // TypeCast(value type, func type) need to be converted to Box(value type, Class-$Auto_Env_xxx&)
     // ps: value type is non-func type, func type is not CFunc type
     auto typecast = StaticCast<TypeCast*>(&e);
-    return typecast->GetTargetTy()->IsCJFunc() && !typecast->GetSourceTy()->IsCJFunc();
+    return typecast->GetTargetType()->IsCJFunc() && !typecast->GetSourceType()->IsCJFunc();
 }
 
 bool TypeCastNeedConvertToUnBox(Expression& e)
 {
-    if (e.GetExprKind() != CHIR::ExprKind::TYPECAST) {
+    if (e.GetExprKind() != CHIR::ExprKind::CLASS_STATIC_CAST) {
         return false;
     }
-    // TypeCast(func type, value type) need to be converted to UnBox(Class-$Auto_Env_xxx&, value type)
+    // TypeCast(func type, value type) need to be converted to UnBoxToValue(Class-$Auto_Env_xxx&, value type)
     // ps: value type is non-func type, func type is not CFunc type
     auto typecast = StaticCast<TypeCast*>(&e);
-    return typecast->GetSourceTy()->IsCJFunc() && !typecast->GetTargetTy()->IsCJFunc();
+    return typecast->GetSourceType()->IsCJFunc() && !typecast->GetTargetType()->IsCJFunc();
 }
 
 bool BoxNeedConvertToTypeCast(Expression& e)
@@ -613,18 +614,18 @@ bool BoxNeedConvertToTypeCast(Expression& e)
     // Box(func type, ref type) need to be converted to TypeCast(Class-$Auto_Env_xxx&, ref type)
     // ps: func type is not CFunc type
     auto box = StaticCast<Box*>(&e);
-    return box->GetSourceTy()->IsCJFunc();
+    return box->GetSourceType()->IsCJFunc();
 }
 
 bool UnBoxNeedConvertToTypeCast(Expression& e)
 {
-    if (e.GetExprKind() != CHIR::ExprKind::UNBOX) {
+    if (e.GetExprKind() != CHIR::ExprKind::UNBOX_TO_VALUE) {
         return false;
     }
-    // UnBox(ref type, func type) need to be converted to TypeCast(ref type, Class-$Auto_Env_xxx&)
+    // UnBoxToValue(ref type, func type) need to be converted to TypeCast(ref type, Class-$Auto_Env_xxx&)
     // ps: func type is not CFunc type
-    auto box = StaticCast<UnBox*>(&e);
-    return box->GetTargetTy()->IsCJFunc();
+    auto box = StaticCast<UnBoxToValue*>(&e);
+    return box->GetTargetType()->IsCJFunc();
 }
 
 std::vector<size_t> OperandNeedTypeCast(
@@ -655,7 +656,7 @@ Type* GetFieldBaseType(const Value& base)
         return base.GetType();
     }
     auto expr = StaticCast<const LocalVar&>(base).GetExpr();
-    if (expr->GetExprKind() != CHIR::ExprKind::TYPECAST) {
+    if (expr->GetExprKind() != CHIR::ExprKind::CLASS_STATIC_CAST) {
         return base.GetType();
     }
     // there may be a typecast from enum type to tuple type:
@@ -793,7 +794,7 @@ void AddTypeCastForOperand(const std::pair<Expression*, std::vector<size_t>>& e,
         auto op = expr->GetOperand(idx);
         auto expectedType = builder.GetType<RefType>(
             StaticCast<ClassType*>(op->GetType()->StripAllRefs())->GetClassDef()->GetSuperClassTy());
-        auto typecast = builder.CreateExpression<TypeCast>(expectedType, op, parentBlock);
+        auto typecast = builder.CreateExpression<ClassStaticCast>(expectedType, op, parentBlock);
         typecast->MoveBefore(expr);
         expr->ReplaceOperand(idx, typecast->GetResult());
     }
@@ -1673,7 +1674,7 @@ void ClosureConversion::CreateGenericOverrideMethodInAutoEnvImplDef(ClassDef& au
         auto pType = params[i]->GetType();
         if (pType->IsCJFunc()) {
             CJC_ASSERT(expectedParamTypes[i - offset] == pType);
-            auto typecast = builder.CreateExpression<TypeCast>(pType, params[i], entry);
+            auto typecast = builder.CreateExpression<ClassStaticCast>(pType, params[i], entry);
             entry->AppendExpression(typecast);
             applyArgs.emplace_back(typecast->GetResult());
         } else {
@@ -2097,7 +2098,7 @@ void ClosureConversion::ReplaceUserPoint(Function& srcFunc, Expression& user, Cl
     auto curClassTy = StaticCast<ClassType*>(StaticCast<RefType*>(autoEnvObj->GetType())->GetBaseType());
     auto superClassTy = curClassTy->GetSuperClassTy(&builder);
     auto superClassRefTy = builder.GetType<RefType>(superClassTy);
-    auto castToBaseType = builder.CreateExpression<TypeCast>(superClassRefTy, autoEnvObj, user.GetParentBlock());
+    auto castToBaseType = builder.CreateExpression<ClassStaticCast>(superClassRefTy, autoEnvObj, user.GetParentBlock());
     castToBaseType->MoveBefore(&user);
 
     auto res = CastTypeFromAutoEnvRefToFuncType(
@@ -2296,17 +2297,17 @@ void ClosureConversion::ConvertExpressions()
             cast.ReplaceWith(*box);
         } else if (TypeCastNeedConvertToUnBox(e)) {
             auto& cast = StaticCast<TypeCast&>(e);
-            auto unbox = builder.CreateExpression<UnBox>(
+            auto unbox = builder.CreateExpression<UnBoxToValue>(
                 cast.GetResult()->GetType(), cast.GetSourceValue(), cast.GetParentBlock());
             cast.ReplaceWith(*unbox);
         } else if (BoxNeedConvertToTypeCast(e)) {
             auto& box = StaticCast<Box&>(e);
-            auto typecast = builder.CreateExpression<TypeCast>(
+            auto typecast = builder.CreateExpression<ClassStaticCast>(
                 box.GetResult()->GetType(), box.GetSourceValue(), box.GetParentBlock());
             box.ReplaceWith(*typecast);
         } else if (UnBoxNeedConvertToTypeCast(e)) {
-            auto& unbox = StaticCast<UnBox&>(e);
-            auto typecast = builder.CreateExpression<TypeCast>(
+            auto& unbox = StaticCast<UnBoxToValue&>(e);
+            auto typecast = builder.CreateExpression<ClassStaticCast>(
                 unbox.GetResult()->GetType(), unbox.GetSourceValue(), unbox.GetParentBlock());
             unbox.ReplaceWith(*typecast);
         }
@@ -2604,7 +2605,7 @@ void ClosureConversion::WrapApplyRetVal(Apply& apply)
     storeMemberVar->MoveAfter(allocate);
 
     // typecast from $Auto_Env_xxx_wrapper to $Auto_Env_InstBase
-    auto typecast = builder.CreateExpression<TypeCast>(applyRetType, allocate->GetResult(), parentBlock);
+    auto typecast = builder.CreateExpression<ClassStaticCast>(applyRetType, allocate->GetResult(), parentBlock);
     typecast->MoveAfter(storeMemberVar);
 
     // 4. replace user
@@ -2688,7 +2689,7 @@ void ClosureConversion::WrapApplyWithExceptionRetVal(ApplyWithException& apply)
         storeMemberVar->MoveAfter(allocate);
 
         // typecast from $Auto_Env_xxx_wrapper to $Auto_Env_InstBase
-        auto typecast = builder.CreateExpression<TypeCast>(applyRetType, allocate->GetResult(), userParentBlock);
+        auto typecast = builder.CreateExpression<ClassStaticCast>(applyRetType, allocate->GetResult(), userParentBlock);
         typecast->MoveAfter(storeMemberVar);
 
         // 4. replace user
@@ -2748,7 +2749,7 @@ void ClosureConversion::WrapInvokeRetVal(DynamicDispatch& e)
     storeMemberVar->MoveAfter(allocate);
 
     // typecast from $Auto_Env_xxx_wrapper to $Auto_Env_InstBase
-    auto typecast = builder.CreateExpression<TypeCast>(invokeRetType, allocate->GetResult(), parentBlock);
+    auto typecast = builder.CreateExpression<ClassStaticCast>(invokeRetType, allocate->GetResult(), parentBlock);
     typecast->MoveAfter(storeMemberVar);
 
     // 4. replace user
@@ -2821,7 +2822,8 @@ void ClosureConversion::WrapInvokeWithExceptionRetVal(DynamicDispatchWithExcepti
         storeMemberVar->MoveAfter(allocate);
 
         // typecast from $Auto_Env_xxx_wrapper to $Auto_Env_InstBase
-        auto typecast = builder.CreateExpression<TypeCast>(invokeRetType, allocate->GetResult(), userParentBlock);
+        auto typecast =
+            builder.CreateExpression<ClassStaticCast>(invokeRetType, allocate->GetResult(), userParentBlock);
         typecast->MoveAfter(storeMemberVar);
 
         // 4. replace user
@@ -2910,7 +2912,7 @@ void ClosureConversion::WrapGetElementRefRetVal(GetElementRef& getEleRef)
 
     // typecast from $Auto_Env_xxx_wrapper to $Auto_Env_InstBase
     auto expectedType = StaticCast<RefType*>(getEleRefRetType)->GetBaseType();
-    auto typecast = builder.CreateExpression<TypeCast>(expectedType, allocate1->GetResult(), parentBlock);
+    auto typecast = builder.CreateExpression<ClassStaticCast>(expectedType, allocate1->GetResult(), parentBlock);
     typecast->MoveAfter(storeMemberVar);
 
     auto typecastRetType = typecast->GetResult()->GetType();
@@ -2968,7 +2970,7 @@ void ClosureConversion::WrapFieldRetVal(Field& field)
     storeMemberVar->MoveAfter(allocate);
 
     // typecast from $Auto_Env_xxx_wrapper to $Auto_Env_InstBase
-    auto typecast = builder.CreateExpression<TypeCast>(fieldRetType, allocate->GetResult(), parentBlock);
+    auto typecast = builder.CreateExpression<ClassStaticCast>(fieldRetType, allocate->GetResult(), parentBlock);
     typecast->MoveAfter(storeMemberVar);
 
     // 4. replace user
@@ -2995,32 +2997,32 @@ void ClosureConversion::CastRawArrayInitByValueArgIfNeed(RawArrayInitByValue& e)
     }
 }
 
-void ClosureConversion::CastTypeCastArgIfNeed(TypeCast& e)
+void ClosureConversion::CastTypeCastArgIfNeed(ClassStaticCast& e)
 {
     /** Class-$AutoEnvGenericBase is parent type of Class-$AutoEnvInstBase
      *  we can't cast type from parent type to sub type, a wrapper class is needed
      */
-    auto srcType = e.GetSourceTy()->StripAllRefs();
-    auto targetType = e.GetTargetTy()->StripAllRefs();
+    auto srcType = e.GetSourceType()->StripAllRefs();
+    auto targetType = e.GetTargetType()->StripAllRefs();
     if (IsAutoEnvGenericType(*srcType) && targetType->IsAutoEnvInstBase()) {
         WrapTypeCastSrcVal(e);
     }
 }
 
-void ClosureConversion::WrapTypeCastSrcVal(TypeCast& typecast)
+void ClosureConversion::WrapTypeCastSrcVal(ClassStaticCast& typecast)
 {
     /** convert from:
      *  %0: $AutoEnvGenericBase& = xxx
-     *  %1: $AutoEnvInstBase& = TypeCast(%0)
+     *  %1: $AutoEnvInstBase& = ClassStaticCast(%0)
      *
      *  to:
      *  %0: $AutoEnvGenericBase& = xxx
      *  %2: $AutoEnvWrapperClass& = Allocate($AutoEnvWrapperClass)
      *  %3: Unit = StoreElementRef(%0, %2, 0)
-     *  %1: $AutoEnvInstBase& = TypeCast(%3)
+     *  %1: $AutoEnvInstBase& = ClassStaticCast(%3)
      */
     // 1. create $Auto_Env_wrapper
-    auto targetTypeNoRef = StaticCast<ClassType*>(typecast.GetTargetTy()->StripAllRefs());
+    auto targetTypeNoRef = StaticCast<ClassType*>(typecast.GetTargetType()->StripAllRefs());
     auto autoEnvWrapperDef = GetOrCreateAutoEnvWrapper(*targetTypeNoRef);
 
     // 2. create $Auto_Env_wrapper object
@@ -3040,7 +3042,7 @@ void ClosureConversion::WrapTypeCastSrcVal(TypeCast& typecast)
     typecast.ReplaceOperand(srcVal, allocate->GetResult());
 }
 
-void ClosureConversion::CastSpawnArgIfNeed(Spawn& e)
+void ClosureConversion::CastSpawnArgIfNeed(SpawnBase& e)
 {
     if (!e.IsExecuteClosure()) {
         // only check executeClosure, skip future Execute
@@ -3087,10 +3089,10 @@ void ClosureConversion::ModifyTypeMismatchInExpr()
             }
         } else if (Is<RawArrayInitByValue>(e)) {
             CastRawArrayInitByValueArgIfNeed(StaticCast<RawArrayInitByValue&>(e));
-        } else if (Is<TypeCast>(e)) {
-            CastTypeCastArgIfNeed(StaticCast<TypeCast&>(e));
-        } else if (Is<Spawn>(e)) {
-            CastSpawnArgIfNeed(StaticCast<Spawn&>(e));
+        } else if (Is<ClassStaticCast>(e)) {
+            CastTypeCastArgIfNeed(StaticCast<ClassStaticCast&>(e));
+        } else if (Is<SpawnBase>(e)) {
+            CastSpawnArgIfNeed(StaticCast<SpawnBase&>(e));
         }
         return VisitResult::CONTINUE;
     };
@@ -3123,7 +3125,7 @@ void ClosureConversion::ModifyTypeMismatchInFunc(Function& func, size_t paramInd
     storeMemberVar->MoveAfter(allocate);
 
     // 4. typecast from $Auto_Env_xxx_wrapper to $Auto_Env_InstBase
-    auto typecast = builder.CreateExpression<TypeCast>(param->GetType(), allocate->GetResult(), parentBlock);
+    auto typecast = builder.CreateExpression<ClassStaticCast>(param->GetType(), allocate->GetResult(), parentBlock);
     typecast->MoveAfter(storeMemberVar);
 
     // 5. replace user

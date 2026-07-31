@@ -55,7 +55,8 @@ void CHIR2BCHIR::TranslateOthersExpression(Context& ctx, const Expression& expr)
             TranslateInstanceOf(ctx, *instanceOfExpr);
             break;
         }
-        case ExprKind::TYPECAST: {
+        case ExprKind::CLASS_STATIC_CAST:
+        case ExprKind::NUMERIC_CAST: {
             TranslateTypecast(ctx, expr);
             break;
         }
@@ -93,7 +94,7 @@ void CHIR2BCHIR::TranslateOthersExpression(Context& ctx, const Expression& expr)
             TranslateBox(ctx, *boxExpr);
             break;
         }
-        case ExprKind::UNBOX: {
+        case ExprKind::UNBOX_TO_VALUE: {
             CJC_ASSERT(expr.GetNumOfOperands() == 1);
             PushOpCodeWithAnnotations(ctx, OpCode::UNBOX, expr);
             break;
@@ -108,8 +109,8 @@ void CHIR2BCHIR::TranslateOthersExpression(Context& ctx, const Expression& expr)
         case ExprKind::INVOKESTATIC:
         case ExprKind::GET_RTTI:
         case ExprKind::GET_RTTI_STATIC:
-        case ExprKind::TRANSFORM_TO_CONCRETE:
-        case ExprKind::TRANSFORM_TO_GENERIC: {
+        case ExprKind::CAST_TO_CONCRETE:
+        case ExprKind::CAST_TO_GENERIC: {
             // We currently don't support these operations. If they are reached during interpretation
             // the interpreter will terminate with exception.
             PushOpCodeWithAnnotations(ctx, OpCode::ABORT, expr);
@@ -158,13 +159,17 @@ void CHIR2BCHIR::TranslateTypecast(Context& ctx, const Expression& expr)
 {
     CJC_ASSERT(expr.GetNumOfOperands() == 1);
     auto typeCastExpr = StaticCast<const TypeCast*>(&expr);
-    auto srcTy = typeCastExpr->GetSourceTy();
-    auto dstTy = typeCastExpr->GetTargetTy();
+    auto srcTy = typeCastExpr->GetSourceType();
+    auto dstTy = typeCastExpr->GetTargetType();
     if (srcTy->IsPrimitive() && dstTy->IsPrimitive()) {
         auto srcTyIdx = srcTy->GetTypeKind();
         auto dstTyIdx = dstTy->GetTypeKind();
-        auto overflowStrat = static_cast<Bchir::ByteCodeContent>(typeCastExpr->GetOverflowStrategy());
-        PushOpCodeWithAnnotations(ctx, OpCode::TYPECAST, expr, srcTyIdx, dstTyIdx, overflowStrat);
+        OverflowStrategy overflowStrat = OverflowStrategy::NA;
+        if (auto numericCast = DynamicCast<const NumericCastBase*>(typeCastExpr)) {
+            overflowStrat = numericCast->GetOverflowStrategy();
+        }
+        PushOpCodeWithAnnotations(ctx, OpCode::TYPECAST, expr, srcTyIdx, dstTyIdx,
+            static_cast<Bchir::ByteCodeContent>(overflowStrat));
     } else {
         CJC_ASSERT((!srcTy->IsPrimitive() && !dstTy->IsPrimitive()) ||
             (srcTy->IsEnum() && IsEnumSelectorType(*dstTy)) || (IsEnumSelectorType(*srcTy) && dstTy->IsEnum()));
@@ -198,7 +203,7 @@ void CHIR2BCHIR::TranslateBox(Context& ctx, const Box& expr)
     auto opIdx = ctx.def.Size();
     CJC_ASSERT(opIdx <= static_cast<size_t>(Bchir::BYTECODE_CONTENT_MAX));
     PushOpCodeWithAnnotations<false>(ctx, OpCode::BOX, expr, 0u);
-    auto ty = expr.GetSourceTy();
+    auto ty = expr.GetSourceType();
     if (ty->IsStruct()) {
         auto structTy = StaticCast<const StructType*>(ty);
         auto structDef = structTy->GetStructDef();

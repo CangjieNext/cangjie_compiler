@@ -1568,11 +1568,10 @@ void CHIRChecker::CheckUnreachableGenericTypeInExpr(
         }
     }
     auto eKind = expr.GetExprKind();
-    if (eKind == ExprKind::ALLOCATE || eKind == ExprKind::ALLOCATE_WITH_EXCEPTION) {
-        auto base = AllocateBase(&expr);
+    if (auto allocate = DynamicCast<const AllocateBase*>(&expr)) {
         // 2. generic type in Allocate must be reachable
-        if (!GenericTypeIsInContainer(*base.GetType(), reachableGenericTypes)) {
-            auto errMsg = "generic type " + base.GetType()->ToString() +
+        if (!GenericTypeIsInContainer(*allocate->GetType(), reachableGenericTypes)) {
+            auto errMsg = "generic type " + allocate->GetType()->ToString() +
                 " is unreachable, the type is allocated type in expression " + expr.ToString(0) + ".";
             ErrorInFunc(*expr.GetTopLevelFunc(), errMsg);
         }
@@ -1610,7 +1609,7 @@ void CHIRChecker::CheckUnreachableGenericTypeInExpr(
             ErrorInFunc(*expr.GetTopLevelFunc(), errMsg);
         }
     } else if (eKind == ExprKind::RAW_ARRAY_ALLOCATE || eKind == ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION) {
-        auto base = RawArrayAllocateBase(&expr);
+        auto& base = StaticCast<const RawArrayAllocateBase&>(expr);
         // 7. generic type in RawArrayAllocate must be reachable
         if (!GenericTypeIsInContainer(*base.GetElementType(), reachableGenericTypes)) {
             auto errMsg = "generic type " + base.GetElementType()->ToString() +
@@ -1825,8 +1824,8 @@ void CHIRChecker::CheckTerminator(const Expression& expr, const Function& topLev
             CheckIntOpWithException(StaticCast<const IntOpWithException&>(expr), topLevelFunc); }},
         {ExprKind::SPAWN_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
             CheckSpawnWithException(StaticCast<const SpawnWithException&>(expr), topLevelFunc); }},
-        {ExprKind::TYPECAST_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
-            CheckTypeCastWithException(StaticCast<const TypeCastWithException&>(expr), topLevelFunc); }},
+        {ExprKind::NUMERIC_CAST_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
+            CheckNumericCastWithException(StaticCast<const NumericCastWithException&>(expr), topLevelFunc); }},
         {ExprKind::INTRINSIC_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
             CheckIntrinsicWithException(StaticCast<const IntrinsicWithException&>(expr), topLevelFunc); }},
         {ExprKind::ALLOCATE_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
@@ -2985,7 +2984,7 @@ void CHIRChecker::CheckSpawnWithException(const SpawnWithException& expr, const 
         return;
     }
 
-    CheckSpawnBase(SpawnBase(&expr), topLevelFunc);
+    CheckSpawnBase(expr, topLevelFunc);
 }
 
 void CHIRChecker::CheckSpawnBase(const SpawnBase& expr, const Function& topLevelFunc)
@@ -2994,7 +2993,7 @@ void CHIRChecker::CheckSpawnBase(const SpawnBase& expr, const Function& topLevel
     auto obj = expr.GetObject();
     auto objType = obj->GetType();
     if (!objType->IsRef() || !StaticCast<RefType>(objType)->GetBaseType()->IsClass()) {
-        TypeCheckError(*expr.GetRawExpr(), *obj, "Class&", topLevelFunc);
+        TypeCheckError(expr, *obj, "Class&", topLevelFunc);
         return;
     }
 
@@ -3003,18 +3002,18 @@ void CHIRChecker::CheckSpawnBase(const SpawnBase& expr, const Function& topLevel
     if (!IsCoreFuture(*def) && !IsFuncTypeOrClosureBaseRefType(*objType)) {
         auto errMsg = "the first operand's type is `" + objType->ToString() +
             "`, but Class-Future& type or closure type are expected.";
-        ErrorInExpr(topLevelFunc, *expr.GetRawExpr(), errMsg);
+        ErrorInExpr(topLevelFunc, expr, errMsg);
     }
 
     // 3. if the first operand's type is closure type, `spawn` must set function `executeClosure`
     if (IsFuncTypeOrClosureBaseRefType(*objType) && !expr.IsExecuteClosure()) {
         auto errMsg = "the first operand's type is closure type but you don't set `executeClosure` function";
-        ErrorInExpr(topLevelFunc, *expr.GetRawExpr(), errMsg);
+        ErrorInExpr(topLevelFunc, expr, errMsg);
     }
 }
 
-void CHIRChecker::CheckTypeCastWithException(
-    [[maybe_unused]] const TypeCastWithException& expr, [[maybe_unused]] const Function& topLevelFunc)
+void CHIRChecker::CheckNumericCastWithException(
+    [[maybe_unused]] const NumericCastWithException& expr, [[maybe_unused]] const Function& topLevelFunc)
 {
 }
 
@@ -3080,7 +3079,7 @@ void CHIRChecker::CheckInoutOpSrc(const Value& op, const IntrinsicBase& expr, co
                 }
             }
             CheckInoutOpSrc(*field->GetBase(), expr, topLevelFunc);
-        } else if (Is<TypeCastWithException>(localExpr) || Is<TypeCast>(localExpr)) {
+        } else if (Is<NumericCastBase>(localExpr)) {
             CheckInoutOpSrc(*localExpr->GetOperand(0), expr, topLevelFunc);
         } else if (!Is<FuncCallWithException>(localExpr) && !Is<FuncCall>(localExpr) &&
                    !Is<AllocateWithException>(localExpr) && !Is<Allocate>(localExpr)) {
@@ -3162,7 +3161,7 @@ void CHIRChecker::CheckInout(const IntrinsicBase& expr, const Function& topLevel
                         errMsgBase + "the result must be used as pointerInit1's argument.");
                 }
                 continue;
-            } else if (Is<TypeCast>(user)) {
+            } else if (Is<ClassStaticCast>(user)) {
                 checkUsers(*user->GetResult());
                 continue;
             }
@@ -3206,7 +3205,7 @@ void CHIRChecker::CheckAllocateWithException(const AllocateWithException& expr, 
         return;
     }
 
-    CheckAllocateBase(AllocateBase(&expr), topLevelFunc);
+    CheckAllocateBase(expr, topLevelFunc);
 }
 
 void CHIRChecker::CheckAllocateBase(const AllocateBase& expr, const Function& topLevelFunc)
@@ -3216,7 +3215,7 @@ void CHIRChecker::CheckAllocateBase(const AllocateBase& expr, const Function& to
     auto allocatedType = expr.GetType();
     // 1. result type must be ref of allocated type
     if (!resultTy->IsRef() || StaticCast<RefType*>(resultTy)->GetBaseType() != allocatedType) {
-        TypeCheckError(*expr.GetRawExpr(), *result, allocatedType->ToString() + "&", topLevelFunc);
+        TypeCheckError(expr, *result, allocatedType->ToString() + "&", topLevelFunc);
     }
 
     // 2. can't allocate `Void` type
@@ -3225,7 +3224,7 @@ void CHIRChecker::CheckAllocateBase(const AllocateBase& expr, const Function& to
     }
 
     // 3. if allocated type is CustomType, then must be a valid type
-    CheckTypeIsValid(*allocatedType, "allocated", *expr.GetRawExpr(), topLevelFunc);
+    CheckTypeIsValid(*allocatedType, "allocated", expr, topLevelFunc);
 }
 
 bool CHIRChecker::CheckTypeIsValid(
@@ -3264,7 +3263,7 @@ void CHIRChecker::CheckRawArrayAllocateWithException(
         return;
     }
 
-    CheckRawArrayAllocateBase(RawArrayAllocateBase(&expr), topLevelFunc);
+    CheckRawArrayAllocateBase(expr, topLevelFunc);
 }
 
 void CHIRChecker::CheckRawArrayAllocateBase(const RawArrayAllocateBase& expr, const Function& topLevelFunc)
@@ -3272,12 +3271,12 @@ void CHIRChecker::CheckRawArrayAllocateBase(const RawArrayAllocateBase& expr, co
     // 1. result type must be RawArray&
     auto result = expr.GetResult();
     if (!result->GetType()->IsRef() || !result->GetType()->StripAllRefs()->IsRawArray()) {
-        TypeCheckError(*expr.GetRawExpr(), *result, "RawArray&", topLevelFunc);
+        TypeCheckError(expr, *result, "RawArray&", topLevelFunc);
         return;
     }
 
     // 2. if element type is CustomType, then must be a valid type
-    if (!CheckTypeIsValid(*expr.GetElementType(), "element", *expr.GetRawExpr(), topLevelFunc)) {
+    if (!CheckTypeIsValid(*expr.GetElementType(), "element", expr, topLevelFunc)) {
         return;
     }
 
@@ -3285,13 +3284,13 @@ void CHIRChecker::CheckRawArrayAllocateBase(const RawArrayAllocateBase& expr, co
     auto resultTypeArg = StaticCast<RawArrayType*>(result->GetType()->StripAllRefs())->GetElementType();
     if (resultTypeArg != expr.GetElementType()) {
         TypeCheckError(
-            *expr.GetRawExpr(), *result, "RawArray<" + expr.GetElementType()->ToString() + ">&", topLevelFunc);
+            expr, *result, "RawArray<" + expr.GetElementType()->ToString() + ">&", topLevelFunc);
     }
 
     // 4. size type must be Int64
     auto size = expr.GetSize();
     if (size->GetType()->GetTypeKind() != Type::TypeKind::TYPE_INT64) {
-        TypeCheckError(*expr.GetRawExpr(), *size, "Int64", topLevelFunc);
+        TypeCheckError(expr, *size, "Int64", topLevelFunc);
     }
 }
 
@@ -3382,7 +3381,9 @@ void CHIRChecker::CheckOtherExpression(const Expression& expr, const Function& t
             CheckInvokeStatic(StaticCast<const InvokeStatic&>(expr), topLevelFunc); }},
         {ExprKind::INSTANCEOF, [this, &expr, &topLevelFunc]() {
             CheckInstanceOf(StaticCast<const InstanceOf&>(expr), topLevelFunc); }},
-        {ExprKind::TYPECAST, [this, &expr, &topLevelFunc]() {
+        {ExprKind::CLASS_STATIC_CAST, [this, &expr, &topLevelFunc]() {
+            CheckTypeCast(StaticCast<const TypeCast&>(expr), topLevelFunc); }},
+        {ExprKind::NUMERIC_CAST, [this, &expr, &topLevelFunc]() {
             CheckTypeCast(StaticCast<const TypeCast&>(expr), topLevelFunc); }},
         {ExprKind::GET_EXCEPTION, [this, &expr, &topLevelFunc]() {
             CheckGetException(StaticCast<const GetException&>(expr), topLevelFunc); }},
@@ -3402,12 +3403,12 @@ void CHIRChecker::CheckOtherExpression(const Expression& expr, const Function& t
             CheckIntrinsic(StaticCast<const Intrinsic&>(expr), topLevelFunc); }},
         {ExprKind::BOX, [this, &expr, &topLevelFunc]() {
             CheckBox(StaticCast<const Box&>(expr), topLevelFunc); }},
-        {ExprKind::UNBOX, [this, &expr, &topLevelFunc]() {
-            CheckUnBox(StaticCast<const UnBox&>(expr), topLevelFunc); }},
-        {ExprKind::TRANSFORM_TO_GENERIC, [this, &expr, &topLevelFunc]() {
-            CheckTransformToGeneric(StaticCast<const TransformToGeneric&>(expr), topLevelFunc); }},
-        {ExprKind::TRANSFORM_TO_CONCRETE, [this, &expr, &topLevelFunc]() {
-            CheckTransformToConcrete(StaticCast<const TransformToConcrete&>(expr), topLevelFunc); }},
+        {ExprKind::UNBOX_TO_VALUE, [this, &expr, &topLevelFunc]() {
+            CheckUnBox(StaticCast<const UnBoxToValue&>(expr), topLevelFunc); }},
+        {ExprKind::CAST_TO_GENERIC, [this, &expr, &topLevelFunc]() {
+            CheckCastToGeneric(StaticCast<const CastToGeneric&>(expr), topLevelFunc); }},
+        {ExprKind::CAST_TO_CONCRETE, [this, &expr, &topLevelFunc]() {
+            CheckCastToConcrete(StaticCast<const CastToConcrete&>(expr), topLevelFunc); }},
         {ExprKind::GET_INSTANTIATE_VALUE, [this, &expr, &topLevelFunc]() {
             CheckGetInstantiateValue(StaticCast<const GetInstantiateValue&>(expr), topLevelFunc); }},
         {ExprKind::UNBOX_TO_REF, [this, &expr, &topLevelFunc]() {
@@ -3768,7 +3769,7 @@ void CHIRChecker::CheckSpawn(const Spawn& expr, const Function& topLevelFunc)
     if (!OperandNumAtLeast(1, expr, topLevelFunc)) {
         return;
     }
-    CheckSpawnBase(SpawnBase(&expr), topLevelFunc);
+    CheckSpawnBase(expr, topLevelFunc);
 }
 
 void CHIRChecker::CheckRawArrayAllocate(const RawArrayAllocate& expr, const Function& topLevelFunc)
@@ -3776,7 +3777,7 @@ void CHIRChecker::CheckRawArrayAllocate(const RawArrayAllocate& expr, const Func
     if (!OperandNumIsEqual(1, expr, topLevelFunc)) {
         return;
     }
-    CheckRawArrayAllocateBase(RawArrayAllocateBase(&expr), topLevelFunc);
+    CheckRawArrayAllocateBase(expr, topLevelFunc);
 }
 
 void CHIRChecker::CheckRawArrayLiteralInit(const RawArrayLiteralInit& expr, const Function& topLevelFunc)
@@ -3893,8 +3894,8 @@ void CHIRChecker::CheckBox(const Box& expr, const Function& topLevelFunc)
     if (!OperandNumIsEqual(1, expr, topLevelFunc)) {
         return;
     }
-    auto targetType = expr.GetTargetTy();
-    auto sourceType = expr.GetSourceTy();
+    auto targetType = expr.GetTargetType();
+    auto sourceType = expr.GetSourceType();
     if (!targetType->IsRef()) {
         TypeCheckError(expr, *expr.GetResult(), "reference", topLevelFunc);
     } else if (targetType->StripAllRefs()->IsBox()) {
@@ -3912,13 +3913,13 @@ void CHIRChecker::CheckBox(const Box& expr, const Function& topLevelFunc)
     }
 }
 
-void CHIRChecker::CheckUnBox(const UnBox& expr, const Function& topLevelFunc)
+void CHIRChecker::CheckUnBox(const UnBoxToValue& expr, const Function& topLevelFunc)
 {
     if (!OperandNumIsEqual(1, expr, topLevelFunc)) {
         return;
     }
-    auto targetType = expr.GetTargetTy();
-    auto sourceType = expr.GetSourceTy();
+    auto targetType = expr.GetTargetType();
+    auto sourceType = expr.GetSourceType();
     if (!sourceType->IsRef()) {
         TypeCheckError(expr, *expr.GetSourceValue(), "reference", topLevelFunc);
     } else if (sourceType->StripAllRefs()->IsBox()) {
@@ -3936,28 +3937,28 @@ void CHIRChecker::CheckUnBox(const UnBox& expr, const Function& topLevelFunc)
     }
 }
 
-void CHIRChecker::CheckTransformToGeneric(const TransformToGeneric& expr, const Function& topLevelFunc)
+void CHIRChecker::CheckCastToGeneric(const CastToGeneric& expr, const Function& topLevelFunc)
 {
     if (!OperandNumIsEqual(1, expr, topLevelFunc)) {
         return;
     }
-    if (!expr.GetTargetTy()->IsGenericRelated()) {
+    if (!expr.GetTargetType()->IsGenericRelated()) {
         TypeCheckError(expr, *expr.GetResult(), "generic related", topLevelFunc);
     }
-    if (expr.GetSourceTy()->IsGeneric()) {
+    if (expr.GetSourceType()->IsGeneric()) {
         TypeCheckError(expr, *expr.GetSourceValue(), "concrete", topLevelFunc);
     }
 }
 
-void CHIRChecker::CheckTransformToConcrete(const TransformToConcrete& expr, const Function& topLevelFunc)
+void CHIRChecker::CheckCastToConcrete(const CastToConcrete& expr, const Function& topLevelFunc)
 {
     if (!OperandNumIsEqual(1, expr, topLevelFunc)) {
         return;
     }
-    if (expr.GetTargetTy()->IsGeneric()) {
+    if (expr.GetTargetType()->IsGeneric()) {
         TypeCheckError(expr, *expr.GetResult(), "concrete", topLevelFunc);
     }
-    if (!expr.GetSourceTy()->IsGenericRelated()) {
+    if (!expr.GetSourceType()->IsGenericRelated()) {
         TypeCheckError(expr, *expr.GetSourceValue(), "generic related", topLevelFunc);
     }
 }
@@ -4057,14 +4058,14 @@ void CHIRChecker::CheckUnBoxToRef(const UnBoxToRef& expr, const Function& topLev
         return;
     }
 
-    auto targetType = expr.GetTargetTy();
+    auto targetType = expr.GetTargetType();
     auto isValueRefType = targetType->IsRef() &&
         StaticCast<RefType*>(targetType)->GetBaseType()->IsValueType();
     if (!isValueRefType) {
         TypeCheckError(expr, *expr.GetResult(), "Value&", topLevelFunc);
     }
     
-    auto sourceType = expr.GetSourceTy();
+    auto sourceType = expr.GetSourceType();
     auto isReferenceRefType = sourceType->IsRef() &&
         StaticCast<RefType*>(sourceType)->GetBaseType()->IsReferenceType();
     if (!isReferenceRefType) {
@@ -4142,7 +4143,7 @@ void CHIRChecker::CheckAllocate(const Allocate& expr, const Function& topLevelFu
     // 1. don't have operands
     OperandNumIsEqual(0, expr, topLevelFunc);
 
-    CheckAllocateBase(AllocateBase(&expr), topLevelFunc);
+    CheckAllocateBase(expr, topLevelFunc);
 }
 
 void CHIRChecker::CheckLoad(const Load& expr, const Function& topLevelFunc)

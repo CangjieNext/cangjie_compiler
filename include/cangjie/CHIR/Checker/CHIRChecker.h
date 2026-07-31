@@ -161,7 +161,7 @@ private:
     void CheckBinaryExprBase(const BinaryExprBase& expr, const Function& topLevelFunc);
     void CheckSpawnWithException(const SpawnWithException& expr, const Function& topLevelFunc);
     void CheckSpawnBase(const SpawnBase& expr, const Function& topLevelFunc);
-    void CheckTypeCastWithException(const TypeCastWithException& expr, const Function& topLevelFunc);
+    void CheckNumericCastWithException(const NumericCastWithException& expr, const Function& topLevelFunc);
     void CheckIntrinsicWithException(const IntrinsicWithException& expr, const Function& topLevelFunc);
     void CheckIntrinsicBase(const IntrinsicBase& expr, const Function& topLevelFunc);
     void CheckAllocateWithException(const AllocateWithException& expr, const Function& topLevelFunc);
@@ -255,9 +255,9 @@ private:
     void CheckVArrayBuilder(const VArrayBuilder& expr, const Function& topLevelFunc);
     void CheckIntrinsic(const Intrinsic& expr, const Function& topLevelFunc);
     void CheckBox(const Box& expr, const Function& topLevelFunc);
-    void CheckUnBox(const UnBox& expr, const Function& topLevelFunc);
-    void CheckTransformToGeneric(const TransformToGeneric& expr, const Function& topLevelFunc);
-    void CheckTransformToConcrete(const TransformToConcrete& expr, const Function& topLevelFunc);
+    void CheckUnBox(const UnBoxToValue& expr, const Function& topLevelFunc);
+    void CheckCastToGeneric(const CastToGeneric& expr, const Function& topLevelFunc);
+    void CheckCastToConcrete(const CastToConcrete& expr, const Function& topLevelFunc);
     void CheckGetInstantiateValue(const GetInstantiateValue& expr, const Function& topLevelFunc);
     void CheckUnBoxToRef(const UnBoxToRef& expr, const Function& topLevelFunc);
     void CheckGetRTTI(const GetRTTI& expr, const Function& topLevelFunc);

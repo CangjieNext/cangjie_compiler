@@ -155,7 +155,12 @@ bool Expression::IsLoad() const
 
 bool Expression::IsTypeCast() const
 {
-    return kind == ExprKind::TYPECAST;
+    return TypeAs<TypeCast>::IsInstanceOf(*this);
+}
+
+bool Expression::IsNumericCast() const
+{
+    return kind == ExprKind::NUMERIC_CAST;
 }
 
 bool Expression::IsDynamicDispatch() const
@@ -544,7 +549,7 @@ bool Expression::HasExceptionBranch() const
         kind == ExprKind::INVOKESTATIC_WITH_EXCEPTION ||
         kind == ExprKind::INT_OP_WITH_EXCEPTION ||
         kind == ExprKind::SPAWN_WITH_EXCEPTION ||
-        kind == ExprKind::TYPECAST_WITH_EXCEPTION ||
+        kind == ExprKind::NUMERIC_CAST_WITH_EXCEPTION ||
         kind == ExprKind::INTRINSIC_WITH_EXCEPTION ||
         kind == ExprKind::ALLOCATE_WITH_EXCEPTION ||
         kind == ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION;
@@ -735,14 +740,27 @@ bool Constant::IsUnitLit() const
 }
 
 // Allocate
-Type* Allocate::GetType() const
+AllocateBase::AllocateBase(ExprKind kind, Type* ty, const std::vector<Block*>& successors, Block* parent)
+    : Expression(kind, {}, parent), ty(ty)
+{
+    CJC_NULLPTR_CHECK(parent);
+    for (auto succ : successors) {
+        AppendOperand(*succ);
+    }
+}
+
+Type* AllocateBase::GetType() const
 {
     return ty;
 }
 
-std::string Allocate::OperandsToString() const
+std::string AllocateBase::OperandsToString() const
 {
     return ty->ToString();
+}
+
+Allocate::Allocate(Type* ty, Block* parent) : AllocateBase(ExprKind::ALLOCATE, ty, {}, parent)
+{
 }
 
 Value* Load::GetLocation() const
@@ -1154,13 +1172,13 @@ InvokeStatic* InvokeStatic::Clone(CHIRBuilder& builder, Block& parent) const
 }
 
 // TypeCast
-TypeCast::TypeCast(Value* operand, Block* parent) : Expression(ExprKind::TYPECAST, {operand}, {}, parent)
+TypeCast::TypeCast(ExprKind kind, Value* operand, const std::vector<Block*>& successors, Block* parent)
+    : Expression(kind, {operand}, parent)
 {
-}
-
-TypeCast::TypeCast(Value* operand, Cangjie::OverflowStrategy overflow, Block* parent)
-    : Expression(ExprKind::TYPECAST, {operand}, {}, parent), overflowStrategy(overflow)
-{
+    CJC_NULLPTR_CHECK(parent);
+    for (auto succ : successors) {
+        AppendOperand(*succ);
+    }
 }
 
 Value* TypeCast::GetSourceValue() const
@@ -1168,27 +1186,68 @@ Value* TypeCast::GetSourceValue() const
     return operands[0];
 }
 
-Type* TypeCast::GetSourceTy() const
+Type* TypeCast::GetSourceType() const
 {
     return operands[0]->GetType();
 }
 
-Type* TypeCast::GetTargetTy() const
+Type* TypeCast::GetTargetType() const
 {
     return result->GetType();
 }
 
-Cangjie::OverflowStrategy TypeCast::GetOverflowStrategy() const
+// NumericCastBase
+NumericCastBase::NumericCastBase(
+    ExprKind kind, Value* operand, Cangjie::OverflowStrategy overflow, const std::vector<Block*>& successors,
+    Block* parent)
+    : TypeCast(kind, operand, successors, parent), overflowStrategy(overflow)
+{
+}
+
+Cangjie::OverflowStrategy NumericCastBase::GetOverflowStrategy() const
 {
     return overflowStrategy;
 }
 
-std::string TypeCast::AddExtraComment() const
+std::string NumericCastBase::AddExtraComment() const
 {
     if (overflowStrategy != Cangjie::OverflowStrategy::NA) {
         return OverflowToString(overflowStrategy);
     }
     return "";
+}
+
+// StaticCast
+ClassStaticCast::ClassStaticCast(Value* operand, Block* parent)
+    : TypeCast(ExprKind::CLASS_STATIC_CAST, operand, {}, parent)
+{
+}
+
+ClassStaticCast* ClassStaticCast::Clone(CHIRBuilder& builder, Block& parent) const
+{
+    auto newNode = builder.CreateExpression<ClassStaticCast>(result->GetType(), GetSourceValue(), &parent);
+    parent.AppendExpression(newNode);
+    newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
+    newNode->Set<NeedCheckCast>(this->Get<NeedCheckCast>());
+    newNode->GetResult()->Set<EnumCaseIndex>(result->Get<EnumCaseIndex>());
+    return newNode;
+}
+
+// NumericCast
+NumericCast::NumericCast(Value* operand, Cangjie::OverflowStrategy overflow, Block* parent)
+    : NumericCastBase(ExprKind::NUMERIC_CAST, operand, overflow, {}, parent)
+{
+}
+
+NumericCast* NumericCast::Clone(CHIRBuilder& builder, Block& parent) const
+{
+    auto newNode =
+        builder.CreateExpression<NumericCast>(result->GetType(), GetSourceValue(), GetOverflowStrategy(), &parent);
+    parent.AppendExpression(newNode);
+    newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
+    newNode->Set<NeedCheckCast>(this->Get<NeedCheckCast>());
+    newNode->GetResult()->Set<EnumCaseIndex>(result->Get<EnumCaseIndex>());
+    return newNode;
 }
 
 // InstanceOf
@@ -1214,23 +1273,8 @@ std::string InstanceOf::OperandsToString() const
 
 // Box
 Box::Box(Value* operand, Block* parent)
-    : Expression(ExprKind::BOX, {operand}, {}, parent)
+    : TypeCast(ExprKind::BOX, operand, {}, parent)
 {
-}
-
-Value* Box::GetSourceValue() const
-{
-    return operands[0];
-}
-
-Type* Box::GetSourceTy() const
-{
-    return GetSourceValue()->GetType();
-}
-
-Type* Box::GetTargetTy() const
-{
-    return result->GetType();
 }
 
 Box* Box::Clone(CHIRBuilder& builder, Block& parent) const
@@ -1241,88 +1285,43 @@ Box* Box::Clone(CHIRBuilder& builder, Block& parent) const
     return newNode;
 }
 
-// UnBox
-UnBox::UnBox(Value* operand, Block* parent)
-    : Expression(ExprKind::UNBOX, {operand}, {}, parent)
+// UnBoxToValue
+UnBoxToValue::UnBoxToValue(Value* operand, Block* parent)
+    : TypeCast(ExprKind::UNBOX_TO_VALUE, operand, {}, parent)
 {
 }
 
-Value* UnBox::GetSourceValue() const
+UnBoxToValue* UnBoxToValue::Clone(CHIRBuilder& builder, Block& parent) const
 {
-    return operands[0];
-}
-
-Type* UnBox::GetSourceTy() const
-{
-    return GetSourceValue()->GetType();
-}
-
-Type* UnBox::GetTargetTy() const
-{
-    return result->GetType();
-}
-
-UnBox* UnBox::Clone(CHIRBuilder& builder, Block& parent) const
-{
-    auto newNode = builder.CreateExpression<UnBox>(result->GetType(), GetSourceValue(), &parent);
+    auto newNode = builder.CreateExpression<UnBoxToValue>(result->GetType(), GetSourceValue(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;
 }
 
-// TransformToGeneric
-TransformToGeneric::TransformToGeneric(Value* operand, Block* parent)
-    : Expression(ExprKind::TRANSFORM_TO_GENERIC, {operand}, {}, parent)
+// CastToGeneric
+CastToGeneric::CastToGeneric(Value* operand, Block* parent)
+    : TypeCast(ExprKind::CAST_TO_GENERIC, operand, {}, parent)
 {
 }
 
-Value* TransformToGeneric::GetSourceValue() const
+CastToGeneric* CastToGeneric::Clone(CHIRBuilder& builder, Block& parent) const
 {
-    return operands[0];
-}
-
-Type* TransformToGeneric::GetSourceTy() const
-{
-    return GetSourceValue()->GetType();
-}
-
-Type* TransformToGeneric::GetTargetTy() const
-{
-    return result->GetType();
-}
-
-TransformToGeneric* TransformToGeneric::Clone(CHIRBuilder& builder, Block& parent) const
-{
-    auto newNode = builder.CreateExpression<TransformToGeneric>(result->GetType(), GetSourceValue(), &parent);
+    auto newNode = builder.CreateExpression<CastToGeneric>(result->GetType(), GetSourceValue(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;
 }
 
-// TransformToConcrete
-TransformToConcrete::TransformToConcrete(Value* operand, Block* parent)
-    : Expression(ExprKind::TRANSFORM_TO_CONCRETE, {operand}, {}, parent)
+// CastToConcrete
+CastToConcrete::CastToConcrete(Value* operand, Block* parent)
+    : TypeCast(ExprKind::CAST_TO_CONCRETE, operand, {}, parent)
 {
 }
 
-Value* TransformToConcrete::GetSourceValue() const
+CastToConcrete* CastToConcrete::Clone(CHIRBuilder& builder, Block& parent) const
 {
-    return operands[0];
-}
-
-Type* TransformToConcrete::GetSourceTy() const
-{
-    return GetSourceValue()->GetType();
-}
-
-Type* TransformToConcrete::GetTargetTy() const
-{
-    return result->GetType();
-}
-
-TransformToConcrete* TransformToConcrete::Clone(CHIRBuilder& builder, Block& parent) const
-{
-    auto newNode = builder.CreateExpression<TransformToConcrete>(result->GetType(), GetSourceValue(), &parent);
+    auto newNode = builder.CreateExpression<CastToConcrete>(result->GetType(), GetSourceValue(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;
@@ -1330,23 +1329,8 @@ TransformToConcrete* TransformToConcrete::Clone(CHIRBuilder& builder, Block& par
 
 // UnBoxToRef
 UnBoxToRef::UnBoxToRef(Value* operand, Block* parent)
-    : Expression(ExprKind::UNBOX_TO_REF, {operand}, {}, parent)
+    : TypeCast(ExprKind::UNBOX_TO_REF, operand, {}, parent)
 {
-}
-
-Value* UnBoxToRef::GetSourceValue() const
-{
-    return operands[0];
-}
-
-Type* UnBoxToRef::GetSourceTy() const
-{
-    return GetSourceValue()->GetType();
-}
-
-Type* UnBoxToRef::GetTargetTy() const
-{
-    return result->GetType();
 }
 
 UnBoxToRef* UnBoxToRef::Clone(CHIRBuilder& builder, Block& parent) const
@@ -1438,25 +1422,35 @@ FieldByName* FieldByName::Clone(CHIRBuilder& builder, Block& parent) const
 }
 
 // RawArrayAllocate
-RawArrayAllocate::RawArrayAllocate(Type* eleTy, Value* size, Block* parent)
-    : Expression(ExprKind::RAW_ARRAY_ALLOCATE, {size}, {}, parent), elementType(eleTy)
+RawArrayAllocateBase::RawArrayAllocateBase(
+    ExprKind kind, Type* eleTy, Value* size, const std::vector<Block*>& successors, Block* parent)
+    : Expression(kind, {size}, parent), elementType(eleTy)
 {
+    CJC_NULLPTR_CHECK(parent);
+    for (auto succ : successors) {
+        AppendOperand(*succ);
+    }
 }
 
-Value* RawArrayAllocate::GetSize() const
+Value* RawArrayAllocateBase::GetSize() const
 {
     CJC_ASSERT(!operands.empty());
     return operands[0];
 }
 
-Type* RawArrayAllocate::GetElementType() const
+Type* RawArrayAllocateBase::GetElementType() const
 {
     return elementType;
 }
 
-std::string RawArrayAllocate::OperandsToString() const
+std::string RawArrayAllocateBase::OperandsToString() const
 {
     return elementType->ToString() + ", " + GetSize()->GetIdentifier();
+}
+
+RawArrayAllocate::RawArrayAllocate(Type* eleTy, Value* size, Block* parent)
+    : RawArrayAllocateBase(ExprKind::RAW_ARRAY_ALLOCATE, eleTy, size, {}, parent)
+{
 }
 
 // RawArrayLiteralInit
@@ -1673,57 +1667,89 @@ std::string Debug::OperandsToString() const
     return GetValue()->GetIdentifier() + ", " + GetSrcCodeIdentifier();
 }
 
-Spawn::Spawn(Value* val, Block* parent)
-    : Expression(ExprKind::SPAWN, {val}, {}, parent)
+SpawnBase::SpawnBase(
+    ExprKind kind, const std::vector<Value*>& operands, const std::vector<Block*>& successors, Block* parent)
+    : Expression(kind, operands, parent)
 {
+    CJC_NULLPTR_CHECK(parent);
+    for (auto succ : successors) {
+        AppendOperand(*succ);
+    }
 }
 
-Spawn::Spawn(Value* val, Value* arg, Block* parent)
-    : Expression(ExprKind::SPAWN, {val, arg}, {}, parent)
-{
-}
-
-Value* Spawn::GetFuture() const
+Value* SpawnBase::GetFuture() const
 {
     CJC_ASSERT(!IsExecuteClosure());
     return operands[0];
 }
 
-Value* Spawn::GetSpawnArg() const
+Value* SpawnBase::GetSpawnArg() const
 {
-    if (operands.size() > 1) {
+    if (GetNumOfNonSuccessorOperands() > 1) {
         return operands[1];
     }
     return nullptr;
 }
 
-Value* Spawn::GetClosure() const
+Value* SpawnBase::GetObject() const
+{
+    return operands[0];
+}
+
+Value* SpawnBase::GetClosure() const
 {
     CJC_ASSERT(IsExecuteClosure());
     return operands[0];
 }
 
-Function* Spawn::GetExecuteClosure() const
+Function* SpawnBase::GetExecuteClosure() const
 {
     return executeClosure;
 }
 
-bool Spawn::IsExecuteClosure() const
+bool SpawnBase::IsExecuteClosure() const
 {
     return executeClosure != nullptr;
 }
 
-void Spawn::SetExecuteClosure(Function& func)
+void SpawnBase::SetExecuteClosure(Function& func)
 {
     executeClosure = &func;
 }
 
-std::string Spawn::AddExtraComment() const
+std::string SpawnBase::AddExtraComment() const
 {
     if (IsExecuteClosure()) {
         return "executeClosure: " + GetExecuteClosure()->GetIdentifier();
     }
     return "";
+}
+
+Spawn::Spawn(Value* val, Block* parent)
+    : SpawnBase(ExprKind::SPAWN, {val}, {}, parent)
+{
+}
+
+Spawn::Spawn(Value* val, Value* arg, Block* parent)
+    : SpawnBase(ExprKind::SPAWN, {val, arg}, {}, parent)
+{
+}
+
+Spawn* Spawn::Clone(CHIRBuilder& builder, Block& parent) const
+{
+    Spawn* newNode = nullptr;
+    auto arg = GetSpawnArg();
+    if (arg != nullptr) {
+        newNode = builder.CreateExpression<Spawn>(result->GetType(), GetObject(), arg, &parent);
+    } else {
+        newNode = builder.CreateExpression<Spawn>(result->GetType(), GetObject(), &parent);
+    }
+    if (executeClosure) {
+        newNode->SetExecuteClosure(*executeClosure);
+    }
+    parent.AppendExpression(newNode);
+    newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
+    return newNode;
 }
 
 UnaryExpression* UnaryExpression::Clone(CHIRBuilder& builder, Block& parent) const
@@ -1837,18 +1863,6 @@ Invoke* Invoke::Clone(CHIRBuilder& builder, Block& parent) const
     auto newNode = builder.CreateExpression<Invoke>(result->GetType(), invokeInfo, &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
-    return newNode;
-}
-
-TypeCast* TypeCast::Clone(CHIRBuilder& builder, Block& parent) const
-{
-    auto newNode =
-        builder.CreateExpression<TypeCast>(result->GetType(), GetSourceValue(), GetOverflowStrategy(), &parent);
-    parent.AppendExpression(newNode);
-    newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
-    // Need to keep the NeedCheckCast for TypeCast Clone
-    newNode->Set<NeedCheckCast>(this->Get<NeedCheckCast>());
-    newNode->GetResult()->Set<EnumCaseIndex>(result->Get<EnumCaseIndex>());
     return newNode;
 }
 
@@ -2094,23 +2108,6 @@ Lambda* Lambda::Clone(CHIRBuilder& builder, Block& parent) const
 Debug* Debug::Clone(CHIRBuilder& builder, Block& parent) const
 {
     auto newNode = builder.CreateExpression<Debug>(result->GetType(), GetValue(), GetSrcCodeIdentifier(), &parent);
-    parent.AppendExpression(newNode);
-    newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
-    return newNode;
-}
-
-Spawn* Spawn::Clone(CHIRBuilder& builder, Block& parent) const
-{
-    Spawn* newNode = nullptr;
-    auto arg = GetSpawnArg();
-    if (arg != nullptr) {
-        newNode = builder.CreateExpression<Spawn>(result->GetType(), GetFuture(), arg, &parent);
-    } else {
-        newNode = builder.CreateExpression<Spawn>(result->GetType(), GetFuture(), &parent);
-    }
-    if (executeClosure) {
-        newNode->SetExecuteClosure(*executeClosure);
-    }
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;

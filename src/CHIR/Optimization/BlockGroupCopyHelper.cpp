@@ -219,12 +219,12 @@ void FixCastProblemAfterInst(std::vector<Block*>& blocks, CHIRBuilder& builder)
                     builder.CreateConstantExpression<BoolLiteral>(builder.GetBoolTy(), e.GetParentBlock(), false);
                 e.ReplaceWith(*falseExpr);
             }
-        } else if (e.GetExprKind() == ExprKind::TRANSFORM_TO_CONCRETE) {
+        } else if (e.GetExprKind() == ExprKind::CAST_TO_CONCRETE) {
             // change transformToConcrete to box/unbox/typecast
-            auto& cast = StaticCast<TransformToConcrete&>(e);
-            if (!cast.GetSourceTy()->IsGenericRelated()) {
+            auto& cast = StaticCast<CastToConcrete&>(e);
+            if (!cast.GetSourceType()->IsGenericRelated()) {
                 auto newCast = TypeCastOrBoxIfNeeded(
-                    *cast.GetSourceValue(), *cast.GetTargetTy(), builder, *e.GetParentBlock(), e.GetDebugLocation());
+                    *cast.GetSourceValue(), *cast.GetTargetType(), builder, *e.GetParentBlock(), e.GetDebugLocation());
                 if (newCast == cast.GetSourceValue()) {
                     for (auto user : e.GetResult()->GetUsers()) {
                         user->ReplaceOperand(e.GetResult(), cast.GetSourceValue());
@@ -238,12 +238,12 @@ void FixCastProblemAfterInst(std::vector<Block*>& blocks, CHIRBuilder& builder)
                 StaticCast<LocalVar*>(newCast)->GetExpr()->MoveBefore(&e);
                 e.RemoveSelfFromBlock();
             }
-        } else if (e.GetExprKind() == ExprKind::TRANSFORM_TO_GENERIC) {
-            // change TransformToGeneric to box/unbox/typecast
-            auto cast = StaticCast<TransformToGeneric*>(&e);
-            if (!cast->GetTargetTy()->IsGenericRelated()) {
+        } else if (e.GetExprKind() == ExprKind::CAST_TO_GENERIC) {
+            // change CastToGeneric to box/unbox/typecast
+            auto cast = StaticCast<CastToGeneric*>(&e);
+            if (!cast->GetTargetType()->IsGenericRelated()) {
                 auto newCast =
-                    TypeCastOrBoxIfNeeded(*cast->GetSourceValue(), *cast->GetTargetTy(), builder, *e.GetParentBlock(),
+                    TypeCastOrBoxIfNeeded(*cast->GetSourceValue(), *cast->GetTargetType(), builder, *e.GetParentBlock(),
                         e.GetDebugLocation());
                 if (newCast == cast->GetSourceValue()) {
                     for (auto user : e.GetResult()->GetUsers()) {
@@ -258,7 +258,7 @@ void FixCastProblemAfterInst(std::vector<Block*>& blocks, CHIRBuilder& builder)
                 StaticCast<LocalVar*>(newCast)->GetExpr()->MoveBefore(&e);
                 e.RemoveSelfFromBlock();
             }
-        } else if (e.GetExprKind() == ExprKind::TYPECAST) {
+        } else if (e.GetExprKind() == ExprKind::CLASS_STATIC_CAST) {
             /* change typecast to unbox/box
              * func foo<T>(a: T) {
              *   let b: CA<T> = TypeCast(a, CA<T>)   // typecast to CA<T>
@@ -267,7 +267,7 @@ void FixCastProblemAfterInst(std::vector<Block*>& blocks, CHIRBuilder& builder)
              * when foo inline to other function and inst to int64 type, the typecast would change to:
              *   (a: Int64)
              *   let b: CA<Int64> = Box(a, CA<Int64>) */
-            auto cast = StaticCast<TypeCast*>(&e);
+            auto cast = StaticCast<ClassStaticCast*>(&e);
             if (cast->GetSourceValue()->GetType()->IsGenericRelated()) {
                 return VisitResult::CONTINUE;
             }
@@ -278,7 +278,7 @@ void FixCastProblemAfterInst(std::vector<Block*>& blocks, CHIRBuilder& builder)
                 return VisitResult::CONTINUE;
             }
             auto newCast = StaticCast<LocalVar*>(newCastRes);
-            if (newCast->GetExpr()->GetExprKind() == ExprKind::TYPECAST) {
+            if (newCast->GetExpr()->GetExprKind() == ExprKind::CLASS_STATIC_CAST) {
                 newCast->GetExpr()->RemoveSelfFromBlock();
                 return VisitResult::CONTINUE;
             }

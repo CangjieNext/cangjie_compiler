@@ -530,9 +530,9 @@ private:
 };
 
 /**
- * @brief `TypeCast` expression wroten in `try` block
+ * @brief `NumericCast` expression written in `try` block
  */
-class TypeCastWithException : public ExpressionWithException {
+class NumericCastWithException : public NumericCastBase {
     friend class CHIRContext;
     friend class CHIRBuilder;
 public:
@@ -540,38 +540,24 @@ public:
     // Base Information
     // ===--------------------------------------------------------------------===//
     /**
-     * @brief Retrieves the overflow strategy.
+     * @brief Retrieves the success block.
      *
-     * @return The overflow strategy.
+     * @return The success block.
      */
-    OverflowStrategy GetOverflowStrategy() const;
+    Block* GetSuccessBlock() const;
 
     /**
-     * @brief Retrieves the source value of this cast operation.
+     * @brief Retrieves the error block.
      *
-     * @return The source value of this cast operation.
+     * @return The error block.
      */
-    Value* GetSourceValue() const;
-
-    /**
-     * @brief Retrieves the source type of this cast operation.
-     *
-     * @return The source type of this cast operation.
-     */
-    Type* GetSourceTy() const;
-
-    /**
-     * @brief Retrieves the target type of this cast operation.
-     *
-     * @return The target type of this cast operation.
-     */
-    Type* GetTargetTy() const;
+    Block* GetErrorBlock() const;
 
 private:
-    explicit TypeCastWithException(Value* operand, Block* normal, Block* exception, Block* parent);
-    ~TypeCastWithException() override = default;
+    explicit NumericCastWithException(Value* operand, Block* normal, Block* exception, Block* parent);
+    ~NumericCastWithException() override = default;
 
-    TypeCastWithException* Clone(CHIRBuilder& builder, Block& parent) const override;
+    NumericCastWithException* Clone(CHIRBuilder& builder, Block& parent) const override;
 };
 
 /**
@@ -622,64 +608,71 @@ private:
 };
 
 /**
- * @brief `Allocate` expression wroten in `try` block
+ * @brief `Allocate` expression written in `try` block
  */
-class AllocateWithException : public ExpressionWithException {
-    friend class ExprTypeConverter;
+class AllocateWithException : public AllocateBase {
     friend class CHIRContext;
     friend class CHIRBuilder;
 public:
     // ===--------------------------------------------------------------------===//
     // Base Information
     // ===--------------------------------------------------------------------===//
-    Type* GetType() const;
+    /**
+     * @brief Retrieves the success block.
+     *
+     * @return The success block.
+     */
+    Block* GetSuccessBlock() const;
 
-protected:
-    std::string OperandsToString() const override;
+    /**
+     * @brief Retrieves the error block.
+     *
+     * @return The error block.
+     */
+    Block* GetErrorBlock() const;
 
 private:
     explicit AllocateWithException(Type* ty, Block* normal, Block* exception, Block* parent);
     ~AllocateWithException() override = default;
 
     AllocateWithException* Clone(CHIRBuilder& builder, Block& parent) const override;
-
-    /** @brief The type to be allocated.
-     */
-    Type* ty;
 };
 
 /**
- * @brief `RawArrayAllocate` expression wroten in `try` block
+ * @brief `RawArrayAllocate` expression written in `try` block
  */
-class RawArrayAllocateWithException : public ExpressionWithException {
-    friend class ExprTypeConverter;
-    friend class TypeConverterForCC;
+class RawArrayAllocateWithException : public RawArrayAllocateBase {
     friend class CHIRContext;
     friend class CHIRBuilder;
 public:
     // ===--------------------------------------------------------------------===//
     // Base Information
     // ===--------------------------------------------------------------------===//
-    Value* GetSize() const;
+    /**
+     * @brief Retrieves the success block.
+     *
+     * @return The success block.
+     */
+    Block* GetSuccessBlock() const;
 
-    Type* GetElementType() const;
-
-protected:
-    std::string OperandsToString() const override;
+    /**
+     * @brief Retrieves the error block.
+     *
+     * @return The error block.
+     */
+    Block* GetErrorBlock() const;
 
 private:
     explicit RawArrayAllocateWithException(Type* eleTy, Value* size, Block* normal, Block* exception, Block* parent);
     ~RawArrayAllocateWithException() override = default;
 
     RawArrayAllocateWithException* Clone(CHIRBuilder& builder, Block& parent) const override;
-
-    Type* elementType; // The element type.
 };
 
 /**
- * @brief `Spawn` expression wroten in `try` block
+ * @brief `Spawn` expression written in `try` block
  */
-class SpawnWithException : public ExpressionWithException {
+class SpawnWithException : public SpawnBase {
     friend class CHIRContext;
     friend class CHIRBuilder;
 public:
@@ -687,36 +680,18 @@ public:
     // Base Information
     // ===--------------------------------------------------------------------===//
     /**
-     * @brief Get the spawn argument.
+     * @brief Retrieves the success block.
      *
-     * @return nullptr if no argument.
+     * @return The success block.
      */
-    Value* GetSpawnArg() const;
-
-    bool IsExecuteClosure() const;
-    void SetExecuteClosure(Function& func);
-
-    // ===--------------------------------------------------------------------===//
-    // Before Optimization
-    // ===--------------------------------------------------------------------===//
-    /** @brief Get the future argument for execute.*/
-    Value* GetFuture() const;
-    
-    // ===--------------------------------------------------------------------===//
-    // After Optimization
-    // ===--------------------------------------------------------------------===//
-    /** @brief Get the closure argument for execute closure.*/
-    Value* GetClosure() const;
+    Block* GetSuccessBlock() const;
 
     /**
-     * @brief Get the Function* of execute closure.
+     * @brief Retrieves the error block.
      *
-     * @return nullptr if not exist.
+     * @return The error block.
      */
-    Function* GetExecuteClosure() const;
-
-protected:
-    std::string AddExtraComment() const override;
+    Block* GetErrorBlock() const;
 
 private:
     explicit SpawnWithException(
@@ -726,12 +701,6 @@ private:
     ~SpawnWithException() override = default;
 
     SpawnWithException* Clone(CHIRBuilder& builder, Block& parent) const override;
-
-    /**
-     * @brief After optimization, backend will use `executeClosure` to create new thread, not `Future` object.
-     * `executeClosure` is member method in class `Future` which is declared in std.core
-     */
-    Function* executeClosure{nullptr};
 };
 } // namespace Cangjie::CHIR
 #endif // CANGJIE_CHIR_EXPRESSION_H

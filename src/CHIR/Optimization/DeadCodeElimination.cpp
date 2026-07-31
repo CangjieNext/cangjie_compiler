@@ -345,7 +345,7 @@ void DeadCodeElimination::DiagUnusedLambdaVariable(const Debug& expr)
     auto closureExpr = StaticCast<LocalVar*>(expr.GetOperand(0));
     if (closureExpr->GetExpr()->GetExprKind() == ExprKind::TUPLE) {
         auto realVar = StaticCast<LocalVar*>(closureExpr->GetExpr()->GetOperand(1));
-        if (realVar->GetExpr()->GetExprKind() == ExprKind::TYPECAST) {
+        if (realVar->GetExpr()->GetExprKind() == ExprKind::CLASS_STATIC_CAST) {
             auto typecastVar = StaticCast<LocalVar*>(realVar->GetExpr()->GetOperand(0));
             auto users = typecastVar->GetUsers();
             if (users.back() == realVar->GetExpr()) {
@@ -761,7 +761,8 @@ std::optional<Block*> GetMultiBranchTargetSucc(const MultiBranch& branch)
         return std::nullopt;
     }
     auto condExpr = Cangjie::StaticCast<LocalVar*>(branch.GetCondition())->GetExpr();
-    if (condExpr->GetExprKind() == ExprKind::TYPECAST) {
+    if (condExpr->GetExprKind() == ExprKind::NUMERIC_CAST ||
+        condExpr->GetExprKind() == ExprKind::CLASS_STATIC_CAST) {
         if (!condExpr->GetOperand(0)->IsLocalVar()) {
             return std::nullopt;
         }

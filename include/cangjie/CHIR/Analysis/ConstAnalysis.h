@@ -274,7 +274,7 @@ private:
         }
         if (expression->GetExprMajorKind() != ExprMajorKind::UNARY_EXPR &&
             expression->GetExprMajorKind() != ExprMajorKind::BINARY_EXPR &&
-            expression->GetExprKind() != ExprKind::TYPECAST) {
+            expression->GetExprKind() != ExprKind::NUMERIC_CAST) {
             return;
         }
         auto exprType = expression->GetResult()->GetType();
@@ -375,8 +375,12 @@ private:
     void HandleOthersExpr(TConstDomain& state, const Expression* expression, ExceptionKind& exceptionKind)
     {
         switch (expression->GetExprKind()) {
-            case ExprKind::TYPECAST: {
-                exceptionKind = HandleTypeCast(state, StaticCast<const TypeCast*>(expression));
+            case ExprKind::NUMERIC_CAST: {
+                exceptionKind = HandleTypeCast(state, StaticCast<const NumericCast*>(expression));
+                return;
+            }
+            case ExprKind::CLASS_STATIC_CAST: {
+                exceptionKind = HandleTypeCast(state, StaticCast<const ClassStaticCast*>(expression));
                 return;
             }
             case ExprKind::INTRINSIC: {
@@ -412,8 +416,8 @@ private:
                 return HandleBranchTerminator(state, StaticCast<const Branch*>(terminator));
             case ExprKind::MULTIBRANCH:
                 return HandleMultiBranchTerminator(state, StaticCast<const MultiBranch*>(terminator));
-            case ExprKind::TYPECAST_WITH_EXCEPTION:
-                res = HandleTypeCast(state, StaticCast<const TypeCastWithException*>(terminator));
+            case ExprKind::NUMERIC_CAST_WITH_EXCEPTION:
+                res = HandleTypeCast(state, StaticCast<const NumericCastWithException*>(terminator));
                 break;
             case ExprKind::INT_OP_WITH_EXCEPTION:
                 res = HandleIntOpWithExcepTerminator(state, StaticCast<const IntOpWithException*>(terminator));
@@ -1044,7 +1048,7 @@ private:
     template <typename TTypeCast> ExceptionKind HandleTypeCast(TConstDomain& state, const TTypeCast* cast)
     {
         auto dest = cast->GetResult();
-        auto srcTy = cast->GetSourceTy();
+        auto srcTy = cast->GetSourceType();
         if (srcTy->IsInteger()) {
             if (auto srcAbsVal = state.CheckAbstractValue(cast->GetSourceValue()); srcAbsVal) {
                 return HandleTypecastOfInt(state, cast, srcAbsVal);
@@ -1062,7 +1066,7 @@ private:
     template <typename TTypeCast>
     ExceptionKind HandleTypecastOfInt(TConstDomain& state, const TTypeCast* cast, const ConstValue* srcAbsVal)
     {
-        switch (cast->GetSourceTy()->GetTypeKind()) {
+        switch (cast->GetSourceType()->GetTypeKind()) {
             case Type::TypeKind::TYPE_INT8: {
                 auto constVal = StaticCast<const ConstIntVal*>(srcAbsVal)->GetVal();
                 return HandleTypecastOfIntDispatcher(state, cast, static_cast<int8_t>(constVal));
@@ -1114,7 +1118,7 @@ private:
     template <typename SrcTy, typename TTypeCast>
     ExceptionKind HandleTypecastOfIntDispatcher(TConstDomain& state, const TTypeCast* cast, SrcTy val)
     {
-        auto targetTyKind = cast->GetTargetTy()->GetTypeKind();
+        auto targetTyKind = cast->GetTargetType()->GetTypeKind();
         switch (targetTyKind) {
             case Type::TypeKind::TYPE_INT8:
                 return CastOrRaiseExceptionForInt<SrcTy, int8_t>(state, cast, val);
@@ -1145,7 +1149,10 @@ private:
     template <typename SrcTy, typename TargetTy, typename TTypeCast>
     ExceptionKind CastOrRaiseExceptionForInt(TConstDomain& state, const TTypeCast* cast, SrcTy val)
     {
-        auto os = cast->GetOverflowStrategy();
+        OverflowStrategy os = OverflowStrategy::NA;
+        if constexpr (std::is_base_of_v<NumericCastBase, TTypeCast>) {
+            os = cast->GetOverflowStrategy();
+        }
         TargetTy res = 0;
         bool isOverflow = OverflowChecker::IsTypecastOverflowForInt<SrcTy, TargetTy>(val, &res, os);
         if (isOverflow && os == OverflowStrategy::THROWING) {
@@ -1164,9 +1171,9 @@ private:
         if (this->isStable) {
             auto& loc = cast->GetDebugLocation();
             auto builder = diag.DiagnoseRefactor(DiagKindRefactor::chir_typecast_overflow, ToRange(loc));
-            std::string srcValStr = cast->GetSourceTy()->ToString() + "(" + std::to_string(srcVal) + ")";
-            builder.AddMainHintArguments(srcValStr, cast->GetTargetTy()->ToString());
-            builder.AddNote(GenerateTypeRangePrompt(cast->GetTargetTy()));
+            std::string srcValStr = cast->GetSourceType()->ToString() + "(" + std::to_string(srcVal) + ")";
+            builder.AddMainHintArguments(srcValStr, cast->GetTargetType()->ToString());
+            builder.AddNote(GenerateTypeRangePrompt(cast->GetTargetType()));
         }
     }
 

@@ -1661,7 +1661,7 @@ llvm::Value* GetCommonEnumAssociatedValue(IRBuilder2& irBuilder, const CHIR::Fie
         return irBuilder.CreateLoad(layoutType->getStructElementType(associatedValIdx), fieldPtr);
     } else {
         auto typeCastExpr = StaticCast<CHIR::TypeCast*>(StaticCast<CHIR::LocalVar*>(field.GetBase())->GetExpr());
-        const auto& chirEnumType = *StaticCast<CHIR::EnumType*>(typeCastExpr->GetSourceTy());
+        const auto& chirEnumType = *StaticCast<CHIR::EnumType*>(typeCastExpr->GetSourceType());
         CJC_ASSERT(typeCastExpr->GetResult()->Get<CHIR::EnumCaseIndex>().has_value());
 
         std::vector<CHIR::Type*> typeArgs;
@@ -1733,9 +1733,11 @@ llvm::Value* GetAssociatedNonRefEnumAssociatedValue(
 llvm::Value* IRBuilder2::GetEnumAssociatedValue(const CHIR::Field& field)
 {
     CJC_ASSERT(field.GetBase()->IsLocalVar());
-    CJC_ASSERT(StaticCast<CHIR::LocalVar*>(field.GetBase())->GetExpr()->GetExprKind() == CHIR::ExprKind::TYPECAST);
+    CJC_ASSERT(StaticCast<CHIR::LocalVar*>(
+        field.GetBase())->GetExpr()->GetExprKind() == CHIR::ExprKind::CLASS_STATIC_CAST);
     auto typeCast = StaticCast<CHIR::TypeCast*>(StaticCast<CHIR::LocalVar*>(field.GetBase())->GetExpr());
-    auto cgEnumType = static_cast<const CGEnumType*>(CGType::GetOrCreate(cgMod, typeCast->GetSourceValue()->GetType()));
+    auto cgEnumType = static_cast<const CGEnumType*>(
+        CGType::GetOrCreate(cgMod, typeCast->GetSourceValue()->GetType()));
 
     auto cgEnum = GetCGModule().GetMappedValue(field.GetBase());
     CJC_NULLPTR_CHECK(cgEnum);
