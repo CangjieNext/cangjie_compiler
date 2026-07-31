@@ -145,7 +145,7 @@ void UnBoxGetElementRefResIfNeed(GetElementRef& ger, CHIRBuilder& builder)
         loadRes->SetType(*boxRefType);
 
         auto loadResUsers = loadRes->GetUsers();
-        auto unbox = builder.CreateExpression<UnBox>(targetType, loadRes, ger.GetParentBlock());
+        auto unbox = builder.CreateExpression<UnBoxToValue>(targetType, loadRes, ger.GetParentBlock());
         unbox->MoveAfter(load);
         for (auto user : loadResUsers) {
             user->ReplaceOperand(loadRes, unbox->GetResult());
@@ -193,7 +193,7 @@ void InsertUnBoxAfterField(Field& field, CHIRBuilder& builder)
     fieldRes->SetType(*boxRefType);
     auto parent = field.GetParentBlock();
     auto oldUsers = fieldRes->GetUsers();
-    auto unbox = builder.CreateExpression<UnBox>(resType, fieldRes, parent);
+    auto unbox = builder.CreateExpression<UnBoxToValue>(resType, fieldRes, parent);
     unbox->MoveAfter(&field);
     for (auto user : oldUsers) {
         user->ReplaceOperand(fieldRes, unbox->GetResult());
@@ -228,7 +228,7 @@ bool FieldAndTypeCastNeedUnBox(
      *  %0: Enum-E = ...
      *  %1: Tuple<UInt64, Box<Struct-S>&> = TypeCast(%0)
      *  %2: Box<Struct-S>& = Field(%1, 1)
-     *  %3: Struct-S = UnBox(%2)
+     *  %3: Struct-S = UnBoxToValue(%2)
      */
     auto index = field.GetPath();
     if (index.size() != 1) {
@@ -242,15 +242,15 @@ bool FieldAndTypeCastNeedUnBox(
         return false;
     }
     auto baseExpr = StaticCast<LocalVar*>(base)->GetExpr();
-    if (baseExpr->GetExprKind() != CHIR::ExprKind::TYPECAST) {
+    if (baseExpr->GetExprKind() != CHIR::ExprKind::CLASS_STATIC_CAST) {
         return false;
     }
-    auto typecast = StaticCast<TypeCast*>(baseExpr);
-    auto srcType = typecast->GetSourceTy();
+    auto typecast = StaticCast<ClassStaticCast*>(baseExpr);
+    auto srcType = typecast->GetSourceType();
     if (!srcType->IsEnum()) {
         return false;
     }
-    auto targetType = typecast->GetTargetTy();
+    auto targetType = typecast->GetTargetType();
     if (!targetType->IsTuple()) {
         return false;
     }

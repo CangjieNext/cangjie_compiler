@@ -13,14 +13,14 @@
 #include "Base/AllocateImpl.h"
 
 #include "Base/CGTypes/CGClassType.h"
-#include "Base/CHIRExprWrapper.h"
 #include "IRBuilder.h"
+#include "cangjie/CHIR/IR/Expression/Expression.h"
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
 
 using namespace Cangjie;
 using namespace CodeGen;
 
-llvm::Value* CodeGen::GenerateAllocate(IRBuilder2& irBuilder, const CHIRAllocateWrapper& alloca)
+llvm::Value* CodeGen::GenerateAllocate(IRBuilder2& irBuilder, const CHIR::AllocateBase& alloca)
 {
     auto allocaType = alloca.GetType();
     if (allocaType->IsClass()) {

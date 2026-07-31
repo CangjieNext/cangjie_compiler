@@ -11,12 +11,12 @@
 
 namespace Cangjie {
 namespace CHIR {
+class RawArrayAllocateBase;
 class RawArrayInitByValue;
 }
 namespace CodeGen {
 class IRBuilder2;
-class CHIRRawArrayAllocateWrapper;
-llvm::Value* GenerateRawArrayAllocate(IRBuilder2& irBuilder, const CHIRRawArrayAllocateWrapper& rawArray);
+llvm::Value* GenerateRawArrayAllocate(IRBuilder2& irBuilder, const CHIR::RawArrayAllocateBase& rawArray);
 llvm::Value* GenerateRawArrayInitByValue(IRBuilder2& irBuilder, const CHIR::RawArrayInitByValue& rawArrayInitByValue);
 } // namespace CodeGen
 } // namespace Cangjie

@@ -138,7 +138,7 @@ AnnoInstanceValue CreateValue(const Value& v)
             return {std::make_shared<AnnoInstanceClassInst>(AnnoInstanceClassInst{nullptr, GetTupleArgs(*t)})};
         }
         if (auto c = DynamicCast<TypeCast>(obj->GetExpr())) {
-            if (c->GetSourceTy()->IsClassRef() && c->GetTargetTy()->IsClassRef()) {
+            if (c->GetSourceType()->IsClassRef() && c->GetTargetType()->IsClassRef()) {
                 // cast between subtypes, we cannot test subtype relation without CHIRBuilder
                 // so we skip this assertion
                 return GetValue(*c->GetSourceValue());

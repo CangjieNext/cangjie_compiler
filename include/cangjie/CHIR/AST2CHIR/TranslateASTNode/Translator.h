@@ -670,9 +670,9 @@ private:
     {
         CJC_NULLPTR_CHECK(parent);
         if (tryCatchContext.empty() || !mayThrowE) {
-            return CreateAndAppendExpression<TypeCast>(std::forward<Args>(args)..., ofs, parent);
+            return CreateAndAppendExpression<NumericCast>(std::forward<Args>(args)..., ofs, parent);
         }
-        return TryCreateExceptionTerminator<TypeCastWithException>(*parent, std::forward<Args>(args)...);
+        return TryCreateExceptionTerminator<NumericCastWithException>(*parent, std::forward<Args>(args)...);
     }
 
     template <typename TEx, typename... Args>
@@ -1064,13 +1064,13 @@ private:
         const std::vector<std::string>& path, Ptr<Block> block, const CustomType& customType);
 
     /// Create a typecast or some equivalent expressions that represent a typecast.
-    TypeCast* CreateWrappedTypeCast(Type* ty, Value* operand, Block* parent)
+    ClassStaticCast* CreateWrappedTypeCast(Type* ty, Value* operand, Block* parent)
     {
         return CreateWrappedTypeCast(INVALID_LOCATION, ty, operand, parent);
     }
-    TypeCast* CreateWrappedTypeCast(const DebugLocation& loc, Type* ty, Value* operand, Block* parent)
+    ClassStaticCast* CreateWrappedTypeCast(const DebugLocation& loc, Type* ty, Value* operand, Block* parent)
     {
-        return CreateAndAppendExpression<TypeCast>(loc, ty, operand, parent);
+        return CreateAndAppendExpression<ClassStaticCast>(loc, ty, operand, parent);
     }
 
     void HandleInitializedArgVal(const AST::CallExpr& ce, std::vector<Value*>& args);

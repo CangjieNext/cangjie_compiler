@@ -201,16 +201,16 @@ llvm::Value* HandleTerminatorExpression(IRBuilder2& irBuilder, const CHIR::Expre
             auto normalDest = spawnWithException.GetSuccessor(0);
             auto unwindDest = spawnWithException.GetSuccessor(1);
             CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
-            auto resultVal = GenerateSpawn(irBuilder, CHIRSpawnWrapper(spawnWithException));
+            auto resultVal = GenerateSpawn(irBuilder, spawnWithException);
             irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
             return resultVal;
         }
-        case CHIR::ExprKind::TYPECAST_WITH_EXCEPTION: {
-            auto& typeCastWithException = StaticCast<const CHIR::TypeCastWithException&>(chirExpr);
+        case CHIR::ExprKind::NUMERIC_CAST_WITH_EXCEPTION: {
+            auto& typeCastWithException = StaticCast<const CHIR::NumericCastWithException&>(chirExpr);
             auto normalDest = typeCastWithException.GetSuccessor(0);
             auto unwindDest = typeCastWithException.GetSuccessor(1);
             CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
-            auto resultVal = GenerateTypeCast(irBuilder, CHIRTypeCastWrapper(typeCastWithException));
+            auto resultVal = GenerateTypeCast(irBuilder, typeCastWithException);
             irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
             return resultVal;
         }
@@ -228,7 +228,7 @@ llvm::Value* HandleTerminatorExpression(IRBuilder2& irBuilder, const CHIR::Expre
             auto normalDest = allocateWithException.GetSuccessor(0);
             auto unwindDest = allocateWithException.GetSuccessor(1);
             CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
-            auto resultVal = GenerateAllocate(irBuilder, CHIRAllocateWrapper(allocateWithException));
+            auto resultVal = GenerateAllocate(irBuilder, allocateWithException);
             irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
             return resultVal;
         }
@@ -237,7 +237,7 @@ llvm::Value* HandleTerminatorExpression(IRBuilder2& irBuilder, const CHIR::Expre
             auto normalDest = rawArrayWithException.GetSuccessor(0);
             auto unwindDest = rawArrayWithException.GetSuccessor(1);
             CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
-            auto resultVal = GenerateRawArrayAllocate(irBuilder, CHIRRawArrayAllocateWrapper(rawArrayWithException));
+            auto resultVal = GenerateRawArrayAllocate(irBuilder, rawArrayWithException);
             irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
             return resultVal;
         }

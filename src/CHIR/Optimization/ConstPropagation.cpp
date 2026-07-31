@@ -95,7 +95,7 @@ void ConstPropagation::VisitFunc(const Function& func, bool isDebug, bool isCJLi
             case ExprKind::MULTIBRANCH:
                 return (void)targetSuccMap.emplace(terminator, std::make_pair(nullptr, targetSucc.value()));
             case ExprKind::INT_OP_WITH_EXCEPTION:
-            case ExprKind::TYPECAST_WITH_EXCEPTION: {
+            case ExprKind::NUMERIC_CAST_WITH_EXCEPTION: {
                 auto res = terminator->GetResult();
                 if (auto absVal = state.CheckAbstractValue(res)) {
                     targetSuccMap.emplace(terminator,

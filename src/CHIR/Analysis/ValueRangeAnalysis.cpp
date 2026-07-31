@@ -215,7 +215,7 @@ void RangeAnalysis::HandleNormalExpressionEffect(RangeDomain& state, const Expre
     }
     if (expression->GetExprMajorKind() != ExprMajorKind::UNARY_EXPR &&
         expression->GetExprMajorKind() != ExprMajorKind::BINARY_EXPR &&
-        expression->GetExprKind() != ExprKind::TYPECAST) {
+        expression->GetExprKind() != ExprKind::NUMERIC_CAST) {
         return;
     }
     if (isDebug && !expression->GetResult()->GetType()->IsRef()) {
@@ -425,8 +425,8 @@ SIntDomain RangeAnalysis::ComputeTypeCast(RangeDomain& state, PtrSymbol oldSymbo
 void RangeAnalysis::HandleOthersExpr(RangeDomain& state, const Expression* expression)
 {
     switch (expression->GetExprKind()) {
-        case ExprKind::TYPECAST: {
-            HandleTypeCast(state, StaticCast<const TypeCast*>(expression));
+        case ExprKind::NUMERIC_CAST: {
+            HandleTypeCast(state, StaticCast<const NumericCast*>(expression));
             break;
         }
         case ExprKind::CONSTANT:
@@ -452,8 +452,8 @@ std::optional<Block*> RangeAnalysis::HandleTerminatorEffect(RangeDomain& state, 
             return HandleBranchTerminator(state, StaticCast<const Branch*>(terminator));
         case ExprKind::MULTIBRANCH:
             return HandleMultiBranchTerminator(state, StaticCast<const MultiBranch*>(terminator));
-        case ExprKind::TYPECAST_WITH_EXCEPTION:
-            res = HandleTypeCast(state, StaticCast<const TypeCastWithException*>(terminator));
+        case ExprKind::NUMERIC_CAST_WITH_EXCEPTION:
+            res = HandleTypeCast(state, StaticCast<const NumericCastWithException*>(terminator));
             break;
         case ExprKind::INT_OP_WITH_EXCEPTION:
         case ExprKind::INTRINSIC_WITH_EXCEPTION:

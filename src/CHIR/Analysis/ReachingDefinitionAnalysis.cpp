@@ -81,10 +81,8 @@ ReachingDefinitionAnalysis::ReachingDefinitionAnalysis(const Function* func) : A
         for (auto expr : bb->GetExpressions()) {
             Type* allocatedTy = nullptr;
             auto kind = expr->GetExprKind();
-            if (kind == ExprKind::ALLOCATE) {
-                allocatedTy = StaticCast<Allocate*>(expr)->GetType();
-            } else if (kind == ExprKind::ALLOCATE_WITH_EXCEPTION) {
-                allocatedTy = StaticCast<AllocateWithException*>(expr)->GetType();
+            if (kind == ExprKind::ALLOCATE || kind == ExprKind::ALLOCATE_WITH_EXCEPTION) {
+                allocatedTy = StaticCast<AllocateBase*>(expr)->GetType();
             } else if (kind == ExprKind::LAMBDA) {
                 auto blocks = StaticCast<const Lambda*>(expr)->GetBody()->GetBlocks();
                 worklist.insert(worklist.end(), blocks.begin(), blocks.end());

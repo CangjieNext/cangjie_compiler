@@ -172,7 +172,8 @@ void TypeAnalysis::PrintDebugMessage(const Expression* expr, const TypeValue* ab
 void TypeAnalysis::HandleNormalExpressionEffect(TypeDomain& state, const Expression* expression)
 {
     switch (expression->GetExprKind()) {
-        case ExprKind::TYPECAST:
+        case ExprKind::CLASS_STATIC_CAST:
+        case ExprKind::NUMERIC_CAST:
             return HandleTypeCastExpr(state, StaticCast<const TypeCast*>(expression));
         case ExprKind::BOX:
             return HandleBoxExpr(state, StaticCast<const Box*>(expression));
@@ -215,8 +216,8 @@ std::optional<Block*> TypeAnalysis::HandleTerminatorEffect(TypeDomain& state, co
         // case ExprKind::RAW_ARRAY_LITERAL_ALLOCATE_WITH_EXCEPTION:
         // case ExprKind::APPLY_WITH_EXCEPTION:
         // case ExprKind::INVOKE_WITH_EXCEPTION:
-        case ExprKind::TYPECAST_WITH_EXCEPTION:
-            HandleTypeCastExpr(state, StaticCast<const TypeCastWithException*>(terminator));
+        case ExprKind::NUMERIC_CAST_WITH_EXCEPTION:
+            HandleTypeCastExpr(state, StaticCast<const NumericCastWithException*>(terminator));
             break;
         case ExprKind::GOTO:
         case ExprKind::EXIT:
@@ -286,8 +287,8 @@ void TypeAnalysis::HandleBoxExpr(TypeDomain& state, const Box* boxExpr) const
 
 template <typename TTypeCast> void TypeAnalysis::HandleTypeCastExpr(TypeDomain& state, const TTypeCast* typecast) const
 {
-    Type* srcTy = typecast->GetSourceTy();
-    Type* tgtTy = typecast->GetTargetTy();
+    Type* srcTy = typecast->GetSourceType();
+    Type* tgtTy = typecast->GetTargetType();
     while (srcTy->IsRef()) {
         auto ty1 = StaticCast<RefType*>(srcTy)->GetBaseType();
         srcTy = ty1;
