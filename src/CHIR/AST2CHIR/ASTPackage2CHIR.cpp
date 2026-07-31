@@ -934,6 +934,10 @@ void AST2CHIR::CreateAnnoOnlyDeclSig(const AST::Decl& decl)
 static void SetCustomTypeDefAttr(CustomTypeDef& def, const AST::Decl& decl)
 {
     def.AppendAttributeInfo(BuildAttr(decl.GetAttrs()));
+    // An abstract class is implicitly open in the language semantics.
+    if (DynamicCast<ClassDef*>(&def) != nullptr && decl.TestAttr(AST::Attribute::ABSTRACT)) {
+        def.EnableAttr(Attribute::VIRTUAL);
+    }
     if (auto structDef = DynamicCast<StructDef*>(&def)) {
         if (decl.TestAttr(AST::Attribute::C)) {
             structDef->SetCStruct(true);
