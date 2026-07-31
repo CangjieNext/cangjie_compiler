@@ -207,9 +207,6 @@ InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& in
     auto tempDecl = typeManager.GetTopOverriddenFuncDecl(&callee);
     const AST::FuncDecl* originalFuncDecl = tempDecl ? tempDecl.get() : &callee;
     auto method = StaticCast<Function*>(GetSymbolTable(*originalFuncDecl));
-    // the overflow strategy is NA in mock case, of course, it's a wrong choice, we have to use SATURATING as default
-    // we choose SATURATING because SATURATING and NA are same in `OverflowStrategyPrefix`
-    auto tempStrategy = strategy == OverflowStrategy::NA ? OverflowStrategy::SATURATING : strategy;
     return InvokeCallContext {
         .method = method,
         .caller = &caller,
@@ -218,7 +215,9 @@ InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& in
             .instTypeArgs = instFuncInfo.instantiatedTypeArgs,
             .thisType = instFuncInfo.thisType
         },
-        .overflowStrategy = IsOverflowOpCall(*originalFuncDecl) ? tempStrategy : OverflowStrategy::NA
+        // Sema assigns the effective strategy to calls synthesized for mock
+        // support. Preserve NA when integer-overflow handling is disabled.
+        .overflowStrategy = IsOverflowOpCall(*originalFuncDecl) ? strategy : OverflowStrategy::NA
     };
 }
 

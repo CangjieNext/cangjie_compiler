@@ -209,6 +209,21 @@ void SetOverflowStrategy(Node& node, const OverflowStrategy overflowStrategy, co
 #endif
                 break;
             }
+            case ASTKind::CALL_EXPR: {
+                // Mock call-base expressions are synthesized after the initial
+                // type checking pass, so they do not inherit the strategy from
+                // a source arithmetic expression.  Give them the same
+                // effective strategy as the function body that contains them.
+                auto callExpr = RawStaticCast<CallExpr*>(curNode);
+                if (callExpr->TestAttr(Attribute::GENERATED_TO_MOCK)) {
+                    if (overflowStrategy == OverflowStrategy::NA) {
+                        callExpr->overflowStrategy = optionStrategy;
+                    } else {
+                        callExpr->overflowStrategy = overflowStrategy;
+                    }
+                }
+                break;
+            }
             default:
                 break;
         }
