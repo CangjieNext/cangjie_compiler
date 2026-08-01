@@ -2376,6 +2376,24 @@ bool TypeChecker::TypeCheckerImpl::CheckRefConstructor(const ASTContext& ctx, co
     return true;
 }
 
+bool TypeChecker::TypeCheckerImpl::TryResolveTypeAliasNumConv(CallExpr& ce, RefExpr& re)
+{
+    auto callTarget = GetRealTarget(&re, re.ref.target);
+    if (!callTarget || callTarget->astKind != ASTKind::TYPE_ALIAS_DECL) {
+        return false;
+    }
+    auto& aliasDecl = static_cast<const TypeAliasDecl&>(*callTarget);
+    if (!aliasDecl.type) {
+        return false;
+    }
+    auto origTy = aliasDecl.type->GetTy();
+    if (!origTy || !(origTy->IsNumeric() || origTy->kind == TypeKind::TYPE_RUNE)) {
+        return false;
+    }
+    ce.SetTy(origTy);
+    return true;
+}
+
 bool TypeChecker::TypeCheckerImpl::ChkCallBaseRefExpr(
     ASTContext& ctx, CallExpr& ce, Ptr<Decl>& target, std::vector<Ptr<FuncDecl>>& candidates)
 {
@@ -2391,27 +2409,15 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseRefExpr(
     }
     if (!re->ref.target && re->ref.targets.empty()) {
         return false;
-    } else {
-        if (!CheckRefConstructor(ctx, ce, *re)) {
-            return false;
-        }
-        if (!GetCallBaseCandidates(ctx, ce, *re, target, candidates)) {
-            // Issue #375: type alias to numeric/rune type, treat as type conversion.
-            auto callTarget = GetRealTarget(re, re->ref.target);
-            if (callTarget && callTarget->astKind == ASTKind::TYPE_ALIAS_DECL) {
-                auto& aliasDecl = static_cast<const TypeAliasDecl&>(*callTarget);
-                if (aliasDecl.type) {
-                    auto origTy = aliasDecl.type->GetTy();
-                    if (origTy && (origTy->IsNumeric() || origTy->kind == TypeKind::TYPE_RUNE)) {
-                        ce.SetTy(origTy);
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
+    }
+    if (!CheckRefConstructor(ctx, ce, *re)) {
+        return false;
+    }
+    if (GetCallBaseCandidates(ctx, ce, *re, target, candidates)) {
         return true;
     }
+    // Issue #375: type alias to numeric/rune type is treated as a type conversion.
+    return TryResolveTypeAliasNumConv(ce, *re);
 }
 
 bool TypeChecker::TypeCheckerImpl::ChkCallBaseMemberAccess(
