@@ -273,10 +273,16 @@ TEST_F(ProfileRecorderTest, DisabledRecordReturnsEmptyResultAndWritesNothing)
     EXPECT_TRUE(record.IsEnable());
     EXPECT_EQ(record.GetResult(), "{\"fake\": 1}");
 
-    // An unwritable output directory must be swallowed rather than throwing out of WriteJson.
-    record.SetOutputDir("/definitely/not/a/real/directory");
+    // WriteJson bails out when the stream cannot be opened, so nothing is written and no
+    // directory is created along the way. SetOutputDir takes the parent of a non-directory
+    // argument, so the *parent* has to be the missing one.
+    const std::string missingDir = FileUtil::JoinPath(TempDirRoot(), "cj_no_such_dir_for_profile");
+    ASSERT_FALSE(FileUtil::FileExist(missingDir));
+    record.SetOutputDir(FileUtil::JoinPath(missingDir, "inner"));
     record.SetPackageName("pkg");
     record.OutputResult();
+    EXPECT_FALSE(FileUtil::FileExist(FileUtil::JoinPath(missingDir, "pkg.fake.prof")));
+    EXPECT_FALSE(FileUtil::FileExist(missingDir));
 }
 
 TEST_F(ProfileRecorderTest, CodeInfoJsonHandlesEmptyAndPopulatedRecords)
