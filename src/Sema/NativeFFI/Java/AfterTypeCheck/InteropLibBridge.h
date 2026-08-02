@@ -418,20 +418,13 @@ public:
      */
     OwnedPtr<CallExpr> CreateGetJniEnvCall(Ptr<File> curFile);
 
-    /** CFFI object creation call:
-     * Java_CFFI_newJavaObject(jniEnv, classTypeSignature, "(<argsSignature>)V", cffiCtorFuncArgs)
-     */
-    OwnedPtr<CallExpr> CreateCFFINewJavaObjectCall(OwnedPtr<Expr> jniEnv, std::string classTypeSignature,
-                                                   FuncParamList& params, bool isMirror, File& curFile);
-
     /**
-     * Java_CFFI_newJavaObject(env, classTypeSignature, constructorSignature, [args])
+     * Creates a block that performs Java object construction,
+     * including all required JNI setup (JNIEnv, class, constructor ID,
+     * arguments and exception handling), and returns the created object.
      */
-    OwnedPtr<CallExpr> CreateNewJavaObjectCall(
-        Ptr<Expr> env,
-        const std::string& classTypeSignature,
-        const std::string& constructorSignature,
-        std::vector<OwnedPtr<Expr>> args);
+    OwnedPtr<Block> CreateJavaConstructorBlock(Ptr<Ty> classTy, FuncParamList& paramList,
+        Ptr<File> curFile, bool isMirror);
 
     /**
      * JavaObjectController<T>(javaEntity, className)
@@ -478,15 +471,6 @@ public:
         AST::FuncParamList& params, const Ptr<AST::GenericParamDecl> genericParam, ArrayOperationKind kind);
 
     /**
-     * Creates JNI jvalue-compatible expressions for a non-empty function
-     * parameter list.
-     *
-     * Each returned expression corresponds to one function parameter converted
-     * to its JNI jvalue representation.
-     */
-    std::vector<OwnedPtr<Expr>> CreateJNIArgJValueExprs(FuncParamList& paramList, File& curFile);
-
-    /**
      * Converts the result of a direct JNI method call to the Cangjie value expected
      * by the generated code.
      *
@@ -496,40 +480,28 @@ public:
      */
     OwnedPtr<Expr> ConvertJavaResultToCJ(OwnedPtr<Expr> result, Ptr<Ty> resultTy, Decl& scope);
     
-    /**
-     * onverts a Cangjie expression to its JNI jvalue representation.
-     */
-    OwnedPtr<Expr> CreateJValueExpr(OwnedPtr<Expr> expr);
-    
-    /**
-     * Generates a direct JNI instance method call.
-     *
-     * Selects the appropriate Call<Type>MethodA or CallNonvirtual<Type>MethodA
-     * function according to the return type and the virt flag. For non-virtual
-     * calls, the declaring class is passed explicitly as required by JNI.
-     *
-     * Primitive JNI results are returned directly. Object results are wrapped into
-     * JavaEntity to preserve the interop-layer result representation.
-     *
-     * @param virt true to generate a virtual JNI call; false to generate a
-     *             non-virtual JNI call.
-     */
-    OwnedPtr<CallExpr> CreateJNIMethodCall(Ptr<Expr> env, OwnedPtr<Expr> obj,
-                                            const MemberJNISignature& signature,
-                                            OwnedPtr<Expr> argsExpr, Ptr<Ty> retTy,
-                                            bool virt = true);
+   /**
+    * Creates a block that prepares the JNI state and invokes a Java method.
+    *
+    * @param curFile   Current source file.
+    * @param paramList Method arguments.
+    * @param retTy     Method return type.
+    * @param isStatic  Whether the target method is static.
+    * @param javaRef   Receiver object for instance calls; unused for static calls.
+    * @param signature JNI signature of the target method.
+    */
+    OwnedPtr<Block> CreateJavaMethodCallBlock(Ptr<File> curFile, FuncParamList& paramList, Ptr<Ty> retTy,
+        bool isStatic, OwnedPtr<Expr> javaRef, const MemberJNISignature& signature);
 
-    /**
-     * Generates a direct JNI static method call.
-     *
-     * Selects the appropriate CallStatic<Type>MethodA function according to the
-     * return type and passes the supplied class as the JNI call receiver.
-     *
-     * Primitive JNI results are returned directly. Object results are wrapped into
-     * JavaEntity to preserve the interop-layer result representation.
-     */
-    OwnedPtr<CallExpr> CreateJNIStaticMethodCall(Ptr<Expr> env, OwnedPtr<Expr> clazz,
-        const MemberJNISignature& signature, OwnedPtr<Expr> argsExpr, Ptr<Ty> retTy);
+   /**
+    * Creates a block that prepares the JNI state and invokes the Java
+    * superclass method corresponding to the given call.
+    *
+    * @param impl      JavaImpl class containing the call.
+    * @param call      Original super-method call expression.
+    * @param signature JNI signature of the target superclass method.
+    */
+    OwnedPtr<Block> CreateJavaSuperMethodCallBlock(ClassDecl& impl, CallExpr& call, const MemberJNISignature& signature);
 
     /**
      * Java_CFFI_removeFromRegistry(registryId)
@@ -699,27 +671,6 @@ public:
     static bool IsInteropLibAccessible(const ImportManager& importManager);
     static bool IsJavaEntityTy(Ty& ty);
 
-    /**
-    * Creates a variable holding a Cangjie VArray of JNI jvalue-compatible
-    * argument representations.
-    *
-    * The input expressions must already be converted to the representation
-    * expected in JNI argument slots.
-    *
-    * Returns nullptr if the argument list is empty
-    */
-    OwnedPtr<VarDecl> CreateJNIArgsVar(std::vector<OwnedPtr<Expr>> args, File& curFile);
-
-   /**
-    * Creates a variable holding the Java class resolved by its JNI class name.
-    *
-    * Generates a Java_CFFI_ClassInit(env, className) call and stores its result
-    * in a temporary variable for use by subsequent JNI operations.
-    *
-    * Returns nullptr if the required CFFI class initialization function
-    * cannot be resolved.
-    */
-    OwnedPtr<VarDecl> CreateJNIClassVar(Ptr<Expr> env, const std::string& className);
 private:
    /**
     * Version value should be the same as for java interop library for the same SDK.
@@ -765,14 +716,66 @@ private:
         return ImportDecl<K>(INTEROP_JAVA_LANG_PACKAGE, declname);
     }
 
-    Ptr<FuncDecl> GetJavaObjectControllerMethodDecl(std::string methodName);
-    OwnedPtr<FuncArg> PrepareJNIArgsVArray(OwnedPtr<Expr> expr);
-    OwnedPtr<CallExpr> CreateJNIEnvReadCall(Ptr<Expr> env);
-    Ptr<StructDecl> GetJNINativeInterfaceDecl() const;
-    Ptr<VarDecl> GetJNINativeInterfaceField(const std::string_view name);
     const std::string_view SelectJNIStaticMethodName(TypeKind retTypeKind, bool hasArgs);
     const std::string_view SelectJNIInstanceMethodName(TypeKind retTypeKind, bool virt, bool hasArgs);
-    OwnedPtr<Expr> CreateBitCastExpr(OwnedPtr<Expr> expr, Ptr<Ty> resultTy, Ptr<Ty> valueTy, Ptr<File> curFile);
+
+    /**
+     * onverts a Cangjie expression to its JNI jvalue representation.
+     */
+    OwnedPtr<Expr> CreateJValueExpr(OwnedPtr<Expr> expr);    
+    /**
+     * Creates JNI jvalue-compatible expressions for a non-empty function
+     * parameter list.
+     *
+     * Each returned expression corresponds to one function parameter converted
+     * to its JNI jvalue representation.
+     */
+    std::vector<OwnedPtr<Expr>> CreateJNIArgJValueExprs(FuncParamList& paramList, File& curFile);
+
+    /**
+    * Creates a variable holding a Cangjie VArray of JNI jvalue-compatible
+    * argument representations.
+    *
+    * The input expressions must already be converted to the representation
+    * expected in JNI argument slots.
+    *
+    * Returns nullptr if the argument list is empty
+    */
+    OwnedPtr<VarDecl> CreateJNIArgsVar(std::vector<OwnedPtr<Expr>> args, File& curFile);
+
+   /**
+    * Creates a variable holding the Java class resolved by its JNI class name.
+    *
+    * Generates a Java_CFFI_ClassInit(env, className) call and stores its result
+    * in a temporary variable for use by subsequent JNI operations.
+    *
+    * Returns nullptr if the required CFFI class initialization function
+    * cannot be resolved.
+    */
+    OwnedPtr<VarDecl> CreateJNIClassVar(Ptr<Expr> env, const std::string& className);    
+
+   /**
+    * Builds a JNI NewObject/NewObjectA call and wraps the result as JavaEntity.
+    *
+    * @param env       JNI environment (`JNIEnv*`).
+    * @param javaClass Target Java class (`jclass`) to instantiate.
+    * @param methodID  Constructor method ID (`jmethodID`).
+    * @param argsExpr  Constructor arguments as a `jvalue[]` expression.
+    *                   If null, `NewObject` is used; otherwise `NewObjectA`.
+    */
+    OwnedPtr<CallExpr> CreateJNINewObjectCall(Ptr<Expr> env, OwnedPtr<Expr> javaClass,
+        OwnedPtr<Expr> methodID, OwnedPtr<Expr> argsExpr);
+
+    OwnedPtr<CallExpr> CreateJNICall(Ptr<Expr> env, Ptr<VarDecl> jniFunction, std::vector<OwnedPtr<FuncArg>> callArgs);
+    Ptr<FuncDecl> GetJavaObjectControllerMethodDecl(std::string methodName);
+    Ptr<StructDecl> GetJNINativeInterfaceDecl() const;
+    Ptr<VarDecl> GetJNINativeInterfaceField(const std::string_view name);
+    OwnedPtr<FuncArg> PrepareJNIArgsVArray(OwnedPtr<Expr> expr);
+    OwnedPtr<CallExpr> CreateJNIEnvReadCall(Ptr<Expr> env);
+    OwnedPtr<CallExpr> CreateAsJObjectCall(OwnedPtr<Expr> javaEntity);
+    OwnedPtr<CallExpr> CreateBitCastExpr(OwnedPtr<Expr> expr, Ptr<Ty> resultTy, Ptr<Ty> valueTy, Ptr<File> curFile);
+    OwnedPtr<CallExpr> CreateJNIMethodId(Ptr<Expr> env, OwnedPtr<Expr> clazz,
+        const std::string& name, const std::string& signature, bool isStatic);
 
     const ImportManager& importManager;
     TypeManager& typeManager;

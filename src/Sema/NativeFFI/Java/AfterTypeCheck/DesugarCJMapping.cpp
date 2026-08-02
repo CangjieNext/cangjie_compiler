@@ -800,18 +800,11 @@ OwnedPtr<FuncDecl> JavaDesugarManager::GenerateFwdClassMethod(
     // JNI virtual method call
     CJC_ASSERT_WITH_MSG(!fun->funcBody->paramLists.empty(), "paramLists cannot be empty");
     auto& paramList = *fun->funcBody->paramLists[0];
-
-    OwnedPtr<VarDecl> argsVar = nullptr;
-    OwnedPtr<Expr> argsRef = nullptr;
-    if (!paramList.params.empty()) {
-        auto args = lib.CreateJNIArgJValueExprs(paramList, *curFile);
-        argsVar = lib.CreateJNIArgsVar(std::move(args), *curFile);
-        argsRef = WithinFile(CreateRefExpr(*argsVar), curFile);
-    }
-
-    auto methodCall = lib.CreateJNIMethodCall(WithinFile(CreateRefExpr(*envVar), curFile),
-        WithinFile(CreateRefExpr(*localRefVar), curFile), MemberJNISignature(utils, *fun),
-        std::move(argsRef), fun->funcBody->retType->GetTy());
+    auto memberJNISignature = MemberJNISignature(utils, *fun);
+    auto retTy = fun->funcBody->retType->GetTy();
+    auto methodCall = lib.CreateJavaMethodCallBlock(curFile, paramList, retTy, false,
+        WithinFile(CreateRefExpr(*localRefVar), curFile),
+    memberJNISignature);
     if (!methodCall) {
         fun->EnableAttr(Attribute::IS_BROKEN);
         return nullptr;
@@ -819,7 +812,6 @@ OwnedPtr<FuncDecl> JavaDesugarManager::GenerateFwdClassMethod(
 
     auto methodCallRes = WithinFile(CreateTmpVarDecl(nullptr, std::move(methodCall)), curFile);
     auto callResRef = WithinFile(CreateRefExpr(*methodCallRes), curFile);
-    auto retTy = fun->funcBody->retType->GetTy();
     OwnedPtr<Expr> retCallExpr = nullptr;
     if (fun->funcBody->retType->TyKind() == TypeKind::TYPE_FUNC) {
         retCallExpr = CreateGetCJLambdaCallExpr(std::move(callResRef), retTy, fwdDecl);
@@ -838,9 +830,6 @@ OwnedPtr<FuncDecl> JavaDesugarManager::GenerateFwdClassMethod(
     thenRetExpr->refFuncBody = fun->funcBody.get();
     thenBodyNodes.push_back(std::move(envVar));
     thenBodyNodes.push_back(std::move(localRefVar));
-    if (argsVar) {
-        thenBodyNodes.push_back(std::move(argsVar));
-    }
     thenBodyNodes.push_back(std::move(methodCallRes));
     thenBodyNodes.push_back(std::move(deleteCallExpr));
     thenBodyNodes.push_back(std::move(thenRetExpr));
@@ -1149,20 +1138,9 @@ OwnedPtr<LambdaExpr> JavaDesugarManager::GenerateLambdaExpr(File& file, LambdaPa
         NormalizeJavaSignature(file.curPackage->fullPackageName + "/" + GetLambdaJavaClassName(pattern)), "call",
         utils.GetJavaTypeSignature(*retTy, paramTys));
 
-    // Create JNI argument array if the lambda has parameters.
-    OwnedPtr<VarDecl> argsVar = nullptr;
-    OwnedPtr<Expr> argsRef = nullptr;
-    if (!funcParamList->params.empty()) {
-        auto args = lib.CreateJNIArgJValueExprs(*funcParamList, *curFile);
-        argsVar = lib.CreateJNIArgsVar(std::move(args), *curFile);
-        CJC_NULLPTR_CHECK(argsVar);
-        argsRef = WithinFile(CreateRefExpr(*argsVar), curFile);
-    }
-
     // Call the Java lambda implementation.
-    auto methodCall = lib.CreateJNIMethodCall(lib.CreateGetJniEnvCall(curFile),
-        lib.CreateJavaEntityJobjectCall(WithinFile(CreateRefExpr(funcParam), curFile)),
-        memberJNISignature, std::move(argsRef), retTy);
+    auto methodCall = lib.CreateJavaMethodCallBlock(curFile, *funcParamList, retTy, false,
+         lib.CreateJavaEntityJobjectCall(WithinFile(CreateRefExpr(funcParam), curFile)), memberJNISignature);
     CJC_NULLPTR_CHECK(methodCall);
     auto methodCallRes = WithinFile(CreateTmpVarDecl(nullptr, std::move(methodCall)), curFile);
     auto callResRef = WithinFile(CreateRefExpr(*methodCallRes), curFile);
@@ -1174,9 +1152,6 @@ OwnedPtr<LambdaExpr> JavaDesugarManager::GenerateLambdaExpr(File& file, LambdaPa
     returnExpr->SetTy(TypeManager::GetNothingTy());
 
     std::vector<OwnedPtr<Node>> nodes;
-    if (argsVar) {
-        nodes.push_back(std::move(argsVar));
-    }
     nodes.push_back(std::move(methodCallRes));
     nodes.push_back(std::move(returnExpr));
 

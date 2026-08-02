@@ -5,7 +5,6 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "DesugarJavaImplSuperMethodCall.h"
-#include "Utils.h"
 #include "InteropLibBridge.h"
 
 #include "cangjie/AST/Match.h"
@@ -31,40 +30,10 @@ void DesugarJavaImplSuperMethodCall::DesugarSuperMethodCall(
     auto& outerDecl = *call.resolvedFunction->outerDecl;
     CJC_ASSERT(IsMirror(outerDecl));
     auto parent = As<ASTKind::CLASS_DECL>(&outerDecl);
-    auto curFile = call.curFile;
-    CJC_NULLPTR_CHECK(curFile);
-
-    std::vector<OwnedPtr<Expr>> jniArgs;
-    for (auto& arg : call.args) {
-        auto argExpr = ASTCloner::Clone(arg->expr.get());
-        CJC_NULLPTR_CHECK(argExpr);
-        jniArgs.emplace_back(ilib.CreateJValueExpr(std::move(argExpr)));
-    }
-
-    OwnedPtr<VarDecl> argsVar = nullptr;
-    OwnedPtr<Expr> argsRef = nullptr;
-    if (!jniArgs.empty()) {
-        argsVar = ilib.CreateJNIArgsVar(std::move(jniArgs), *curFile);
-        CJC_NULLPTR_CHECK(argsVar);
-        argsRef = WithinFile(CreateRefExpr(*argsVar), curFile);
-    }
-
     MemberJNISignature signature(utils, *call.resolvedFunction, parent);
-    auto jniCall = ilib.CreateJNIMethodCall(ilib.CreateGetJniEnvCall(curFile), CreateJavaRefCall(impl, curFile),
-        signature, std::move(argsRef), call.GetTy(), false);
-    CJC_NULLPTR_CHECK(jniCall);
-    auto resultExpr = ilib.ConvertJavaResultToCJ(std::move(jniCall), call.GetTy(), impl);
+    auto resultExpr = ilib.CreateJavaSuperMethodCallBlock(impl, call, signature);
     CJC_NULLPTR_CHECK(resultExpr);
-
-    if (!argsVar) {
-        call.desugarExpr = std::move(resultExpr);
-        return;
-    }
-
-    std::vector<OwnedPtr<Node>> nodes;
-    nodes.emplace_back(std::move(argsVar));
-    nodes.emplace_back(std::move(resultExpr));
-    call.desugarExpr = CreateBlock(std::move(nodes), call.GetTy());
+    call.desugarExpr = std::move(resultExpr);
 }
 
 DesugarJavaImplSuperMethodCall::DesugarJavaImplSuperMethodCall(

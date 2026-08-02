@@ -20,6 +20,8 @@
 #include "cangjie/AST/Utils.h"
 
 #include "cangjie/Utils/SafePointer.h"
+#include "cangjie/AST/Create.h"
+
 
 namespace Cangjie::Interop::Java {
 using namespace Cangjie::Native::FFI;
@@ -290,32 +292,21 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
     }
     auto curFile = ctor.curFile;
     CJC_ASSERT(ctor.TestAttr(Attribute::CONSTRUCTOR) && ctor.TestAttr(Attribute::JAVA_MIRROR));
+    CJC_ASSERT(ctor.TestAttr(Attribute::CONSTRUCTOR) && ctor.TestAttr(Attribute::JAVA_MIRROR));
     ctor.constructorCall = ConstructorCall::OTHER_INIT;
     auto thisCall = CreateThisCall(*ctor.outerDecl, generatedCtor, generatedCtor.GetTy(), curFile);
-
     CJC_ASSERT(ctor.funcBody);
     CJC_ASSERT(ctor.funcBody->paramLists.size() == 1);
-
-    auto jniEnvPtrDecl = lib.GetJniEnvPtrDecl();
-    if (!jniEnvPtrDecl) {
+    auto& body = ctor.funcBody->body->body;
+        auto& paramList = *ctor.funcBody->paramLists[0];
+    auto constructorExpr = lib.CreateJavaConstructorBlock(ctor.outerDecl->GetTy(),
+        paramList, curFile, true);
+    if (!constructorExpr) {
         ctor.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
-
-    auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, lib.CreateGetJniEnvCall(curFile));
-    OwnedPtr<CallExpr> newObjectCall = lib.CreateCFFINewJavaObjectCall(WithinFile(CreateRefExpr(*jniEnvVar), curFile),
-        utils.GetJavaClassNormalizeSignature(*ctor.outerDecl->GetTy()), *ctor.funcBody->paramLists[0], true, *curFile);
-
-    if (newObjectCall) {
-        std::vector<OwnedPtr<Node>> nodes;
-        nodes.push_back(std::move(jniEnvVar));
-        nodes.push_back(std::move(newObjectCall));
-
-        thisCall->args.push_back(CreateFuncArg(WrapReturningLambdaCall(typeManager, std::move(nodes))));
-        ctor.funcBody->body->body.push_back(std::move(thisCall));
-    } else {
-        ctor.EnableAttr(Attribute::IS_BROKEN);
-    }
+    thisCall->args.push_back(CreateFuncArg(std::move(constructorExpr)));
+    body.push_back(std::move(thisCall));
 }
 
 void JavaDesugarManager::AddJavaMirrorMethodBody(
@@ -331,49 +322,29 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     auto retTy = fun.funcBody->retType->GetTy();
     fun.funcBody->body = CreateBlock({}, retTy);
     auto& body = fun.funcBody->body->body;
-
-    auto& jniEnv = *StaticAs<ASTKind::VAR_DECL>(
-        body.emplace_back(CreateTmpVarDecl(nullptr, lib.CreateGetJniEnvCall(curFile))).get());
-
     CJC_ASSERT_WITH_MSG(!fun.funcBody->paramLists.empty(), "paramLists cannot be empty");
     auto& paramList = *fun.funcBody->paramLists[0].get();
     OwnedPtr<Expr> methodCall;
 
     if (IsJArray(mirror) && !fun.TestAttr(Attribute::STATIC)) {
+        auto& jniEnv = *StaticAs<ASTKind::VAR_DECL>(
+            body.emplace_back(CreateTmpVarDecl(nullptr, lib.CreateGetJniEnvCall(curFile))).get());
         CJC_ASSERT_WITH_MSG(!mirror.generic->typeParameters.empty(), "JArray ctor must be generic");
         auto genericParam = mirror.generic->typeParameters[0].get();
         CJC_ASSERT(genericParam);
-
         methodCall = lib.CreateCFFICallArrayMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
             std::move(javaRefCall), paramList, genericParam, GetArrayOperationKind(fun));
     } else {
-        auto memberJNISignature =
-            genericConfig ? MemberJNISignature(utils, fun, genericConfig) : MemberJNISignature(utils, fun);
-
-        OwnedPtr<VarDecl> argsVar = nullptr;
-        OwnedPtr<Expr> argsRef = nullptr;
-        if (!paramList.params.empty()) {
-            auto args = lib.CreateJNIArgJValueExprs(paramList, *curFile);
-            argsVar = lib.CreateJNIArgsVar(std::move(args), *curFile);
-            argsRef = WithinFile(CreateRefExpr(*argsVar), curFile);
-            body.emplace_back(std::move(argsVar));
+        auto memberJNISignature = genericConfig ?
+            MemberJNISignature(utils, fun, genericConfig) : MemberJNISignature(utils, fun);
+        auto methodBlock = lib.CreateJavaMethodCallBlock(curFile, paramList, retTy,
+            fun.TestAttr(Attribute::STATIC), std::move(javaRefCall), memberJNISignature);
+        if (!methodBlock) {
+            fun.EnableAttr(Attribute::IS_BROKEN);
+            return;
         }
-
-        if (fun.TestAttr(Attribute::STATIC)) {
-            auto clazzVar =
-                lib.CreateJNIClassVar(WithinFile(CreateRefExpr(jniEnv), curFile),
-                    memberJNISignature.classTypeSignature);
-            methodCall = lib.CreateJNIStaticMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
-                WithinFile(CreateRefExpr(*clazzVar), curFile), memberJNISignature,
-                std::move(argsRef), retTy);
-            body.emplace_back(std::move(clazzVar));
-        } else {
-            methodCall = lib.CreateJNIMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
-                std::move(javaRefCall), memberJNISignature, std::move(argsRef),
-                retTy, true);
-        }
+        methodCall = WrapReturningLambdaCall(typeManager, std::move(methodBlock->body));
     }
-
     if (!methodCall) {
         fun.EnableAttr(Attribute::IS_BROKEN);
         return;
@@ -385,13 +356,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     CopyBasicInfo(methodCallRes.initializer.get(), &methodCallRes);
     methodCallRes.begin = fun.begin;
     methodCallRes.curFile = curFile;
-
-    static auto handlePendingDecl = lib.GetJNIHandlePendingExceptionDecl();
-    auto handlePendingCall = CreateCall(handlePendingDecl, curFile, WithinFile(CreateRefExpr(jniEnv), curFile));
-    body.emplace_back(std::move(handlePendingCall));
-
     auto callResRef = WithinFile(CreateRefExpr(methodCallRes), curFile);
-
     OwnedPtr<Expr> retCallExpr = nullptr;
     // CJMapping interface return parameters support lambdas.
     if (retTy->kind == TypeKind::TYPE_FUNC && fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
