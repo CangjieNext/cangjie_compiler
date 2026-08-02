@@ -1293,65 +1293,95 @@ struct JNIMethodNames {
 };
 
 namespace {
+// Lookup tables for selecting the appropriate JNI Call<Type>Method variant.
 
 constexpr JNIMethodNames BYTE_METHODS{
-    "CallByteMethod",           "CallByteMethodA",
-    "CallNonvirtualByteMethod", "CallNonvirtualByteMethodA",
-    "CallStaticByteMethod",     "CallStaticByteMethodA"
-};
-
+    "CallByteMethod",            // virtualNoArgs
+    "CallByteMethodA",           // virtualArgs
+    "CallNonvirtualByteMethod",  // nonVirtualNoArgs
+    "CallNonvirtualByteMethodA", // nonVirtualArgs
+    "CallStaticByteMethod",      // staticNoArgs
+    "CallStaticByteMethodA",     // staticArgs
+};    
 constexpr JNIMethodNames CHAR_METHODS{
-    "CallCharMethod",           "CallCharMethodA",
-    "CallNonvirtualCharMethod", "CallNonvirtualCharMethodA",
-    "CallStaticCharMethod",     "CallStaticCharMethodA"
+    "CallCharMethod",            // virtualNoArgs
+    "CallCharMethodA",           // virtualArgs
+    "CallNonvirtualCharMethod",  // nonVirtualNoArgs
+    "CallNonvirtualCharMethodA", // nonVirtualArgs
+    "CallStaticCharMethod",      // staticNoArgs
+    "CallStaticCharMethodA",     // staticArgs
 };
 
 constexpr JNIMethodNames SHORT_METHODS{
-    "CallShortMethod",           "CallShortMethodA",
-    "CallNonvirtualShortMethod", "CallNonvirtualShortMethodA",
-    "CallStaticShortMethod",     "CallStaticShortMethodA"
+    "CallShortMethod",            // virtualNoArgs
+    "CallShortMethodA",           // virtualArgs
+    "CallNonvirtualShortMethod",  // nonVirtualNoArgs
+    "CallNonvirtualShortMethodA", // nonVirtualArgs
+    "CallStaticShortMethod",      // staticNoArgs
+    "CallStaticShortMethodA",     // staticArgs
 };
 
 constexpr JNIMethodNames INT_METHODS{
-    "CallIntMethod",           "CallIntMethodA",
-    "CallNonvirtualIntMethod", "CallNonvirtualIntMethodA",
-    "CallStaticIntMethod",     "CallStaticIntMethodA"
+    "CallIntMethod",            // virtualNoArgs
+    "CallIntMethodA",           // virtualArgs
+    "CallNonvirtualIntMethod",  // nonVirtualNoArgs
+    "CallNonvirtualIntMethodA", // nonVirtualArgs
+    "CallStaticIntMethod",      // staticNoArgs
+    "CallStaticIntMethodA",     // staticArgs
 };
 
 constexpr JNIMethodNames LONG_METHODS{
-    "CallLongMethod",           "CallLongMethodA",
-    "CallNonvirtualLongMethod", "CallNonvirtualLongMethodA",
-    "CallStaticLongMethod",     "CallStaticLongMethodA"
+    "CallLongMethod",            // virtualNoArgs
+    "CallLongMethodA",           // virtualArgs
+    "CallNonvirtualLongMethod",  // nonVirtualNoArgs
+    "CallNonvirtualLongMethodA", // nonVirtualArgs
+    "CallStaticLongMethod",      // staticNoArgs
+    "CallStaticLongMethodA",     // staticArgs
 };
 
 constexpr JNIMethodNames FLOAT_METHODS{
-    "CallFloatMethod",           "CallFloatMethodA",
-    "CallNonvirtualFloatMethod", "CallNonvirtualFloatMethodA",
-    "CallStaticFloatMethod",     "CallStaticFloatMethodA"
+    "CallFloatMethod",            // virtualNoArgs
+    "CallFloatMethodA",           // virtualArgs
+    "CallNonvirtualFloatMethod",  // nonVirtualNoArgs
+    "CallNonvirtualFloatMethodA", // nonVirtualArgs
+    "CallStaticFloatMethod",      // staticNoArgs
+    "CallStaticFloatMethodA",     // staticArgs
 };
 
 constexpr JNIMethodNames DOUBLE_METHODS{
-    "CallDoubleMethod",           "CallDoubleMethodA",
-    "CallNonvirtualDoubleMethod", "CallNonvirtualDoubleMethodA",
-    "CallStaticDoubleMethod",     "CallStaticDoubleMethodA"
+    "CallDoubleMethod",            // virtualNoArgs
+    "CallDoubleMethodA",           // virtualArgs
+    "CallNonvirtualDoubleMethod",  // nonVirtualNoArgs
+    "CallNonvirtualDoubleMethodA", // nonVirtualArgs
+    "CallStaticDoubleMethod",      // staticNoArgs
+    "CallStaticDoubleMethodA",     // staticArgs
 };
 
 constexpr JNIMethodNames BOOLEAN_METHODS{
-    "CallBooleanMethod",           "CallBooleanMethodA",
-    "CallNonvirtualBooleanMethod", "CallNonvirtualBooleanMethodA",
-    "CallStaticBooleanMethod",     "CallStaticBooleanMethodA"
+    "CallBooleanMethod",            // virtualNoArgs
+    "CallBooleanMethodA",           // virtualArgs
+    "CallNonvirtualBooleanMethod",  // nonVirtualNoArgs
+    "CallNonvirtualBooleanMethodA", // nonVirtualArgs
+    "CallStaticBooleanMethod",      // staticNoArgs
+    "CallStaticBooleanMethodA",     // staticArgs
 };
 
 constexpr JNIMethodNames VOID_METHODS{
-    "CallVoidMethod",           "CallVoidMethodA",
-    "CallNonvirtualVoidMethod", "CallNonvirtualVoidMethodA",
-    "CallStaticVoidMethod",     "CallStaticVoidMethodA"
+    "CallVoidMethod",            // virtualNoArgs
+    "CallVoidMethodA",           // virtualArgs
+    "CallNonvirtualVoidMethod",  // nonVirtualNoArgs
+    "CallNonvirtualVoidMethodA", // nonVirtualArgs
+    "CallStaticVoidMethod",      // staticNoArgs
+    "CallStaticVoidMethodA",     // staticArgs
 };
 
 constexpr JNIMethodNames OBJECT_METHODS{
-    "CallObjectMethod",           "CallObjectMethodA",
-    "CallNonvirtualObjectMethod", "CallNonvirtualObjectMethodA",
-    "CallStaticObjectMethod",     "CallStaticObjectMethodA"
+    "CallObjectMethod",            // virtualNoArgs
+    "CallObjectMethodA",           // virtualArgs
+    "CallNonvirtualObjectMethod",  // nonVirtualNoArgs
+    "CallNonvirtualObjectMethodA", // nonVirtualArgs
+    "CallStaticObjectMethod",      // staticNoArgs
+    "CallStaticObjectMethodA",     // staticArgs
 };
 
 } // namespace
@@ -1375,11 +1405,9 @@ const JNIMethodNames& GetJNIMethodNames(TypeKind retTypeKind)
 const std::string_view InteropLibBridge::SelectJNIInstanceMethodName(TypeKind retTypeKind, bool virt, bool hasArgs)
 {
     const auto& m = GetJNIMethodNames(retTypeKind);
-
     if (virt) {
         return hasArgs ? m.virtualArgs : m.virtualNoArgs;
     }
-
     return hasArgs ? m.nonVirtualArgs : m.nonVirtualNoArgs;
 }
 
@@ -1414,7 +1442,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateBitCastExpr(OwnedPtr<Expr> expr,
 OwnedPtr<VarDecl> InteropLibBridge::CreateJNIClassVar(Ptr<Expr> env, const std::string& className)
 {
     auto pcurFile = env->curFile;
-    auto jclassInitFuncDecl = GetJClassIdDecl();
+    static auto jclassInitFuncDecl = GetJClassIdDecl();
     CJC_NULLPTR_CHECK(jclassInitFuncDecl);
     auto strTy = jclassInitFuncDecl->funcBody->paramLists[0]->params[1]->GetTy();
     auto classNameExpr = CreateLitConstExpr(LitConstKind::STRING, className, strTy);
