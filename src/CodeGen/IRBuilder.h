@@ -222,6 +222,12 @@ public:
      * the BE will ensure that it can be retained.
      */
     llvm::CallInst* CreateCJMemSetStructWith0(llvm::AllocaInst* addr);
+
+    /**
+     * Create SRet for unknown size / generic return value.
+     * Return the created SRet (typically i8 addrspace(1)**).
+     */
+    llvm::Value* CreateSRetForUnknownSize(const CHIR::Type& returnCHIRType, const CHIR::Type& retValType);
 #endif
 
     /**
@@ -481,11 +487,6 @@ private:
      */
     std::vector<llvm::Value*> TransformFuncArgs(const CGFunctionType& calleeType,
         const std::vector<CGValue*>& args, const CHIRCallExpr* applyWrapper, llvm::Value* thisTypeInfo);
-    /**
-     * Create SRet for unknown size return value.
-     * Return the created SRet.
-     */
-    llvm::Value* CreateSRetForUnknownSize(const CHIR::Type& returnCHIRType, const CHIR::Type& retValType);
     /**
      * Create Outer TypeInfo for the given CHIRCallExpr.
      * Return the created Outer TypeInfo.
