@@ -1,3 +1,37 @@
+diff --git a/.gitcode/CODEOWNERS b/.gitcode/CODEOWNERS
+new file mode 100644
+index 000000000..97b025790
+--- /dev/null
++++ b/.gitcode/CODEOWNERS
+@@ -0,0 +1,28 @@
++/.gitcode/ @neilliuistaken
++
++* @neilliuistaken
++
++/compiler-rt/ @duo-duo @wangyang594
++/llvm/ @duo-duo @wangyang594
++/lldb/ @zxudong
++/lld/ @duo-duo @wangyang594
++
++/bolt/ @neilliuistaken
++/clang/ @neilliuistaken
++/clang-tools-extra/ @neilliuistaken
++/cmake/ @neilliuistaken
++/cross-project-tests/ @neilliuistaken
++/flang/ @neilliuistaken
++/libc/ @neilliuistaken
++/libclc/ @neilliuistaken
++/libcxx/ @neilliuistaken
++/libcxxabi/ @neilliuistaken
++/libunwind/ @neilliuistaken
++/llvm-libgcc/ @neilliuistaken
++/mlir/ @neilliuistaken
++/openmp/ @neilliuistaken
++/polly/ @neilliuistaken
++/pstl/ @neilliuistaken
++/runtimes/ @neilliuistaken
++/third-party/ @neilliuistaken
++/utils/ @neilliuistaken
 diff --git a/.gitcode/ISSUE_TEMPLATE/bug-report.yml b/.gitcode/ISSUE_TEMPLATE/bug-report.yml
 new file mode 100644
 index 000000000..2672d0d19
@@ -222,6 +256,1080 @@ index 000000000..58f8fa908
 +
 +Any additional information related to this Pull Request can be added here.
 \ No newline at end of file
+diff --git a/.github/PULL_REQUEST_TEMPLATE.md b/.github/PULL_REQUEST_TEMPLATE.md
+deleted file mode 100644
+index a3d33bdb4..000000000
+--- a/.github/PULL_REQUEST_TEMPLATE.md
++++ /dev/null
+@@ -1,5 +0,0 @@
+-# **DO NOT FILE A PULL REQUEST**
+-
+-This repository does not accept pull requests. Please follow http://llvm.org/docs/Contributing.html#how-to-submit-a-patch for contribution to LLVM.
+-
+-# **DO NOT FILE A PULL REQUEST**
+diff --git a/.github/workflows/README.md b/.github/workflows/README.md
+deleted file mode 100644
+index 2781d9cc0..000000000
+--- a/.github/workflows/README.md
++++ /dev/null
+@@ -1 +0,0 @@
+-Github action workflows should be stored in this directrory.
+diff --git a/.github/workflows/clang-tests.yml b/.github/workflows/clang-tests.yml
+deleted file mode 100644
+index fb2d04b3b..000000000
+--- a/.github/workflows/clang-tests.yml
++++ /dev/null
+@@ -1,37 +0,0 @@
+-name: Clang Tests
+-
+-on:
+-  workflow_dispatch:
+-  push:
+-    ignore-forks: true
+-    branches:
+-      - 'release/**'
+-    paths:
+-      - 'clang/**'
+-      - '.github/workflows/clang-tests.yml'
+-      - '.github/workflows/llvm-project-tests.yml'
+-      - '!llvm/**'
+-  pull_request:
+-    ignore-forks: true
+-    branches:
+-      - 'release/**'
+-    paths:
+-      - 'clang/**'
+-      - '.github/workflows/clang-tests.yml'
+-      - '.github/workflows/llvm-project-tests.yml'
+-      - '!llvm/**'
+-
+-concurrency:
+-  # Skip intermediate builds: always.
+-  # Cancel intermediate builds: only if it is a pull request build.
+-  group: ${{ github.workflow }}-${{ github.ref }}
+-  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+-
+-jobs:
+-  check_clang:
+-    if: github.repository_owner == 'llvm'
+-    name: Test clang,lldb,libclc
+-    uses: ./.github/workflows/llvm-project-tests.yml
+-    with:
+-      build_target: check-clang
+-      projects: clang;lldb;libclc
+diff --git a/.github/workflows/closed-issues.yml b/.github/workflows/closed-issues.yml
+deleted file mode 100644
+index 921bbcf78..000000000
+--- a/.github/workflows/closed-issues.yml
++++ /dev/null
+@@ -1,13 +0,0 @@
+-name: Labeling closed issues
+-on:
+-  issues:
+-    types: ['closed']
+-
+-jobs:
+-  automate-issues-labels:
+-    runs-on: ubuntu-latest
+-    if: github.repository == 'llvm/llvm-project'
+-    steps:
+-      - uses: andymckay/labeler@1.0.4
+-        with:
+-          remove-labels: 'awaiting-review'
+diff --git a/.github/workflows/issue-release-workflow.yml b/.github/workflows/issue-release-workflow.yml
+deleted file mode 100644
+index 927ffb8ae..000000000
+--- a/.github/workflows/issue-release-workflow.yml
++++ /dev/null
+@@ -1,88 +0,0 @@
+-# This contains the workflow definitions that allow users to test backports
+-# to the release branch using comments on issues.
+-#
+-# /cherry-pick <commit> <...>
+-#
+-# This comment will attempt to cherry-pick the given commits to the latest
+-# release branch (release/Y.x) and if successful, push the result to a branch
+-# on github.
+-#
+-# /branch <owner>/<repo>/<branch>
+-#
+-# This comment will create a pull request from <branch> to the latest release
+-# branch.
+-
+-name: Issue Release Workflow
+-
+-on:
+-  issue_comment:
+-    types:
+-      - created
+-      - edited
+-  issues:
+-    types:
+-      - opened
+-
+-env:
+-  COMMENT_BODY: ${{ github.event.action == 'opened' && github.event.issue.body || github.event.comment.body  }}
+-
+-jobs:
+-  backport-commits:
+-    name: Backport Commits
+-    runs-on: ubuntu-20.04
+-    if: >-
+-      (github.repository == 'llvm/llvm-project') &&
+-      !startswith(github.event.comment.body, '<!--IGNORE-->') &&
+-      contains(github.event.action == 'opened' && github.event.issue.body || github.event.comment.body, '/cherry-pick')
+-    steps:
+-      - name: Fetch LLVM sources
+-        uses: actions/checkout@v2
+-        with:
+-          repository: llvm/llvm-project
+-          # GitHub stores the token used for checkout and uses it for pushes
+-          # too, but we want to use a different token for pushing, so we need
+-          # to disable persist-credentials here.
+-          persist-credentials: false
+-          fetch-depth: 0
+-
+-      - name: Setup Environment
+-        run: |
+-          pip install -r ./llvm/utils/git/requirements.txt
+-          ./llvm/utils/git/github-automation.py --token ${{ github.token }} setup-llvmbot-git
+-
+-      - name: Backport Commits
+-        run: |
+-          printf "$COMMENT_BODY" |
+-          ./llvm/utils/git/github-automation.py \
+-          --repo $GITHUB_REPOSITORY \
+-          --token ${{ secrets.RELEASE_WORKFLOW_PUSH_SECRET }} \
+-          release-workflow \
+-          --issue-number ${{ github.event.issue.number }} \
+-          --phab-token ${{ secrets.RELEASE_WORKFLOW_PHAB_TOKEN }} \
+-          auto
+-
+-  create-pull-request:
+-    name: Create Pull Request
+-    runs-on: ubuntu-20.04
+-    if: >-
+-      (github.repository == 'llvm/llvm-project') &&
+-      !startswith(github.event.comment.body, '<!--IGNORE-->') &&
+-      contains(github.event.comment.body, '/branch')
+-
+-    steps:
+-      - name: Fetch LLVM sources
+-        uses: actions/checkout@v2
+-
+-      - name: Setup Environment
+-        run: |
+-          pip install -r ./llvm/utils/git/requirements.txt
+-
+-      - name: Create Pull Request
+-        run: |
+-          printf "$COMMENT_BODY" |
+-          ./llvm/utils/git/github-automation.py \
+-          --repo $GITHUB_REPOSITORY \
+-          --token ${{ secrets.RELEASE_WORKFLOW_PUSH_SECRET }} \
+-          release-workflow \
+-          --issue-number ${{ github.event.issue.number }} \
+-          auto
+diff --git a/.github/workflows/issue-subscriber.yml b/.github/workflows/issue-subscriber.yml
+deleted file mode 100644
+index a243c7526..000000000
+--- a/.github/workflows/issue-subscriber.yml
++++ /dev/null
+@@ -1,29 +0,0 @@
+-name: Issue Subscriber
+-
+-on:
+-  issues:
+-    types:
+-      - labeled
+-
+-jobs:
+-  auto-subscribe:
+-    runs-on: ubuntu-latest
+-    if: github.repository == 'llvm/llvm-project'
+-    steps:
+-      - name: Setup Automation Script
+-        run: |
+-          curl -O -L https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_SHA/llvm/utils/git/github-automation.py
+-          curl -O -L https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_SHA/llvm/utils/git/requirements.txt
+-          chmod a+x github-automation.py
+-          pip install -r requirements.txt
+-
+-      - name: Update watchers
+-        # https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
+-        env:
+-          LABEL_NAME: ${{ github.event.label.name }}
+-        run: |
+-          ./github-automation.py \
+-            --token '${{ secrets.ISSUE_SUBSCRIBER_TOKEN }}' \
+-            issue-subscriber \
+-            --issue-number '${{ github.event.issue.number }}' \
+-            --label-name "$LABEL_NAME"
+diff --git a/.github/workflows/libclang-abi-tests.yml b/.github/workflows/libclang-abi-tests.yml
+deleted file mode 100644
+index 8cc2f3a0f..000000000
+--- a/.github/workflows/libclang-abi-tests.yml
++++ /dev/null
+@@ -1,166 +0,0 @@
+-name: libclang ABI Tests
+-
+-on:
+-  workflow_dispatch:
+-  push:
+-    ignore-forks: true
+-    branches:
+-      - 'release/**'
+-    paths:
+-      - 'clang/**'
+-      - '.github/workflows/libclang-abi-tests.yml'
+-  pull_request:
+-    ignore-forks: true
+-    branches:
+-      - 'release/**'
+-    paths:
+-      - 'clang/**'
+-      - '.github/workflows/libclang-abi-tests.yml'
+-
+-concurrency:
+-  # Skip intermediate builds: always.
+-  # Cancel intermediate builds: only if it is a pull request build.
+-  group: ${{ github.workflow }}-${{ github.ref }}
+-  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+-
+-
+-jobs:
+-  abi-dump-setup:
+-    if: github.repository_owner == 'llvm'
+-    runs-on: ubuntu-latest
+-    outputs:
+-      BASELINE_REF: ${{ steps.vars.outputs.BASELINE_REF }}
+-      ABI_HEADERS: ${{ steps.vars.outputs.ABI_HEADERS }}
+-      ABI_LIBS: ${{ steps.vars.outputs.ABI_LIBS }}
+-      BASELINE_VERSION_MAJOR: ${{ steps.vars.outputs.BASELINE_VERSION_MAJOR }}
+-      BASELINE_VERSION_MINOR: ${{ steps.vars.outputs.BASELINE_VERSION_MINOR }}
+-      LLVM_VERSION_MAJOR: ${{ steps.version.outputs.LLVM_VERSION_MAJOR }}
+-      LLVM_VERSION_MINOR: ${{ steps.version.outputs.LLVM_VERSION_MINOR }}
+-      LLVM_VERSION_PATCH: ${{ steps.version.outputs.LLVM_VERSION_PATCH }}
+-    steps:
+-      - name: Checkout source
+-        uses: actions/checkout@v3
+-        with:
+-          fetch-depth: 250
+-
+-      - name: Get LLVM version
+-        id: version
+-        uses: llvm/actions/get-llvm-version@main
+-
+-      - name: Setup Variables
+-        id: vars
+-        run: |
+-          minor_version=0
+-          remote_repo='https://github.com/llvm/llvm-project'
+-          if [ ${{ steps.version.outputs.LLVM_VERSION_MINOR }} -ne 0 -o ${{ steps.version.outputs.LLVM_VERSION_PATCH }} -eq 0 ]; then
+-            major_version=$(( ${{ steps.version.outputs.LLVM_VERSION_MAJOR }} - 1))
+-            baseline_ref="llvmorg-$major_version.0.0"
+-
+-            # If there is a minor release, we want to use that as the base line.
+-            minor_ref=`git ls-remote --refs -t $remote_repo llvmorg-$major_version.[1-9].[0-9] | tail -n1 | grep -o 'llvmorg-.\+' || true`
+-            if [ -n "$minor_ref" ]; then
+-               baseline_ref=$minor_ref
+-            else
+-              # Check if we have a release candidate
+-              rc_ref=`git ls-remote --refs -t $remote_repo llvmorg-$major_version.[1-9].[0-9]-rc* | tail -n1 | grep -o 'llvmorg-.\+' || true`
+-              if [ -n "$rc_ref" ]; then
+-                baseline_ref=$rc_ref
+-              fi
+-            fi
+-            echo ::set-output name=BASELINE_VERSION_MAJOR::$major_version
+-            echo ::set-output name=BASELINE_REF::$baseline_ref
+-            echo ::set-output name=ABI_HEADERS::clang-c
+-            echo ::set-output name=ABI_LIBS::libclang.so
+-          else
+-            echo ::set-output name=BASELINE_VERSION_MAJOR::${{ steps.version.outputs.LLVM_VERSION_MAJOR }}
+-            echo ::set-output name=BASELINE_REF::llvmorg-${{ steps.version.outputs.LLVM_VERSION_MAJOR }}.0.0
+-            echo ::set-output name=ABI_HEADERS::.
+-            echo ::set-output name=ABI_LIBS::libclang.so libclang-cpp.so
+-          fi
+-
+-
+-  abi-dump:
+-    if: github.repository_owner == 'llvm'
+-    needs: abi-dump-setup
+-    runs-on: ubuntu-latest
+-    strategy:
+-      matrix:
+-        name:
+-          - build-baseline
+-          - build-latest
+-        include:
+-          - name: build-baseline
+-            llvm_version_major: ${{ needs.abi-dump-setup.outputs.BASELINE_VERSION_MAJOR }}
+-            ref: ${{ needs.abi-dump-setup.outputs.BASELINE_REF }}
+-            repo: llvm/llvm-project
+-          - name: build-latest
+-            llvm_version_major: ${{ needs.abi-dump-setup.outputs.LLVM_VERSION_MAJOR }}
+-            ref: ${{ github.sha }}
+-            repo: ${{ github.repository }}
+-    steps:
+-    - name: Install Ninja
+-      uses: llvm/actions/install-ninja@main
+-    - name: Install abi-compliance-checker
+-      run: |
+-        sudo apt-get install abi-dumper autoconf pkg-config
+-    - name: Install universal-ctags
+-      run: |
+-        git clone https://github.com/universal-ctags/ctags.git
+-        cd ctags
+-        ./autogen.sh
+-        ./configure
+-        sudo make install
+-    - name: Download source code
+-      uses: llvm/actions/get-llvm-project-src@main
+-      with:
+-        ref: ${{ matrix.ref }}
+-        repo: ${{ matrix.repo }}
+-    - name: Configure
+-      run: |
+-        mkdir install
+-        cmake -B build -S llvm -G Ninja -DLLVM_ENABLE_PROJECTS=clang -DCMAKE_BUILD_TYPE=Debug -DLLVM_TARGETS_TO_BUILD="" -DLLVM_BUILD_LLVM_DYLIB=ON -DLLVM_LINK_LLVM_DYLIB=ON -DCMAKE_C_FLAGS_DEBUG="-g1 -Og" -DCMAKE_CXX_FLAGS_DEBUG="-g1 -Og" -DCMAKE_INSTALL_PREFIX=`pwd`/install llvm
+-    - name: Build
+-      run: ninja -C build/ ${{ needs.abi-dump-setup.outputs.ABI_LIBS }} install-clang-headers
+-    - name: Dump ABI
+-      run: |
+-        parallel abi-dumper -lver ${{ matrix.ref }} -skip-cxx -public-headers ./install/include/${{ needs.abi-dump-setup.outputs.ABI_HEADERS }} -o {}-${{ matrix.ref }}.abi ./build/lib/{} ::: ${{ needs.abi-dump-setup.outputs.ABI_LIBS }}
+-        for lib in ${{ needs.abi-dump-setup.outputs.ABI_LIBS }}; do
+-          # Remove symbol versioning from dumps, so we can compare across major versions.
+-          sed -i 's/LLVM_[0-9]\+/LLVM_NOVERSION/' $lib-${{ matrix.ref }}.abi
+-        done
+-    - name: Upload ABI file
+-      uses: actions/upload-artifact@v2
+-      with:
+-        name: ${{ matrix.name }}
+-        path: "*${{ matrix.ref }}.abi"
+-
+-  abi-compare:
+-    if: github.repository_owner == 'llvm'
+-    runs-on: ubuntu-latest
+-    needs:
+-      - abi-dump-setup
+-      - abi-dump
+-    steps:
+-      - name: Download baseline
+-        uses: actions/download-artifact@v1
+-        with:
+-          name: build-baseline
+-      - name: Download latest
+-        uses: actions/download-artifact@v1
+-        with:
+-          name: build-latest
+-
+-      - name: Install abi-compliance-checker
+-        run: sudo apt-get install abi-compliance-checker
+-      - name: Compare ABI
+-        run: |
+-          for lib in ${{ needs.abi-dump-setup.outputs.ABI_LIBS }}; do
+-            abi-compliance-checker -lib $lib -old build-baseline/$lib*.abi -new build-latest/$lib*.abi
+-          done
+-      - name: Upload ABI Comparison
+-        if: always()
+-        uses: actions/upload-artifact@v2
+-        with:
+-          name: compat-report-${{ github.sha }}
+-          path: compat_reports/
+-
+diff --git a/.github/workflows/libclc-tests.yml b/.github/workflows/libclc-tests.yml
+deleted file mode 100644
+index f4d11e253..000000000
+--- a/.github/workflows/libclc-tests.yml
++++ /dev/null
+@@ -1,39 +0,0 @@
+-name: libclc Tests
+-
+-on:
+-  workflow_dispatch:
+-  push:
+-    ignore-forks: true
+-    branches:
+-      - 'release/**'
+-    paths:
+-      - 'libclc/**'
+-      - '.github/workflows/libclc-tests.yml'
+-      - '.github/workflows/llvm-project-tests.yml'
+-      - '!clang/**'
+-      - '!llvm/**'
+-  pull_request:
+-    ignore-forks: true
+-    branches:
+-      - 'release/**'
+-    paths:
+-      - 'libclc/**'
+-      - '.github/workflows/libclc-tests.yml'
+-      - '.github/workflows/llvm-project-tests.yml'
+-      - '!clang/**'
+-      - '!llvm/**'
+-
+-concurrency:
+-  # Skip intermediate builds: always.
+-  # Cancel intermediate builds: only if it is a pull request build.
+-  group: ${{ github.workflow }}-${{ github.ref }}
+-  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+-
+-jobs:
+-  check_libclc:
+-    if: github.repository_owner == 'llvm'
+-    name: Test libclc
+-    uses: ./.github/workflows/llvm-project-tests.yml
+-    with:
+-      build_target: ''
+-      projects: clang;libclc
+diff --git a/.github/workflows/lld-tests.yml b/.github/workflows/lld-tests.yml
+deleted file mode 100644
+index b071affb6..000000000
+--- a/.github/workflows/lld-tests.yml
++++ /dev/null
+@@ -1,37 +0,0 @@
+-name: LLD Tests
+-
+-on:
+-  workflow_dispatch:
+-  push:
+-    ignore-forks: true
+-    branches:
+-      - 'release/**'
+-    paths:
+-      - 'lld/**'
+-      - '.github/workflows/lld-tests.yml'
+-      - '.github/workflows/llvm-project-tests.yml'
+-      - '!llvm/**'
+-  pull_request:
+-    ignore-forks: true
+-    branches:
+-      - 'release/**'
+-    paths:
+-      - 'lld/**'
+-      - '.github/workflows/lld-tests.yml'
+-      - '.github/workflows/llvm-project-tests.yml'
+-      - '!llvm/**'
+-
+-concurrency:
+-  # Skip intermediate builds: always.
+-  # Cancel intermediate builds: only if it is a pull request build.
+-  group: ${{ github.workflow }}-${{ github.ref }}
+-  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+-
+-jobs:
+-  check_lld:
+-    if: github.repository_owner == 'llvm'
+-    name: Test lld
+-    uses: ./.github/workflows/llvm-project-tests.yml
+-    with:
+-      build_target: check-lld
+-      projects: lld
+diff --git a/.github/workflows/lldb-tests.yml b/.github/workflows/lldb-tests.yml
+deleted file mode 100644
+index 20a46437a..000000000
+--- a/.github/workflows/lldb-tests.yml
++++ /dev/null
+@@ -1,40 +0,0 @@
+-name: lldb Tests
+-
+-on:
+-  workflow_dispatch:
+-  push:
+-    ignore-forks: true
+-    branches:
+-      - 'release/**'
+-    paths:
+-      - 'lldb/**'
+-      - '.github/workflows/lldb-tests.yml'
+-      - '.github/workflows/llvm-project-tests.yml'
+-      - '!clang/**'
+-      - '!llvm/**'
+-  pull_request:
+-    ignore-forks: true
+-    branches:
+-      - 'release/**'
+-    paths:
+-      - 'lldb/**'
+-      - '.github/workflows/lldb-tests.yml'
+-      - '.github/workflows/llvm-project-tests.yml'
+-      - '!clang/**'
+-      - '!llvm/**'
+-
+-concurrency:
+-  # Skip intermediate builds: always.
+-  # Cancel intermediate builds: only if it is a pull request build.
+-  group: ${{ github.workflow }}-${{ github.ref }}
+-  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+-
+-
+-jobs:
+-  build_lldb:
+-    if: github.repository_owner == 'llvm'
+-    name: Build lldb
+-    uses: ./.github/workflows/llvm-project-tests.yml
+-    with:
+-      build_target: ''
+-      projects: clang;lldb
+diff --git a/.github/workflows/llvm-bugs.yml b/.github/workflows/llvm-bugs.yml
+deleted file mode 100644
+index 36c967e46..000000000
+--- a/.github/workflows/llvm-bugs.yml
++++ /dev/null
+@@ -1,57 +0,0 @@
+-name: LLVM Bugs notifier
+-
+-on:
+-  issues:
+-    types:
+-      - opened
+-
+-jobs:
+-  auto-subscribe:
+-    runs-on: ubuntu-latest
+-    steps:
+-      - uses: actions/setup-node@v2
+-        with:
+-          node-version: 14
+-      - run: npm install mailgun.js form-data
+-      - name: Send notification
+-        uses: actions/github-script@v5
+-        env:
+-          MAILGUN_API_KEY: ${{ secrets.LLVM_BUGS_KEY }}
+-        with:
+-          script: |
+-            const Mailgun = require('mailgun.js');
+-            const formData = require('form-data');
+-
+-            const mailgun = new Mailgun(formData);
+-            const DOMAIN = 'email.llvm.org';
+-
+-            const mg = mailgun.client({ username: 'api', key: process.env.MAILGUN_API_KEY });
+-
+-            github.rest.issues.get({
+-              issue_number: context.issue.number,
+-              owner: context.repo.owner,
+-              repo: context.repo.repo
+-            })
+-            .then((issue) => {
+-              const payload = {
+-                author : issue.data.user.login,
+-                issue  : issue.data.number,
+-                title  : issue.data.title,
+-                url    : issue.data.html_url,
+-                labels : issue.data.labels.map((label) => label.name),
+-                assignee : issue.data.assignees.map((assignee) => assignee.login),
+-                body   : issue.data.body
+-              };
+-
+-              const data = {
+-                from: 'LLVM Bugs <llvm-bugs@email.llvm.org>',
+-                to: 'llvm-bugs@lists.llvm.org',
+-                subject: `[Bug ${issue.data.number}] ${issue.data.title}`,
+-                template: 'new-github-issue',
+-                'o:tracking-clicks': 'no',
+-                'h:X-Mailgun-Variables': JSON.stringify(payload)
+-              };
+-
+-              return mg.messages.create(DOMAIN, data);
+-            })
+-            .then((msg) => console.log(msg));
+diff --git a/.github/workflows/llvm-project-tests.yml b/.github/workflows/llvm-project-tests.yml
+deleted file mode 100644
+index a32fe80ae..000000000
+--- a/.github/workflows/llvm-project-tests.yml
++++ /dev/null
+@@ -1,95 +0,0 @@
+-name: LLVM Project Tests
+-
+-on:
+-  workflow_dispatch:
+-    inputs:
+-      build_target:
+-        required: false
+-      projects:
+-        required: false
+-  workflow_call:
+-    inputs:
+-      build_target:
+-        required: true
+-        type: string
+-
+-      projects:
+-        required: true
+-        type: string
+-
+-concurrency:
+-  # Skip intermediate builds: always.
+-  # Cancel intermediate builds: only if it is a pull request build.
+-  # If the group name here is the same as the group name in the workflow that includes
+-  # this one, then the action will try to wait on itself and get stuck.
+-  group: llvm-project-${{ github.workflow }}-${{ inputs.projects}}${{ github.ref }}
+-  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+-
+-jobs:
+-  lit-tests:
+-    name: Lit Tests
+-    runs-on: ${{ matrix.os }}
+-    strategy:
+-      fail-fast: false
+-      matrix:
+-        os:
+-          - ubuntu-latest
+-          # Use windows-2019 due to:
+-          # https://developercommunity.visualstudio.com/t/Prev-Issue---with-__assume-isnan-/1597317
+-          - windows-2019
+-          # We're using a specific version of macOS due to:
+-          # https://github.com/actions/virtual-environments/issues/5900
+-          - macOS-11
+-    steps:
+-      - name: Setup Windows
+-        if: startsWith(matrix.os, 'windows')
+-        uses: llvm/actions/setup-windows@main
+-        with:
+-          arch: amd64
+-      # On Windows, starting with win19/20220814.1, cmake choose the 32-bit
+-      # python3.10.6 libraries instead of the 64-bit libraries when building
+-      # lldb.  Using this setup-python action to make 3.10 the default
+-      # python fixes this.
+-      - name: Setup Python
+-        uses: actions/setup-python@v4
+-        with:
+-          python-version: '3.10'
+-      - name: Install Ninja
+-        uses: llvm/actions/install-ninja@main
+-      # actions/checkout deletes any existing files in the new git directory,
+-      # so this needs to either run before ccache-action or it has to use
+-      # clean: false.
+-      - uses: actions/checkout@v3
+-        with:
+-          fetch-depth: 250
+-      - name: Setup ccache
+-        uses: hendrikmuhs/ccache-action@v1.2
+-        with:
+-          # A full build of llvm, clang, lld, and lldb takes about 250MB
+-          # of ccache space. There's not much reason to have more than this,
+-          # because we usually won't need to save cache entries from older
+-          # builds.  Also, there is an overall 10GB cache limit, and each
+-          # run creates a new cache entry so we want to ensure that we have
+-          # enough cache space for all the tests to run at once and still
+-          # fit under the 10 GB limit.
+-          max-size: 500M
+-          key: sccache-${{ matrix.os }}
+-          variant: sccache
+-      - name: Build and Test
+-        uses: llvm/actions/build-test-llvm-project@main
+-        env:
+-          # Workaround for https://github.com/actions/virtual-environments/issues/5900.
+-          # This should be a no-op for non-mac OSes
+-          PKG_CONFIG_PATH: /usr/local/Homebrew/Library/Homebrew/os/mac/pkgconfig//12
+-        with:
+-          cmake_args: '-GNinja -DLLVM_ENABLE_PROJECTS="${{ inputs.projects }}" -DCMAKE_BUILD_TYPE=Release -DLLDB_INCLUDE_TESTS=OFF -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache'
+-          build_target:  '${{ inputs.build_target }}'
+-
+-      - name: Build and Test libclc
+-        if: "!startsWith(matrix.os, 'windows') && contains(inputs.projects, 'libclc')"
+-        run: |
+-          # Make sure all of LLVM libraries that llvm-config needs are built.
+-          ninja -C build
+-          cmake -G Ninja -S libclc -B libclc-build -DLLVM_CONFIG=`pwd`/build/bin/llvm-config -DLIBCLC_TARGETS_TO_BUILD="amdgcn--;amdgcn--amdhsa;r600--;nvptx--;nvptx64--;nvptx--nvidiacl;nvptx64--nvidiacl"
+-          ninja -C libclc-build
+-          ninja -C libclc-build test
+diff --git a/.github/workflows/llvm-tests.yml b/.github/workflows/llvm-tests.yml
+deleted file mode 100644
+index 83091da4b..000000000
+--- a/.github/workflows/llvm-tests.yml
++++ /dev/null
+@@ -1,195 +0,0 @@
+-name: LLVM Tests
+-
+-on:
+-  workflow_dispatch:
+-  push:
+-    ignore-forks: true
+-    branches:
+-      - 'release/**'
+-    paths:
+-      - 'llvm/**'
+-      - '.github/workflows/llvm-tests.yml'
+-      - '.github/workflows/llvm-project-tests.yml'
+-  pull_request:
+-    ignore-forks: true
+-    branches:
+-      - 'release/**'
+-    paths:
+-      - 'llvm/**'
+-      - '.github/workflows/llvm-tests.yml'
+-      - '.github/workflows/llvm-project-tests.yml'
+-
+-concurrency:
+-  # Skip intermediate builds: always.
+-  # Cancel intermediate builds: only if it is a pull request build.
+-  group: ${{ github.workflow }}-${{ github.ref }}
+-  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+-
+-
+-jobs:
+-  check_all:
+-    if: github.repository_owner == 'llvm'
+-    name: Test llvm,clang,libclc
+-    uses: ./.github/workflows/llvm-project-tests.yml
+-    with:
+-      build_target: check-all
+-      projects: clang;libclc
+-
+-  # These need to be separate from the check_all job, becuase there is not enough disk
+-  # space to build all these projects on Windows.
+-  build_lldb:
+-    if: github.repository_owner == 'llvm'
+-    name: Build lldb
+-    uses: ./.github/workflows/llvm-project-tests.yml
+-    with:
+-      build_target: ''
+-      projects: clang;lldb
+-
+-  check_lld:
+-    if: github.repository_owner == 'llvm'
+-    name: Test lld
+-    uses: ./.github/workflows/llvm-project-tests.yml
+-    with:
+-      build_target: check-lld
+-      projects: lld
+-
+-  abi-dump-setup:
+-    if: github.repository_owner == 'llvm'
+-    runs-on: ubuntu-latest
+-    outputs:
+-      BASELINE_REF: ${{ steps.vars.outputs.BASELINE_REF }}
+-      ABI_HEADERS: ${{ steps.vars.outputs.ABI_HEADERS }}
+-      BASELINE_VERSION_MAJOR: ${{ steps.vars.outputs.BASELINE_VERSION_MAJOR }}
+-      LLVM_VERSION_MAJOR: ${{ steps.version.outputs.LLVM_VERSION_MAJOR }}
+-      LLVM_VERSION_MINOR: ${{ steps.version.outputs.LLVM_VERSION_MINOR }}
+-      LLVM_VERSION_PATCH: ${{ steps.version.outputs.LLVM_VERSION_PATCH }}
+-    steps:
+-      - name: Checkout source
+-        uses: actions/checkout@v3
+-        with:
+-          fetch-depth: 250
+-
+-      - name: Get LLVM version
+-        id: version
+-        uses: llvm/actions/get-llvm-version@main
+-
+-      - name: Setup Variables
+-        id: vars
+-        run: |
+-          if [ ${{ steps.version.outputs.LLVM_VERSION_MINOR }} -ne 0 -o ${{ steps.version.outputs.LLVM_VERSION_PATCH }} -eq 0 ]; then
+-            echo ::set-output name=BASELINE_VERSION_MAJOR::$(( ${{ steps.version.outputs.LLVM_VERSION_MAJOR }} - 1))
+-            echo ::set-output name=ABI_HEADERS::llvm-c
+-          else
+-            echo ::set-output name=BASELINE_VERSION_MAJOR::${{ steps.version.outputs.LLVM_VERSION_MAJOR }}
+-            echo ::set-output name=ABI_HEADERS::.
+-          fi
+-
+-  abi-dump:
+-    if: github.repository_owner == 'llvm'
+-    needs: abi-dump-setup
+-    runs-on: ubuntu-latest
+-    strategy:
+-      matrix:
+-        name:
+-          - build-baseline
+-          - build-latest
+-        include:
+-          - name: build-baseline
+-            llvm_version_major: ${{ needs.abi-dump-setup.outputs.BASELINE_VERSION_MAJOR }}
+-            ref: llvmorg-${{ needs.abi-dump-setup.outputs.BASELINE_VERSION_MAJOR }}.0.0
+-            repo: llvm/llvm-project
+-          - name: build-latest
+-            llvm_version_major: ${{ needs.abi-dump-setup.outputs.LLVM_VERSION_MAJOR }}
+-            ref: ${{ github.sha }}
+-            repo: ${{ github.repository }}
+-    steps:
+-    - name: Install Ninja
+-      uses: llvm/actions/install-ninja@main
+-    - name: Install abi-compliance-checker
+-      run: |
+-        sudo apt-get install abi-dumper autoconf pkg-config
+-    - name: Install universal-ctags
+-      run: |
+-        git clone https://github.com/universal-ctags/ctags.git
+-        cd ctags
+-        ./autogen.sh
+-        ./configure
+-        sudo make install
+-    - name: Download source code
+-      uses: llvm/actions/get-llvm-project-src@main
+-      with:
+-        ref: ${{ matrix.ref }}
+-        repo: ${{ matrix.repo }}
+-    - name: Configure
+-      run: |
+-        mkdir install
+-        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DLLVM_TARGETS_TO_BUILD="" -DLLVM_BUILD_LLVM_DYLIB=ON -DCMAKE_C_FLAGS_DEBUG="-g1 -Og" -DCMAKE_CXX_FLAGS_DEBUG="-g1 -Og" -DCMAKE_INSTALL_PREFIX=`pwd`/install llvm
+-    - name: Build
+-      # Need to run install-LLVM twice to ensure the symlink is installed (this is a bug).
+-      run: |
+-        ninja -C build install-LLVM
+-        ninja -C build install-LLVM
+-        ninja -C build install-llvm-headers
+-    - name: Dump ABI
+-      run: |
+-        if [ "${{ needs.abi-dump-setup.outputs.ABI_HEADERS }}" = "llvm-c" ]; then
+-          nm ./install/lib/libLLVM.so | awk "/T _LLVM/ || /T LLVM/ { print $3 }" | sort -u | sed -e "s/^_//g" | cut -d ' ' -f 3 > llvm.symbols
+-          # Even though the -symbols-list option doesn't seem to filter out the symbols, I believe it speeds up processing, so I'm leaving it in.
+-          export EXTRA_ARGS="-symbols-list llvm.symbols"
+-        else
+-          touch llvm.symbols
+-        fi
+-        abi-dumper $EXTRA_ARGS -lver ${{ matrix.ref }} -skip-cxx -public-headers ./install/include/${{ needs.abi-dump-setup.outputs.ABI_HEADERS }} -o ${{ matrix.ref }}.abi ./install/lib/libLLVM.so
+-        # Remove symbol versioning from dumps, so we can compare across major versions.
+-        sed -i 's/LLVM_${{ matrix.llvm_version_major }}/LLVM_NOVERSION/' ${{ matrix.ref }}.abi
+-    - name: Upload ABI file
+-      uses: actions/upload-artifact@v1
+-      with:
+-        name: ${{ matrix.name }}
+-        path: ${{ matrix.ref }}.abi
+-
+-    - name: Upload symbol list file
+-      if: matrix.name == 'build-baseline'
+-      uses: actions/upload-artifact@v1
+-      with:
+-        name: symbol-list
+-        path: llvm.symbols
+-
+-  abi-compare:
+-    if: github.repository_owner == 'llvm'
+-    runs-on: ubuntu-latest
+-    needs:
+-      - abi-dump-setup
+-      - abi-dump
+-    steps:
+-      - name: Download baseline
+-        uses: actions/download-artifact@v1
+-        with:
+-          name: build-baseline
+-      - name: Download latest
+-        uses: actions/download-artifact@v1
+-        with:
+-          name: build-latest
+-      - name: Download symbol list
+-        uses: actions/download-artifact@v1
+-        with:
+-          name: symbol-list
+-
+-      - name: Install abi-compliance-checker
+-        run: sudo apt-get install abi-compliance-checker
+-      - name: Compare ABI
+-        run: |
+-          if [ -s symbol-list/llvm.symbols ]; then
+-            # This option doesn't seem to work with the ABI dumper, so passing it here.
+-            export EXTRA_ARGS="-symbols-list symbol-list/llvm.symbols"
+-          fi
+-          # FIXME: Reading of gzip'd abi files on the GitHub runners stop
+-          # working some time in March of 2021, likely due to a change in the
+-          # runner's environment.
+-          abi-compliance-checker $EXTRA_ARGS -l libLLVM.so -old build-baseline/*.abi -new build-latest/*.abi || test "${{ needs.abi-dump-setup.outputs.ABI_HEADERS }}" = "llvm-c"
+-      - name: Upload ABI Comparison
+-        if: always()
+-        uses: actions/upload-artifact@v1
+-        with:
+-          name: compat-report-${{ github.sha }}
+-          path: compat_reports/
+diff --git a/.github/workflows/new-issues.yml b/.github/workflows/new-issues.yml
+deleted file mode 100644
+index 97dfc54a7..000000000
+--- a/.github/workflows/new-issues.yml
++++ /dev/null
+@@ -1,14 +0,0 @@
+-name: Labeling new issues
+-on:
+-  issues:
+-    types: ['opened']
+-
+-jobs:
+-  automate-issues-labels:
+-    runs-on: ubuntu-latest
+-    if: github.repository == 'llvm/llvm-project'
+-    steps:
+-      - uses: andymckay/labeler@1.0.4
+-        with:
+-          add-labels: 'new issue'
+-          ignore-if-labeled: true
+diff --git a/.github/workflows/release-tasks.yml b/.github/workflows/release-tasks.yml
+deleted file mode 100644
+index 71de6b29b..000000000
+--- a/.github/workflows/release-tasks.yml
++++ /dev/null
+@@ -1,66 +0,0 @@
+-name: Release Task
+-
+-on:
+-  push:
+-    tags:
+-      # The regex support here is limited, so just match everything that starts with llvmorg- and filter later.
+-      - 'llvmorg-*'
+-
+-jobs:
+-  release-tasks:
+-    runs-on: ubuntu-latest
+-    if: github.repository == 'llvm/llvm-project'
+-    steps:
+-
+-    - name: Validate Tag
+-      id: validate-tag
+-      run: |
+-        test "${{ github.actor }}" = "tstellar" || test "${{ github.actor }}" = "tru"
+-        echo "${{ github.ref_name }}" | grep -e '^llvmorg-[0-9]\+\.[0-9]\+\.[0-9]\+\(-rc[0-9]\+\)\?$'
+-        release_version=`echo "${{ github.ref_name }}" | sed 's/llvmorg-//g'`
+-        echo "::set-output name=release-version::$release_version"
+-
+-    - name: Install Dependencies
+-      run: |
+-        sudo apt-get install -y \
+-            doxygen \
+-            graphviz \
+-            python3-github \
+-            python3-recommonmark \
+-            python3-sphinx \
+-            ninja-build \
+-            texlive-font-utils
+-        pip3 install --user sphinx-markdown-tables
+-
+-    - name: Checkout LLVM
+-      uses: actions/checkout@v3
+-
+-    - name: Create Release
+-      run: |
+-         ./llvm/utils/release/./github-upload-release.py --token ${{ github.token }} --release ${{ steps.validate-tag.outputs.release-version }} create
+-
+-    - name: Build Documentation
+-      run: |
+-        ./llvm/utils/release/build-docs.sh -srcdir llvm
+-        ./llvm/utils/release/github-upload-release.py --token ${{ github.token }} --release ${{ steps.validate-tag.outputs.release-version }} upload --files *doxygen*.tar.xz
+-
+-    - name: Clone www-releases
+-      if: ${{ !contains(steps.validate-tag.outputs.release-version, 'rc') }}
+-      uses: actions/checkout@v3
+-      with:
+-        repository: ${{ github.repository_owner }}/www-releases
+-        ref: main
+-        fetch-depth: 0
+-        path: www-releases
+-
+-    - name: Upload Release Notes
+-      if: ${{ !contains(steps.validate-tag.outputs.release-version, 'rc') }}
+-      run: |
+-        mkdir -p ../www-releases/${{ steps.validate-tag.outputs.release-version }}
+-        mv ./docs-build/html-export/* ../www-releases/${{ steps.validate-tag.outputs.release-version }}
+-        cd ../www-releases
+-        git add ${{ steps.validate-tag.outputs.release-version }}
+-        git config user.email "llvmbot@llvm.org"
+-        git config user.name "llvmbot"
+-        git commit -a -m "Add ${{ steps.validate-tag.outputs.release-version }} documentation"
+-        git push https://${{ secrets.WWW_RELEASES_TOKEN }}@github.com/${{ github.repository_owner }}/www-releases main:main
+diff --git a/.github/workflows/repo-lockdown.yml b/.github/workflows/repo-lockdown.yml
+deleted file mode 100644
+index f7b56907c..000000000
+--- a/.github/workflows/repo-lockdown.yml
++++ /dev/null
+@@ -1,19 +0,0 @@
+-name: 'Repo Lockdown'
+-on:
+-  pull_request_target:
+-    types: opened
+-
+-permissions:
+-  pull-requests: write
+-
+-jobs:
+-  action:
+-    runs-on: ubuntu-latest
+-    if: github.repository == 'llvm/llvm-project'
+-    steps:
+-      - uses: dessant/repo-lockdown@v2
+-        with:
+-          process-only: 'prs'
+-          pr-comment: >
+-            This repository does not accept pull requests.
+-            Please follow http://llvm.org/docs/Contributing.html#how-to-submit-a-patch for contribution to LLVM.
+diff --git a/.github/workflows/version-check.py b/.github/workflows/version-check.py
+deleted file mode 100755
+index d052bd3a5..000000000
+--- a/.github/workflows/version-check.py
++++ /dev/null
+@@ -1,36 +0,0 @@
+-#!/usr/bin/python3
+-
+-from git import Repo
+-import re
+-import sys
+-
+-
+-def get_version_from_tag(tag):
+-    m = re.match('llvmorg-([0-9]+)\.([0-9]+)\.([0-9]+)(-rc[0-9]+)?$', tag)
+-    if m:
+-        if m.lastindex == 4:
+-            # We have an rc tag.
+-            return m.group(1,2,3)
+-        # We have a final release tag.
+-        return (m.group(1), m.group(2), str(int(m.group(3)) + 1))
+-
+-    m = re.match('llvmorg-([0-9]+)-init', tag)
+-    if m:
+-        return (int(m.group(1)) + 1, 0, 0)
+-
+-    raise Exception(f"error: Tag is not valid: {tag}")
+-
+-
+-version = sys.argv[1]
+-
+-repo = Repo()
+-
+-tag = repo.git.describe(tags = True, abbrev=0)
+-expected_version = '.'.join(get_version_from_tag(tag))
+-
+-if version != expected_version:
+-    print("error: Expected version", expected_version, "but found version", version)
+-    sys.exit(1)
+-
+-print("Versions match:", version, expected_version)
+-sys.exit(0)
+diff --git a/.github/workflows/version-check.yml b/.github/workflows/version-check.yml
+deleted file mode 100644
+index 8f89db32a..000000000
+--- a/.github/workflows/version-check.yml
++++ /dev/null
+@@ -1,29 +0,0 @@
+-name: LLVM Project Version Check
+-
+-on:
+-  push:
+-    branches:
+-      - 'release/**'
+-  pull_request:
+-    branches:
+-      - 'release/**'
+-
+-
+-jobs:
+-  version_check:
+-    if: github.repository_owner == 'llvm'
+-    runs-on: ubuntu-latest
+-    steps:
+-      - name: Fetch LLVM sources
+-        uses: actions/checkout@v2
+-        with:
+-          fetch-depth: 0
+-
+-      - name: Install dependencies
+-        run: |
+-          pip install -r ./llvm/utils/git/requirements.txt
+-
+-      - name: Version Check
+-        run: |
+-          version=`grep -o 'LLVM_VERSION_\(MAJOR\|MINOR\|PATCH\) [0-9]\+' llvm/CMakeLists.txt  | cut -d ' ' -f 2 | tr "\n" "." | sed 's/.$//g'`
+-          .github/workflows/version-check.py $version
 diff --git a/LICENSE.TXT b/LICENSE.TXT
 new file mode 100644
 index 000000000..571517657
@@ -15249,10 +16357,10 @@ index 000000000..b848ed20d
 +endif()
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.cpp
 new file mode 100644
-index 000000000..3b2a3b9ce
+index 000000000..47852df3a
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.cpp
-@@ -0,0 +1,832 @@
+@@ -0,0 +1,830 @@
 +//===-- CangjieASTUtils.cpp -----------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -15815,7 +16923,6 @@ index 000000000..3b2a3b9ce
 +  decl->EnableAttr(Attribute::GENERIC);
 +  decl->funcBody->generic = MakeOwned<Generic>();
 +  // default::Pair<$G_T,$G_U> => Pair<$G_T,$G_U> => T, U
-+  std::vector<std::string> params;
 +  SetGenericByName(decl->funcBody->generic.get(), typeName, decl);
 +}
 +
@@ -15842,7 +16949,6 @@ index 000000000..3b2a3b9ce
 +  decl->EnableAttr(Attribute::GENERIC);
 +  decl->generic = MakeOwned<Generic>();
 +  // default::Pair<$G_T,$G_U> => Pair<$G_T,$G_U> => T, U
-+  std::vector<std::string> params;
 +  auto subname = GetSubNameWithoutPkgname(typeName, decl->fullPackageName);
 +  SetGenericByName(decl->generic.get(), subname, decl);
 +}
@@ -17552,10 +18658,10 @@ index 000000000..225577a05
 +#endif // LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CANGJIE_CANGJIECOMPILERINSTANCE_H
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp
 new file mode 100644
-index 000000000..05635d9cd
+index 000000000..8f666d26d
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp
-@@ -0,0 +1,2292 @@
+@@ -0,0 +1,2290 @@
 +//===-- CangjieDeclMap.cpp ------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -17826,7 +18932,6 @@ index 000000000..05635d9cd
 +    if (full_type.IsValid()) {
 +      return full_type;
 +    }
-+    continue;
 +  }
 +
 +  return CompilerType();
@@ -18429,7 +19534,6 @@ index 000000000..05635d9cd
 +    OwnedPtr<AST::Type> ctype = builder.CreateAstType(AstTypeInfo(up), decltmp, m_current_pkgname);
 +
 +    gc->upperBounds.emplace_back(std::move(ctype));
-+    std::string superName = SafeAsCString(superType.GetTypeName());
 +  }
 +  return gc;
 +}
@@ -19850,10 +20954,10 @@ index 000000000..05635d9cd
 +}
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.h b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.h
 new file mode 100644
-index 000000000..b901d5efb
+index 000000000..49bf8362c
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.h
-@@ -0,0 +1,207 @@
+@@ -0,0 +1,205 @@
 +//===-- CangjieDeclMap.h --------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -19949,7 +21053,6 @@ index 000000000..b901d5efb
 +    CompilerType GetDynamicClassType(Ptr<AST::Ty> ty, std::string typeName, CompilerType& genericType);
 +    CompilerType GetDynamicFuncType(Ptr<AST::Ty> ty, std::string typeName, CompilerType& genericType);
 +    CompilerType GetDynamicStructType(Ptr<AST::Ty> ty, std::string typeName, CompilerType& genericType);
-+    CompilerType GetDynamicInterfaceType(Ptr<AST::Ty> ty, std::string typeName, CompilerType& genericType);
 +    CompilerType GetDynamicTupleType(Ptr<AST::Ty> ty, std::string typeName, CompilerType& genericType);
 +    CompilerType GetDynamicEnumType(Ptr<AST::Ty> ty, std::string typeName, CompilerType& genericType);
 +    CompilerType GetEnumType(Ptr<AST::Ty> ty, std::string typeName, CompilerType& genericType);
@@ -20054,7 +21157,6 @@ index 000000000..b901d5efb
 +    CompilerType CreateOrGetGenericType(const CompilerType& type);
 +    void CollectGenericTypeOfVariable(const CompilerType& type);
 +    void CollectOptionValType(CompilerType& type);
-+    void AddFieldToRecordType(const CompilerType& genericType, CompilerType& instancedType, std::string& name);
 +    std::set<ConstString> m_local_func;
 +};
 +
@@ -20365,10 +21467,10 @@ index 000000000..469d03d9f
 +}
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieExpressionParser.h b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieExpressionParser.h
 new file mode 100644
-index 000000000..900de8606
+index 000000000..8ae3505e4
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieExpressionParser.h
-@@ -0,0 +1,96 @@
+@@ -0,0 +1,85 @@
 +//===-- CangjieExpressionParser.h -----------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -20391,10 +21493,6 @@ index 000000000..900de8606
 +#include "llvm/IR/Module.h"
 +#include <string>
 +#include <vector>
-+
-+namespace llvm {
-+class LLVMContext;
-+}
 +
 +namespace lldb_private {
 +
@@ -20433,14 +21531,8 @@ index 000000000..900de8606
 +  /// True if it was parsed when exe_ctx was in a non-static method.
 +  bool m_in_member_method = false;
 +private:
-+  /// The context to use for IR generation.
-+  std::unique_ptr<llvm::LLVMContext> m_llvm_context;
 +  /// The module to build IR into.
 +  std::unique_ptr<llvm::Module> m_module;
-+  /// The container for the IR, to be JIT-compiled or interpreted.
-+  lldb::IRExecutionUnitSP m_execution_unit_sp;
-+  /// The AST context to build the expression into.
-+  std::unique_ptr<TypeSystemClang> m_ast_context;
 +
 +  lldb_private::Materializer *m_materializer = nullptr;   ///< If non-NULL, the materializer
 +                                          ///to use when reporting used
@@ -20452,7 +21544,6 @@ index 000000000..900de8606
 +  lldb_private::Materializer::PersistentVariableDelegate
 +      *m_error_result_delegate = nullptr; ///< If non-NULL, used to report expression results to
 +                          ///ClangUserExpression.
-+  std::vector<std::string> m_include_directories;
 +  std::string m_result_type_name;
 +  CompilerType m_expr_result_type;
 +  unsigned int m_file_id = 0;
@@ -21186,10 +22277,10 @@ index 000000000..263d6de1b
 +}
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieIRForTarget.h b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieIRForTarget.h
 new file mode 100644
-index 000000000..0c46e8581
+index 000000000..1ee047f7b
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieIRForTarget.h
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,117 @@
 +//===-- CangjieIRForTarget.h ----------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -21210,8 +22301,6 @@ index 000000000..0c46e8581
 +class BasicBlock;
 +class Function;
 +class GlobalValue;
-+class StoreInst;
-+class DataLayout;
 +class GlobalVariable;
 +class CallInst;
 +class Instruction;
@@ -21223,8 +22312,6 @@ index 000000000..0c46e8581
 +
 +namespace lldb_private {
 +class CangjieDeclMap;
-+class IRExecutionUnit;
-+class IRMemoryMap;
 +}
 +
 +class CangjieIRForTarget {
@@ -21597,10 +22684,10 @@ index 000000000..c3e84f057
 +}
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieUserExpression.h b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieUserExpression.h
 new file mode 100644
-index 000000000..09cd0e18b
+index 000000000..e2de5840e
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieUserExpression.h
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,91 @@
 +//===-- CangjieUserExpression.h -------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -21647,8 +22734,6 @@ index 000000000..09cd0e18b
 +
 +  std::unique_ptr<CangjieExpressionSourceCode> m_source_code;
 +
-+  bool AddVarToArgs(ExecutionContext &exe_ctx);
-+
 +private:
 +  void ScanContext(ExecutionContext &exe_ctx,
 +                   lldb_private::Status &err) override;
@@ -21685,14 +22770,8 @@ index 000000000..09cd0e18b
 +  /// True if it was parsed when exe_ctx was in a static method of class.
 +  bool m_in_static_method = false;
 +
-+  ConstString m_func_name;
-+
 +  CangjiePersistentVariableDelegate m_result_delegate;
 +  CangjiePersistentVariableDelegate m_error_result_delegate;
-+
-+  /// True if "this" or "self" must be looked up and passed in.  False if the
-+  /// expression doesn't really use them and they can be NULL.
-+  bool m_needs_object_ptr = false;
 +
 +  std::unique_ptr<CangjieExpressionParser> m_parser;
 +};
@@ -21909,10 +22988,10 @@ index 53a01cfc4..646750708 100644
  
 diff --git a/lldb/source/Plugins/Language/CPlusPlus/CjTypes.cpp b/lldb/source/Plugins/Language/CPlusPlus/CjTypes.cpp
 new file mode 100644
-index 000000000..778852600
+index 000000000..8e050d58b
 --- /dev/null
 +++ b/lldb/source/Plugins/Language/CPlusPlus/CjTypes.cpp
-@@ -0,0 +1,973 @@
+@@ -0,0 +1,967 @@
 +//===-- CjTypes.cpp ---------------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -22094,7 +23173,6 @@ index 000000000..778852600
 +  if (start != std::string::npos && end != std::string::npos) {
 +    stream.Printf("%s", value.substr(start + prefix.size(), end - start - prefix.size()).c_str());
 +  }
-+  return;
 +}
 +
 +bool lldb_private::formatters::RangeSummaryProvider(
@@ -22372,7 +23450,6 @@ index 000000000..778852600
 +          m_negsign(negSign) { }
 +    std::string ToString() {
 +      int64_t digits = 9;
-+      uint64_t anyBase = 1000000000;
 +      // Get str Arr size
 +      int64_t strArrSize = (32 * (m_len + 2) / int64_t(29) + 1);
 +      std::vector<uint64_t> stringArr;
@@ -22401,7 +23478,6 @@ index 000000000..778852600
 +    int64_t ToBaseString(std::vector<uint8_t>& stringUtf8Arr, int64_t index, uint64_t int1) {
 +      const uint8_t DIGIT_DIFF = 0x30;
 +      const uint8_t LETTER_UPPER_DIFF = 0x41 - 0x0A;
-+      const uint8_t LETTER_LOWER_DIFF = 0x61 - 0x0A;
 +      uint64_t base = 10;
 +      int64_t i = index;
 +      uint64_t quo = int1;
@@ -22498,11 +23574,9 @@ index 000000000..778852600
 +  if (!rawptr || !m_start) {
 +    return "0";
 +  }
-+  auto start = m_start->GetValueAsSigned(INT64_MAX);
 +
 +  auto m_elements = rawptr->GetChildMemberWithName(ConstString("elements"), true);
 +  CompilerType element_type = m_elements->GetCompilerType();
-+  llvm::Optional<uint64_t> size = element_type.GetByteSize(nullptr);
 +  uint64_t element_size = 4; // UInt32's size is 4.
 +
 +  std::vector<uint32_t> big_intArr;
@@ -22819,7 +23893,6 @@ index 000000000..778852600
 +  if (!zoneId) {
 +    return false;
 +  }
-+  auto str_zoneId = zoneId->GetSummaryAsCString();
 +  CangjieDateTime date = CangjieDateTime(secVal, 0);
 +  if (date.Year() > 999 || date.Year() < -999) { // 999, -999 year
 +    stream.Printf("%d-%02d-%02dT%02d:%02d:%02dZ", date.Year(),
@@ -22933,10 +24006,10 @@ index 000000000..86fb31227
 +#endif // liblldb_CjTypes_h_
 diff --git a/lldb/source/Plugins/Language/CPlusPlus/LibCj.cpp b/lldb/source/Plugins/Language/CPlusPlus/LibCj.cpp
 new file mode 100644
-index 000000000..832b71a52
+index 000000000..724eba76d
 --- /dev/null
 +++ b/lldb/source/Plugins/Language/CPlusPlus/LibCj.cpp
-@@ -0,0 +1,843 @@
+@@ -0,0 +1,840 @@
 +//===-- LibCj.cpp ---------------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -23119,7 +24192,6 @@ index 000000000..832b71a52
 +  bool m_hasvalue = false;
 +  ValueObjectSP m_some =  nullptr;
 +  bool m_children = false;
-+  bool m_dynamic = false;
 +};
 +
 +static std::string DeletePrefixOfTypeName(std::string type_name, std::string prefix) {
@@ -23186,7 +24258,6 @@ index 000000000..832b71a52
 +  }
 +  auto dynamic = value->GetDynamicValue(eDynamicDontRunTarget);
 +  if (dynamic != nullptr) {
-+    m_dynamic = true;
 +    value = dynamic;
 +  }
 +
@@ -23442,7 +24513,6 @@ index 000000000..832b71a52
 +
 +bool CjEnum2SyntheticFrontEnd::Update() {
 +    std::string field_name;
-+    Status err;
 +    auto enum_type = m_backend.GetCompilerType();
 +    auto constructor = enum_type.GetFieldAtIndex(0, field_name, nullptr, nullptr, nullptr);
 +    llvm::APSInt enum_value;
@@ -23834,7 +24904,7 @@ index 5ab494414..6521e8519 100644
    ItaniumABILanguageRuntime.cpp
  
 diff --git a/lldb/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp b/lldb/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp
-index 1595335cf..f47a78847 100644
+index 1595335cf..44bb884bd 100644
 --- a/lldb/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp
 +++ b/lldb/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp
 @@ -4,37 +4,30 @@
@@ -23891,7 +24961,7 @@ index 1595335cf..f47a78847 100644
  
  char ItaniumABILanguageRuntime::ID = 0;
  
-@@ -182,6 +176,1029 @@ TypeAndOrName ItaniumABILanguageRuntime::GetTypeInfoFromVTableAddress(
+@@ -182,6 +176,1003 @@ TypeAndOrName ItaniumABILanguageRuntime::GetTypeInfoFromVTableAddress(
    return TypeAndOrName();
  }
  
@@ -24019,26 +25089,6 @@ index 1595335cf..f47a78847 100644
 +      pos = temp_name.find("/", pos + 2); // size of "::" is 2
 +    }
 +    return ConstString(temp_name.c_str());
-+}
-+
-+CompilerType LookupDynamicType(Process& process, UGTypeKind typekind, ConstString& type_name) {
-+  if (typekind == UGTypeKind::UG_CLASS || typekind == UGTypeKind::UG_INTERFACE ||
-+    typekind == UGTypeKind::UG_COMMON_ENUM) {
-+    return CompilerType();
-+  }
-+  TypeList types;
-+  llvm::DenseSet<SymbolFile *> searched_symbol_files;
-+  auto& target = process.GetTarget();
-+  target.GetImages().FindTypes(nullptr, type_name, true, 1, searched_symbol_files, types);
-+  size_t num_types = types.GetSize();
-+  for (size_t ti = 0; ti < num_types; ++ti) {
-+    auto type_sp = types.GetTypeAtIndex(ti);
-+    auto type = type_sp->GetFullCompilerType();
-+    if (type.IsValid()) {
-+      return type;
-+    }
-+  }
-+  return CompilerType();
 +}
 +
 +bool IsRefType(int8_t type) {
@@ -24200,12 +25250,6 @@ index 1595335cf..f47a78847 100644
 +    }
 +    ast.CompleteTagDeclarationDefinition(dynamic_type);
 +    return dynamic_type;
-+}
-+
-+bool IsFunctionType(ConstString& type_name) {
-+  ConstString compare("(.+::|^)\\(.*\\)( ?)->.+$");
-+  RegularExpression regex(compare.GetStringRef());
-+  return regex.Execute(type_name.AsCString());
 +}
 +
 +ConstString GetFunctionTypeName(std::string type_name,
@@ -24921,7 +25965,7 @@ index 1595335cf..f47a78847 100644
  bool ItaniumABILanguageRuntime::GetDynamicTypeAndAddress(
      ValueObject &in_value, lldb::DynamicValueType use_dynamic,
      TypeAndOrName &class_type_or_name, Address &dynamic_address,
-@@ -193,7 +1210,16 @@ bool ItaniumABILanguageRuntime::GetDynamicTypeAndAddress(
+@@ -193,7 +1184,16 @@ bool ItaniumABILanguageRuntime::GetDynamicTypeAndAddress(
    // contain the full class name. The second pointer above the "address point"
    // is the "offset_to_top".  We'll use that to get the start of the value
    // object which holds the dynamic type.
@@ -32185,7 +33229,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..4c3840036 100644
+index b391fe1ea..eb072d8e2 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -32241,7 +33285,7 @@ index b391fe1ea..4c3840036 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.2.0-beta.rc1";
++    g_version_str += "\n  cangjie 1.2.0-beta.rc2";
    }
  
    return g_version_str.c_str();
@@ -39595,10 +40639,10 @@ index f8eba1a00..f6356240b 100644
  /// or unreachable). These paths are hidden if the corresponding cl::opts
 diff --git a/llvm/lib/Analysis/CJAliasAnalysis.cpp b/llvm/lib/Analysis/CJAliasAnalysis.cpp
 new file mode 100644
-index 000000000..4957ac303
+index 000000000..ba63d66e1
 --- /dev/null
 +++ b/llvm/lib/Analysis/CJAliasAnalysis.cpp
-@@ -0,0 +1,303 @@
+@@ -0,0 +1,325 @@
 +//===- CJAliasAnalysis.cpp --------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -39655,6 +40699,22 @@ index 000000000..4957ac303
 +  return DT && Inv.invalidate<DominatorTreeAnalysis>(Fn, PA);
 +}
 +
++// An alloca produced by PEA stackification carries the "ea_val" metadata (set
++// by CJPartialEscapeAnalysis::setEscapeMeta). Its body may hold GC pointers,
++// and gcwrite may store an as1-cast of such an alloca into a heap object's
++// field; a later load from that field then returns a value whose type is
++// addrspace(1) but that points back to the stack alloca at run time. The
++// stack-vs-heap NoAlias rule below would misclassify that pair as NoAlias.
++// Treat any side whose underlying object is a PEA-degraded alloca as
++// MayAlias so the NoAlias fast path is not taken. The caller must pass an
++// already-resolved underlying object (i.e. the result of getUnderlyingObject);
++// this helper does not re-resolve.
++static bool isPEADegradedAlloca(const Value *O) {
++  if (const auto *AI = dyn_cast<AllocaInst>(O))
++    return AI->getMetadata("ea_val") != nullptr;
++  return false;
++}
++
 +static bool isGCPointerOrGlobalBase(const Value *V,
 +                                    unsigned MaxLookup = MaxLookupSearchDepth) {
 +  V = getUnderlyingObject(V, 0);
@@ -39662,11 +40722,8 @@ index 000000000..4957ac303
 +    return false;
 +  if (isa<GlobalValue>(V))
 +    return true;
-+  if (isa<Argument>(V))
++  if (isa<Argument>(V) || isa<LoadInst>(V))
 +    return isGCPointerType(V->getType());
-+  if (auto *LI = dyn_cast<LoadInst>(V)) {
-+    return false;
-+  }
 +  if (auto *II = dyn_cast<IntrinsicInst>(V)) {
 +    switch (II->getIntrinsicID()) {
 +    case Intrinsic::cj_gcread_ref:
@@ -39708,6 +40765,15 @@ index 000000000..4957ac303
 +                              const MemoryLocation &LocB, AAQueryInfo &AAQI) {
 +  const Value *O1 = getUnderlyingObject(LocA.Ptr, MaxLookupSearchDepth);
 +  const Value *O2 = getUnderlyingObject(LocB.Ptr, MaxLookupSearchDepth);
++  // A PEA-degraded alloca can be read back through a heap field (gcwrite stores
++  // an as1-cast of it, a later load returns a value typed as1 but pointing to
++  // the stack). Do not apply the stack-vs-heap NoAlias rule when either side
++  // is such an alloca; fall back to the default (MayAlias) instead. Check this
++  // on the already-resolved O1/O2 (reuses the getUnderlyingObject results
++  // above) and before computing IsStackValue, so the fast path is skipped
++  // entirely for the affected pair.
++  if (isPEADegradedAlloca(O1) || isPEADegradedAlloca(O2))
++    return AAResultBase::alias(LocA, LocB, AAQI);
 +  // In cangjie, stack space and heap space has different addrspace, and they
 +  // can never be aliased.
 +  bool IsStackValue1 = isa<AllocaInst>(O1) ||
@@ -53980,7 +55046,7 @@ index 6696d158b..1255795b2 100644
        .StartsWith("vertex", Triple::Vertex)
        .StartsWith("geometry", Triple::Geometry)
 diff --git a/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp b/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp
-index c568f7347..9fab9f496 100644
+index c568f7347..59284a8f9 100644
 --- a/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp
 +++ b/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp
 @@ -32,6 +32,7 @@
@@ -54109,7 +55175,7 @@ index c568f7347..9fab9f496 100644
 +  int emitCJSafepointInlineCall(unsigned Index) override;
 +  void emitGcStateCheck() override;
 +  void emitGetCJTLSData(int64_t Offset);
-+  void emitCangjieRuntimeCall(MCSymbol *Sym);
++  void emitCangjieRuntimeCall(MCSymbol *Sym, bool IsTailCall = false);
  };
  
  } // end anonymous namespace
@@ -54122,7 +55188,7 @@ index c568f7347..9fab9f496 100644
    // Emit stack and fault map information.
    emitStackMaps(SM);
    FM.serializeToFaultMapSection();
-@@ -1050,24 +1124,277 @@ void AArch64AsmPrinter::LowerPATCHPOINT(MCStreamer &OutStreamer, StackMaps &SM,
+@@ -1050,24 +1124,279 @@ void AArch64AsmPrinter::LowerPATCHPOINT(MCStreamer &OutStreamer, StackMaps &SM,
      EmitToStreamer(OutStreamer, MCInstBuilder(AArch64::HINT).addImm(0));
  }
  
@@ -54253,7 +55319,7 @@ index c568f7347..9fab9f496 100644
 +  OutStreamer->emitLabel(EndSym);
 +}
 +
-+void AArch64AsmPrinter::emitCangjieRuntimeCall(MCSymbol *Sym) {
++void AArch64AsmPrinter::emitCangjieRuntimeCall(MCSymbol *Sym, bool IsTailCall) {
 +  using namespace AArch64;
 +  if (TM.getCodeModel() == CodeModel::Large &&
 +      getSubtargetInfo().getTargetTriple().isOSBinFormatMachO()) {
@@ -54266,10 +55332,12 @@ index c568f7347..9fab9f496 100644
 +                       .addExpr(MCSymbolRefExpr::create(
 +                           Sym, MCSymbolRefExpr::VK_GOTPAGEOFF, OutContext))
 +                       .addImm(0));
-+    EmitToStreamer(*OutStreamer, MCInstBuilder(BLR).addReg(X16));
++    EmitToStreamer(*OutStreamer,
++                   MCInstBuilder(IsTailCall ? BR : BLR).addReg(X16));
 +  } else {
-+    EmitToStreamer(*OutStreamer, MCInstBuilder(BL).addExpr(
-+        MCSymbolRefExpr::create(Sym, OutContext)));
++    EmitToStreamer(*OutStreamer,
++                   MCInstBuilder(IsTailCall ? B : BL).addExpr(
++                       MCSymbolRefExpr::create(Sym, OutContext)));
 +  }
 +}
 +
@@ -54405,7 +55473,7 @@ index c568f7347..9fab9f496 100644
      case MachineOperand::MO_Immediate:
        CallTargetMCOp = MCOperand::createImm(CallTarget.getImm());
        CallOpcode = AArch64::BL;
-@@ -1085,6 +1412,11 @@ void AArch64AsmPrinter::LowerSTATEPOINT(MCStreamer &OutStreamer, StackMaps &SM,
+@@ -1085,6 +1414,11 @@ void AArch64AsmPrinter::LowerSTATEPOINT(MCStreamer &OutStreamer, StackMaps &SM,
                     MCInstBuilder(CallOpcode).addOperand(CallTargetMCOp));
    }
  
@@ -54417,7 +55485,7 @@ index c568f7347..9fab9f496 100644
    auto &Ctx = OutStreamer.getContext();
    MCSymbol *MILabel = Ctx.createTempSymbol();
    OutStreamer.emitLabel(MILabel);
-@@ -1196,12 +1528,69 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
+@@ -1196,12 +1530,69 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
      OutStreamer->emitLabel(LOHLabel);
    }
  
@@ -54487,7 +55555,7 @@ index c568f7347..9fab9f496 100644
    case AArch64::HINT: {
      // CurrentPatchableFunctionEntrySym can be CurrentFnBegin only for
      // -fpatchable-function-entry=N,0. The entry MBB is guaranteed to be
-@@ -1559,6 +1948,516 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
+@@ -1559,6 +1950,505 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
    MCInstLowering.Lower(MI, TmpInst);
    EmitToStreamer(*OutStreamer, TmpInst);
  }
@@ -54549,7 +55617,6 @@ index c568f7347..9fab9f496 100644
 +  MCOperand SymOriAddr = setGAAndLower(MOSym, AddrGV, AArch64II::MO_PAGE);
 +  MCOperand SymOriAddrLo12 =
 +      setGAAndLower(MOSym, AddrGV, AArch64II::MO_PAGEOFF | AArch64II::MO_NC);
-+  MCOperand SymNewAddr = setGAAndLower(MOSym, F);
 +
 +  const auto *OriCalled = dyn_cast<Function>(MOSym.getGlobal());
 +  // push callee-addr and CallFrameSize to stack. This operation extends
@@ -54566,16 +55633,9 @@ index c568f7347..9fab9f496 100644
 +  // |  callee-addr                        |
 +  // |  param-stack-size (16 bytes align)  |
 +  extendStackAndInsertFFIInfoForJmp(SymOriAddr, SymOriAddrLo12, CallFrameSize);
-+  MCInst TemInst;
-+  if (Opcode == AArch64::TCRETURNdi) {
-+    Opcode = AArch64::B; // Branch directly for tailcall
-+  } else {
-+    assert(Opcode == AArch64::BL &&
-+           "Opcode should be BL or TCRETURNdi for Cangjie Call Stub");
-+  }
-+  TemInst.setOpcode(Opcode);
-+  TemInst.addOperand(SymNewAddr);
-+  EmitToStreamer(*OutStreamer, TemInst);
++  assert((Opcode == AArch64::TCRETURNdi || Opcode == AArch64::BL) &&
++         "Opcode should be BL or TCRETURNdi for Cangjie Call Stub");
++  emitCangjieRuntimeCall(getSymbol(F), Opcode == AArch64::TCRETURNdi);
 +  SM.recordCJStackMap(*MI);
 +  return;
 +}
@@ -54673,10 +55733,7 @@ index c568f7347..9fab9f496 100644
 +void AArch64AsmPrinter::emitCJThrowException(const MachineInstr *MI,
 +                                             const MachineOperand &MOSym,
 +                                             unsigned Opcode) {
-+  MCOperand Call;
-+  MCInstLowering.lowerOperand(MOSym, Call);
-+  MCInst CallThrowException = MCInstBuilder(Opcode).addOperand(Call);
-+  EmitToStreamer(*OutStreamer, CallThrowException);
++  emitCangjieRuntimeCall(getSymbol(MOSym.getGlobal()));
 +  StackMaps::CallsiteInfo CSInfo;
 +  SM.updateOrInsertFnInfo(CurrentFnSym, CSInfo);
 +}
@@ -55062,7 +56119,7 @@ index c0da242a2..31a91d44d 100644
  
  def CSR_AArch64_RT_MostRegs :  CalleeSavedRegs<(add CSR_AArch64_AAPCS,
 diff --git a/llvm/lib/Target/AArch64/AArch64FastISel.cpp b/llvm/lib/Target/AArch64/AArch64FastISel.cpp
-index 49fffa01a..b8fb1753c 100644
+index 49fffa01a..f1272fd14 100644
 --- a/llvm/lib/Target/AArch64/AArch64FastISel.cpp
 +++ b/llvm/lib/Target/AArch64/AArch64FastISel.cpp
 @@ -340,6 +340,8 @@ CCAssignFn *AArch64FastISel::CCAssignFnForCall(CallingConv::ID CC) const {
@@ -55086,7 +56143,22 @@ index 49fffa01a..b8fb1753c 100644
  
    // Issue CALLSEQ_START
    unsigned AdjStackDown = TII.getCallFrameSetupOpcode();
-@@ -3787,7 +3794,9 @@ bool AArch64FastISel::selectRet(const Instruction *I) {
+@@ -3127,6 +3134,14 @@ bool AArch64FastISel::fastLowerCall(CallLoweringInfo &CLI) {
+   if (!Callee && !Symbol)
+     return false;
+ 
++  // Cangjie N2C/C2N stub callees under Large+MachO: bail to SelectionDAG, whose
++  // LowerCall (MO_NO_FLAG) keeps the target a direct global so AsmPrinter
++  // intercepts it (CJStubGV + N2CStub).
++  if (TM.getCodeModel() == CodeModel::Large && Subtarget->isTargetMachO())
++    if (auto *F = dyn_cast<Function>(Callee))
++      if (F->isCangjieNativeStub(MF->getFunction()) || F->isCangjieSafePoint())
++        return false;
++
+   // Allow SelectionDAG isel to handle calls to functions like setjmp that need
+   // a bti instruction following the call.
+   if (CLI.CB && CLI.CB->hasFnAttr(Attribute::ReturnsTwice) &&
+@@ -3787,7 +3802,9 @@ bool AArch64FastISel::selectRet(const Instruction *I) {
      SmallVector<CCValAssign, 16> ValLocs;
      CCState CCInfo(CC, F.isVarArg(), *FuncInfo.MF, ValLocs, I->getContext());
      CCAssignFn *RetCC = CC == CallingConv::WebKit_JS ? RetCC_AArch64_WebKit_JS
@@ -55415,7 +56487,7 @@ index f59860a24..62de8bad7 100644
    /// the function.
    void emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
 diff --git a/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp b/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp
-index 06e21f90e..3561674e0 100644
+index 06e21f90e..dc75bf252 100644
 --- a/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp
 +++ b/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp
 @@ -706,6 +706,8 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
@@ -55502,7 +56574,7 @@ index 06e21f90e..3561674e0 100644
  
      // FPDiff will be negative if this tail call requires more space than we
      // would automatically have in our incoming argument space. Positive if we
-@@ -6841,9 +6872,21 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
+@@ -6841,9 +6872,23 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
    // direct call is) turn it into a TargetGlobalAddress/TargetExternalSymbol
    // node so that legalize doesn't hack it.
    if (auto *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
@@ -55516,15 +56588,17 @@ index 06e21f90e..3561674e0 100644
 +    if (CalleeFunc->isCangjieSafepointStub() ||
 +        CalleeFunc->isCangjieSafePoint() ||
 +        CalleeFunc->isCangjieStackCheck() ||
++        CalleeFunc->isCangjieThrowException() ||
 +        CalleeFunc->getName().isGetGCPhase() ||
 +        CalleeFunc->isGetCJThreadId() ||
 +        CalleeFunc->getName().isSetDebugLocation() ||
-+        CalleeFunc->getName().equals("CJ_MRT_PreInitializePackage"))
++        CalleeFunc->getName().equals("CJ_MRT_PreInitializePackage") ||
++        CalleeFunc->isCangjieNativeStub(MF.getFunction()))
 +      OpFlags = AArch64II::MO_NO_FLAG;
      if (OpFlags & AArch64II::MO_GOT) {
        Callee = DAG.getTargetGlobalAddress(GV, DL, PtrVT, 0, OpFlags);
        Callee = DAG.getNode(AArch64ISD::LOADgot, DL, PtrVT, Callee);
-@@ -8700,7 +8743,11 @@ SDValue AArch64TargetLowering::LowerSPONENTRY(SDValue Op,
+@@ -8700,7 +8745,11 @@ SDValue AArch64TargetLowering::LowerSPONENTRY(SDValue Op,
  // this table could be generated automatically from RegInfo.
  Register AArch64TargetLowering::
  getRegisterByName(const char* RegName, LLT VT, const MachineFunction &MF) const {
@@ -55537,7 +56611,7 @@ index 06e21f90e..3561674e0 100644
    if (AArch64::X1 <= Reg && Reg <= AArch64::X28) {
      const MCRegisterInfo *MRI = Subtarget->getRegisterInfo();
      unsigned DwarfRegNum = MRI->getDwarfRegNum(Reg, false);
-@@ -8709,8 +8756,7 @@ getRegisterByName(const char* RegName, LLT VT, const MachineFunction &MF) const
+@@ -8709,8 +8758,7 @@ getRegisterByName(const char* RegName, LLT VT, const MachineFunction &MF) const
    }
    if (Reg)
      return Reg;
@@ -55547,7 +56621,7 @@ index 06e21f90e..3561674e0 100644
  }
  
  SDValue AArch64TargetLowering::LowerADDROFRETURNADDR(SDValue Op,
-@@ -13636,6 +13682,10 @@ bool AArch64TargetLowering::generateFMAsInMachineCombiner(
+@@ -13636,6 +13684,10 @@ bool AArch64TargetLowering::generateFMAsInMachineCombiner(
           !useSVEForFixedLengthVectorVT(VT);
  }
  
@@ -55581,7 +56655,7 @@ index ff3bfe897..3276e7f4b 100644
    SDValue LowerSET_ROUNDING(SDValue Op, SelectionDAG &DAG) const;
    SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
 diff --git a/llvm/lib/Target/AArch64/AArch64InstrInfo.cpp b/llvm/lib/Target/AArch64/AArch64InstrInfo.cpp
-index 835a7b6cc..d3a75fd1d 100644
+index 835a7b6cc..b84f93b89 100644
 --- a/llvm/lib/Target/AArch64/AArch64InstrInfo.cpp
 +++ b/llvm/lib/Target/AArch64/AArch64InstrInfo.cpp
 @@ -33,6 +33,7 @@
@@ -55592,7 +56666,7 @@ index 835a7b6cc..d3a75fd1d 100644
  #include "llvm/MC/MCAsmInfo.h"
  #include "llvm/MC/MCInst.h"
  #include "llvm/MC/MCInstBuilder.h"
-@@ -73,6 +74,69 @@ AArch64InstrInfo::AArch64InstrInfo(const AArch64Subtarget &STI)
+@@ -73,6 +74,71 @@ AArch64InstrInfo::AArch64InstrInfo(const AArch64Subtarget &STI)
                            AArch64::CATCHRET),
        RI(STI.getTargetTriple()), Subtarget(STI) {}
  
@@ -55651,7 +56725,9 @@ index 835a7b6cc..d3a75fd1d 100644
 +  }
 +  const auto &CallerFunc = MI.getParent()->getParent()->getFunction();
 +  if (Callee->isCangjieNativeStub(CallerFunc)) {
-+    return 24; // 24: 24 bytes(6 insts) for Native Stub
++    // emitCangjieCallStubInstImpl: 20B (extendStackAndInsertFFIInfoForJmp) +
++    // final call BL/B 4B -> ADRP+LDR+BLR/BR 12B under Large+MachO (+GotExtra).
++    return 24 + GotExtra;
 +  }
 +  if (Callee->isGetCJThreadId()) {
 +    return 12; // 12: 12 bytes(3 insts) for mutex opt
@@ -55662,7 +56738,7 @@ index 835a7b6cc..d3a75fd1d 100644
  /// GetInstSize - Return the number of bytes of code the specified
  /// instruction may be.  This returns the maximum number of bytes.
  unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
-@@ -90,9 +154,13 @@ unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
+@@ -90,9 +156,13 @@ unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
    if (MI.isMetaInstruction())
      return 0;
  
@@ -55677,7 +56753,7 @@ index 835a7b6cc..d3a75fd1d 100644
    const MCInstrDesc &Desc = MI.getDesc();
  
    // Size should be preferably set in
-@@ -2098,6 +2166,36 @@ unsigned AArch64InstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
+@@ -2098,6 +2168,36 @@ unsigned AArch64InstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
    return 0;
  }
  
@@ -55714,7 +56790,7 @@ index 835a7b6cc..d3a75fd1d 100644
  unsigned AArch64InstrInfo::isStoreToStackSlot(const MachineInstr &MI,
                                                int &FrameIndex) const {
    switch (MI.getOpcode()) {
-@@ -2122,6 +2220,50 @@ unsigned AArch64InstrInfo::isStoreToStackSlot(const MachineInstr &MI,
+@@ -2122,6 +2222,50 @@ unsigned AArch64InstrInfo::isStoreToStackSlot(const MachineInstr &MI,
    return 0;
  }
  
@@ -56469,10 +57545,18 @@ index a167225e2..7a9a87501 100644
    const GlobalValue *GV = dyn_cast<GlobalValue>(Callee);
    if (!GV || Subtarget->genLongCalls()) UseReg = true;
 diff --git a/llvm/lib/Target/ARM/ARMFrameLowering.cpp b/llvm/lib/Target/ARM/ARMFrameLowering.cpp
-index 48b4d266b..682f8f6f6 100644
+index 48b4d266b..4f23efd21 100644
 --- a/llvm/lib/Target/ARM/ARMFrameLowering.cpp
 +++ b/llvm/lib/Target/ARM/ARMFrameLowering.cpp
-@@ -169,6 +169,10 @@ static cl::opt<bool>
+@@ -113,6 +113,7 @@
+ #include "ARMConstantPoolValue.h"
+ #include "ARMMachineFunctionInfo.h"
+ #include "ARMSubtarget.h"
++#include "CangjieDemangle.h"
+ #include "MCTargetDesc/ARMAddressingModes.h"
+ #include "MCTargetDesc/ARMBaseInfo.h"
+ #include "Utils/ARMBaseInfo.h"
+@@ -169,6 +170,10 @@ static cl::opt<bool>
  SpillAlignedNEONRegs("align-neon-spills", cl::Hidden, cl::init(true),
                       cl::desc("Align ARM NEON spills in prolog and epilog"));
  
@@ -56483,7 +57567,26 @@ index 48b4d266b..682f8f6f6 100644
  static MachineBasicBlock::iterator
  skipAlignedDPRCS2Spills(MachineBasicBlock::iterator MI,
                          unsigned NumAlignedDPRCS2Regs);
-@@ -861,6 +865,14 @@ void ARMFrameLowering::emitPrologue(MachineFunction &MF,
+@@ -719,6 +724,18 @@ void ARMFrameLowering::emitPrologue(MachineFunction &MF,
+   Align Alignment = STI.getFrameLowering()->getStackAlign();
+   unsigned ArgRegsSaveSize = AFI->getArgRegsSaveSize();
+   unsigned NumBytes = MFI.getStackSize();
++  constexpr uint64_t CangjieMaxStackSize = 2ULL * 1024 * 1024 * 1024;
++  if (CJPipeline && MFI.getStackSize() >= CangjieMaxStackSize) {
++    auto D = Cangjie::Demangle(MF.getName().str());
++    std::string DemangledName = D.GetPkgName() +
++                                std::string(D.GetPkgName().empty() ? "" : "::") +
++                                D.GetFullName();
++    report_fatal_error("The stacksize of " + Twine(DemangledName) +
++                           " exceeds cangjie max stacksize(2GB).\nCompilation "
++                           "stopped! Please check the implementation of " +
++                           Twine(DemangledName) + "!",
++                       false);
++  }
+   const std::vector<CalleeSavedInfo> &CSI = MFI.getCalleeSavedInfo();
+   int FPCXTSaveSize = 0;
+   bool NeedsWinCFI = needsWinCFI(MF);
+@@ -861,6 +878,14 @@ void ARMFrameLowering::emitPrologue(MachineFunction &MF,
  
    // Move past area 1.
    if (GPRCS1Size > 0) {
@@ -56498,7 +57601,7 @@ index 48b4d266b..682f8f6f6 100644
      GPRCS1Push = LastPush = MBBI++;
      DefCFAOffsetCandidates.addInst(LastPush, GPRCS1Size, true);
    }
-@@ -1047,6 +1059,10 @@ void ARMFrameLowering::emitPrologue(MachineFunction &MF,
+@@ -1047,6 +1072,10 @@ void ARMFrameLowering::emitPrologue(MachineFunction &MF,
    if (HasFP) {
      AfterPush = std::next(GPRCS1Push);
      unsigned PushSize = sizeOfSPAdjustment(*GPRCS1Push);
@@ -56509,7 +57612,7 @@ index 48b4d266b..682f8f6f6 100644
      int FPOffset = PushSize + FramePtrOffsetInPush;
      if (STI.splitFramePointerPush(MF)) {
        AfterPush = std::next(GPRCS2Push);
-@@ -1407,12 +1423,14 @@ void ARMFrameLowering::emitEpilogue(MachineFunction &MF,
+@@ -1407,12 +1436,14 @@ void ARMFrameLowering::emitEpilogue(MachineFunction &MF,
  StackOffset ARMFrameLowering::getFrameIndexReference(const MachineFunction &MF,
                                                       int FI,
                                                       Register &FrameReg) const {
@@ -56526,7 +57629,7 @@ index 48b4d266b..682f8f6f6 100644
    const MachineFrameInfo &MFI = MF.getFrameInfo();
    const ARMBaseRegisterInfo *RegInfo = static_cast<const ARMBaseRegisterInfo *>(
        MF.getSubtarget().getRegisterInfo());
-@@ -1420,7 +1438,7 @@ int ARMFrameLowering::ResolveFrameIndexReference(const MachineFunction &MF,
+@@ -1420,7 +1451,7 @@ int ARMFrameLowering::ResolveFrameIndexReference(const MachineFunction &MF,
    int Offset = MFI.getObjectOffset(FI) + MFI.getStackSize();
    int FPOffset = Offset - AFI->getFramePtrSpillOffset();
    bool isFixed = MFI.isFixedObjectIndex(FI);
@@ -56535,7 +57638,7 @@ index 48b4d266b..682f8f6f6 100644
    FrameReg = ARM::SP;
    Offset += SPAdj;
  
-@@ -1432,7 +1450,7 @@ int ARMFrameLowering::ResolveFrameIndexReference(const MachineFunction &MF,
+@@ -1432,7 +1463,7 @@ int ARMFrameLowering::ResolveFrameIndexReference(const MachineFunction &MF,
    // parameters, and the stack/base pointer for locals.
    if (RegInfo->hasStackRealignment(MF)) {
      assert(hasFP(MF) && "dynamic stack realignment without a FP!");
@@ -56544,7 +57647,7 @@ index 48b4d266b..682f8f6f6 100644
        FrameReg = RegInfo->getFrameRegister(MF);
        Offset = FPOffset;
      } else if (hasMovingSP) {
-@@ -1448,7 +1466,7 @@ int ARMFrameLowering::ResolveFrameIndexReference(const MachineFunction &MF,
+@@ -1448,7 +1479,7 @@ int ARMFrameLowering::ResolveFrameIndexReference(const MachineFunction &MF,
    if (hasFP(MF) && AFI->hasStackFrame()) {
      // Use frame pointer to reference fixed objects. Use it for locals if
      // there are VLAs (and thus the SP isn't reliable as a base).
@@ -56553,7 +57656,7 @@ index 48b4d266b..682f8f6f6 100644
        FrameReg = RegInfo->getFrameRegister(MF);
        return FPOffset;
      } else if (hasMovingSP) {
-@@ -1549,8 +1567,35 @@ void ARMFrameLowering::emitPushInst(MachineBasicBlock &MBB,
+@@ -1549,8 +1580,35 @@ void ARMFrameLowering::emitPushInst(MachineBasicBlock &MBB,
                                      .addReg(ARM::SP)
                                      .setMIFlags(MIFlags)
                                      .add(predOps(ARMCC::AL));
@@ -56591,7 +57694,7 @@ index 48b4d266b..682f8f6f6 100644
      } else if (Regs.size() == 1) {
        BuildMI(MBB, MI, DL, TII.get(StrOpc), ARM::SP)
            .addReg(Regs[0].first, getKillRegState(Regs[0].second))
-@@ -1646,8 +1691,31 @@ void ARMFrameLowering::emitPopInst(MachineBasicBlock &MBB,
+@@ -1646,8 +1704,31 @@ void ARMFrameLowering::emitPopInst(MachineBasicBlock &MBB,
                                      .addReg(ARM::SP)
                                      .add(predOps(ARMCC::AL))
                                      .setMIFlags(MachineInstr::FrameDestroy);
@@ -56625,7 +57728,7 @@ index 48b4d266b..682f8f6f6 100644
        if (DeleteRet) {
          if (MI != MBB.end()) {
            MIB.copyImplicitOps(*MI);
-@@ -2076,6 +2144,8 @@ static unsigned estimateRSStackSizeLimit(MachineFunction &MF,
+@@ -2076,6 +2157,8 @@ static unsigned estimateRSStackSizeLimit(MachineFunction &MF,
        for (unsigned i = 0, e = MI.getNumOperands(); i != e; ++i) {
          if (!MI.getOperand(i).isFI())
            continue;
@@ -56801,6 +57904,29 @@ index 79244f634..224eaf0eb 100644
      stackAlignment = Align(16);
  
    // FIXME: Completely disable sibcall for Thumb1 since ThumbRegisterInfo::
+diff --git a/llvm/lib/Target/ARM/CMakeLists.txt b/llvm/lib/Target/ARM/CMakeLists.txt
+index 593737b8c..17be74a17 100644
+--- a/llvm/lib/Target/ARM/CMakeLists.txt
++++ b/llvm/lib/Target/ARM/CMakeLists.txt
+@@ -19,6 +19,8 @@ tablegen(LLVM ARMGenSystemRegister.inc -gen-searchable-tables)
+ 
+ add_public_tablegen_target(ARMCommonTableGen)
+ 
++include_directories(${CANGJIE_DEMANGLE_DIR})
++
+ add_llvm_target(ARMCodeGen
+   A15SDOptimizer.cpp
+   ARMAsmPrinter.cpp
+@@ -69,6 +71,9 @@ add_llvm_target(ARMCodeGen
+   Thumb2InstrInfo.cpp
+   Thumb2SizeReduction.cpp
+ 
++  ADDITIONAL_HEADER_DIRS
++  ${CANGJIE_DEMANGLE_DIR}
++
+   LINK_COMPONENTS
+   ARMDesc
+   ARMInfo
 diff --git a/llvm/lib/Target/TargetLoweringObjectFile.cpp b/llvm/lib/Target/TargetLoweringObjectFile.cpp
 index 29cc28403..1ddd4ea6a 100644
 --- a/llvm/lib/Target/TargetLoweringObjectFile.cpp
@@ -59045,10 +60171,10 @@ index 8c77b6937..4e65ed2e2 100644
        F->addParamAttr(ArgNo, Attribute::NoAlias);
 diff --git a/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
 new file mode 100644
-index 000000000..e4a48b35e
+index 000000000..9d32f5dc2
 --- /dev/null
 +++ b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
-@@ -0,0 +1,3422 @@
+@@ -0,0 +1,3567 @@
 +//===- CJPartialEscapeAnalysis.cpp - escape analysis for Cangjie ----------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -59100,6 +60226,17 @@ index 000000000..e4a48b35e
 +namespace llvm {
 +cl::opt<bool> CJDisablePEA("cj-disable-partial-ea",
 +                                  cl::Hidden, cl::init(false));
++cl::opt<unsigned> CJPEAMaxCycNonzero(
++    "cj-pea-max-cyc-nonzero", cl::Hidden, cl::init(24),
++    // 24 bails the confirmed-pathological case (RedBlackTree.put,
++    // maxCycNonzero=30). The metric counts every non-zero-offset
++    // intra-SCC edge (multi-edges included); the -1 escape-all sentinel
++    // offset is excluded (see countNonzeroIntraEdges).
++    cl::desc("Max non-zero-offset edges inside a cyclic SCC of the PEA "
++             "propagation graph for PEA to proceed; above this PEA bails "
++             "out. A cyclic SCC with non-zero offsets makes spreadMemEscape "
++             "cumulative offset-paths diverge; this is a deterministic graph "
++             "property and the direct topology root cause of the blow-up."));
 +
 +GlobalVariable *getNewKlass(CallBase *I) {
 +  GlobalVariable *Klass =
@@ -61622,6 +62759,129 @@ index 000000000..e4a48b35e
 +    }
 +  }
 +
++  // Compute the maximum number of non-zero-offset edges inside any cyclic
++  // SCC of the propagation graph (built from MP / BaseValue / Alias /
++  // InfoEscapedVec edges). A cyclic SCC carrying non-zero offsets is the
++  // topology root cause of spreadMemEscape blow-up: cumulative offset-paths
++  // diverge, so distinct (node, offset) states grow without bound. This is a
++  // deterministic graph property (independent of ASLR or DenseMap order).
++  unsigned computeMaxCycNonzero() {
++    DenseMap<GCPtr *, SmallVector<GCPtr *>> G;
++    DenseMap<GCPtr *, SmallVector<int64_t>> GOff;
++    auto AddEdge = [&](GCPtr *From, GCPtr *To, int64_t Off) {
++      G[From].push_back(To);
++      GOff[From].push_back(Off);
++      // Pre-register every edge target as a key of G: targets such as
++      // MemPtrs live in AllMemLocInfo and are never values of AllPtrLocInfo,
++      // so without this tarjanMaxCycNonzero would insert them via G[U]
++      // while iterating G, invalidating the iteration (UB).
++      if (G.find(To) == G.end()) {
++        G[To];
++      }
++    };
++    for (auto &KV : AllPtrLocInfo) {
++      GCPtr *P = KV.second;
++      for (GCPtr *M : P->MPs) {
++        AddEdge(P, M, 0);
++      }
++      for (auto &V : P->BaseValue) {
++        for (uint64_t O : V.second) {
++          AddEdge(P, V.first, static_cast<int64_t>(O));
++        }
++      }
++      for (auto &V : P->Alias) {
++        for (int O : V.second) {
++          AddEdge(P, V.first, O);
++        }
++      }
++      for (GCPtr *V : P->InfoEscapedVec) {
++        AddEdge(P, V, 0);
++      }
++    }
++    return tarjanMaxCycNonzero(G, GOff);
++  }
++
++  // Iterative Tarjan SCC. For every cyclic SCC, count non-zero-offset
++  // intra-SCC edges and return the maximum such count.
++  unsigned tarjanMaxCycNonzero(DenseMap<GCPtr *, SmallVector<GCPtr *>> &G,
++                               DenseMap<GCPtr *, SmallVector<int64_t>> &GOff) {
++    unsigned Idx = 0;
++    DenseMap<GCPtr *, unsigned> Disc, Low;
++    SmallVector<GCPtr *> Stk;
++    DenseSet<GCPtr *> OnStk;
++    unsigned MaxCycNonzero = 0;
++    for (auto &KV : G) {
++      if (Disc.count(KV.first)) {
++        continue;
++      }
++      SmallVector<std::pair<GCPtr *, unsigned>> Dfs;
++      Dfs.push_back({KV.first, 0});
++      while (!Dfs.empty()) {
++        GCPtr *U = Dfs.back().first;
++        unsigned &Pos = Dfs.back().second;
++        if (Pos == 0) {
++          Disc[U] = Low[U] = Idx++;
++          Stk.push_back(U);
++          OnStk.insert(U);
++        }
++        if (Pos < G[U].size()) {
++          GCPtr *W = G[U][Pos++];
++          if (!Disc.count(W)) {
++            Dfs.push_back({W, 0});
++            continue;
++          }
++          if (OnStk.count(W)) {
++            Low[U] = std::min(Low[U], Disc[W]);
++          }
++          continue;
++        }
++        Dfs.pop_back();
++        if (!Dfs.empty()) {
++          Low[Dfs.back().first] = std::min(Low[Dfs.back().first], Low[U]);
++        }
++        if (Low[U] != Disc[U]) {
++          continue;
++        }
++        // U roots an SCC; pop it and, if cyclic, count non-zero intra-edges.
++        SmallVector<GCPtr *> Comp;
++        GCPtr *X;
++        do {
++          X = Stk.pop_back_val();
++          OnStk.erase(X);
++          Comp.push_back(X);
++        } while (X != U);
++        if (Comp.size() <= 1) {
++          continue;
++        }
++        DenseSet<GCPtr *> In(Comp.begin(), Comp.end());
++        unsigned Nz = countNonzeroIntraEdges(Comp, G, GOff, In);
++        MaxCycNonzero = std::max(MaxCycNonzero, Nz);
++      }
++    }
++    return MaxCycNonzero;
++  }
++
++  // Count edges within a cyclic SCC whose offset is non-zero. The -1
++  // escape-all sentinel (an unknown, non-constant offset; see getBaseValue)
++  // is excluded: it stops offset accumulation in spreadMemEscape rather
++  // than making cumulative offset-paths diverge, so it must not count as a
++  // diverging edge.
++  unsigned countNonzeroIntraEdges(SmallVectorImpl<GCPtr *> &Comp,
++                                  DenseMap<GCPtr *, SmallVector<GCPtr *>> &G,
++                                  DenseMap<GCPtr *, SmallVector<int64_t>> &GOff,
++                                  DenseSet<GCPtr *> &In) {
++    unsigned Nz = 0;
++    for (GCPtr *N : Comp) {
++      for (unsigned I = 0; I < G[N].size(); ++I) {
++        int64_t Off = GOff[N][I];
++        if (In.count(G[N][I]) && Off != 0 && Off != -1) {
++          ++Nz;
++        }
++      }
++    }
++    return Nz;
++  }
++
 +  bool run() {
 +    bool Changed = false;
 +    if (GCNew.empty()) {
@@ -61634,6 +62894,17 @@ index 000000000..e4a48b35e
 +    }
 +    for (auto LoadPtr : LoadValues) {
 +      processLoadNew(LoadPtr);
++    }
++    // Bail out when the propagation graph has a cyclic SCC with too many
++    // non-zero-offset edges (the direct topology root cause of
++    // spreadMemEscape blow-up: a cycle carrying non-zero offsets makes
++    // cumulative offset-paths diverge into an unbounded number of distinct
++    // (node, offset) states). This is a deterministic compile-time graph
++    // property, so the bail-out decision is order-independent. Keep every
++    // GCNew on the heap (conservative, correct, no stack promotion).
++    if (computeMaxCycNonzero() > CJPEAMaxCycNonzero) {
++      cleanupAnalysisState();
++      return Changed;
 +    }
 +    for (Function *Func : SCCFunctions) {
 +      processFunc(Func);
@@ -71985,10 +73256,10 @@ index 000000000..80e8be1e5
 \ No newline at end of file
 diff --git a/llvm/lib/Transforms/Scalar/CJGCLiveAnalysis.cpp b/llvm/lib/Transforms/Scalar/CJGCLiveAnalysis.cpp
 new file mode 100644
-index 000000000..51e8f13b3
+index 000000000..fd0e05159
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJGCLiveAnalysis.cpp
-@@ -0,0 +1,1459 @@
+@@ -0,0 +1,1466 @@
 +//===- CJGCLiveAnalysis.cpp - GC Live Analysis For Cangjie ------*- C++ -*-===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -72004,6 +73275,7 @@ index 000000000..51e8f13b3
 +#include "llvm/Transforms/Scalar/CJGCLiveAnalysis.h"
 +
 +#include "llvm/ADT/Optional.h"
++#include "llvm/ADT/Triple.h"
 +#include "llvm/IR/Argument.h"
 +#include "llvm/IR/Attributes.h"
 +#include "llvm/IR/BasicBlock.h"
@@ -73089,7 +74361,13 @@ index 000000000..51e8f13b3
 +  }
 +
 +  Type *ValType = SI->getValueOperand()->getType();
-+  if (ValType->isPointerTy() || ValType->isIntegerTy(64)) { // 64bit
++  // On 32-bit ARM a pointer is 4 bytes, so a `store i32` (e.g. zeroing the
++  // payload field) can define a GC field. Route it through the pointer/i64
++  // branch so it is recorded as a def; otherwise the else branch skips it as
++  // a partial store and the GC scans stale data (SIGSEGV on a null gctib).
++  const Triple TT(SI->getModule()->getTargetTriple());
++  if (ValType->isPointerTy() || ValType->isIntegerTy(64) ||
++      (TT.isARM() && ValType->isIntegerTy(32))) {
 +    FieldInfo *Field = getFieldInfoByValue(Ptr);
 +    Value *Base = Field->V;
 +    if (isa<AllocaInst>(Base) || isa<Argument>(Base))
@@ -80830,10 +82108,10 @@ index 000000000..bedd16770
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
 new file mode 100644
-index 000000000..0ed70333d
+index 000000000..5318a18d3
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
-@@ -0,0 +1,1178 @@
+@@ -0,0 +1,1182 @@
 +//===- CJRuntimeLowering.cpp - CJ Runtime Lowering --------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -81715,7 +82993,11 @@ index 000000000..0ed70333d
 +      Value *GVExpr = ConstantExpr::getBitCast(GV, IRB.getInt8PtrTy());
 +      IRB.CreateStore(GVExpr, BC);
 +      const StructLayout *AllocaSL = DL.getStructLayout(AllocaTy);
-+      uint64_t HeaderSize = DL.getTypeAllocSize(TIType->getPointerTo()).getFixedSize();
++      // Count the arm32 i32 padding (see ElemTypes above) so the memset
++      // starts at the payload @8, not the padding @4.
++      uint64_t HeaderSize =
++          DL.getTypeAllocSize(TIType->getPointerTo()).getFixedSize() +
++          (TT.isARM() ? 4 : 0);
 +      uint64_t MemSize = AllocaSL->getSizeInBytes() - HeaderSize;
 +      // %x.payload = getelementptr i8*, %x.i, HeaderSize
 +      // call @memset(%x.payload, 0, MemSize)
