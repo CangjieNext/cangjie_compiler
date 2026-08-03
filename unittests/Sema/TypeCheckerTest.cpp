@@ -409,7 +409,7 @@ TEST_F(TypeCheckerTest, MacroDiagInLSPTest)
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
 }
 
-TEST_F(TypeCheckerTest, DISABLED_NoDiagInLSPMacroCallTest)
+TEST_F(TypeCheckerTest, NoDiagInLSPMacroCallTest)
 {
     srcPath = projectPath + "/unittests/Sema/SemaCangjieFiles/";
     std::string command = "cjc " + srcPath + "AddClassTyInfoMacro.cj --compile-macro -Woff all";
@@ -537,7 +537,7 @@ TEST_F(TypeCheckerTest, AssumptionTest)
     }
 }
 
-TEST_F(TypeCheckerTest, DISABLED_SpawnTest)
+TEST_F(TypeCheckerTest, SpawnTest)
 {
 #ifdef _WIN32
     srcPath = projectPath + "\\unittests\\Sema\\SemaCangjieFiles\\";
@@ -562,11 +562,13 @@ TEST_F(TypeCheckerTest, DISABLED_SpawnTest)
     Ptr<Node> targetFutureObj1{nullptr};
     Ptr<Node> targetFutureObj2{nullptr};
     for (auto& decl : instance->GetSourcePackages()[0]->files[0]->decls) {
-        auto main = As<ASTKind::FUNC_DECL>(decl.get());
-        EXPECT_TRUE(main);
-        EXPECT_TRUE(main->funcBody->body->body.size() == 4);
-        targetFutureObj1 = main->funcBody->body->body[1].get();
-        targetFutureObj2 = main->funcBody->body->body[2].get();
+        if (auto md = DynamicCast<MainDecl>(decl.get())) {
+            auto main = As<ASTKind::FUNC_DECL>(md->desugarDecl.get());
+            EXPECT_TRUE(main);
+            EXPECT_TRUE(main->funcBody->body->body.size() == 4);
+            targetFutureObj1 = main->funcBody->body->body[1].get();
+            targetFutureObj2 = main->funcBody->body->body[2].get();
+        }
     }
 
     auto var1 = As<ASTKind::VAR_DECL>(targetFutureObj1);

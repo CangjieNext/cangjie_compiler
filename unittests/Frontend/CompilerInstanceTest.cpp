@@ -30,11 +30,11 @@ protected:
 #ifdef PROJECT_SOURCE_DIR
         // Gets the absolute path of the project from the compile parameter.
         projectPath = PROJECT_SOURCE_DIR;
-        cangjieHome = FileUtil::JoinPath(FileUtil::JoinPath(PROJECT_SOURCE_DIR, "build"), "build");
+        cangjieHome = FileUtil::JoinPath(PROJECT_SOURCE_DIR, "output");
 #else
         // Just in case, give it a default value. Assume the initial is in the build directory.
         projectPath = "..";
-        cangjieHome = FileUtil::JoinPath(FileUtil::JoinPath(".", "build"), "build");
+        cangjieHome = FileUtil::JoinPath(".", "output");
 #endif
 #ifdef __x86_64__
         invocation.globalOptions.target.arch = Cangjie::Triple::ArchType::X86_64;
@@ -55,7 +55,7 @@ protected:
     )";
 };
 
-TEST_F(CompilerInstanceTest, DISABLED_FullCompile)
+TEST_F(CompilerInstanceTest, FullCompile)
 {
     std::unique_ptr<DefaultCompilerInstance> instance = std::make_unique<DefaultCompilerInstance>(invocation, diag);
     instance->srcDirs.emplace(FileUtil::JoinPath(projectPath, "unittests/Frontend/FullCompile/src"));
@@ -70,7 +70,7 @@ TEST_F(CompilerInstanceTest, DISABLED_FullCompile)
     EXPECT_EQ(ctx->curPackage, pkg);
 }
 
-TEST_F(CompilerInstanceTest, DISABLED_GetAllVisibleExtendMembers01)
+TEST_F(CompilerInstanceTest, GetAllVisibleExtendMembers01)
 {
     std::unique_ptr<DefaultCompilerInstance> instance = std::make_unique<DefaultCompilerInstance>(invocation, diag);
     instance->srcDirs.emplace(FileUtil::JoinPath(projectPath, "unittests/Frontend/FullCompile/src"));
@@ -130,7 +130,7 @@ TEST_F(CompilerInstanceTest, Comments)
     EXPECT_TRUE(oneComments);
 }
 
-TEST_F(CompilerInstanceTest, DISABLED_TrailingClosure)
+TEST_F(CompilerInstanceTest, TrailingClosure)
 {
     std::unique_ptr<DefaultCompilerInstance> instance = std::make_unique<DefaultCompilerInstance>(invocation, diag);
     instance->srcDirs.emplace(FileUtil::JoinPath(projectPath, "unittests/Frontend/TrailingClosure/src"));

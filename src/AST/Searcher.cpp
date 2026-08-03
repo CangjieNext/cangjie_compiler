@@ -409,6 +409,13 @@ std::set<Symbol*> Searcher::GetIDsByNamePrefix(const ASTContext& ctx, const std:
 std::set<Symbol*> Searcher::GetIDsByNameSuffix(const ASTContext& ctx, const std::string& suffix) const
 {
     std::set<Symbol*> ids;
+    // An empty suffix (query `name:*`) matches every indexed name.
+    if (suffix.empty()) {
+        for (const auto& entry : ctx.invertedIndex.nameIndexes) {
+            ids.insert(entry.second.begin(), entry.second.end());
+        }
+        return ids;
+    }
     std::vector<std::string> names = ctx.invertedIndex.nameTrie->SuffixMatch(suffix);
     for (std::string& name : names) {
         ids = Union(ids, GetIDsByName(ctx, name));

@@ -370,10 +370,11 @@ TEST_F(PackageTest, LSPBasicCompileCost)
     EXPECT_TRUE(diag.GetErrorCount() == 0);
 }
 
-TEST_F(PackageTest, DISABLED_LSPImportLotPkgsCompileCost)
+TEST_F(PackageTest, LSPImportLotPkgsCompileCost)
 {
     instance = std::make_unique<TestCompilerInstance>(invocation, diag);
     instance->invocation.globalOptions.implicitPrelude = true;
+    instance->cangjieHome = FileUtil::JoinPath(projectPath, "output");
     instance->code = R"(
         import std.ast.*
         import std.collection.*

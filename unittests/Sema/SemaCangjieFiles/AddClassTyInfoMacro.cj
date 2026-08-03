@@ -3,13 +3,13 @@
 // with Runtime Library Exception.
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
-// macro package macrodef
+macro package macrodef
 import std.ast.*
 
 public macro M0 (input : Tokens) {
     quote(
-        public class Class3 <: InteropType < Class3 > {
-            public func retClass(a: HashMapEx < String, Class3 >): Unit {
+        public class Class3 <: MyInteropType < Class3 > {
+            public func retClass(a: MyHashMapEx < String, Class3 >): Unit {
             }
         }
     )
