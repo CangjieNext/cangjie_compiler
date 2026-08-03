@@ -1138,6 +1138,16 @@ void StructInheritanceChecker::CheckInheritanceAttributes(const MemberSignature&
 #endif
         } else if (child.TestAttr(Attribute::ABSTRACT) && notInInterface) {
             diag.Diagnose(child, DiagKind::sema_invalid_override_member_in_class, type, child.identifier.Val(), type);
+        } else if (child.TestAttr(Attribute::ABSTRACT) && !notInInterface) {
+            // An abstract redeclaration of an interface default-implemented member is illegal; the
+            // default implementation must be kept (or overridden with a concrete body). This is usually
+            // caught by CheckInheritanceForInterface, but when the default implementation is reached
+            // through an intermediate abstract superclass (e.g. C <: B <: I, B does not redeclare it),
+            // CheckInheritanceForInterface receives the inherited interface member as the child rather
+            // than the abstract redeclaration, so the error is missed and compilation proceeds to VTable
+            // generation where it crashes. Report it here instead.
+            diag.Diagnose(child, DiagKind::sema_invalid_override_or_redefine_member_in_interface, type,
+                child.identifier.Val(), type);
         }
     }
 }
