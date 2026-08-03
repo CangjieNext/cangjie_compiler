@@ -204,7 +204,14 @@ std::unique_ptr<Query> QueryParser::ParseNormalTerm()
         if (Skip(TokenKind::WILDCARD)) {
             prefix = "_";
         }
-        if (Seeing(TokenKind::INT8, TokenKind::RUNE_LITERAL)) {
+        // NOTE: `Seeing(INT8, RUNE_LITERAL)` is a range check that also covers END/SENTINEL/COMMENT/NL
+        // (their enum values fall inside [INT8, RUNE_LITERAL]). Check END first so that `key:*`
+        // (a wildcard matching every name) is handled explicitly instead of letting the trailing
+        // END be mistaken for a (empty) value.
+        if (Seeing(TokenKind::END)) {
+            term->value = prefix;
+            term->matchKind = MatchKind::SUFFIX;
+        } else if (Seeing(TokenKind::INT8, TokenKind::RUNE_LITERAL)) {
             term->value = prefix + LookAhead().Value();
             term->matchKind = MatchKind::SUFFIX;
             Next();

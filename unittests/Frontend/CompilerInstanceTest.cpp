@@ -55,7 +55,7 @@ protected:
     )";
 };
 
-TEST_F(CompilerInstanceTest, DISABLED_FullCompile)
+TEST_F(CompilerInstanceTest, FullCompile)
 {
     std::unique_ptr<DefaultCompilerInstance> instance = std::make_unique<DefaultCompilerInstance>(invocation, diag);
     instance->srcDirs.emplace(FileUtil::JoinPath(projectPath, "unittests/Frontend/FullCompile/src"));
@@ -70,7 +70,7 @@ TEST_F(CompilerInstanceTest, DISABLED_FullCompile)
     EXPECT_EQ(ctx->curPackage, pkg);
 }
 
-TEST_F(CompilerInstanceTest, DISABLED_GetAllVisibleExtendMembers01)
+TEST_F(CompilerInstanceTest, GetAllVisibleExtendMembers01)
 {
     std::unique_ptr<DefaultCompilerInstance> instance = std::make_unique<DefaultCompilerInstance>(invocation, diag);
     instance->srcDirs.emplace(FileUtil::JoinPath(projectPath, "unittests/Frontend/FullCompile/src"));
@@ -130,7 +130,7 @@ TEST_F(CompilerInstanceTest, Comments)
     EXPECT_TRUE(oneComments);
 }
 
-TEST_F(CompilerInstanceTest, DISABLED_TrailingClosure)
+TEST_F(CompilerInstanceTest, TrailingClosure)
 {
     std::unique_ptr<DefaultCompilerInstance> instance = std::make_unique<DefaultCompilerInstance>(invocation, diag);
     instance->srcDirs.emplace(FileUtil::JoinPath(projectPath, "unittests/Frontend/TrailingClosure/src"));
