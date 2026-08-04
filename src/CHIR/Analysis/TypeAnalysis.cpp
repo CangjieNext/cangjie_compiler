@@ -223,7 +223,15 @@ std::optional<Block*> TypeAnalysis::HandleTerminatorEffect(TypeDomain& state, co
         case ExprKind::EXIT:
         case ExprKind::BRANCH:
         case ExprKind::MULTIBRANCH:
-        case ExprKind::INT_OP_WITH_EXCEPTION:
+        case ExprKind::NEG_WITH_EXCEPTION:
+        case ExprKind::ADD_WITH_EXCEPTION:
+        case ExprKind::SUB_WITH_EXCEPTION:
+        case ExprKind::MUL_WITH_EXCEPTION:
+        case ExprKind::DIV_WITH_EXCEPTION:
+        case ExprKind::MOD_WITH_EXCEPTION:
+        case ExprKind::EXP_WITH_EXCEPTION:
+        case ExprKind::LSHIFT_WITH_EXCEPTION:
+        case ExprKind::RSHIFT_WITH_EXCEPTION:
         case ExprKind::INTRINSIC_WITH_EXCEPTION:
         default: {
             auto dest = terminator->GetResult();

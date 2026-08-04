@@ -9,6 +9,7 @@
 #include <climits>
 #include "cangjie/CHIR/Checker/OverflowChecking.h"
 #include "cangjie/CHIR/Analysis/Arithmetic.h"
+#include "cangjie/CHIR/Utils/Utils.h"
 
 namespace Cangjie::CHIR {
 ValueRange::ValueRange(RangeKind kind) : kind(kind)
@@ -146,7 +147,8 @@ const SIntDomain& GetDefaultIntCache(const Ptr<Type>& ty)
 
 inline bool IsBasicBinaryExpr(const Expression& expr)
 {
-    return expr.GetExprKind() >= ExprKind::ADD && expr.GetExprKind() <= ExprKind::MOD;
+    auto binary = DynamicCast<const BinaryExpressionBase*>(&expr);
+    return binary != nullptr && binary->IsMathematicalOperator() && binary->GetOpKind() != BinaryExprKind::EXP;
 }
 
 template <> const std::string Analysis<RangeDomain>::name = "range-analysis";
@@ -288,23 +290,15 @@ std::string GenerateTypeRangePrompt(const Ptr<Type>& type)
 }
 
 template <typename TBinary, typename T>
-void RaiseArithmeticOverflowError(const TBinary* expr, ExprKind kind, T leftVal, T rightVal, DiagnosticEngine& diag)
+void RaiseArithmeticOverflowError(
+    const TBinary* expr, BinaryExprKind kind, T leftVal, T rightVal, DiagnosticEngine& diag)
 {
     auto& loc = expr->GetDebugLocation();
     auto ty = expr->GetResult()->GetType();
-    const static std::unordered_map<ExprKind, std::string> OPS = {
-        {ExprKind::ADD, "+"},
-        {ExprKind::SUB, "-"},
-        {ExprKind::MUL, "*"},
-        {ExprKind::DIV, "/"},
-        {ExprKind::MOD, "%"},
-        {ExprKind::EXP, "**"},
-    };
-    auto token = OPS.find(kind);
-    CJC_ASSERT(token != OPS.end());
+    auto token = GetBinaryExprKindLiteral(kind);
     auto builder =
-        diag.DiagnoseRefactor(DiagKindRefactor::chir_arithmetic_operator_overflow, ToRange(loc), token->second);
-    std::string hint = ty->ToString() + "(" + std::to_string(leftVal) + ") " + token->second + " " +
+        diag.DiagnoseRefactor(DiagKindRefactor::chir_arithmetic_operator_overflow, ToRange(loc), token);
+    std::string hint = ty->ToString() + "(" + std::to_string(leftVal) + ") " + token + " " +
         expr->GetRHSOperand()->GetType()->ToString() + "(" + std::to_string(rightVal) + ")";
     builder.AddMainHintArguments(hint);
     builder.AddNote(GenerateTypeRangePrompt(expr->GetResult()->GetType()));
@@ -336,7 +330,7 @@ SIntDomain CheckSingleValueOverflow(const CHIRArithmeticBinopArgs& args, const P
         }
         isOv = OverflowChecker::IsUIntOverflow(args.l->GetType()->GetTypeKind(), exprKind, a, b, args.ov, &res);
         if (isOv && args.ov == OverflowStrategy::THROWING) {
-            RaiseArithmeticOverflowError(expr.get(), exprKind, a, b, diag);
+            RaiseArithmeticOverflowError(expr.get(), expr->GetOpKind(), a, b, diag);
             return SIntDomain::Top(args.ld.Width(), true);
         }
         return {ConstantRange{{args.ld.Width(), res}}, true};
@@ -349,7 +343,7 @@ SIntDomain CheckSingleValueOverflow(const CHIRArithmeticBinopArgs& args, const P
         }
         isOv = OverflowChecker::IsIntOverflow(args.l->GetType()->GetTypeKind(), exprKind, a, b, args.ov, &res);
         if (isOv && args.ov == OverflowStrategy::THROWING) {
-            RaiseArithmeticOverflowError(expr.get(), exprKind, a, b, diag);
+            RaiseArithmeticOverflowError(expr.get(), expr->GetOpKind(), a, b, diag);
             return SIntDomain::Top(args.ld.Width(), false);
         }
         return {ConstantRange{{args.ld.Width(), static_cast<uint64_t>(res)}}, false};
@@ -455,7 +449,15 @@ std::optional<Block*> RangeAnalysis::HandleTerminatorEffect(RangeDomain& state, 
         case ExprKind::NUMERIC_CAST_WITH_EXCEPTION:
             res = HandleTypeCast(state, StaticCast<const NumericCastWithException*>(terminator));
             break;
-        case ExprKind::INT_OP_WITH_EXCEPTION:
+        case ExprKind::NEG_WITH_EXCEPTION:
+        case ExprKind::ADD_WITH_EXCEPTION:
+        case ExprKind::SUB_WITH_EXCEPTION:
+        case ExprKind::MUL_WITH_EXCEPTION:
+        case ExprKind::DIV_WITH_EXCEPTION:
+        case ExprKind::MOD_WITH_EXCEPTION:
+        case ExprKind::EXP_WITH_EXCEPTION:
+        case ExprKind::LSHIFT_WITH_EXCEPTION:
+        case ExprKind::RSHIFT_WITH_EXCEPTION:
         case ExprKind::INTRINSIC_WITH_EXCEPTION:
         default: {
             auto dest = terminator->GetResult();
