@@ -823,19 +823,9 @@ bool IsSyntheticMirrorWrapper(const Node& node)
     return node.astKind == ASTKind::CLASS_DECL && node.TestAttr(Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER);
 }
 
-bool IsCJMapping(const Node& node)
-{
-    return node.TestAttr(Attribute::JAVA_CJ_MAPPING);
-}
-
 bool IsObject(const Node& node)
 {
     return node.GetTy()->IsObject();
-}
-
-bool IsFwdClass(const Node& node)
-{
-    return node.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD);
 }
 
 } // namespace Cangjie::Interop::Java
