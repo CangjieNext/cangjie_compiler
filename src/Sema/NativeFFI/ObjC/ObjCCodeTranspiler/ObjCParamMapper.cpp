@@ -54,10 +54,6 @@ std::string ObjCParamMapper::GenerateFuncParamLists(
         switch (format) {
             case FunctionListFormat::DECLARATION:
                 if (i != 0) {
-                    /*
-                     * for CJMapping Objective-C method signature, label shouldn't generate if not use @ForeignName
-                     * as it would be more user-friendly to keep both side method signatures the same
-                     */
                     auto name = hasForeignNameAnno ? *componentIterator++ : "";
                     genParams += name + ":"; // label
                 } else {
@@ -209,15 +205,11 @@ std::string ObjCParamMapper::MapCJTypeToObjCType(std::vector<std::string>& typed
 
 std::string ObjCParamMapper::GenerateArgumentCast(const Ty& retTy, std::string value)
 {
-    if (TypeMapper::IsObjCCJMapping(retTy)) {
-        return value + "." + REGISTRY_ID;
-    }
     const auto& actualTy = retTy.IsCoreOptionType() ? *retTy.typeArgs[0] : retTy;
     if (TypeMapper::IsObjCImpl(actualTy)) {
         return CAST_TO_VOID_PTR + std::move(value);
     }
-    if (TypeMapper::IsObjCMirror(actualTy) || TypeMapper::IsObjCBlock(actualTy) ||
-        TypeMapper::IsObjCCJMappingInterface(actualTy)) {
+    if (TypeMapper::IsObjCMirror(actualTy) || TypeMapper::IsObjCBlock(actualTy)) {
         return CAST_TO_VOID_PTR_RETAINED + std::move(value);
     }
     if (TypeMapper::IsObjCPointer(actualTy)) {

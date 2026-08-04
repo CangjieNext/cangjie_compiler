@@ -73,13 +73,6 @@ void DesugarMirrors::HandleImpl(InteropContext& ctx)
         }
     };
 
-    if (interopType == InteropType::Fwd_Class) {
-        for (auto& fwdClass : ctx.fwdClasses) {
-            genMirrorLikeClassBody(*fwdClass);
-        }
-        return;
-    }
-
     for (auto& mirror : ctx.mirrors) {
         genMirrorLikeClassBody(*mirror);
     }
@@ -201,11 +194,14 @@ void DesugarMirrors::DesugarTopLevelFunc(InteropContext& ctx, FuncDecl& func)
 
     auto& params = func.funcBody->paramLists[0]->params;
     std::transform(params.begin(), params.end(), std::back_inserter(nativeCallArgs),
-        [&ctx, curFile](auto& param) { return CreateFuncArg(ctx.factory.UnwrapEntity(WithinFile(CreateRefExpr(*param), curFile))); });
+        [&ctx, curFile](auto& param) {
+            return CreateFuncArg(ctx.factory.UnwrapEntity(WithinFile(CreateRefExpr(*param), curFile)));
+        });
 
     auto funcAccess = WithinFile(CreateRefExpr(*cFuncDecl), func.curFile);
 
-    auto call = CreateCallExpr(std::move(funcAccess), std::move(nativeCallArgs), cFuncDecl, cFuncTy->retTy, CallKind::CALL_DECLARED_FUNCTION);
+    auto call = CreateCallExpr(std::move(funcAccess), std::move(nativeCallArgs), cFuncDecl, cFuncTy->retTy,
+        CallKind::CALL_DECLARED_FUNCTION);
     CopyBasicInfo(&func, call);
 
     // We use objc_retain here, because we don't know in advance if

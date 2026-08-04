@@ -44,18 +44,6 @@ void CompileStrategy::TypeCheck() const
     ci->typeChecker->TypeCheckForPackages(ci->GetSourcePackages());
 }
 
-void CompileStrategy::InteropConfigTomlCheck()
-{
-    Utils::ProfileRecorder recorder("Semantic", "InteropConfigTomlCheck");
-    InteropCJPackageConfigReader packagesFullConfig;
-    if (ci->invocation.globalOptions.enableInteropCJMapping &&
-        ci->invocation.globalOptions.interopCJPackageConfigPath != "./" &&
-        !packagesFullConfig.Parse(ci->invocation.globalOptions.interopCJPackageConfigPath)) {
-        ci->diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_generic_method_not_get_instance_config,
-            DEFAULT_POSITION, ci->invocation.globalOptions.interopCJPackageConfigPath);
-    }
-}
-
 bool CompileStrategy::ConditionCompile() const
 {
     auto beforeErrCnt = ci->diag.GetErrorCount();
@@ -573,8 +561,6 @@ bool CompileStrategy::MacroExpand() const
 bool FullCompileStrategy::Sema()
 {
     PerformDesugar();
-    // Interop config toml file check format.
-    InteropConfigTomlCheck();
     TypeCheck();
 #ifdef SIGNAL_TEST
     // The interrupt signal triggers the function. In normal cases, this function does not take effect.
