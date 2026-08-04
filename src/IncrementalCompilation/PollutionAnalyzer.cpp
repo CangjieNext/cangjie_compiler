@@ -16,6 +16,31 @@ using namespace Cangjie::IncrementalCompilation;
 
 namespace {
 
+// Returns whether decl has an eligible direct sealed parent. An eligible parent is a non-imported, non-generic
+// sealed declaration. Check every inherited type because a declaration may directly implement multiple sealed
+// interfaces; indirect descendants do not change a sealed root's direct subtype set.
+bool HasEligibleDirectSealedParent(const InheritableDecl& decl)
+{
+    for (const auto& inheritedType : decl.inheritedTypes) {
+        auto parentDecl = Ty::GetDeclOfTy<InheritableDecl>(inheritedType ? inheritedType->GetTy() : nullptr);
+        if (parentDecl != nullptr && parentDecl->TestAttr(Attribute::SEALED) &&
+            !parentDecl->TestAttr(Attribute::IMPORTED) && parentDecl->GetGeneric() == nullptr) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// A sealed root or an eligible direct subtype can change match exhaustiveness; imported and generic declarations are
+// outside the closed hierarchy visible to the current package.
+bool IsSealedHierarchyChange(const InheritableDecl& decl, const TypeChange& change)
+{
+    if (!change.srcUse || decl.TestAttr(Attribute::IMPORTED) || decl.GetGeneric() != nullptr) {
+        return false;
+    }
+    return decl.TestAttr(Attribute::SEALED) || HasEligibleDirectSealedParent(decl);
+}
+
 } // namespace
 
 void TypeMap::CollectImportedDeclExtraRelation(const AST::Decl& decl)
@@ -179,6 +204,12 @@ void PollutionAnalyzer::PollutionForAddedDecl(const Decl& decl)
 
 void PollutionAnalyzer::PollutionForAddedTypeDecl(const Decl& decl)
 {
+    const auto& inheritableDecl = StaticCast<const InheritableDecl&>(decl);
+    if (!inheritableDecl.TestAttr(Attribute::IMPORTED) && inheritableDecl.GetGeneric() == nullptr &&
+        HasEligibleDirectSealedParent(inheritableDecl)) {
+        sealedHierarchyChanges.push_back(&decl);
+    }
+
     if (decl.TestAttr(Attribute::IMPORTED)) {
         // All imported stuff has been sema-d in upstream package. We only need to:
         // 1) analysis the pollution for the added decl
@@ -722,6 +753,15 @@ void PollutionAnalyzer::PollutionForChangedTypeDecl(const InheritableDecl& decl,
     CJC_ASSERT(decl.astKind == ASTKind::ENUM_DECL || decl.astKind == ASTKind::STRUCT_DECL ||
         decl.astKind == ASTKind::CLASS_DECL || decl.astKind == ASTKind::INTERFACE_DECL ||
         decl.astKind == ASTKind::EXTEND_DECL);
+
+    // Only a sealed root or one of its direct children can change the closed hierarchy used by match analysis.
+    // Other src-use changes, such as `abstract class` to `class` or an unrelated interface becoming open, retain
+    // the normal precise incremental path.
+    // Generic declarations are excluded from closed sealed-hierarchy analysis;
+    // changing their modifiers therefore does not require a global rollback.
+    if (IsSealedHierarchyChange(decl, c)) {
+        sealedHierarchyChanges.push_back(&decl);
+    }
 
     // For imported non-public type decl, we just add it into the recompilation list so the
     // backend will update its metadata info
@@ -1327,7 +1367,11 @@ void PollutionAnalyzer::PollutedGlobalChangeToPackageQualifiedUses(const Decl& d
 // Returns true if we can tell incremental compilation must rollback to full
 bool PollutionAnalyzer::FallBack() const
 {
-    return !typeAliases.empty() || !unfoundExtends.empty() || !unfoundNames.empty() || !removedNotSupported.empty();
+    // Sealed hierarchy changes affect match exhaustiveness globally; the cached pollution graph cannot describe the
+    // changed set of direct subtypes, so incremental compilation must re-run semantic analysis from scratch.
+    return !typeAliases.empty() || !sealedHierarchyChanges.empty() || !unfoundExtends.empty() ||
+        !unfoundNames.empty() ||
+        !removedNotSupported.empty();
 }
 
 void PollutionAnalyzer::PrintFallbackInfo()
@@ -1343,6 +1387,13 @@ void PollutionAnalyzer::PrintFallbackInfo()
     if (!typeAliases.empty()) {
         for (auto decl : std::as_const(typeAliases)) {
             out << "changed typealias: ";
+            PrintDecl(out, *decl);
+            out << '\n';
+        }
+    }
+    if (!sealedHierarchyChanges.empty()) {
+        for (auto decl : std::as_const(sealedHierarchyChanges)) {
+            out << "changed subtype of sealed type: ";
             PrintDecl(out, *decl);
             out << '\n';
         }
