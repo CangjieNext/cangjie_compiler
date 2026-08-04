@@ -179,6 +179,19 @@ void PollutionAnalyzer::PollutionForAddedDecl(const Decl& decl)
 
 void PollutionAnalyzer::PollutionForAddedTypeDecl(const Decl& decl)
 {
+    if (auto inheritableDecl = DynamicCast<const InheritableDecl*>(&decl)) {
+        for (const auto& inheritedType : inheritableDecl->inheritedTypes) {
+            if (!inheritedType || inheritedType->GetTy() == nullptr) {
+                continue;
+            }
+            auto parentDecl = Ty::GetDeclOfTy(inheritedType->GetTy());
+            if (parentDecl != nullptr && parentDecl->TestAttr(Attribute::SEALED)) {
+                addedSealedSubtypes.push_back(&decl);
+                break;
+            }
+        }
+    }
+
     if (decl.TestAttr(Attribute::IMPORTED)) {
         // All imported stuff has been sema-d in upstream package. We only need to:
         // 1) analysis the pollution for the added decl
@@ -1327,7 +1340,8 @@ void PollutionAnalyzer::PollutedGlobalChangeToPackageQualifiedUses(const Decl& d
 // Returns true if we can tell incremental compilation must rollback to full
 bool PollutionAnalyzer::FallBack() const
 {
-    return !typeAliases.empty() || !unfoundExtends.empty() || !unfoundNames.empty() || !removedNotSupported.empty();
+    return !typeAliases.empty() || !addedSealedSubtypes.empty() || !unfoundExtends.empty() || !unfoundNames.empty() ||
+        !removedNotSupported.empty();
 }
 
 void PollutionAnalyzer::PrintFallbackInfo()
@@ -1343,6 +1357,13 @@ void PollutionAnalyzer::PrintFallbackInfo()
     if (!typeAliases.empty()) {
         for (auto decl : std::as_const(typeAliases)) {
             out << "changed typealias: ";
+            PrintDecl(out, *decl);
+            out << '\n';
+        }
+    }
+    if (!addedSealedSubtypes.empty()) {
+        for (auto decl : std::as_const(addedSealedSubtypes)) {
+            out << "added subtype of sealed type: ";
             PrintDecl(out, *decl);
             out << '\n';
         }
