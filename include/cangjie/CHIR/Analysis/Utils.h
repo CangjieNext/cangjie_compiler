@@ -205,7 +205,7 @@ bool IsStructEnum(const Ptr<Type>& type);
 bool IsRefEnum(const Ptr<Type>& type);
 
 /// check if expression is arithmetic of unsigned value.
-bool IsUnsignedArithmetic(const BinaryExpression& expr);
+bool IsUnsignedArithmetic(const BinaryExpressionBase& expr);
 
 /// get CHIR func value from apply.
 Function* TryGetInstanceVarInitFromApply(const Expression& expr);

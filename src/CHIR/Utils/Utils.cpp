@@ -1608,6 +1608,58 @@ bool IsSTDFunction(const Function& func)
     return func.GetPackageName().substr(0, strlen(STD_PACKAGE_PREFIX)) == STD_PACKAGE_PREFIX;
 }
 
+namespace {
+const std::unordered_map<UnaryExprKind, std::string>& UnaryExprKindToLiteralMap()
+{
+    static const std::unordered_map<UnaryExprKind, std::string> MAP = {
+        {UnaryExprKind::NEG, "-"},
+        {UnaryExprKind::NOT, "!"},
+        {UnaryExprKind::BITNOT, "~"},
+    };
+    return MAP;
+}
+
+const std::unordered_map<BinaryExprKind, std::string>& BinaryExprKindToLiteralMap()
+{
+    static const std::unordered_map<BinaryExprKind, std::string> MAP = {
+        {BinaryExprKind::ADD, "+"},
+        {BinaryExprKind::SUB, "-"},
+        {BinaryExprKind::MUL, "*"},
+        {BinaryExprKind::DIV, "/"},
+        {BinaryExprKind::MOD, "%"},
+        {BinaryExprKind::EXP, "**"},
+        {BinaryExprKind::LSHIFT, "<<"},
+        {BinaryExprKind::RSHIFT, ">>"},
+        {BinaryExprKind::BITAND, "&"},
+        {BinaryExprKind::BITOR, "|"},
+        {BinaryExprKind::BITXOR, "^"},
+        {BinaryExprKind::LT, "<"},
+        {BinaryExprKind::GT, ">"},
+        {BinaryExprKind::LE, "<="},
+        {BinaryExprKind::GE, ">="},
+        {BinaryExprKind::EQUAL, "=="},
+        {BinaryExprKind::NOTEQUAL, "!="},
+        {BinaryExprKind::AND, "&&"},
+        {BinaryExprKind::OR, "||"},
+    };
+    return MAP;
+}
+} // namespace
+
+std::string GetUnaryExprKindLiteral(UnaryExprKind kind)
+{
+    auto it = UnaryExprKindToLiteralMap().find(kind);
+    CJC_ASSERT(it != UnaryExprKindToLiteralMap().end());
+    return it->second;
+}
+
+std::string GetBinaryExprKindLiteral(BinaryExprKind kind)
+{
+    auto it = BinaryExprKindToLiteralMap().find(kind);
+    CJC_ASSERT(it != BinaryExprKindToLiteralMap().end());
+    return it->second;
+}
+
 std::vector<Expression*> GetNonDebugUsers(const Value& val)
 {
     std::vector<Expression*> res;

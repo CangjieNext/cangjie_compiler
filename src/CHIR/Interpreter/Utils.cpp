@@ -53,14 +53,14 @@ OpCode Interpreter::PrimitiveTypeKind2OpCode(Type::TypeKind kind)
     }
 }
 
-OpCode Interpreter::UnExprKind2OpCode(Cangjie::CHIR::ExprKind exprKind)
+OpCode Interpreter::UnExprKind2OpCode(Cangjie::CHIR::UnaryExprKind kind)
 {
-    switch (exprKind) {
-        case ExprKind::NEG:
+    switch (kind) {
+        case UnaryExprKind::NEG:
             return OpCode::UN_NEG;
-        case ExprKind::NOT:
+        case UnaryExprKind::NOT:
             return OpCode::UN_NOT;
-        case ExprKind::BITNOT:
+        case UnaryExprKind::BITNOT:
             return OpCode::UN_BITNOT;
         default: {
             CJC_ASSERT(false);
@@ -69,45 +69,57 @@ OpCode Interpreter::UnExprKind2OpCode(Cangjie::CHIR::ExprKind exprKind)
     }
 }
 
-OpCode Interpreter::BinExprKind2OpCode(Cangjie::CHIR::ExprKind exprKind)
+OpCode Interpreter::UnExprKindWitException2OpCode(Cangjie::CHIR::UnaryExprKind kind)
 {
-    switch (exprKind) {
-        case ExprKind::ADD:
+    switch (kind) {
+        case UnaryExprKind::NEG:
+            return OpCode::UN_NEG_EXC;
+        default: {
+            CJC_ASSERT(false);
+            return OpCode::INVALID;
+        }
+    }
+}
+
+OpCode Interpreter::BinExprKind2OpCode(Cangjie::CHIR::BinaryExprKind kind)
+{
+    switch (kind) {
+        case BinaryExprKind::ADD:
             return OpCode::BIN_ADD;
-        case ExprKind::SUB:
+        case BinaryExprKind::SUB:
             return OpCode::BIN_SUB;
-        case ExprKind::MUL:
+        case BinaryExprKind::MUL:
             return OpCode::BIN_MUL;
-        case ExprKind::DIV:
+        case BinaryExprKind::DIV:
             return OpCode::BIN_DIV;
-        case ExprKind::MOD:
+        case BinaryExprKind::MOD:
             return OpCode::BIN_MOD;
-        case ExprKind::LSHIFT:
+        case BinaryExprKind::LSHIFT:
             return OpCode::BIN_LSHIFT;
-        case ExprKind::RSHIFT:
+        case BinaryExprKind::RSHIFT:
             return OpCode::BIN_RSHIFT;
-        case ExprKind::BITAND:
+        case BinaryExprKind::BITAND:
             return OpCode::BIN_BITAND;
-        case ExprKind::BITOR:
+        case BinaryExprKind::BITOR:
             return OpCode::BIN_BITOR;
-        case ExprKind::BITXOR:
+        case BinaryExprKind::BITXOR:
             return OpCode::BIN_BITXOR;
-        case ExprKind::LT:
+        case BinaryExprKind::LT:
             return OpCode::BIN_LT;
-        case ExprKind::GT:
+        case BinaryExprKind::GT:
             return OpCode::BIN_GT;
-        case ExprKind::LE:
+        case BinaryExprKind::LE:
             return OpCode::BIN_LE;
-        case ExprKind::GE:
+        case BinaryExprKind::GE:
             return OpCode::BIN_GE;
-        case ExprKind::EQUAL:
+        case BinaryExprKind::EQUAL:
             return OpCode::BIN_EQUAL;
-        case ExprKind::NOTEQUAL:
+        case BinaryExprKind::NOTEQUAL:
             return OpCode::BIN_NOTEQ;
-        case ExprKind::EXP:
+        case BinaryExprKind::EXP:
             return OpCode::BIN_EXP;
-        case ExprKind::AND:
-        case ExprKind::OR:
+        case BinaryExprKind::AND:
+        case BinaryExprKind::OR:
             // should have already been desugared at this point
             // missing break/return intended
         default: {
@@ -117,27 +129,25 @@ OpCode Interpreter::BinExprKind2OpCode(Cangjie::CHIR::ExprKind exprKind)
     }
 }
 
-OpCode Interpreter::BinExprKindWitException2OpCode(Cangjie::CHIR::ExprKind exprKind)
+OpCode Interpreter::BinExprKindWitException2OpCode(Cangjie::CHIR::BinaryExprKind kind)
 {
-    switch (exprKind) {
-        case ExprKind::ADD:
+    switch (kind) {
+        case BinaryExprKind::ADD:
             return OpCode::BIN_ADD_EXC;
-        case ExprKind::SUB:
+        case BinaryExprKind::SUB:
             return OpCode::BIN_SUB_EXC;
-        case ExprKind::MUL:
+        case BinaryExprKind::MUL:
             return OpCode::BIN_MUL_EXC;
-        case ExprKind::DIV:
+        case BinaryExprKind::DIV:
             return OpCode::BIN_DIV_EXC;
-        case ExprKind::MOD:
+        case BinaryExprKind::MOD:
             return OpCode::BIN_MOD_EXC;
-        case ExprKind::EXP:
+        case BinaryExprKind::EXP:
             return OpCode::BIN_EXP_EXC;
-        case ExprKind::LSHIFT:
+        case BinaryExprKind::LSHIFT:
             return OpCode::BIN_LSHIFT_EXC;
-        case ExprKind::RSHIFT:
+        case BinaryExprKind::RSHIFT:
             return OpCode::BIN_RSHIFT_EXC;
-        case ExprKind::NEG:
-            return OpCode::UN_NEG_EXC;
         default: {
             CJC_ASSERT(false);
             return OpCode::INVALID;

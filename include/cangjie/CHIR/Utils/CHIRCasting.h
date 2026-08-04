@@ -68,7 +68,7 @@ DEFINE_NODE_TYPE_KIND(CHIR::RaiseException, CHIR::ExprKind::RAISE_EXCEPTION);
 DEFINE_NODE_TYPE_KIND(CHIR::ApplyWithException, CHIR::ExprKind::APPLY_WITH_EXCEPTION);
 DEFINE_NODE_TYPE_KIND(CHIR::InvokeWithException, CHIR::ExprKind::INVOKE_WITH_EXCEPTION);
 DEFINE_NODE_TYPE_KIND(CHIR::InvokeStaticWithException, CHIR::ExprKind::INVOKESTATIC_WITH_EXCEPTION);
-DEFINE_NODE_TYPE_KIND(CHIR::IntOpWithException, CHIR::ExprKind::INT_OP_WITH_EXCEPTION);
+DEFINE_NODE_TYPE_KIND(CHIR::UnaryExpressionWithException, CHIR::ExprKind::NEG_WITH_EXCEPTION);
 DEFINE_NODE_TYPE_KIND(CHIR::IntrinsicWithException, CHIR::ExprKind::INTRINSIC_WITH_EXCEPTION);
 DEFINE_NODE_TYPE_KIND(CHIR::AllocateWithException, CHIR::ExprKind::ALLOCATE_WITH_EXCEPTION);
 DEFINE_NODE_TYPE_KIND(CHIR::RawArrayAllocateWithException, CHIR::ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION);
@@ -95,7 +95,7 @@ DEFINE_NODE_TYPE_KIND(CHIR::UnBoxToValue, CHIR::ExprKind::UNBOX_TO_VALUE);
 DEFINE_NODE_TYPE_KIND(CHIR::GetRTTI, CHIR::ExprKind::GET_RTTI);
 DEFINE_NODE_TYPE_KIND(CHIR::GetRTTIStatic, CHIR::ExprKind::GET_RTTI_STATIC);
 
-// CustomTypeDef.h, 包含class enum struct三种
+// CustomTypeDef.h: class, enum, and struct.
 DEFINE_NODE_TYPE_KIND(CHIR::ClassDef, CHIR::CustomDefKind::TYPE_CLASS);
 DEFINE_NODE_TYPE_KIND(CHIR::EnumDef, CHIR::CustomDefKind::TYPE_ENUM);
 DEFINE_NODE_TYPE_KIND(CHIR::StructDef, CHIR::CustomDefKind::TYPE_STRUCT);
@@ -250,7 +250,8 @@ template <> struct TypeAs<CHIR::IntType> {
 template <typename To>
 using ExprImplSeparately = std::enable_if_t<std::is_base_of_v<CHIR::Expression, To> &&
     ShouldInstantiate<To, CHIR::UnaryExpression, CHIR::BinaryExpression, CHIR::Terminator, CHIR::SpawnBase,
-        CHIR::AllocateBase, CHIR::RawArrayAllocateBase, CHIR::TypeCast, CHIR::NumericCastBase>::value>;
+        CHIR::AllocateBase, CHIR::RawArrayAllocateBase, CHIR::TypeCast, CHIR::NumericCastBase,
+        CHIR::UnaryExpressionBase, CHIR::BinaryExpressionBase, CHIR::BinaryExpressionWithException>::value>;
 
 template <typename To> struct TypeAs<To, ExprImplSeparately<To>> {
     static inline bool IsInstanceOf(const CHIR::Expression& node)
@@ -349,6 +350,30 @@ template <> struct TypeAs<CHIR::BinaryExpression> {
     {
         auto kind = node.GetExprKind();
         return kind >= CHIR::ExprKind::ADD && kind <= CHIR::ExprKind::OR;
+    }
+};
+
+template <> struct TypeAs<CHIR::BinaryExpressionWithException> {
+    static inline bool IsInstanceOf(const CHIR::Expression& node)
+    {
+        auto kind = node.GetExprKind();
+        return kind >= CHIR::ExprKind::ADD_WITH_EXCEPTION && kind <= CHIR::ExprKind::RSHIFT_WITH_EXCEPTION;
+    }
+};
+
+template <> struct TypeAs<CHIR::UnaryExpressionBase> {
+    static inline bool IsInstanceOf(const CHIR::Expression& node)
+    {
+        return TypeAs<CHIR::UnaryExpression>::IsInstanceOf(node) ||
+            node.GetExprKind() == CHIR::ExprKind::NEG_WITH_EXCEPTION;
+    }
+};
+
+template <> struct TypeAs<CHIR::BinaryExpressionBase> {
+    static inline bool IsInstanceOf(const CHIR::Expression& node)
+    {
+        return TypeAs<CHIR::BinaryExpression>::IsInstanceOf(node) ||
+            TypeAs<CHIR::BinaryExpressionWithException>::IsInstanceOf(node);
     }
 };
 

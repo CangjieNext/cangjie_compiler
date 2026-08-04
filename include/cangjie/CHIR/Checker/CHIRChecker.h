@@ -156,9 +156,10 @@ private:
     void CheckInvokeBase(const InvokeBase& expr, const Function& topLevelFunc);
     void CheckInvokeStaticWithException(const InvokeStaticWithException& expr, const Function& topLevelFunc);
     void CheckInvokeStaticBase(const InvokeStaticBase& expr, const Function& topLevelFunc);
-    void CheckIntOpWithException(const IntOpWithException& expr, const Function& topLevelFunc);
-    void CheckUnaryExprBase(const UnaryExprBase& expr, const Function& topLevelFunc);
-    void CheckBinaryExprBase(const BinaryExprBase& expr, const Function& topLevelFunc);
+    void CheckUnaryExpressionWithException(const UnaryExpressionWithException& expr, const Function& topLevelFunc);
+    void CheckBinaryExpressionWithException(const BinaryExpressionWithException& expr, const Function& topLevelFunc);
+    void CheckUnaryExprBase(const UnaryExpressionBase& expr, const Function& topLevelFunc);
+    void CheckBinaryExprBase(const BinaryExpressionBase& expr, const Function& topLevelFunc);
     void CheckSpawnWithException(const SpawnWithException& expr, const Function& topLevelFunc);
     void CheckSpawnBase(const SpawnBase& expr, const Function& topLevelFunc);
     void CheckNumericCastWithException(const NumericCastWithException& expr, const Function& topLevelFunc);
@@ -177,11 +178,11 @@ private:
     // Check Binary Expression
     // ===--------------------------------------------------------------------===//
     void CheckBinaryExpression(const BinaryExpression& expr, const Function& topLevelFunc);
-    void CheckCalculExpression(const BinaryExprBase& expr, const Function& topLevelFunc);
-    void CheckExponentiationExpression(const BinaryExprBase& expr, const Function& topLevelFunc);
-    void CheckBitExpression(const BinaryExprBase& expr, const Function& topLevelFunc);
-    void CheckCompareExpression(const BinaryExprBase& expr, const Function& topLevelFunc);
-    void CheckLogicExpression(const BinaryExprBase& expr, const Function& topLevelFunc);
+    void CheckCalculExpression(const BinaryExpressionBase& expr, const Function& topLevelFunc);
+    void CheckExponentiationExpression(const BinaryExpressionBase& expr, const Function& topLevelFunc);
+    void CheckBitExpression(const BinaryExpressionBase& expr, const Function& topLevelFunc);
+    void CheckCompareExpression(const BinaryExpressionBase& expr, const Function& topLevelFunc);
+    void CheckLogicExpression(const BinaryExpressionBase& expr, const Function& topLevelFunc);
 
     // ===--------------------------------------------------------------------===//
     // Check Memory Expression

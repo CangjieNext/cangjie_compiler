@@ -182,17 +182,28 @@ llvm::Value* HandleTerminatorExpression(IRBuilder2& irBuilder, const CHIR::Expre
             irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
             return resultVal;
         }
-        case CHIR::ExprKind::INT_OP_WITH_EXCEPTION: {
-            auto& intOpWithException = StaticCast<const CHIR::IntOpWithException&>(chirExpr);
-            auto normalDest = intOpWithException.GetSuccessor(0);
-            auto unwindDest = intOpWithException.GetSuccessor(1);
+        case CHIR::ExprKind::NEG_WITH_EXCEPTION: {
+            auto& unaryWithException = StaticCast<const CHIR::UnaryExpressionWithException&>(chirExpr);
+            auto normalDest = unaryWithException.GetSuccessor(0);
+            auto unwindDest = unaryWithException.GetSuccessor(1);
             CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
-            llvm::Value* resultVal = nullptr;
-            if (intOpWithException.GetNumOfNonSuccessorOperands() == 1) {
-                resultVal = HandleUnaryExpression(irBuilder, CHIRUnaryExprWrapper(intOpWithException));
-            } else {
-                resultVal = HandleBinaryExpression(irBuilder, CHIRBinaryExprWrapper(intOpWithException));
-            }
+            auto resultVal = HandleUnaryExpression(irBuilder, unaryWithException);
+            irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
+            return resultVal;
+        }
+        case CHIR::ExprKind::ADD_WITH_EXCEPTION:
+        case CHIR::ExprKind::SUB_WITH_EXCEPTION:
+        case CHIR::ExprKind::MUL_WITH_EXCEPTION:
+        case CHIR::ExprKind::DIV_WITH_EXCEPTION:
+        case CHIR::ExprKind::MOD_WITH_EXCEPTION:
+        case CHIR::ExprKind::EXP_WITH_EXCEPTION:
+        case CHIR::ExprKind::LSHIFT_WITH_EXCEPTION:
+        case CHIR::ExprKind::RSHIFT_WITH_EXCEPTION: {
+            auto& binaryWithException = StaticCast<const CHIR::BinaryExpressionWithException&>(chirExpr);
+            auto normalDest = binaryWithException.GetSuccessor(0);
+            auto unwindDest = binaryWithException.GetSuccessor(1);
+            CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
+            auto resultVal = HandleBinaryExpression(irBuilder, binaryWithException);
             irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
             return resultVal;
         }

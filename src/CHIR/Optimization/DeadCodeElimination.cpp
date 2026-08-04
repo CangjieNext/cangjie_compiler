@@ -135,38 +135,6 @@ bool ReflectPackageIsUsed(const Package& package) {
 }
 }  // namespace
 
-static inline const std::unordered_map<ExprKind, std::string> EXPR_KIND_TO_STR = {
-    {ExprKind::NEG, "-"},
-    {ExprKind::NOT, "!"},
-    {ExprKind::BITNOT, "~"},
-    {ExprKind::ADD, "+"},
-    {ExprKind::SUB, "-"},
-    {ExprKind::MUL, "*"},
-    {ExprKind::DIV, "/"},
-    {ExprKind::MOD, "%"},
-    {ExprKind::EXP, "**"},
-    {ExprKind::LSHIFT, "<<"},
-    {ExprKind::RSHIFT, ">>"},
-    {ExprKind::BITAND, "&"},
-    {ExprKind::BITOR, "|"},
-    {ExprKind::BITXOR, "^"},
-    {ExprKind::LT, "<"},
-    {ExprKind::GT, ">"},
-    {ExprKind::LE, "<="},
-    {ExprKind::GE, ">="},
-    {ExprKind::EQUAL, "=="},
-    {ExprKind::NOTEQUAL, "!="},
-    {ExprKind::AND, "&&"},
-    {ExprKind::OR, "||"},
-};
-
-std::string DeadCodeElimination::GetLiteralFromExprKind(const ExprKind& kind) const
-{
-    auto it = EXPR_KIND_TO_STR.find(kind);
-    CJC_ASSERT(it != EXPR_KIND_TO_STR.end());
-    return it->second;
-}
-
 void DeadCodeElimination::UselessFuncElimination(Package& package, const GlobalOptions& opts)
 {
     auto allFuncs = package.GetGlobalFunctions();
@@ -484,11 +452,12 @@ void DeadCodeElimination::ReportUnusedExpression(Expression& expr)
             if (expr.GetExprKind() == ExprKind::LAMBDA) {
                 DiagUnusedCode(res, DiagKindRefactor::chir_dce_unused_function,
                     StaticCast<const Lambda&>(expr).GetSrcCodeIdentifier());
-            } else if (expr.IsUnaryExpr() || expr.IsBinaryExpr() || expr.IsIntOpWithException()) {
-                auto kind = expr.GetExprKind() == ExprKind::INT_OP_WITH_EXCEPTION
-                    ? GetLiteralFromExprKind(StaticCast<IntOpWithException*>(&expr)->GetOpKind())
-                    : GetLiteralFromExprKind(expr.GetExprKind());
-                diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unused_operator, res.second, kind);
+            } else if (auto unary = DynamicCast<const UnaryExpressionBase*>(&expr)) {
+                diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unused_operator,
+                    res.second, GetUnaryExprKindLiteral(unary->GetOpKind()));
+            } else if (auto binary = DynamicCast<const BinaryExpressionBase*>(&expr)) {
+                diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unused_operator, res.second,
+                    GetBinaryExprKindLiteral(binary->GetOpKind()));
             } else {
                 diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unused_expression, res.second);
             }
@@ -975,7 +944,7 @@ Ptr<Expression> DeadCodeElimination::GetUnreachableExpression(const CHIR::Block&
             // when report deadcode in BinaryExpr, it has 4 situations in tests/LLT/CHIR/DCE/testUnusedOp03.cj
             // if operand in binaryExpr is nothing, use warninglocation as report position
             // if all operand in binaryExpr is normal, use binaryExpr location as report position
-            if (expression->IsBinaryExpr() || expression->IsIntOpWithException()) {
+            if (Is<BinaryExpressionBase>(expression) || Is<UnaryExpressionWithException>(expression)) {
                 auto args = expression->GetNonSuccessorOperands();
                 auto it =
                     std::find_if(args.begin(), args.end(), [](auto item) { return item->GetType()->IsNothing(); });
@@ -1065,7 +1034,8 @@ bool DeadCodeElimination::CheckUselessExpr(const Expression& expr, bool isReport
     if (expr.GetResult() && !expr.GetResult()->GetUsers().empty()) {
         return false;
     }
-    if (expr.GetExprKind() == ExprKind::INT_OP_WITH_EXCEPTION && expr.Get<NeverOverflowInfo>() && isReportWarning) {
+    if ((expr.IsUnaryExpressionWithException() || expr.IsBinaryExpressionWithException()) &&
+        expr.Get<NeverOverflowInfo>() && isReportWarning) {
         return true;
     }
     if (expr.IsTerminator()) {
@@ -1087,13 +1057,13 @@ bool DeadCodeElimination::CheckUselessExpr(const Expression& expr, bool isReport
                 kind == ExprKind::RSHIFT) {
                 // MOD/DIV may throw div_by_zero exception; LSHIFT/RSHIFT may throw overshift exception.
                 return false;
-            } else if (kind >= ExprKind::ADD && kind <= ExprKind::EXP) {
-                // all the other arithemetic operations and bitwise shift operations.
-                auto binary = StaticCast<const BinaryExpression*>(&expr);
-                return binary->GetOverflowStrategy() != OverflowStrategy::THROWING;
-            } else {
-                return true;
             }
+            auto binary = StaticCast<const BinaryExpression*>(&expr);
+            if (binary->IsMathematicalOperator()) {
+                // all the other arithemetic operations.
+                return binary->GetOverflowStrategy() != OverflowStrategy::THROWING;
+            }
+            return true;
         }
         case ExprMajorKind::MEMORY_EXPR: {
             return kind == ExprKind::LOAD || kind == ExprKind::GET_ELEMENT_REF;

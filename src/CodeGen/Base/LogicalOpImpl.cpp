@@ -17,10 +17,10 @@
 
 namespace Cangjie {
 namespace CodeGen {
-llvm::Value* GenerateBooleanOperation(IRBuilder2& irBuilder, const CHIRBinaryExprWrapper& binOp)
+llvm::Value* GenerateBooleanOperation(IRBuilder2& irBuilder, const CHIR::BinaryExpressionBase& binOp)
 {
     using GenerateFunc = std::function<llvm::Value*(llvm::IRBuilder<>&, llvm::Value*, llvm::Value*)>;
-    using OperatorKind = CHIR::ExprKind;
+    using OperatorKind = CHIR::BinaryExprKind;
     using namespace std::placeholders;
 
     static const std::map<OperatorKind, GenerateFunc> mapForFloat = {
@@ -63,8 +63,8 @@ llvm::Value* GenerateBooleanOperation(IRBuilder2& irBuilder, const CHIRBinaryExp
 
     // special case
     if ((leftArgTypeInfo->IsUnit() || leftArgTypeInfo->IsNothing()) &&
-        (binOp.GetBinaryExprKind() == OperatorKind::EQUAL || binOp.GetBinaryExprKind() == OperatorKind::NOTEQUAL)) {
-        return binOp.GetBinaryExprKind() == OperatorKind::EQUAL ? irBuilder.getTrue() : irBuilder.getFalse();
+        (binOp.GetOpKind() == OperatorKind::EQUAL || binOp.GetOpKind() == OperatorKind::NOTEQUAL)) {
+        return binOp.GetOpKind() == OperatorKind::EQUAL ? irBuilder.getTrue() : irBuilder.getFalse();
     }
 
     std::map<OperatorKind, GenerateFunc> currentMap;
@@ -75,7 +75,7 @@ llvm::Value* GenerateBooleanOperation(IRBuilder2& irBuilder, const CHIRBinaryExp
     } else {
         currentMap = mapForOthers;
     }
-    auto iter = std::as_const(currentMap).find(binOp.GetBinaryExprKind());
+    auto iter = std::as_const(currentMap).find(binOp.GetOpKind());
     return iter->second(irBuilder, valLeft, valRight);
 }
 } // namespace CodeGen

@@ -632,21 +632,24 @@ static PackageFormat::CHIRExprKind ToPackageExprKind(const Expression& expr)
         case ExprKind::INVOKE_WITH_EXCEPTION:             return PackageFormat::CHIRExprKind_TryInvoke;
         case ExprKind::INVOKESTATIC_WITH_EXCEPTION:       return PackageFormat::CHIRExprKind_TryInvoke;
         case ExprKind::RAISE_EXCEPTION:                   return PackageFormat::CHIRExprKind_RaiseException;
-        case ExprKind::INT_OP_WITH_EXCEPTION: {
-            const auto& intOp = static_cast<const IntOpWithException&>(expr);
-            switch (intOp.GetOpKind()) {
-                case ExprKind::NEG:    return PackageFormat::CHIRExprKind_TryNeg;
-                case ExprKind::ADD:    return PackageFormat::CHIRExprKind_TryAdd;
-                case ExprKind::SUB:    return PackageFormat::CHIRExprKind_TrySub;
-                case ExprKind::MUL:    return PackageFormat::CHIRExprKind_TryMul;
-                case ExprKind::DIV:    return PackageFormat::CHIRExprKind_TryDiv;
-                case ExprKind::MOD:    return PackageFormat::CHIRExprKind_TryMod;
-                case ExprKind::EXP:    return PackageFormat::CHIRExprKind_TryExp;
-                case ExprKind::LSHIFT: return PackageFormat::CHIRExprKind_TryLShift;
-                case ExprKind::RSHIFT: return PackageFormat::CHIRExprKind_TryRShift;
-                default:               return PackageFormat::CHIRExprKind_Invalid;
-            }
-        }
+        case ExprKind::NEG_WITH_EXCEPTION:
+            return PackageFormat::CHIRExprKind_TryNeg;
+        case ExprKind::ADD_WITH_EXCEPTION:
+            return PackageFormat::CHIRExprKind_TryAdd;
+        case ExprKind::SUB_WITH_EXCEPTION:
+            return PackageFormat::CHIRExprKind_TrySub;
+        case ExprKind::MUL_WITH_EXCEPTION:
+            return PackageFormat::CHIRExprKind_TryMul;
+        case ExprKind::DIV_WITH_EXCEPTION:
+            return PackageFormat::CHIRExprKind_TryDiv;
+        case ExprKind::MOD_WITH_EXCEPTION:
+            return PackageFormat::CHIRExprKind_TryMod;
+        case ExprKind::EXP_WITH_EXCEPTION:
+            return PackageFormat::CHIRExprKind_TryExp;
+        case ExprKind::LSHIFT_WITH_EXCEPTION:
+            return PackageFormat::CHIRExprKind_TryLShift;
+        case ExprKind::RSHIFT_WITH_EXCEPTION:
+            return PackageFormat::CHIRExprKind_TryRShift;
         case ExprKind::SPAWN_WITH_EXCEPTION:              return PackageFormat::CHIRExprKind_TrySpawn;
         case ExprKind::NUMERIC_CAST_WITH_EXCEPTION:       return PackageFormat::CHIRExprKind_TryNumericCast;
         case ExprKind::INTRINSIC_WITH_EXCEPTION:          return PackageFormat::CHIRExprKind_TryIntrinsic;
@@ -735,16 +738,7 @@ flatbuffers::Offset<PackageFormat::Expression> CHIRSerializer::CHIRSerializerImp
 
 template <>
 flatbuffers::Offset<PackageFormat::UnaryExpressionBase> CHIRSerializer::CHIRSerializerImpl::Serialize(
-    const UnaryExpression& obj)
-{
-    auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
-    auto overflowStrategy = SerializeOverflowStrategy(obj.GetOverflowStrategy());
-    return PackageFormat::CreateUnaryExpressionBase(builder, base, overflowStrategy);
-}
-
-template <>
-flatbuffers::Offset<PackageFormat::UnaryExpressionBase> CHIRSerializer::CHIRSerializerImpl::Serialize(
-    const IntOpWithException& obj)
+    const UnaryExpressionBase& obj)
 {
     auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
     auto overflowStrategy = SerializeOverflowStrategy(obj.GetOverflowStrategy());
@@ -753,16 +747,7 @@ flatbuffers::Offset<PackageFormat::UnaryExpressionBase> CHIRSerializer::CHIRSeri
 
 template <>
 flatbuffers::Offset<PackageFormat::BinaryExpressionBase> CHIRSerializer::CHIRSerializerImpl::Serialize(
-    const BinaryExpression& obj)
-{
-    auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
-    auto overflowStrategy = SerializeOverflowStrategy(obj.GetOverflowStrategy());
-    return PackageFormat::CreateBinaryExpressionBase(builder, base, overflowStrategy);
-}
-
-template <>
-flatbuffers::Offset<PackageFormat::BinaryExpressionBase> CHIRSerializer::CHIRSerializerImpl::Serialize(
-    const IntOpWithException& obj)
+    const BinaryExpressionBase& obj)
 {
     auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
     auto overflowStrategy = SerializeOverflowStrategy(obj.GetOverflowStrategy());
@@ -1322,7 +1307,8 @@ template <> flatbuffers::Offset<void> CHIRSerializer::CHIRSerializerImpl::Dispat
         case ExprKind::AND:
         case ExprKind::OR:
             exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_BinaryExpressionBase;
-            return Serialize<PackageFormat::BinaryExpressionBase>(static_cast<const BinaryExpression&>(obj)).Union();
+            return Serialize<PackageFormat::BinaryExpressionBase>(
+                StaticCast<const BinaryExpressionBase&>(obj)).Union();
         case ExprKind::BRANCH:
             exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_Branch;
             return Serialize<PackageFormat::Branch>(static_cast<const Branch&>(obj)).Union();
@@ -1350,16 +1336,21 @@ template <> flatbuffers::Offset<void> CHIRSerializer::CHIRSerializerImpl::Dispat
         case ExprKind::INSTANCEOF:
             exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_InstanceOf;
             return Serialize<PackageFormat::InstanceOf>(static_cast<const InstanceOf&>(obj)).Union();
-        case ExprKind::INT_OP_WITH_EXCEPTION: {
-            const auto& expr = static_cast<const IntOpWithException&>(obj);
-            if (ExprKindMgr::Instance()->GetMajorKind(expr.GetOpKind()) == ExprMajorKind::UNARY_EXPR) {
-                exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_UnaryExpressionBase;
-                return Serialize<PackageFormat::UnaryExpressionBase>(expr).Union();
-            } else {
-                exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_BinaryExpressionBase;
-                return Serialize<PackageFormat::BinaryExpressionBase>(expr).Union();
-            }
-        }
+        case ExprKind::NEG_WITH_EXCEPTION:
+            exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_UnaryExpressionBase;
+            return Serialize<PackageFormat::UnaryExpressionBase>(
+                StaticCast<const UnaryExpressionBase&>(obj)).Union();
+        case ExprKind::ADD_WITH_EXCEPTION:
+        case ExprKind::SUB_WITH_EXCEPTION:
+        case ExprKind::MUL_WITH_EXCEPTION:
+        case ExprKind::DIV_WITH_EXCEPTION:
+        case ExprKind::MOD_WITH_EXCEPTION:
+        case ExprKind::EXP_WITH_EXCEPTION:
+        case ExprKind::LSHIFT_WITH_EXCEPTION:
+        case ExprKind::RSHIFT_WITH_EXCEPTION:
+            exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_BinaryExpressionBase;
+            return Serialize<PackageFormat::BinaryExpressionBase>(
+                StaticCast<const BinaryExpressionBase&>(obj)).Union();
         case ExprKind::INTRINSIC:
             exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_IntrinsicBase;
             return Serialize<PackageFormat::IntrinsicBase>(static_cast<const Intrinsic&>(obj)).Union();
@@ -1409,7 +1400,8 @@ template <> flatbuffers::Offset<void> CHIRSerializer::CHIRSerializerImpl::Dispat
         case ExprKind::NOT:
         case ExprKind::BITNOT:
             exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_UnaryExpressionBase;
-            return Serialize<PackageFormat::UnaryExpressionBase>(static_cast<const UnaryExpression&>(obj)).Union();
+            return Serialize<PackageFormat::UnaryExpressionBase>(
+                StaticCast<const UnaryExpressionBase&>(obj)).Union();
         case ExprKind::GOTO:
         case ExprKind::EXIT:
         case ExprKind::RAISE_EXCEPTION:

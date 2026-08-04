@@ -15,15 +15,13 @@ namespace Cangjie {
 namespace CodeGen {
 class IRBuilder2;
 class CGValue;
-class CHIRUnaryExprWrapper;
-class CHIRBinaryExprWrapper;
 
 llvm::Value* HandleConstantExpression(IRBuilder2& irBuilder, const CHIR::Constant& chirConst);
 llvm::Value* HandleLiteralValue(IRBuilder2& irBuilder, const CHIR::LiteralValue& chirLiteral);
 llvm::Value* HandleTerminatorExpression(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr);
 llvm::Value* HandleNegExpression(IRBuilder2& irBuilder, llvm::Value* value);
-llvm::Value* HandleUnaryExpression(IRBuilder2& irBuilder, const CHIRUnaryExprWrapper& chirExpr);
-llvm::Value* HandleBinaryExpression(IRBuilder2& irBuilder, const CHIRBinaryExprWrapper& chirExpr);
+llvm::Value* HandleUnaryExpression(IRBuilder2& irBuilder, const CHIR::UnaryExpressionBase& chirExpr);
+llvm::Value* HandleBinaryExpression(IRBuilder2& irBuilder, const CHIR::BinaryExpressionBase& chirExpr);
 llvm::Value* HandleMemoryExpression(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr);
 llvm::Value* HandleStructedControlFlowExpression(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr);
 llvm::Value* HandleOthersExpression(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr);
