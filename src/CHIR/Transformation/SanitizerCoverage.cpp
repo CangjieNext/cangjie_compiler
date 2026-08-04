@@ -290,9 +290,7 @@ bool SanitizerCoverage::CheckSancovOption(DiagnosticEngine& diag) const
 void SanitizerCoverage::InjectTraceForCmp(BinaryExpression& binary, bool isDebug)
 {
     // We need to inject the trace info for all the comparison operations.
-    static std::unordered_set<ExprKind> cmpToken = {
-        ExprKind::LT, ExprKind::GT, ExprKind::LE, ExprKind::GE, ExprKind::NOTEQUAL, ExprKind::EQUAL};
-    if (cmpToken.find(binary.GetExprKind()) == cmpToken.end()) {
+    if (!binary.IsComparisonOperator()) {
         return;
     }
 
@@ -624,7 +622,7 @@ std::vector<Value*> SanitizerCoverage::GenerateArrayCmp(
         auto elementSize = builder.CreateExpression<Intrinsic>(loc, builder.GetInt64Ty(), elementSizeContext, parent);
         elementSize->MoveBefore(&apply);
         auto calSize = builder.CreateExpression<BinaryExpression>(loc, builder.GetInt64Ty(),
-            ExprKind::MUL, sizeN->GetResult(), elementSize->GetResult(), OverflowStrategy::WRAPPING, parent);
+            BinaryExprKind::MUL, sizeN->GetResult(), elementSize->GetResult(), OverflowStrategy::WRAPPING, parent);
         calSize->MoveBefore(&apply);
         auto sizeNCasted = builder.CreateExpression<NumericCast>(
             loc, builder.GetUInt32Ty(), calSize->GetResult(), OverflowStrategy::NA, parent);
@@ -938,7 +936,7 @@ std::vector<Expression*> SanitizerCoverage::GenerateInline8bitExpr(
     auto readPoint = builder.CreateExpression<Intrinsic>(loc, builder.GetUInt8Ty(), callContext1, parent);
     auto one = builder.CreateConstantExpression<IntLiteral>(loc, builder.GetUInt8Ty(), parent, 1UL);
     auto addRes = builder.CreateExpression<BinaryExpression>(loc, builder.GetUInt8Ty(),
-        ExprKind::ADD, readPoint->GetResult(), one->GetResult(), OverflowStrategy::WRAPPING, parent);
+        BinaryExprKind::ADD, readPoint->GetResult(), one->GetResult(), OverflowStrategy::WRAPPING, parent);
     auto callContext2 = IntrisicCallContext {
         .kind = IntrinsicKind::CPOINTER_WRITE,
         .args = std::vector<Value*>{loadGlobal->GetResult(), offset->GetResult(), addRes->GetResult()},

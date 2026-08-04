@@ -23,31 +23,31 @@ llvm::Value* HandleNegExpression(IRBuilder2& irBuilder, llvm::Value* value)
     }
 }
 
-llvm::Value* HandleNonOverflowUnaryExpression(IRBuilder2& irBuilder, const CHIRUnaryExprWrapper& chirExpr)
+llvm::Value* HandleNonOverflowUnaryExpression(IRBuilder2& irBuilder, const CHIR::UnaryExpressionBase& chirExpr)
 {
     auto value = **(irBuilder.GetCGModule() | chirExpr.GetOperand());
-    switch (chirExpr.GetUnaryExprKind()) {
-        case CHIR::ExprKind::NEG: {
+    switch (chirExpr.GetOpKind()) {
+        case CHIR::UnaryExprKind::NEG: {
             return HandleNegExpression(irBuilder, value);
         }
-        case CHIR::ExprKind::NOT: {
+        case CHIR::UnaryExprKind::NOT: {
             return irBuilder.CreateXor(value, 1, "not");
         }
-        case CHIR::ExprKind::BITNOT: {
+        case CHIR::UnaryExprKind::BITNOT: {
             return irBuilder.CreateNot(value, "bitNot");
         }
         default: {
-            auto exprKindStr = std::to_string(static_cast<uint64_t>(chirExpr.GetUnaryExprKind()));
+            auto exprKindStr = std::to_string(static_cast<uint64_t>(chirExpr.GetOpKind()));
             CJC_ASSERT_WITH_MSG(false, std::string("Unexpected CHIRUnaryExprKind: " + exprKindStr + "\n").c_str());
             return nullptr;
         }
     }
 }
 
-llvm::Value* HandleUnaryExpression(IRBuilder2& irBuilder, const CHIRUnaryExprWrapper& chirExpr)
+llvm::Value* HandleUnaryExpression(IRBuilder2& irBuilder, const CHIR::UnaryExpressionBase& chirExpr)
 {
     OverflowStrategy overflowStrategy = chirExpr.GetOverflowStrategy();
-    const CHIR::ExprKind& kind = chirExpr.GetUnaryExprKind();
+    const CHIR::ExprKind kind = CHIR::ExprKindMgr::ToExprKind(chirExpr.GetOpKind());
     if (OPERATOR_KIND_TO_OP_MAP.find(kind) == OPERATOR_KIND_TO_OP_MAP.end() ||
         overflowStrategy == OverflowStrategy::NA) {
         return HandleNonOverflowUnaryExpression(irBuilder, chirExpr);
@@ -61,7 +61,7 @@ llvm::Value* HandleUnaryExpression(IRBuilder2& irBuilder, const CHIRUnaryExprWra
     const CHIR::IntType* intTy = StaticCast<const CHIR::IntType*>(ty);
     auto& cgMod = irBuilder.GetCGModule();
     auto cgValue = cgMod | chirExpr.GetOperand();
-    irBuilder.EmitLocation(chirExpr);
+    irBuilder.EmitLocation(CHIRExprWrapper(chirExpr));
 
     return GenerateOverflow(irBuilder, overflowStrategy, kind, std::make_pair(intTy, nullptr), {cgValue});
 }
