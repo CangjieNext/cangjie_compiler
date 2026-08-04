@@ -1658,7 +1658,6 @@ std::vector<std::string> GlobalOptions::ToSerialized() const
     result.emplace_back(BoolToSerializedString(enableMacroInLSP));
     result.emplace_back(BoolToSerializedString(enableCompileTest));
     result.emplace_back(BoolToSerializedString(implicitPrelude));
-    result.emplace_back(BoolToSerializedString(enableInteropCJMapping));
     result.emplace_back(BoolToSerializedString(chirEA));
     result.emplace_back(BoolToSerializedString(chirLICM));
     result.emplace_back(BoolToSerializedString(chirCC));

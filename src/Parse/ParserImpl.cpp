@@ -120,8 +120,6 @@ void Parser::SetCompileOptions(const GlobalOptions& opts)
     impl->backend = opts.backend;
     impl->scanDepPkg = opts.scanDepPkg;
     impl->calculateLineNum = opts.enableTimer || opts.enableMemoryCollect;
-    impl->enableInteropCJMapping = opts.enableInteropCJMapping;
-    impl->targetInteropLanguage = opts.targetInteropLanguage;
     // set compile options for cjmp implementation
     impl->mpImpl->SetCompileOptions(opts);
     // Effect handlers break backwards compatibility by introducing new

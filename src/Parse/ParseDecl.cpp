@@ -530,7 +530,7 @@ void ParserImpl::CheckInitCtorDeclBody(FuncDecl& ctor)
 void ParserImpl::CheckJavaInteropMember(Decl& decl)
 {
     if (decl.outerDecl->IsJavaImpl()) {
-        if (decl.GetGeneric() != nullptr && !decl.TestAttr(Attribute::JAVA_CJ_MAPPING)) {
+        if (decl.GetGeneric() != nullptr) {
             ffiParser->Java().DiagJavaImplCannotBeGeneric(decl);
             return;
         }
@@ -830,36 +830,6 @@ void ParserImpl::CheckPrimaryCtorDeclObjCMirror(PrimaryCtorDecl& ctor)
     ctor.EnableAttr(Attribute::OBJ_C_MIRROR);
     ctor.EnableAttr(Attribute::IS_BROKEN);
     ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_mirror_cannot_have_primary_ctor, ctor);
-}
-
-void ParserImpl::CheckCJMappingAttr(Decl& decl) const
-{
-    if (!enableInteropCJMapping) {
-        return;
-    }
-    if (decl.IsJavaMirror() || decl.IsJavaImpl() || decl.TestAnyAttr(Attribute::OBJ_C_MIRROR,
-        Attribute::OBJ_C_MIRROR_SUBTYPE)) {
-        return;
-    }
-    // currently only support struct decl, enum decl, class decl interface decl, extend decl.
-    bool isCJMappingClass = decl.astKind == ASTKind::CLASS_DECL && !decl.TestAttr(Attribute::ABSTRACT);
-    // support java type
-    if (decl.astKind == ASTKind::STRUCT_DECL || decl.astKind == ASTKind::ENUM_DECL || isCJMappingClass ||
-        decl.astKind == ASTKind::INTERFACE_DECL) {
-        if (!decl.TestAttr(Attribute::PUBLIC)) {
-            return;
-        }
-        if (targetInteropLanguage == GlobalOptions::InteropLanguage::Java) {
-            decl.EnableAttr(Attribute::JAVA_CJ_MAPPING);
-        } else if (targetInteropLanguage == GlobalOptions::InteropLanguage::ObjC) {
-            decl.EnableAttr(Attribute::OBJ_C_CJ_MAPPING);
-        }
-    }
-    if (decl.astKind == ASTKind::EXTEND_DECL) {
-        if (targetInteropLanguage == GlobalOptions::InteropLanguage::Java) {
-            decl.EnableAttr(Attribute::JAVA_CJ_MAPPING);
-        }
-    }
 }
 
 template <typename T>
@@ -1417,8 +1387,6 @@ OwnedPtr<ClassDecl> ParserImpl::ParseClassDecl(
     ret->end = lastToken.End();
     ret->annotations = std::move(annos);
 
-    CheckCJMappingAttr(*ret);
-
     return ret;
 }
 
@@ -1443,7 +1411,6 @@ OwnedPtr<InterfaceDecl> ParserImpl::ParseInterfaceDecl(
     ret->end = lastToken.End();
     ret->annotations = std::move(annos);
 
-    CheckCJMappingAttr(*ret);
     if (Interop::ObjC::IsDeclAppropriateForSyntheticClassGeneration(*ret)) {
         Interop::ObjC::InsertSyntheticClassDecl(*ret, *currentFile);
     }
@@ -1570,8 +1537,6 @@ OwnedPtr<EnumDecl> ParserImpl::ParseEnumDecl(
     ret->end = lastToken.End();
     ret->bodyScope->end = ret->end;
 
-    CheckCJMappingAttr(*ret);
-
     return ret;
 }
 
@@ -1642,8 +1607,6 @@ OwnedPtr<StructDecl> ParserImpl::ParseStructDecl(
     RevertPrimaryDecl();
     ret->end = lastToken.End();
     ret->annotations = std::move(annos);
-
-    CheckCJMappingAttr(*ret);
 
     return ret;
 }
@@ -1727,7 +1690,6 @@ OwnedPtr<ExtendDecl> ParserImpl::ParseExtendDecl(
     } else if (!modifiers.empty() && !chainedAST.back()->TestAttr(Attribute::IS_BROKEN)) {
         DiagExpectNoModifier(*modifiers.begin());
     }
-    CheckCJMappingAttr(*ret);
     ParseExtendedType(*ret);
     if (Skip(TokenKind::UPPERBOUND)) { // Interface extension.
         ret->upperBoundPos = lastToken.Begin();

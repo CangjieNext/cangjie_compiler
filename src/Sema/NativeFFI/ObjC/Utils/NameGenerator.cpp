@@ -24,103 +24,61 @@ using namespace Cangjie::Native::FFI;
 namespace {
 constexpr auto WRAPPER_PREFIX = "CJImpl_ObjC_";
 constexpr auto DELETE_CJ_OBJECT_SUFFIX = "_deleteCJObject";
-constexpr auto LOCK_CJ_OBJECT_SUFFIX = "_lockCJObject";
-constexpr auto UNLOCK_CJ_OBJECT_SUFFIX = "_unlockCJObject";
 constexpr auto WRAPPER_GETTER_SUFFIX = "_get";
 constexpr auto WRAPPER_GETTER_SUFFIX_INNER_GENERIC_PROP = "get";
 constexpr auto WRAPPER_SETTER_SUFFIX = "_set";
 } // namespace
 
-NameGenerator::NameGenerator(const BaseMangler& mangler, TypeManager& typeManager)
-    : mangler(mangler), typeManager(typeManager)
+NameGenerator::NameGenerator(const BaseMangler& mangler) : mangler(mangler)
 {
 }
 
-std::string NameGenerator::GenerateInitCjObjectName(const VarDecl& target, const std::string* genericActualName)
+std::string NameGenerator::GenerateInitCjObjectName(const VarDecl& target)
 {
-    std::string name = genericActualName ? target.outerDecl->identifier.Val() + '_' + *genericActualName :
-        target.outerDecl->identifier.Val() + '_' + target.identifier.Val();
+    std::string name = target.outerDecl->identifier.Val() + '_' + target.identifier.Val();
     return WRAPPER_PREFIX + name;
 }
 
-std::string NameGenerator::GenerateInitCjObjectName(const FuncDecl& target, const std::string* genericActualName)
+std::string NameGenerator::GenerateInitCjObjectName(const FuncDecl& target)
 {
     auto& params =  target.funcBody->paramLists[0]->params;
     auto ctorName = GetObjCDeclName(target);
-    auto mangledCtorName = GetMangledMethodName(mangler, params, ctorName, typeManager);
-    auto name = GetObjCFullDeclName(*target.outerDecl, genericActualName) + "_" + mangledCtorName;
+    auto mangledCtorName = GetMangledMethodName(mangler, params, ctorName);
+    auto name = GetObjCFullDeclName(*target.outerDecl) + "_" + mangledCtorName;
     std::replace(name.begin(), name.end(), '.', '_');
     std::replace(name.begin(), name.end(), ':', '_');
 
     return WRAPPER_PREFIX + name;
 }
 
-std::string NameGenerator::GenerateInitCjObjectName(const Decl& target, const std::string* genericActualName)
+std::string NameGenerator::GenerateInitCjObjectName(const Decl& target)
 {
     if (auto funcDecl = DynamicCast<const FuncDecl*>(&target)) {
-        return GenerateInitCjObjectName(*funcDecl, genericActualName);
+        return GenerateInitCjObjectName(*funcDecl);
     } else if (auto varDecl = DynamicCast<const VarDecl*>(&target)) {
-        return GenerateInitCjObjectName(*varDecl, genericActualName);
+        return GenerateInitCjObjectName(*varDecl);
     }
     CJC_ABORT();
     return "";
 }
 
-std::string NameGenerator::GenerateDeleteCjObjectName(const Decl& target, const std::string* genericActualName)
+std::string NameGenerator::GenerateDeleteCjObjectName(const Decl& target)
 {
-    auto name = GetObjCFullDeclName(target, genericActualName);
+    auto name = GetObjCFullDeclName(target);
     std::replace(name.begin(), name.end(), '.', '_');
     std::replace(name.begin(), name.end(), ':', '_');
 
     return WRAPPER_PREFIX + name + DELETE_CJ_OBJECT_SUFFIX;
 }
 
-std::string NameGenerator::GenerateLockCjObjectName(const AST::Decl& target)
-{
-    auto name = GetObjCFullDeclName(target);
-    std::replace(name.begin(), name.end(), '.', '_');
-    std::replace(name.begin(), name.end(), ':', '_');
-
-    return WRAPPER_PREFIX + name + LOCK_CJ_OBJECT_SUFFIX;
-}
-
-std::string NameGenerator::GenerateUnlockCjObjectName(const AST::Decl& target)
-{
-    auto name = GetObjCFullDeclName(target);
-    std::replace(name.begin(), name.end(), '.', '_');
-    std::replace(name.begin(), name.end(), ':', '_');
-
-    return WRAPPER_PREFIX + name + UNLOCK_CJ_OBJECT_SUFFIX;
-}
-
-std::string NameGenerator::GenerateMethodWrapperName(const FuncDecl& target, const std::string* genericActualName, bool isInnerGeneric)
+std::string NameGenerator::GenerateMethodWrapperName(const FuncDecl& target)
 {
     auto& params = target.funcBody->paramLists[0]->params;
     auto methodName = GetObjCDeclName(target);
-    auto mangledMethodName = GetMangledMethodName(mangler, params, methodName, typeManager);
-    auto outerDeclName = genericActualName ? GetObjCFullDeclName(*target.outerDecl, genericActualName) :
-        GetObjCFullDeclName(*target.outerDecl);
+    auto mangledMethodName = GetMangledMethodName(mangler, params, methodName);
+    auto outerDeclName = GetObjCFullDeclName(*target.outerDecl);
 
     auto name = outerDeclName + "." + mangledMethodName;
-
-    /*
-        public enum A<T> where T <: ToString {
-            | E(T)
-
-            public prop p: Int64 {
-                get() {
-                var b: T
-                1
-                }
-            }
-        }
-        For prop inner local generic var.
-    */
-    if (isInnerGeneric) {
-        name.erase(std::remove_if(name.begin(), name.end(),
-            [](char c) { return c == '$'; }),
-            name.end());
-    }
 
     std::replace(name.begin(), name.end(), '.', '_');
     std::replace(name.begin(), name.end(), ':', '_');
