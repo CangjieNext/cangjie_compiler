@@ -15,12 +15,12 @@ namespace Cangjie {
 namespace CodeGen {
 class IRBuilder2;
 class CGValue;
-class CHIRBinaryExprWrapper;
-llvm::Value* GenerateArithmeticOperation(IRBuilder2& irBuilder, const CHIRBinaryExprWrapper& binExpr);
-llvm::Value* GenerateArithmeticOperation(IRBuilder2& irBuilder, CHIR::ExprKind exprKind, const CHIR::Type* ty,
+
+llvm::Value* GenerateArithmeticOperation(IRBuilder2& irBuilder, const CHIR::BinaryExpressionBase& binExpr);
+llvm::Value* GenerateArithmeticOperation(IRBuilder2& irBuilder, CHIR::BinaryExprKind exprKind, const CHIR::Type* ty,
     const CGValue* valLeft, const CGValue* valRight);
-llvm::Value* GenerateBitwiseOperation(IRBuilder2& irBuilder, const CHIRBinaryExprWrapper& binExpr);
-llvm::Value* GenerateBinaryExpOperation(IRBuilder2& irBuilder, const CHIRBinaryExprWrapper& binExpr);
+llvm::Value* GenerateBitwiseOperation(IRBuilder2& irBuilder, const CHIR::BinaryExpressionBase& binExpr);
+llvm::Value* GenerateBinaryExpOperation(IRBuilder2& irBuilder, const CHIR::BinaryExpressionBase& binExpr);
 llvm::Value* GenerateBinaryExpOperation(IRBuilder2& irBuilder, CGValue* valLeft, CGValue* valRight);
 } // namespace CodeGen
 } // namespace Cangjie

@@ -538,7 +538,7 @@ Ptr<Value> Translator::HandleEnumPattern(const AST::EnumPattern& enumPattern, Pt
             : CreateAndAppendConstantExpression<IntLiteral>(selectorTy, *currentBlock, enumId));
     LocalVar* idValue = constExpr->GetResult();
     auto cond = CreateAndAppendExpression<BinaryExpression>(
-        originLoc, builder.GetBoolTy(), ExprKind::EQUAL, enumIdx, idValue, currentBlock)
+        originLoc, builder.GetBoolTy(), BinaryExprKind::EQUAL, enumIdx, idValue, currentBlock)
                     ->GetResult();
     CJC_ASSERT(value->GetType()->IsEnum());
     // Set current to 'trueBlock' for generating enum element.
@@ -566,7 +566,7 @@ Ptr<Value> Translator::HandleConstPattern(
         auto litVal = TranslateExprArg(*constPattern.literal);
         SetSkipPrintWarning(*litVal);
         return CreateAndAppendExpression<BinaryExpression>(
-            originLoc, builder.GetBoolTy(), ExprKind::EQUAL, value, litVal, currentBlock)
+            originLoc, builder.GetBoolTy(), BinaryExprKind::EQUAL, value, litVal, currentBlock)
             ->GetResult();
     } else {
         // AST desugared the base of 'operatorCallExpr' as a special dummy node.

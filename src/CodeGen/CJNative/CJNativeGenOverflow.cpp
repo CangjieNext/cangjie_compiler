@@ -135,7 +135,8 @@ void OverflowHandler::GenerateOverflowElseBody(llvm::AllocaInst* ifValue, const 
     // emit else body.
     llvm::Value* res = nullptr;
     if (valInfo.alc == nullptr) {
-        res = GenerateArithmeticOperation(irBuilder, kind, GetElemTy(), argGenValues[0], argGenValues[1]);
+        res = GenerateArithmeticOperation(
+            irBuilder, CHIR::ExprKindMgr::ToBinaryExprKind(kind), GetElemTy(), argGenValues[0], argGenValues[1]);
     } else {
         auto s0 = irBuilder.CreateStructGEP(valInfo.alcTy, valInfo.alc, 0);
         res = irBuilder.CreateLoad(valInfo.tys[0], s0);
@@ -250,7 +251,8 @@ llvm::Value* OverflowHandler::GenerateOverflowOpKindOption()
     if (!IsChecked()) {
         return GenerateOverflowWrappingArithmeticOp(irBuilder, kind, ty, argGenValues);
     }
-    llvm::Value* val = GenerateArithmeticOperation(irBuilder, kind, GetElemTy(), argGenValues[0], argGenValues[1]);
+    llvm::Value* val = GenerateArithmeticOperation(
+        irBuilder, CHIR::ExprKindMgr::ToBinaryExprKind(kind), GetElemTy(), argGenValues[0], argGenValues[1]);
     const CHIR::Type* optionTy = GetOptionTy();
     CGType* optionType = CGType::GetOrCreate(irBuilder.GetCGModule(), optionTy);
     llvm::AllocaInst* retValue = irBuilder.CreateEntryAlloca(optionType->GetLLVMType());

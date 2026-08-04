@@ -70,15 +70,15 @@ void ExpressionGeneratorImpl::EmitIR()
                 rawRet = HandleTerminatorExpression(irBuilder, *chirExpr);
                 break;
             case ExprMajorKind::UNARY_EXPR: {
-                auto unaryExpr = StaticCast<const CHIR::UnaryExpression*>(chirExpr);
+                auto unaryExpr = StaticCast<const CHIR::UnaryExpressionBase*>(chirExpr);
                 irBuilder.EmitLocation(CHIRExprWrapper(*chirExpr));
-                rawRet = HandleUnaryExpression(irBuilder, CHIRUnaryExprWrapper(*unaryExpr));
+                rawRet = HandleUnaryExpression(irBuilder, *unaryExpr);
                 break;
             }
             case ExprMajorKind::BINARY_EXPR: {
-                auto binaryExpr = StaticCast<const CHIR::BinaryExpression*>(chirExpr);
+                auto binaryExpr = StaticCast<const CHIR::BinaryExpressionBase*>(chirExpr);
                 irBuilder.EmitLocation(CHIRExprWrapper(*chirExpr));
-                rawRet = HandleBinaryExpression(irBuilder, CHIRBinaryExprWrapper(*binaryExpr));
+                rawRet = HandleBinaryExpression(irBuilder, *binaryExpr);
                 break;
             }
             case ExprMajorKind::MEMORY_EXPR:

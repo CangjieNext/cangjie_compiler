@@ -591,11 +591,6 @@ llvm::Value* GenerateTypeCast(IRBuilder2& irBuilder, const CHIR::TypeCast& typeC
     auto srcTy = typeCast.GetSourceType();
     CJC_ASSERT(srcTy && targetTy);
 
-    OverflowStrategy overflowStrategy = OverflowStrategy::NA;
-    if (auto numericCast = DynamicCast<const CHIR::NumericCastBase*>(&typeCast)) {
-        overflowStrategy = numericCast->GetOverflowStrategy();
-    }
-
     auto& cgMod = irBuilder.GetCGModule();
     auto cgSrcValue = cgMod | typeCast.GetSourceValue();
     auto srcValue = **cgSrcValue;
@@ -630,6 +625,10 @@ llvm::Value* GenerateTypeCast(IRBuilder2& irBuilder, const CHIR::TypeCast& typeC
     }
 #endif
 
+    OverflowStrategy overflowStrategy = OverflowStrategy::NA;
+    if (auto numericCast = DynamicCast<const CHIR::NumericCastBase*>(&typeCast)) {
+        overflowStrategy = numericCast->GetOverflowStrategy();
+    }
     if (targetTy->IsFloat() && srcTy->IsFloat()) {
         return GenerateFloatConvExpr(irBuilder, srcValue, targetType->GetLLVMType(),
             *StaticCast<CHIR::NumericType*>(srcTy), *StaticCast<CHIR::NumericType*>(targetTy));
