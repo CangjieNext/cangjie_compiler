@@ -55,7 +55,7 @@ public:
 
     VArrayType* GetZeroSizedTy()
     {
-        return GetType<VArrayType>(GetInt8Ty(), 0U);
+        return GetType<VArrayType>(GetInt8Ty(), 0);
     }
     NothingType* GetNothingType() const
     {

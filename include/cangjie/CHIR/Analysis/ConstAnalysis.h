@@ -1408,7 +1408,8 @@ private:
         auto index = StaticCast<const ConstIntVal*>(indexVal)->GetVal();
         CJC_ASSERT(arrNode->GetType()->IsVArray());
         auto len = StaticCast<VArrayType*>(arrNode->GetType())->GetSize();
-        return RaiseOutOfBoundError(intrinsic, len, index);
+        CJC_ASSERT(len >= 0);
+        return RaiseOutOfBoundError(intrinsic, static_cast<size_t>(len), index);
     }
 
     template <typename TIntrinsic> ExceptionKind HandleVArraySet(const TConstDomain& state, const TIntrinsic* intrinsic)
@@ -1430,7 +1431,8 @@ private:
         auto arrType = StaticCast<RefType*>(arrRefNode->GetType())->GetBaseType();
         CJC_ASSERT(arrType->IsVArray());
         auto len = StaticCast<VArrayType*>(arrType)->GetSize();
-        auto res = RaiseOutOfBoundError(intrinsic, len, index);
+        CJC_ASSERT(len >= 0);
+        auto res = RaiseOutOfBoundError(intrinsic, static_cast<size_t>(len), index);
         if (res == ExceptionKind::SUCCESS) {
             const_cast<TIntrinsic*>(intrinsic)->template Set<NeedCheckArrayBound>(false);
         }

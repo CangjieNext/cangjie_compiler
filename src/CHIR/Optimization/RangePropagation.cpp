@@ -237,7 +237,8 @@ std::vector<size_t> GetVArraySizeList(const Ptr<Type>& type)
     }
     while (indexType->GetTypeKind() == Type::TypeKind::TYPE_VARRAY) {
         auto vArrayType = StaticCast<const VArrayType*>(indexType);
-        size.push_back(vArrayType->GetSize());
+        CJC_ASSERT(vArrayType->GetSize() >= 0);
+        size.push_back(static_cast<size_t>(vArrayType->GetSize()));
         indexType = vArrayType->GetElementType();
     }
     return size;
