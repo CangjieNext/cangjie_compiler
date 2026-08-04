@@ -33,13 +33,7 @@ void ExprTypeConverter::VisitExprDefaultImpl(Expression& o)
     }
 }
 
-void ExprTypeConverter::VisitSubExpression(Allocate& o)
-{
-    VisitExprDefaultImpl(o);
-    o.ty = ConvertType(*o.ty);
-}
-
-void ExprTypeConverter::VisitSubExpression(AllocateWithException& o)
+void ExprTypeConverter::VisitSubExpression(AllocateBase& o)
 {
     VisitExprDefaultImpl(o);
     o.ty = ConvertType(*o.ty);
@@ -51,13 +45,7 @@ void ExprTypeConverter::VisitSubExpression(InstanceOf& o)
     o.ty = ConvertType(*o.ty);
 }
 
-void ExprTypeConverter::VisitSubExpression(RawArrayAllocate& o)
-{
-    VisitExprDefaultImpl(o);
-    o.elementType = ConvertType(*o.elementType);
-}
-
-void ExprTypeConverter::VisitSubExpression(RawArrayAllocateWithException& o)
+void ExprTypeConverter::VisitSubExpression(RawArrayAllocateBase& o)
 {
     VisitExprDefaultImpl(o);
     o.elementType = ConvertType(*o.elementType);
@@ -293,13 +281,7 @@ Type* TypeConverterForCC::ConvertType(Type& type)
     }
 }
 
-void TypeConverterForCC::VisitSubExpression(RawArrayAllocate& o)
-{
-    VisitExprDefaultImpl(o);
-    o.elementType = converter(*o.elementType);
-}
-
-void TypeConverterForCC::VisitSubExpression(RawArrayAllocateWithException& o)
+void TypeConverterForCC::VisitSubExpression(RawArrayAllocateBase& o)
 {
     VisitExprDefaultImpl(o);
     o.elementType = converter(*o.elementType);

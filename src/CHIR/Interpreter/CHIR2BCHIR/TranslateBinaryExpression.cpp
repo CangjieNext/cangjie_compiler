@@ -15,15 +15,18 @@
 using namespace Cangjie::CHIR;
 using namespace Interpreter;
 
-void CHIR2BCHIR::TranslateBinaryExpression(Context& ctx, const Expression& expr)
+void CHIR2BCHIR::TranslateBinaryExpression(Context& ctx, const BinaryExpressionBase& expr)
 {
     CJC_ASSERT(expr.GetNumOfNonSuccessorOperands() == Bchir::FLAG_TWO);
-    auto binaryExpression = StaticCast<const BinaryExpression*>(&expr);
-    auto opCode = Cangjie::CHIR::Interpreter::BinExprKind2OpCode(expr.GetExprKind());
-    auto typeKind = binaryExpression->GetOperand(0)->GetType()->GetTypeKind();
-    auto overflowStrat = static_cast<Bchir::ByteCodeContent>(binaryExpression->GetOverflowStrategy());
+    auto opKind = expr.GetOpKind();
+    auto opCode = expr.IsTerminator()
+        ? Cangjie::CHIR::Interpreter::BinExprKindWitException2OpCode(opKind)
+        : Cangjie::CHIR::Interpreter::BinExprKind2OpCode(opKind);
+    auto typeKind = expr.GetLHSOperand()->GetType()->GetTypeKind();
+    auto overflowStrat = static_cast<Bchir::ByteCodeContent>(expr.GetOverflowStrategy());
     PushOpCodeWithAnnotations<false, true>(ctx, opCode, expr, typeKind, overflowStrat);
-    if (opCode == OpCode::BIN_LSHIFT || opCode == OpCode::BIN_RSHIFT) {
-        ctx.def.Push(static_cast<Bchir::ByteCodeContent>(binaryExpression->GetOperand(1)->GetType()->GetTypeKind()));
+    if (opCode == OpCode::BIN_LSHIFT || opCode == OpCode::BIN_RSHIFT || opCode == OpCode::BIN_LSHIFT_EXC ||
+        opCode == OpCode::BIN_RSHIFT_EXC) {
+        ctx.def.Push(static_cast<Bchir::ByteCodeContent>(expr.GetRHSOperand()->GetType()->GetTypeKind()));
     }
 }

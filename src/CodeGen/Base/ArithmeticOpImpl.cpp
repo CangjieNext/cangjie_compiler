@@ -153,7 +153,8 @@ llvm::Value* CreateFastPowerCallForInt64PowerUInt64(
 }
 
 // Convert integer type to integer type. Use for shift expr by now.
-llvm::Value* GenerateIntegerConvExpr(IRBuilder2& irBuilder, const CHIRBinaryExprWrapper& binOp, llvm::Value* srcValue)
+llvm::Value* GenerateIntegerConvExpr(
+    IRBuilder2& irBuilder, const CHIR::BinaryExpressionBase& binOp, llvm::Value* srcValue)
 {
     auto leftArg = binOp.GetLHSOperand();
     auto rightArg = binOp.GetRHSOperand();
@@ -213,7 +214,7 @@ llvm::Value* GenerateIntegerConvExpr(IRBuilder2& irBuilder, const CHIRBinaryExpr
 }
 
 llvm::Value* GenerateOverShiftCheck(
-    IRBuilder2& irBuilder, const CHIRBinaryExprWrapper& binOp, const CGValue* lValue, const CGValue* rValue)
+    IRBuilder2& irBuilder, const CHIR::BinaryExpressionBase& binOp, const CGValue* lValue, const CGValue* rValue)
 {
     auto& cgMod = irBuilder.GetCGModule();
     auto rightTy = binOp.GetRHSOperand()->GetType();
@@ -251,9 +252,9 @@ llvm::Value* GenerateOverShiftCheck(
     irBuilder.SetInsertPoint(else1BB);
     llvm::Value* ret = nullptr;
     auto rConvValue = GenerateIntegerConvExpr(irBuilder, binOp, **rValue);
-    if (binOp.GetBinaryExprKind() == CHIR::ExprKind::LSHIFT) {
+    if (binOp.GetOpKind() == CHIR::BinaryExprKind::LSHIFT) {
         ret = irBuilder.CreateShl(**lValue, rConvValue, "shl");
-    } else if (binOp.GetBinaryExprKind() == CHIR::ExprKind::RSHIFT) {
+    } else if (binOp.GetOpKind() == CHIR::BinaryExprKind::RSHIFT) {
         auto opTy = binOp.GetResult()->GetType();
         if (opTy->IsInteger() && StaticCast<CHIR::IntType*>(opTy)->IsSigned()) {
             ret = irBuilder.CreateAShr(**lValue, rConvValue, "ashr");
@@ -273,7 +274,7 @@ llvm::Value* GenerateOverShiftCheck(
 
 namespace Cangjie {
 namespace CodeGen {
-llvm::Value* GenerateArithmeticOperation(IRBuilder2& irBuilder, const CHIRBinaryExprWrapper& binExpr)
+llvm::Value* GenerateArithmeticOperation(IRBuilder2& irBuilder, const CHIR::BinaryExpressionBase& binExpr)
 {
     auto& cgMod = irBuilder.GetCGModule();
     CGValue* valLeft = cgMod | binExpr.GetLHSOperand();
@@ -281,35 +282,35 @@ llvm::Value* GenerateArithmeticOperation(IRBuilder2& irBuilder, const CHIRBinary
     CJC_NULLPTR_CHECK(valLeft);
     CJC_NULLPTR_CHECK(valRight);
     return GenerateArithmeticOperation(
-        irBuilder, binExpr.GetBinaryExprKind(), binExpr.GetResult()->GetType(), valLeft, valRight);
+        irBuilder, binExpr.GetOpKind(), binExpr.GetResult()->GetType(), valLeft, valRight);
 }
 
-llvm::Value* GenerateArithmeticOperation(IRBuilder2& irBuilder, CHIR::ExprKind exprKind, const CHIR::Type* ty,
+llvm::Value* GenerateArithmeticOperation(IRBuilder2& irBuilder, CHIR::BinaryExprKind exprKind, const CHIR::Type* ty,
     const CGValue* valLeft, const CGValue* valRight)
 {
     switch (exprKind) {
-        case CHIR::ExprKind::ADD: {
+        case CHIR::BinaryExprKind::ADD: {
             if (ty->IsFloat()) {
                 return irBuilder.CreateFAdd(**valLeft, **valRight);
             } else {
                 return irBuilder.CreateAdd(**valLeft, **valRight);
             }
         }
-        case CHIR::ExprKind::SUB: {
+        case CHIR::BinaryExprKind::SUB: {
             if (ty->IsFloat()) {
                 return irBuilder.CreateFSub(**valLeft, **valRight);
             } else {
                 return irBuilder.CreateSub(**valLeft, **valRight);
             }
         }
-        case CHIR::ExprKind::MUL: {
+        case CHIR::BinaryExprKind::MUL: {
             if (ty->IsFloat()) {
                 return irBuilder.CreateFMul(**valLeft, **valRight);
             } else {
                 return irBuilder.CreateMul(**valLeft, **valRight);
             }
         }
-        case CHIR::ExprKind::DIV: {
+        case CHIR::BinaryExprKind::DIV: {
             if (ty->IsFloat()) {
                 return irBuilder.CreateFDiv(**valLeft, **valRight, "div");
             } else {
@@ -317,7 +318,7 @@ llvm::Value* GenerateArithmeticOperation(IRBuilder2& irBuilder, CHIR::ExprKind e
                 return irBuilder.GenerateDivLikeCheck(**valLeft, **valRight, isSignedInteger, true);
             }
         }
-        case CHIR::ExprKind::MOD: {
+        case CHIR::BinaryExprKind::MOD: {
             if (ty->IsFloat()) {
                 return irBuilder.CreateFRem(**valLeft, **valRight);
             } else {
@@ -327,47 +328,47 @@ llvm::Value* GenerateArithmeticOperation(IRBuilder2& irBuilder, CHIR::ExprKind e
         }
         default:
             auto exprKindStr = std::to_string(static_cast<uint64_t>(exprKind));
-            CJC_ASSERT_WITH_MSG(false, std::string("Unexpected CHIRExprKind: " + exprKindStr + "\n").c_str());
+            CJC_ASSERT_WITH_MSG(false, std::string("Unexpected CHIRBinaryExprKind: " + exprKindStr + "\n").c_str());
             return nullptr;
     }
 }
 
-llvm::Value* GenerateBitwiseOperation(IRBuilder2& irBuilder, const CHIRBinaryExprWrapper& binExpr)
+llvm::Value* GenerateBitwiseOperation(IRBuilder2& irBuilder, const CHIR::BinaryExpressionBase& binExpr)
 {
     auto& cgMod = irBuilder.GetCGModule();
     CGValue* valLeft = cgMod | binExpr.GetLHSOperand();
     CGValue* valRight = cgMod | binExpr.GetRHSOperand();
     CJC_NULLPTR_CHECK(valLeft);
     CJC_NULLPTR_CHECK(valRight);
-    irBuilder.EmitLocation(binExpr);
-    switch (binExpr.GetBinaryExprKind()) {
-        case CHIR::ExprKind::BITAND: {
+    irBuilder.EmitLocation(CHIRExprWrapper(binExpr));
+    switch (binExpr.GetOpKind()) {
+        case CHIR::BinaryExprKind::BITAND: {
             return irBuilder.CreateAnd(**valLeft, **valRight, "and");
         }
-        case CHIR::ExprKind::BITOR: {
+        case CHIR::BinaryExprKind::BITOR: {
             return irBuilder.CreateOr(**valLeft, **valRight, "or");
         }
-        case CHIR::ExprKind::BITXOR: {
+        case CHIR::BinaryExprKind::BITXOR: {
             return irBuilder.CreateXor(**valLeft, **valRight, "xor");
         }
-        case CHIR::ExprKind::LSHIFT:
-        case CHIR::ExprKind::RSHIFT:
+        case CHIR::BinaryExprKind::LSHIFT:
+        case CHIR::BinaryExprKind::RSHIFT:
             return GenerateOverShiftCheck(irBuilder, binExpr, valLeft, valRight);
         default:
-            auto exprKindStr = std::to_string(static_cast<uint64_t>(binExpr.GetBinaryExprKind()));
+            auto exprKindStr = std::to_string(static_cast<uint64_t>(binExpr.GetOpKind()));
             CJC_ASSERT_WITH_MSG(false, std::string("Unexpected CHIRBinaryExprKind: " + exprKindStr + "\n").c_str());
             return nullptr;
     }
 }
 
-llvm::Value* GenerateBinaryExpOperation(IRBuilder2& irBuilder, const CHIRBinaryExprWrapper& binExpr)
+llvm::Value* GenerateBinaryExpOperation(IRBuilder2& irBuilder, const CHIR::BinaryExpressionBase& binExpr)
 {
     auto& cgMod = irBuilder.GetCGModule();
     auto leftArg = binExpr.GetLHSOperand();
     auto rightArg = binExpr.GetRHSOperand();
     auto valLeft = cgMod | leftArg;
     auto valRight = cgMod | rightArg;
-    irBuilder.EmitLocation(binExpr);
+    irBuilder.EmitLocation(CHIRExprWrapper(binExpr));
     return GenerateBinaryExpOperation(irBuilder, valLeft, valRight);
 }
 

@@ -55,6 +55,40 @@ enum class ExprKind : uint8_t {
     MAX_EXPR_KINDS
 };
 
+/**
+ * @brief Unary operator category (independent of try/non-try ExprKind).
+ */
+enum class UnaryExprKind : uint8_t {
+    NEG,
+    NOT,
+    BITNOT,
+};
+
+/**
+ * @brief Binary operator category (independent of try/non-try ExprKind).
+ */
+enum class BinaryExprKind : uint8_t {
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+    MOD,
+    EXP,
+    LSHIFT,
+    RSHIFT,
+    BITAND,
+    BITOR,
+    BITXOR,
+    LT,
+    GT,
+    LE,
+    GE,
+    EQUAL,
+    NOTEQUAL,
+    AND,
+    OR,
+};
+
 class ExprKindMgr {
 public:
     static const ExprKindMgr* Instance()
@@ -70,6 +104,11 @@ public:
     {
         return exprKindNames[exprKind];
     }
+
+    static ExprKind ToExprKind(UnaryExprKind kind, bool isTry = false);
+    static ExprKind ToExprKind(BinaryExprKind kind, bool isTry = false);
+    static UnaryExprKind ToUnaryExprKind(ExprKind kind);
+    static BinaryExprKind ToBinaryExprKind(ExprKind kind);
 
 private:
     void InitMap(ExprMajorKind majorKind, ...)
@@ -138,7 +177,8 @@ public:
     bool IsDynamicDispatch() const;
     bool IsField() const;
     bool IsFuncCall() const;
-    bool IsIntOpWithException() const;
+    bool IsUnaryExpressionWithException() const;
+    bool IsBinaryExpressionWithException() const;
     bool IsInvoke() const;
     bool IsInvokeStaticBase() const;
     bool IsLambda() const;
@@ -385,16 +425,9 @@ protected:
 };
 
 /**
- * @brief Unary expression, including Neg, Not and BitNot.
- *
- * Cangjie Code:
- *      var x = 1
- *      var y = -x // kind is Neg
+ * @brief Common base for unary expressions with overflow strategy.
  */
-class UnaryExpression : public Expression {
-    friend class CHIRContext;
-    friend class CHIRBuilder;
-
+class UnaryExpressionBase : public Expression {
 public:
     // ===--------------------------------------------------------------------===//
     // Base Information
@@ -402,37 +435,49 @@ public:
     using Expression::GetOperand;
     Value* GetOperand() const;
 
+    /**
+     * @brief Non-exception unary operator kind.
+     * For WithException forms, returns the corresponding UnaryExprKind.
+     */
+    UnaryExprKind GetOpKind() const;
+
     OverflowStrategy GetOverflowStrategy() const;
 
 protected:
+    explicit UnaryExpressionBase(
+        UnaryExprKind kind, Value* operand, Cangjie::OverflowStrategy ofs, bool isTry,
+        const std::vector<Block*>& successors, Block* parent);
+    ~UnaryExpressionBase() override = default;
+
     std::string AddExtraComment() const override;
-    ~UnaryExpression() override = default;
 
-private:
-    explicit UnaryExpression(ExprKind kind, Value* operand, Cangjie::OverflowStrategy ofs, Block* parent)
-        : Expression(kind, {operand}, {}, parent), overflowStrategy(ofs)
-    {
-    }
-
-    UnaryExpression* Clone(CHIRBuilder& builder, Block& parent) const override;
-
-    Cangjie::OverflowStrategy overflowStrategy;
+    Cangjie::OverflowStrategy overflowStrategy{Cangjie::OverflowStrategy::NA};
 };
 
 /**
- * @brief Binary expression, including:
- * 1. mathematical operator, such as `add`, `sub`, `mul`, `div`, `mod` and `exp`
- * 2. bit operator, such as `<<`, `>>`, `&`, `|` and `^`
- * 3. comparison operator, such as `<`, `>`, `<=`, `>=`, `==` and `!=`
- * 4. logical operator, such as `&&` and `||`
+ * @brief Unary expression, including Neg, Not and BitNot.
  *
  * Cangjie Code:
- *      var x = 1 + 2 // kind is Add, `1` is left-hand side op, `2` is right-hand side op
+ *      var x = 1
+ *      var y = -x // kind is Neg
  */
-class BinaryExpression : public Expression {
+class UnaryExpression : public UnaryExpressionBase {
     friend class CHIRContext;
     friend class CHIRBuilder;
 
+protected:
+    ~UnaryExpression() override = default;
+
+private:
+    explicit UnaryExpression(UnaryExprKind kind, Value* operand, Cangjie::OverflowStrategy ofs, Block* parent);
+
+    UnaryExpression* Clone(CHIRBuilder& builder, Block& parent) const override;
+};
+
+/**
+ * @brief Common base for binary expressions with overflow strategy.
+ */
+class BinaryExpressionBase : public Expression {
 public:
     // ===--------------------------------------------------------------------===//
     // Base Information
@@ -451,19 +496,53 @@ public:
      */
     Value* GetRHSOperand() const;
 
+    /**
+     * @brief Non-exception binary operator kind.
+     * For WithException forms, returns the corresponding BinaryExprKind.
+     */
+    BinaryExprKind GetOpKind() const;
+
+    bool IsMathematicalOperator() const;
+    bool IsBitwiseOperator() const;
+    bool IsComparisonOperator() const;
+    bool IsLogicalOperator() const;
+
     OverflowStrategy GetOverflowStrategy() const;
 
 protected:
+    explicit BinaryExpressionBase(
+        BinaryExprKind kind, Value* lhs, Value* rhs, OverflowStrategy ofs, bool isTry,
+        const std::vector<Block*>& successors, Block* parent);
+    explicit BinaryExpressionBase(BinaryExprKind kind, Value* lhs, Value* rhs, Block* parent);
+    ~BinaryExpressionBase() override = default;
+
     std::string AddExtraComment() const override;
+
+    Cangjie::OverflowStrategy overflowStrategy{Cangjie::OverflowStrategy::NA};
+};
+
+/**
+ * @brief Binary expression, including:
+ * 1. mathematical operator, such as `add`, `sub`, `mul`, `div`, `mod` and `exp`
+ * 2. bit operator, such as `<<`, `>>`, `&`, `|` and `^`
+ * 3. comparison operator, such as `<`, `>`, `<=`, `>=`, `==` and `!=`
+ * 4. logical operator, such as `&&` and `||`
+ *
+ * Cangjie Code:
+ *      var x = 1 + 2 // kind is Add, `1` is left-hand side op, `2` is right-hand side op
+ */
+class BinaryExpression : public BinaryExpressionBase {
+    friend class CHIRContext;
+    friend class CHIRBuilder;
+
+protected:
     ~BinaryExpression() override = default;
 
 private:
-    explicit BinaryExpression(ExprKind kind, Value* lhs, Value* rhs, OverflowStrategy ofs, Block* parent);
-    explicit BinaryExpression(ExprKind kind, Value* lhs, Value* rhs, Block* parent);
+    explicit BinaryExpression(BinaryExprKind kind, Value* lhs, Value* rhs, OverflowStrategy ofs, Block* parent);
+    explicit BinaryExpression(BinaryExprKind kind, Value* lhs, Value* rhs, Block* parent);
 
     BinaryExpression* Clone(CHIRBuilder& builder, Block& parent) const override;
-
-    Cangjie::OverflowStrategy overflowStrategy{Cangjie::OverflowStrategy::NA};
 };
 
 /**

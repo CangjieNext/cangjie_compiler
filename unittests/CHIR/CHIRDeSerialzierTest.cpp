@@ -424,15 +424,31 @@ ExprKind DeSerialize(const PackageFormat::CHIRExprKind& kind)
             ret = ExprKind::RAISE_EXCEPTION;
             break;
         case CHIRExprKind_TryNeg:
+            ret = ExprKind::NEG_WITH_EXCEPTION;
+            break;
         case CHIRExprKind_TryAdd:
+            ret = ExprKind::ADD_WITH_EXCEPTION;
+            break;
         case CHIRExprKind_TrySub:
+            ret = ExprKind::SUB_WITH_EXCEPTION;
+            break;
         case CHIRExprKind_TryMul:
+            ret = ExprKind::MUL_WITH_EXCEPTION;
+            break;
         case CHIRExprKind_TryDiv:
+            ret = ExprKind::DIV_WITH_EXCEPTION;
+            break;
         case CHIRExprKind_TryMod:
+            ret = ExprKind::MOD_WITH_EXCEPTION;
+            break;
         case CHIRExprKind_TryExp:
+            ret = ExprKind::EXP_WITH_EXCEPTION;
+            break;
         case CHIRExprKind_TryLShift:
+            ret = ExprKind::LSHIFT_WITH_EXCEPTION;
+            break;
         case CHIRExprKind_TryRShift:
-            ret = ExprKind::INT_OP_WITH_EXCEPTION;
+            ret = ExprKind::RSHIFT_WITH_EXCEPTION;
             break;
         case CHIRExprKind_TrySpawn:
             ret = ExprKind::SPAWN_WITH_EXCEPTION;

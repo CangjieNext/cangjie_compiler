@@ -186,20 +186,20 @@ std::ostream& operator<<(std::ostream& out, const SIntDomain::Formatter& fmt)
     return out << ConstantRange::Formatter::DIVIDOR;
 }
 
-static RelationalOperation From(const ExprKind& op)
+static RelationalOperation From(const BinaryExprKind& op)
 {
     switch (op) {
-        case ExprKind::EQUAL:
+        case BinaryExprKind::EQUAL:
             return RelationalOperation::EQ;
-        case ExprKind::LE:
+        case BinaryExprKind::LE:
             return RelationalOperation::LE;
-        case ExprKind::LT:
+        case BinaryExprKind::LT:
             return RelationalOperation::LT;
-        case ExprKind::GT:
+        case BinaryExprKind::GT:
             return RelationalOperation::GT;
-        case ExprKind::GE:
+        case BinaryExprKind::GE:
             return RelationalOperation::GE;
-        case ExprKind::NOTEQUAL:
+        case BinaryExprKind::NOTEQUAL:
             return RelationalOperation::NE;
         default:
             CJC_ABORT();
@@ -582,12 +582,12 @@ decltype(BoolDomain::Top()) ComputeEqualityIntBinop(
 
 // Returns true if both lhs and rhs refer to the same symbol (i.e. this relational operation supersets
 // the equality relation)
-bool TrueOnSameSymbol(ExprKind op)
+bool TrueOnSameSymbol(BinaryExprKind op)
 {
     switch (op) {
-        case ExprKind::EQUAL:
-        case ExprKind::LE:
-        case ExprKind::GE:
+        case BinaryExprKind::EQUAL:
+        case BinaryExprKind::LE:
+        case BinaryExprKind::GE:
             return true;
         default:
             return false;
@@ -602,18 +602,19 @@ decltype(BoolDomain::Top()) ComputeRelIntBinop(CHIRRelIntBinopArgs&& args)
     }
     auto op{From(args.op)};
     if (op == RelationalOperation::EQ || op == RelationalOperation::NE) {
-        return ComputeEqualityIntBinop(args.ld, args.rd, args.l, args.r, args.op == ExprKind::NOTEQUAL);
+        return ComputeEqualityIntBinop(args.ld, args.rd, args.l, args.r, args.op == BinaryExprKind::NOTEQUAL);
     }
     return ComputeTotalOrderingIntBinop(args);
 }
 
-decltype(BoolDomain::Top()) ComputeEqualityBoolBinop(const BoolDomain& ld, const BoolDomain& rd, ExprKind op)
+decltype(BoolDomain::Top()) ComputeEqualityBoolBinop(const BoolDomain& ld, const BoolDomain& rd, BinaryExprKind op)
 {
     if (ld.IsBottom() || rd.IsBottom()) {
         return BoolDomain::Bottom();
     }
     if (ld.IsSingleValue() && rd.IsSingleValue()) {
-        return BoolDomain::FromBool((ld.GetSingleValue() == rd.GetSingleValue()) != (op == ExprKind::NOTEQUAL));
+        return BoolDomain::FromBool(
+            (ld.GetSingleValue() == rd.GetSingleValue()) != (op == BinaryExprKind::NOTEQUAL));
     }
     return BoolDomain::Top();
 }
@@ -622,15 +623,15 @@ decltype(BoolDomain::Top()) ComputeEqualityBoolBinop(const BoolDomain& ld, const
 SIntDomain ComputeArithmeticBinop(CHIRArithmeticBinopArgs&& args)
 {
     switch (args.op) {
-        case ExprKind::ADD:
+        case BinaryExprKind::ADD:
             return ComputeAdd(args);
-        case ExprKind::SUB:
+        case BinaryExprKind::SUB:
             return ComputeSub(args);
-        case ExprKind::MUL:
+        case BinaryExprKind::MUL:
             return ComputeMul(args);
-        case ExprKind::DIV:
+        case BinaryExprKind::DIV:
             return ComputeDiv(args);
-        case ExprKind::MOD:
+        case BinaryExprKind::MOD:
             return ComputeMod(args);
         default:
             CJC_ABORT();
