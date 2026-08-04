@@ -23,9 +23,10 @@
 namespace Cangjie::CHIR::Interpreter {
 
 OpCode PrimitiveTypeKind2OpCode(Type::TypeKind kind);
-OpCode UnExprKind2OpCode(Cangjie::CHIR::ExprKind exprKind);
-OpCode BinExprKind2OpCode(Cangjie::CHIR::ExprKind exprKind);
-OpCode BinExprKindWitException2OpCode(Cangjie::CHIR::ExprKind exprKind);
+OpCode UnExprKind2OpCode(Cangjie::CHIR::UnaryExprKind kind);
+OpCode UnExprKindWitException2OpCode(Cangjie::CHIR::UnaryExprKind kind);
+OpCode BinExprKind2OpCode(Cangjie::CHIR::BinaryExprKind kind);
+OpCode BinExprKindWitException2OpCode(Cangjie::CHIR::BinaryExprKind kind);
 IVal ByteCodeToIval(const Bchir::Definition& def, const Bchir& bchir, Bchir& topBchir);
 
 template <bool OmitFirstArg = false>

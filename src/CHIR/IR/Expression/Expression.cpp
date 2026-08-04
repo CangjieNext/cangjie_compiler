@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <iostream>
 #include <sstream>
+#include <tuple>
 
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
@@ -203,9 +204,14 @@ bool Expression::IsBinaryExpr() const
     return ExprKindMgr::Instance()->GetMajorKind(kind) == ExprMajorKind::BINARY_EXPR;
 }
 
-bool Expression::IsIntOpWithException() const
+bool Expression::IsUnaryExpressionWithException() const
 {
-    return kind == ExprKind::INT_OP_WITH_EXCEPTION;
+    return kind == ExprKind::NEG_WITH_EXCEPTION;
+}
+
+bool Expression::IsBinaryExpressionWithException() const
+{
+    return kind >= ExprKind::ADD_WITH_EXCEPTION && kind <= ExprKind::RSHIFT_WITH_EXCEPTION;
 }
 
 bool Expression::IsInvokeStaticBase() const
@@ -525,11 +531,7 @@ std::string Expression::ToString(size_t indent) const
         }
         ss << ": " << result->GetType()->ToString() << " = ";
     }
-    if (kind == ExprKind::INT_OP_WITH_EXCEPTION) {
-        ss << StaticCast<const IntOpWithException*>(this)->GetOpKindName();
-    } else {
-        ss << GetExprKindName();
-    }
+    ss << GetExprKindName();
     if (kind == ExprKind::LAMBDA) {
         ss << StaticCast<const Lambda*>(this)->LambdaOperandsToString(indent);
     } else {
@@ -547,7 +549,8 @@ bool Expression::HasExceptionBranch() const
     return kind == ExprKind::APPLY_WITH_EXCEPTION ||
         kind == ExprKind::INVOKE_WITH_EXCEPTION ||
         kind == ExprKind::INVOKESTATIC_WITH_EXCEPTION ||
-        kind == ExprKind::INT_OP_WITH_EXCEPTION ||
+        IsUnaryExpressionWithException() ||
+        IsBinaryExpressionWithException() ||
         kind == ExprKind::SPAWN_WITH_EXCEPTION ||
         kind == ExprKind::NUMERIC_CAST_WITH_EXCEPTION ||
         kind == ExprKind::INTRINSIC_WITH_EXCEPTION ||
@@ -588,17 +591,112 @@ std::string Expression::AddExtraComment() const
     return "";
 }
 
-Value* UnaryExpression::GetOperand() const
+namespace {
+// (opKind, ExprKind, try ExprKind). ExprKind::INVALID means no try form.
+constexpr std::tuple<UnaryExprKind, ExprKind, ExprKind> UNARY_EXPR_KIND_TABLE[] = {
+    {UnaryExprKind::NEG, ExprKind::NEG, ExprKind::NEG_WITH_EXCEPTION},
+    {UnaryExprKind::NOT, ExprKind::NOT, ExprKind::INVALID},
+    {UnaryExprKind::BITNOT, ExprKind::BITNOT, ExprKind::INVALID},
+};
+
+constexpr std::tuple<BinaryExprKind, ExprKind, ExprKind> BINARY_EXPR_KIND_TABLE[] = {
+    {BinaryExprKind::ADD, ExprKind::ADD, ExprKind::ADD_WITH_EXCEPTION},
+    {BinaryExprKind::SUB, ExprKind::SUB, ExprKind::SUB_WITH_EXCEPTION},
+    {BinaryExprKind::MUL, ExprKind::MUL, ExprKind::MUL_WITH_EXCEPTION},
+    {BinaryExprKind::DIV, ExprKind::DIV, ExprKind::DIV_WITH_EXCEPTION},
+    {BinaryExprKind::MOD, ExprKind::MOD, ExprKind::MOD_WITH_EXCEPTION},
+    {BinaryExprKind::EXP, ExprKind::EXP, ExprKind::EXP_WITH_EXCEPTION},
+    {BinaryExprKind::LSHIFT, ExprKind::LSHIFT, ExprKind::LSHIFT_WITH_EXCEPTION},
+    {BinaryExprKind::RSHIFT, ExprKind::RSHIFT, ExprKind::RSHIFT_WITH_EXCEPTION},
+    {BinaryExprKind::BITAND, ExprKind::BITAND, ExprKind::INVALID},
+    {BinaryExprKind::BITOR, ExprKind::BITOR, ExprKind::INVALID},
+    {BinaryExprKind::BITXOR, ExprKind::BITXOR, ExprKind::INVALID},
+    {BinaryExprKind::LT, ExprKind::LT, ExprKind::INVALID},
+    {BinaryExprKind::GT, ExprKind::GT, ExprKind::INVALID},
+    {BinaryExprKind::LE, ExprKind::LE, ExprKind::INVALID},
+    {BinaryExprKind::GE, ExprKind::GE, ExprKind::INVALID},
+    {BinaryExprKind::EQUAL, ExprKind::EQUAL, ExprKind::INVALID},
+    {BinaryExprKind::NOTEQUAL, ExprKind::NOTEQUAL, ExprKind::INVALID},
+    {BinaryExprKind::AND, ExprKind::AND, ExprKind::INVALID},
+    {BinaryExprKind::OR, ExprKind::OR, ExprKind::INVALID},
+};
+
+template <typename OpKind, size_t N>
+ExprKind LookupExprKind(
+    const std::tuple<OpKind, ExprKind, ExprKind> (&table)[N], OpKind kind, bool isTry)
+{
+    for (const auto& [opKind, exprKind, tryExprKind] : table) {
+        if (opKind != kind) {
+            continue;
+        }
+        auto result = isTry ? tryExprKind : exprKind;
+        CJC_ASSERT(result != ExprKind::INVALID);
+        return result;
+    }
+    CJC_ABORT();
+    return ExprKind::INVALID;
+}
+
+template <typename OpKind, size_t N>
+OpKind LookupOpKind(const std::tuple<OpKind, ExprKind, ExprKind> (&table)[N], ExprKind kind)
+{
+    for (const auto& [opKind, exprKind, tryExprKind] : table) {
+        if (exprKind == kind || (tryExprKind != ExprKind::INVALID && tryExprKind == kind)) {
+            return opKind;
+        }
+    }
+    CJC_ABORT();
+    return OpKind{};
+}
+} // namespace
+
+ExprKind ExprKindMgr::ToExprKind(UnaryExprKind kind, bool isTry)
+{
+    return LookupExprKind(UNARY_EXPR_KIND_TABLE, kind, isTry);
+}
+
+ExprKind ExprKindMgr::ToExprKind(BinaryExprKind kind, bool isTry)
+{
+    return LookupExprKind(BINARY_EXPR_KIND_TABLE, kind, isTry);
+}
+
+UnaryExprKind ExprKindMgr::ToUnaryExprKind(ExprKind kind)
+{
+    return LookupOpKind(UNARY_EXPR_KIND_TABLE, kind);
+}
+
+BinaryExprKind ExprKindMgr::ToBinaryExprKind(ExprKind kind)
+{
+    return LookupOpKind(BINARY_EXPR_KIND_TABLE, kind);
+}
+
+UnaryExpressionBase::UnaryExpressionBase(
+    UnaryExprKind kind, Value* operand, Cangjie::OverflowStrategy ofs, bool isTry,
+    const std::vector<Block*>& successors, Block* parent)
+    : Expression(ExprKindMgr::ToExprKind(kind, isTry), {operand}, parent), overflowStrategy(ofs)
+{
+    CJC_NULLPTR_CHECK(parent);
+    for (auto succ : successors) {
+        AppendOperand(*succ);
+    }
+}
+
+Value* UnaryExpressionBase::GetOperand() const
 {
     return GetOperand(0);
 }
 
-Cangjie::OverflowStrategy UnaryExpression::GetOverflowStrategy() const
+UnaryExprKind UnaryExpressionBase::GetOpKind() const
+{
+    return ExprKindMgr::ToUnaryExprKind(GetExprKind());
+}
+
+Cangjie::OverflowStrategy UnaryExpressionBase::GetOverflowStrategy() const
 {
     return overflowStrategy;
 }
 
-std::string UnaryExpression::AddExtraComment() const
+std::string UnaryExpressionBase::AddExtraComment() const
 {
     if (overflowStrategy != Cangjie::OverflowStrategy::NA) {
         return OverflowToString(overflowStrategy);
@@ -606,38 +704,88 @@ std::string UnaryExpression::AddExtraComment() const
     return "";
 }
 
-BinaryExpression::BinaryExpression(ExprKind kind, Value* lhs, Value* rhs, OverflowStrategy ofs, Block* parent)
-    : Expression(kind, {lhs, rhs}, {}, parent), overflowStrategy(ofs)
+UnaryExpression::UnaryExpression(UnaryExprKind kind, Value* operand, Cangjie::OverflowStrategy ofs, Block* parent)
+    : UnaryExpressionBase(kind, operand, ofs, false, {}, parent)
 {
 }
 
-BinaryExpression::BinaryExpression(ExprKind kind, Value* lhs, Value* rhs, Block* parent)
-    : Expression(kind, {lhs, rhs}, {}, parent)
+BinaryExpressionBase::BinaryExpressionBase(
+    BinaryExprKind kind, Value* lhs, Value* rhs, OverflowStrategy ofs, bool isTry,
+    const std::vector<Block*>& successors, Block* parent)
+    : Expression(ExprKindMgr::ToExprKind(kind, isTry), {lhs, rhs}, parent), overflowStrategy(ofs)
 {
-    CJC_ASSERT(kind >= ExprKind::BITAND);
+    CJC_NULLPTR_CHECK(parent);
+    for (auto succ : successors) {
+        AppendOperand(*succ);
+    }
 }
 
-Value* BinaryExpression::GetLHSOperand() const
+BinaryExpressionBase::BinaryExpressionBase(BinaryExprKind kind, Value* lhs, Value* rhs, Block* parent)
+    : Expression(ExprKindMgr::ToExprKind(kind, false), {lhs, rhs}, parent)
+{
+    CJC_ASSERT(kind >= BinaryExprKind::BITAND);
+}
+
+Value* BinaryExpressionBase::GetLHSOperand() const
 {
     return GetOperand(0);
 }
 
-Value* BinaryExpression::GetRHSOperand() const
+Value* BinaryExpressionBase::GetRHSOperand() const
 {
     return GetOperand(1);
 }
 
-Cangjie::OverflowStrategy BinaryExpression::GetOverflowStrategy() const
+BinaryExprKind BinaryExpressionBase::GetOpKind() const
+{
+    return ExprKindMgr::ToBinaryExprKind(GetExprKind());
+}
+
+bool BinaryExpressionBase::IsMathematicalOperator() const
+{
+    auto kind = GetOpKind();
+    return kind >= BinaryExprKind::ADD && kind <= BinaryExprKind::EXP;
+}
+
+bool BinaryExpressionBase::IsBitwiseOperator() const
+{
+    auto kind = GetOpKind();
+    return kind >= BinaryExprKind::LSHIFT && kind <= BinaryExprKind::BITXOR;
+}
+
+bool BinaryExpressionBase::IsComparisonOperator() const
+{
+    auto kind = GetOpKind();
+    return kind >= BinaryExprKind::LT && kind <= BinaryExprKind::NOTEQUAL;
+}
+
+bool BinaryExpressionBase::IsLogicalOperator() const
+{
+    auto kind = GetOpKind();
+    return kind >= BinaryExprKind::AND && kind <= BinaryExprKind::OR;
+}
+
+Cangjie::OverflowStrategy BinaryExpressionBase::GetOverflowStrategy() const
 {
     return overflowStrategy;
 }
 
-std::string BinaryExpression::AddExtraComment() const
+std::string BinaryExpressionBase::AddExtraComment() const
 {
     if (overflowStrategy != Cangjie::OverflowStrategy::NA) {
         return OverflowToString(overflowStrategy);
     }
     return "";
+}
+
+BinaryExpression::BinaryExpression(BinaryExprKind kind, Value* lhs, Value* rhs, OverflowStrategy ofs, Block* parent)
+    : BinaryExpressionBase(kind, lhs, rhs, ofs, false, {}, parent)
+{
+}
+
+BinaryExpression::BinaryExpression(BinaryExprKind kind, Value* lhs, Value* rhs, Block* parent)
+    : BinaryExpressionBase(kind, lhs, rhs, parent)
+{
 }
 
 LiteralValue* Constant::GetValue() const
@@ -1755,7 +1903,7 @@ Spawn* Spawn::Clone(CHIRBuilder& builder, Block& parent) const
 UnaryExpression* UnaryExpression::Clone(CHIRBuilder& builder, Block& parent) const
 {
     auto newNode = builder.CreateExpression<UnaryExpression>(
-        result->GetType(), GetExprKind(), GetOperand(), GetOverflowStrategy(), &parent);
+        result->GetType(), GetOpKind(), GetOperand(), GetOverflowStrategy(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;
@@ -1764,7 +1912,7 @@ UnaryExpression* UnaryExpression::Clone(CHIRBuilder& builder, Block& parent) con
 BinaryExpression* BinaryExpression::Clone(CHIRBuilder& builder, Block& parent) const
 {
     auto newNode = builder.CreateExpression<BinaryExpression>(
-        result->GetType(), GetExprKind(), GetLHSOperand(), GetRHSOperand(), GetOverflowStrategy(), &parent);
+        result->GetType(), GetOpKind(), GetLHSOperand(), GetRHSOperand(), GetOverflowStrategy(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;

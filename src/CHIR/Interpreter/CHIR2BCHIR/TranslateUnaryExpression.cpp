@@ -15,12 +15,14 @@
 using namespace Cangjie::CHIR;
 using namespace Interpreter;
 
-void CHIR2BCHIR::TranslateUnaryExpression(Context& ctx, const Expression& expr)
+void CHIR2BCHIR::TranslateUnaryExpression(Context& ctx, const UnaryExpressionBase& expr)
 {
     CJC_ASSERT(expr.GetNumOfNonSuccessorOperands() == Bchir::FLAG_ONE);
-    auto opCode = Cangjie::CHIR::Interpreter::UnExprKind2OpCode(expr.GetExprKind());
-    auto unaryExpression = StaticCast<const UnaryExpression*>(&expr);
-    auto typeKind = expr.GetResult()->GetType()->GetTypeKind();
-    auto overflow = static_cast<Bchir::ByteCodeContent>(unaryExpression->GetOverflowStrategy());
+    auto opKind = expr.GetOpKind();
+    auto opCode = expr.IsTerminator()
+        ? Cangjie::CHIR::Interpreter::UnExprKindWitException2OpCode(opKind)
+        : Cangjie::CHIR::Interpreter::UnExprKind2OpCode(opKind);
+    auto typeKind = expr.GetOperand()->GetType()->GetTypeKind();
+    auto overflow = static_cast<Bchir::ByteCodeContent>(expr.GetOverflowStrategy());
     PushOpCodeWithAnnotations<false, true>(ctx, opCode, expr, typeKind, overflow);
 }

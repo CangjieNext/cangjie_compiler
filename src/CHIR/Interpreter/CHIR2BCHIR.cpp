@@ -447,11 +447,11 @@ void CHIR2BCHIR::TranslateExpression(Context& ctx, const Expression& expr)
             break;
         case ExprMajorKind::UNARY_EXPR:
             CJC_ASSERT(expr.GetResult());
-            TranslateUnaryExpression(ctx, expr);
+            TranslateUnaryExpression(ctx, StaticCast<const UnaryExpressionBase&>(expr));
             break;
         case ExprMajorKind::BINARY_EXPR:
             CJC_ASSERT(expr.GetResult());
-            TranslateBinaryExpression(ctx, expr);
+            TranslateBinaryExpression(ctx, StaticCast<const BinaryExpressionBase&>(expr));
             break;
         case ExprMajorKind::MEMORY_EXPR:
             CJC_ASSERT(expr.GetResult());

@@ -50,7 +50,7 @@ std::vector<ClassType*> GetAllFathers(ClassType* clsTy, CHIRBuilder* builder)
 }
 } // namespace
 
-bool IsUnsignedArithmetic(const BinaryExpression& expr)
+bool IsUnsignedArithmetic(const BinaryExpressionBase& expr)
 {
     auto ty = expr.GetLHSOperand()->GetType();
     return ty->IsUnsignedInteger() || IsStructEnum(ty);

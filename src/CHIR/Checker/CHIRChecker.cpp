@@ -1820,8 +1820,32 @@ void CHIRChecker::CheckTerminator(const Expression& expr, const Function& topLev
             CheckInvokeWithException(StaticCast<const InvokeWithException&>(expr), topLevelFunc); }},
         {ExprKind::INVOKESTATIC_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
             CheckInvokeStaticWithException(StaticCast<const InvokeStaticWithException&>(expr), topLevelFunc); }},
-        {ExprKind::INT_OP_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
-            CheckIntOpWithException(StaticCast<const IntOpWithException&>(expr), topLevelFunc); }},
+        {ExprKind::NEG_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
+            CheckUnaryExpressionWithException(StaticCast<const UnaryExpressionWithException&>(expr), topLevelFunc); }},
+        {ExprKind::ADD_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
+            CheckBinaryExpressionWithException(
+                StaticCast<const BinaryExpressionWithException&>(expr), topLevelFunc); }},
+        {ExprKind::SUB_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
+            CheckBinaryExpressionWithException(
+                StaticCast<const BinaryExpressionWithException&>(expr), topLevelFunc); }},
+        {ExprKind::MUL_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
+            CheckBinaryExpressionWithException(
+                StaticCast<const BinaryExpressionWithException&>(expr), topLevelFunc); }},
+        {ExprKind::DIV_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
+            CheckBinaryExpressionWithException(
+                StaticCast<const BinaryExpressionWithException&>(expr), topLevelFunc); }},
+        {ExprKind::MOD_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
+            CheckBinaryExpressionWithException(
+                StaticCast<const BinaryExpressionWithException&>(expr), topLevelFunc); }},
+        {ExprKind::EXP_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
+            CheckBinaryExpressionWithException(
+                StaticCast<const BinaryExpressionWithException&>(expr), topLevelFunc); }},
+        {ExprKind::LSHIFT_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
+            CheckBinaryExpressionWithException(
+                StaticCast<const BinaryExpressionWithException&>(expr), topLevelFunc); }},
+        {ExprKind::RSHIFT_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
+            CheckBinaryExpressionWithException(
+                StaticCast<const BinaryExpressionWithException&>(expr), topLevelFunc); }},
         {ExprKind::SPAWN_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
             CheckSpawnWithException(StaticCast<const SpawnWithException&>(expr), topLevelFunc); }},
         {ExprKind::NUMERIC_CAST_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
@@ -2737,15 +2761,16 @@ void CHIRChecker::CheckInvokeStaticBase(const InvokeStaticBase& expr, const Func
     CheckInvokeFuncArgs(expr.GetArgs(), paramTypes, *expr.GetRawExpr(), topLevelFunc);
 }
 
-void CHIRChecker::CheckIntOpWithException(const IntOpWithException& expr, const Function& topLevelFunc)
+void CHIRChecker::CheckUnaryExpressionWithException(
+    const UnaryExpressionWithException& expr, const Function& topLevelFunc)
 {
     // 1. must have result
     if (!CheckHaveResult(expr, topLevelFunc)) {
         return;
     }
 
-    // 2. only have 1 or 2 operands
-    if (!OperandNumIsEqual({1, 2}, expr, topLevelFunc)) {
+    // 2. only have 1 operand
+    if (!OperandNumIsEqual(1, expr, topLevelFunc)) {
         return;
     }
 
@@ -2754,18 +2779,33 @@ void CHIRChecker::CheckIntOpWithException(const IntOpWithException& expr, const 
         return;
     }
 
-    // 4. check all kinds of expressions
-    auto exprKind = expr.GetOpKind();
-    if (exprKind >= ExprKind::NEG && exprKind <= ExprKind::BITNOT) {
-        CheckUnaryExprBase(UnaryExprBase(&expr), topLevelFunc);
-    } else if (exprKind >= ExprKind::ADD && exprKind <= ExprKind::OR) {
-        CheckBinaryExprBase(BinaryExprBase(&expr), topLevelFunc);
-    } else {
-        WarningInExpr(topLevelFunc, expr, "find unrecongnized ExprKind " + expr.GetOpKindName() + ".");
-    }
+    // 4. check unary expression
+    CheckUnaryExprBase(expr, topLevelFunc);
 }
 
-void CHIRChecker::CheckUnaryExprBase(const UnaryExprBase& expr, const Function& topLevelFunc)
+void CHIRChecker::CheckBinaryExpressionWithException(
+    const BinaryExpressionWithException& expr, const Function& topLevelFunc)
+{
+    // 1. must have result
+    if (!CheckHaveResult(expr, topLevelFunc)) {
+        return;
+    }
+
+    // 2. only have 2 operands
+    if (!OperandNumIsEqual(2, expr, topLevelFunc)) {
+        return;
+    }
+
+    // 3. have 2 successors
+    if (!SuccessorNumIsEqual(2, expr, topLevelFunc)) {
+        return;
+    }
+
+    // 4. check binary expression
+    CheckBinaryExprBase(expr, topLevelFunc);
+}
+
+void CHIRChecker::CheckUnaryExprBase(const UnaryExpressionBase& expr, const Function& topLevelFunc)
 {
     // 1. skip checking if operand type is Nothing
     auto operand = expr.GetOperand();
@@ -2775,31 +2815,31 @@ void CHIRChecker::CheckUnaryExprBase(const UnaryExprBase& expr, const Function& 
     }
 
     // 2. check operand type
-    if (expr.GetOpKind() == ExprKind::NOT && !operandType->IsBoolean()) {
+    if (expr.GetOpKind() == UnaryExprKind::NOT && !operandType->IsBoolean()) {
         // 2.1 must be Bool when it's NOT (!a)
-        TypeCheckError(*expr.GetRawExpr(), *operand, "Bool", topLevelFunc);
-    } else if (expr.GetOpKind() == ExprKind::BITNOT && !operandType->IsInteger()) {
+        TypeCheckError(expr, *operand, "Bool", topLevelFunc);
+    } else if (expr.GetOpKind() == UnaryExprKind::BITNOT && !operandType->IsInteger()) {
         // 2.2 must be Int when it's BITNOT (!a)
-        TypeCheckError(*expr.GetRawExpr(), *operand, "Int", topLevelFunc);
-    } else if (expr.GetOpKind() == ExprKind::NEG && !operandType->IsInteger() && !operandType->IsFloat()) {
+        TypeCheckError(expr, *operand, "Int", topLevelFunc);
+    } else if (expr.GetOpKind() == UnaryExprKind::NEG && !operandType->IsInteger() && !operandType->IsFloat()) {
         // 2.3 must be Int or Float when it's NEG (-a)
-        TypeCheckError(*expr.GetRawExpr(), *operand, "Int or Float", topLevelFunc);
+        TypeCheckError(expr, *operand, "Int or Float", topLevelFunc);
     }
 
     // 3. result type must equal to operand type
     auto result = expr.GetResult();
     auto resultType = result->GetType();
     if (operandType != resultType) {
-        TypeCheckError(*expr.GetRawExpr(), *result, operandType->ToString(), topLevelFunc);
+        TypeCheckError(expr, *result, operandType->ToString(), topLevelFunc);
     }
 
     // 4. check overflow strategy
-    if (expr.GetOpKind() == ExprKind::NEG) {
-        OverflowStrategyMustBeValid(expr.GetOverflowStrategy(), *expr.GetRawExpr(), topLevelFunc);
+    if (expr.GetOpKind() == UnaryExprKind::NEG) {
+        OverflowStrategyMustBeValid(expr.GetOverflowStrategy(), expr, topLevelFunc);
     }
 }
 
-void CHIRChecker::CheckBinaryExprBase(const BinaryExprBase& expr, const Function& topLevelFunc)
+void CHIRChecker::CheckBinaryExprBase(const BinaryExpressionBase& expr, const Function& topLevelFunc)
 {
     // 1. skip checking if operand type is Nothing
     if (expr.GetLHSOperand()->GetType()->IsNothing() || expr.GetRHSOperand()->GetType()->IsNothing()) {
@@ -2807,19 +2847,20 @@ void CHIRChecker::CheckBinaryExprBase(const BinaryExprBase& expr, const Function
     }
 
     // 2. check all kinds of binary expressions
-    auto exprKind = expr.GetOpKind();
-    if (exprKind >= ExprKind::ADD && exprKind <= ExprKind::MOD) {
-        CheckCalculExpression(expr, topLevelFunc);
-    } else if (exprKind == ExprKind::EXP) {
-        CheckExponentiationExpression(expr, topLevelFunc);
-    } else if (exprKind >= ExprKind::LSHIFT && exprKind <= ExprKind::BITXOR) {
+    if (expr.IsMathematicalOperator()) {
+        if (expr.GetOpKind() == BinaryExprKind::EXP) {
+            CheckExponentiationExpression(expr, topLevelFunc);
+        } else {
+            CheckCalculExpression(expr, topLevelFunc);
+        }
+    } else if (expr.IsBitwiseOperator()) {
         CheckBitExpression(expr, topLevelFunc);
-    } else if (exprKind >= ExprKind::LT && exprKind <= ExprKind::NOTEQUAL) {
+    } else if (expr.IsComparisonOperator()) {
         CheckCompareExpression(expr, topLevelFunc);
-    } else if (exprKind >= ExprKind::AND && exprKind <= ExprKind::OR) {
+    } else if (expr.IsLogicalOperator()) {
         CheckLogicExpression(expr, topLevelFunc);
     } else {
-        WarningInExpr(topLevelFunc, *expr.GetRawExpr(), "find unrecongnized ExprKind " + expr.GetExprKindName() + ".");
+        WarningInExpr(topLevelFunc, expr, "find unrecongnized ExprKind " + expr.GetExprKindName() + ".");
     }
 }
 
@@ -2832,7 +2873,7 @@ void CHIRChecker::OverflowStrategyMustBeValid(
     }
 }
 
-void CHIRChecker::CheckCalculExpression(const BinaryExprBase& expr, const Function& topLevelFunc)
+void CHIRChecker::CheckCalculExpression(const BinaryExpressionBase& expr, const Function& topLevelFunc)
 {
     auto leftOperand = expr.GetLHSOperand();
     auto rightOperand = expr.GetRHSOperand();
@@ -2840,21 +2881,21 @@ void CHIRChecker::CheckCalculExpression(const BinaryExprBase& expr, const Functi
     auto rightOpType = rightOperand->GetType();
     auto result = expr.GetResult();
     // 1. check operand type
-    if (expr.GetOpKind() == ExprKind::MOD) {
+    if (expr.GetOpKind() == BinaryExprKind::MOD) {
         // 1.1 mod's operands' type must be Int or UInt, can't be Bool or Float
         if (!leftOpType->IsInteger()) {
-            TypeCheckError(*expr.GetRawExpr(), *leftOperand, "Int or UInt", topLevelFunc);
+            TypeCheckError(expr, *leftOperand, "Int or UInt", topLevelFunc);
         }
         if (!rightOpType->IsInteger()) {
-            TypeCheckError(*expr.GetRawExpr(), *rightOperand, "Int or UInt", topLevelFunc);
+            TypeCheckError(expr, *rightOperand, "Int or UInt", topLevelFunc);
         }
     } else {
         // 1.2 other operands' type must be numeric type
         if (!leftOpType->IsNumeric()) {
-            TypeCheckError(*expr.GetRawExpr(), *leftOperand, "numeric", topLevelFunc);
+            TypeCheckError(expr, *leftOperand, "numeric", topLevelFunc);
         }
         if (!rightOpType->IsNumeric()) {
-            TypeCheckError(*expr.GetRawExpr(), *rightOperand, "numeric", topLevelFunc);
+            TypeCheckError(expr, *rightOperand, "numeric", topLevelFunc);
         }
     }
 
@@ -2868,10 +2909,10 @@ void CHIRChecker::CheckCalculExpression(const BinaryExprBase& expr, const Functi
     }
 
     // 3. check overflow strategy
-    OverflowStrategyMustBeValid(expr.GetOverflowStrategy(), *expr.GetRawExpr(), topLevelFunc);
+    OverflowStrategyMustBeValid(expr.GetOverflowStrategy(), expr, topLevelFunc);
 }
 
-void CHIRChecker::CheckExponentiationExpression(const BinaryExprBase& expr, const Function& topLevelFunc)
+void CHIRChecker::CheckExponentiationExpression(const BinaryExpressionBase& expr, const Function& topLevelFunc)
 {
     auto leftOperand = expr.GetLHSOperand();
     auto rightOperand = expr.GetRHSOperand();
@@ -2880,35 +2921,35 @@ void CHIRChecker::CheckExponentiationExpression(const BinaryExprBase& expr, cons
     // 1. left operand's type must be Int64 or Float64
     if (leftOpType->GetTypeKind() != Type::TypeKind::TYPE_INT64 &&
         leftOpType->GetTypeKind() != Type::TypeKind::TYPE_FLOAT64) {
-        TypeCheckError(*expr.GetRawExpr(), *leftOperand, "Int64 or Float64", topLevelFunc);
+        TypeCheckError(expr, *leftOperand, "Int64 or Float64", topLevelFunc);
     }
     auto result = expr.GetResult();
     auto resultType = result->GetType();
     if (leftOpType->GetTypeKind() == Type::TypeKind::TYPE_INT64) {
         // 2. if left operand's type is Int64, right operand's type must be UInt64, and result type must be Int64
         if (rightOpType->GetTypeKind() != Type::TypeKind::TYPE_UINT64) {
-            TypeCheckError(*expr.GetRawExpr(), *rightOperand, "UInt64", topLevelFunc);
+            TypeCheckError(expr, *rightOperand, "UInt64", topLevelFunc);
         }
         if (resultType->GetTypeKind() != Type::TypeKind::TYPE_INT64) {
-            TypeCheckError(*expr.GetRawExpr(), *result, "Int64", topLevelFunc);
+            TypeCheckError(expr, *result, "Int64", topLevelFunc);
         }
     } else if (leftOpType->GetTypeKind() == Type::TypeKind::TYPE_FLOAT64) {
         // 3. if left operand's type is Float64, right operand's type must be Int64 or Float64,
         // and result type must be Float64
         if (rightOpType->GetTypeKind() != Type::TypeKind::TYPE_INT64 &&
             rightOpType->GetTypeKind() != Type::TypeKind::TYPE_FLOAT64) {
-            TypeCheckError(*expr.GetRawExpr(), *rightOperand, "Int64 or Float64", topLevelFunc);
+            TypeCheckError(expr, *rightOperand, "Int64 or Float64", topLevelFunc);
         }
         if (resultType->GetTypeKind() != Type::TypeKind::TYPE_FLOAT64) {
-            TypeCheckError(*expr.GetRawExpr(), *result, "Float64", topLevelFunc);
+            TypeCheckError(expr, *result, "Float64", topLevelFunc);
         }
     }
 
     // 4. check overflow strategy
-    OverflowStrategyMustBeValid(expr.GetOverflowStrategy(), *expr.GetRawExpr(), topLevelFunc);
+    OverflowStrategyMustBeValid(expr.GetOverflowStrategy(), expr, topLevelFunc);
 }
 
-void CHIRChecker::CheckBitExpression(const BinaryExprBase& expr, const Function& topLevelFunc)
+void CHIRChecker::CheckBitExpression(const BinaryExpressionBase& expr, const Function& topLevelFunc)
 {
     auto leftOperand = expr.GetLHSOperand();
     auto rightOperand = expr.GetRHSOperand();
@@ -2916,19 +2957,19 @@ void CHIRChecker::CheckBitExpression(const BinaryExprBase& expr, const Function&
     auto rightOpType = rightOperand->GetType();
     // 1. operands' type must be Int
     if (!leftOpType->IsInteger()) {
-        TypeCheckError(*expr.GetRawExpr(), *leftOperand, "Int", topLevelFunc);
+        TypeCheckError(expr, *leftOperand, "Int", topLevelFunc);
     }
     if (!rightOpType->IsInteger()) {
-        TypeCheckError(*expr.GetRawExpr(), *rightOperand, "Int", topLevelFunc);
+        TypeCheckError(expr, *rightOperand, "Int", topLevelFunc);
     }
 
     // 2. check overflow strategy
-    if (expr.GetOpKind() == ExprKind::LSHIFT || expr.GetOpKind() == ExprKind::RSHIFT) {
-        OverflowStrategyMustBeValid(expr.GetOverflowStrategy(), *expr.GetRawExpr(), topLevelFunc);
+    if (expr.GetOpKind() == BinaryExprKind::LSHIFT || expr.GetOpKind() == BinaryExprKind::RSHIFT) {
+        OverflowStrategyMustBeValid(expr.GetOverflowStrategy(), expr, topLevelFunc);
     }
 }
 
-void CHIRChecker::CheckCompareExpression(const BinaryExprBase& expr, const Function& topLevelFunc)
+void CHIRChecker::CheckCompareExpression(const BinaryExpressionBase& expr, const Function& topLevelFunc)
 {
     auto leftOperand = expr.GetLHSOperand();
     auto rightOperand = expr.GetRHSOperand();
@@ -2943,11 +2984,11 @@ void CHIRChecker::CheckCompareExpression(const BinaryExprBase& expr, const Funct
 
     // 2. result type must be Bool
     if (!result->GetType()->IsBoolean()) {
-        TypeCheckError(*expr.GetRawExpr(), *result, "Bool", topLevelFunc);
+        TypeCheckError(expr, *result, "Bool", topLevelFunc);
     }
 }
 
-void CHIRChecker::CheckLogicExpression(const BinaryExprBase& expr, const Function& topLevelFunc)
+void CHIRChecker::CheckLogicExpression(const BinaryExpressionBase& expr, const Function& topLevelFunc)
 {
     auto leftOperand = expr.GetLHSOperand();
     auto rightOperand = expr.GetRHSOperand();
@@ -2955,15 +2996,15 @@ void CHIRChecker::CheckLogicExpression(const BinaryExprBase& expr, const Functio
     auto rightOpType = rightOperand->GetType();
     // 1. operands' type must be Bool
     if (!leftOpType->IsBoolean()) {
-        TypeCheckError(*expr.GetRawExpr(), *leftOperand, "Bool", topLevelFunc);
+        TypeCheckError(expr, *leftOperand, "Bool", topLevelFunc);
     }
     if (!rightOpType->IsBoolean()) {
-        TypeCheckError(*expr.GetRawExpr(), *rightOperand, "Bool", topLevelFunc);
+        TypeCheckError(expr, *rightOperand, "Bool", topLevelFunc);
     }
     // 2. result type must be Bool
     auto result = expr.GetResult();
     if (!result->GetType()->IsBoolean()) {
-        TypeCheckError(*expr.GetRawExpr(), *result, "Bool", topLevelFunc);
+        TypeCheckError(expr, *result, "Bool", topLevelFunc);
     }
 }
 
@@ -3142,33 +3183,34 @@ void CHIRChecker::CheckInout(const IntrinsicBase& expr, const Function& topLevel
     }
 
     // 7. result must be Function's or Intrinsic/pointerInit1's arg
-    std::function<void(const LocalVar&)> checkUsers = [this, &checkUsers, &expr, &topLevelFunc](const LocalVar& localVar) {
-        for (auto user : localVar.GetUsers()) {
-            auto errMsgBase = "the result is used in a wrong expression `" + user->ToString(0) + "`, ";
-            if (Is<ApplyWithException>(user) || Is<Apply>(user)) {
-                continue;
-            } else if (Is<InvokeWithException>(user) || Is<Invoke>(user)) {
-                auto funcName = InvokeBase(user).GetMethodName();
-                if (funcName != INST_VIRTUAL_FUNC && funcName != GENERIC_VIRTUAL_FUNC) {
-                    ErrorInExpr(topLevelFunc, *expr.GetRawExpr(),
-                        errMsgBase + "the result can't be used as virtual method's argument.");
+    std::function<void(const LocalVar&)> checkUsers =
+        [this, &checkUsers, &expr, &topLevelFunc](const LocalVar& localVar) {
+            for (auto user : localVar.GetUsers()) {
+                auto errMsgBase = "the result is used in a wrong expression `" + user->ToString(0) + "`, ";
+                if (Is<ApplyWithException>(user) || Is<Apply>(user)) {
+                    continue;
+                } else if (Is<InvokeWithException>(user) || Is<Invoke>(user)) {
+                    auto funcName = InvokeBase(user).GetMethodName();
+                    if (funcName != INST_VIRTUAL_FUNC && funcName != GENERIC_VIRTUAL_FUNC) {
+                        ErrorInExpr(topLevelFunc, *expr.GetRawExpr(),
+                            errMsgBase + "the result can't be used as virtual method's argument.");
+                    }
+                    continue;
+                } else if (Is<IntrinsicWithException>(user) || Is<Intrinsic>(user)) {
+                    auto userBase = IntrinsicBase(user);
+                    if (userBase.GetIntrinsicKind() != IntrinsicKind::CPOINTER_INIT1) {
+                        ErrorInExpr(topLevelFunc, *expr.GetRawExpr(),
+                            errMsgBase + "the result must be used as pointerInit1's argument.");
+                    }
+                    continue;
+                } else if (Is<ClassStaticCast>(user)) {
+                    checkUsers(*user->GetResult());
+                    continue;
                 }
-                continue;
-            } else if (Is<IntrinsicWithException>(user) || Is<Intrinsic>(user)) {
-                auto userBase = IntrinsicBase(user);
-                if (userBase.GetIntrinsicKind() != IntrinsicKind::CPOINTER_INIT1) {
-                    ErrorInExpr(topLevelFunc, *expr.GetRawExpr(),
-                        errMsgBase + "the result must be used as pointerInit1's argument.");
-                }
-                continue;
-            } else if (Is<ClassStaticCast>(user)) {
-                checkUsers(*user->GetResult());
-                continue;
+                ErrorInExpr(topLevelFunc, *expr.GetRawExpr(),
+                    errMsgBase + "the result must be used as Function's or Intrinsic/pointerInit1's argument.");
             }
-            ErrorInExpr(topLevelFunc, *expr.GetRawExpr(),
-                errMsgBase + "the result must be used as Function's or Intrinsic/pointerInit1's argument.");
-        }
-    };
+        };
     checkUsers(*expr.GetResult());
 }
 void CHIRChecker::CheckIntrinsicBase(const IntrinsicBase& expr, const Function& topLevelFunc)
@@ -3299,7 +3341,7 @@ void CHIRChecker::CheckUnaryExpression(const UnaryExpression& expr, const Functi
     if (!OperandNumIsEqual(1, expr, topLevelFunc)) {
         return;
     }
-    CheckUnaryExprBase(UnaryExprBase(&expr), topLevelFunc);
+    CheckUnaryExprBase(expr, topLevelFunc);
 }
 
 void CHIRChecker::CheckBinaryExpression(const BinaryExpression& expr, const Function& topLevelFunc)
@@ -3308,7 +3350,7 @@ void CHIRChecker::CheckBinaryExpression(const BinaryExpression& expr, const Func
     if (!OperandNumIsEqual(2, expr, topLevelFunc)) {
         return;
     }
-    CheckBinaryExprBase(BinaryExprBase(&expr), topLevelFunc);
+    CheckBinaryExprBase(expr, topLevelFunc);
 }
 
 void CHIRChecker::CheckControlFlowExpression(const Expression& expr, const Function& topLevelFunc)

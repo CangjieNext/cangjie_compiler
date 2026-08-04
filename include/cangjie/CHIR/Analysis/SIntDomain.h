@@ -223,13 +223,13 @@ struct CHIRArithmeticBinopArgs {
     /// Resolved lhs & rhs symbols (i.e. resolved by calling ValueRangeCache::Projection)
     PtrSymbol l, r;
     /// binary operation op kind.
-    ExprKind op;
+    BinaryExprKind op;
     /// overflow strategy.
     Cangjie::OverflowStrategy ov;
     /// flag if arithmetic is unsigned operation.
     bool uns;
 
-    CHIRArithmeticBinopArgs(const SIntDomain& ld, const SIntDomain& rd, PtrSymbol l, PtrSymbol r, ExprKind op,
+    CHIRArithmeticBinopArgs(const SIntDomain& ld, const SIntDomain& rd, PtrSymbol l, PtrSymbol r, BinaryExprKind op,
         Cangjie::OverflowStrategy ov, bool isUnsigned)
         : ld{ld},
           rd{rd},
@@ -256,12 +256,12 @@ struct CHIRRelIntBinopArgs {
     /// Resolved lhs & rhs symbols (i.e. resolved by calling ValueRangeCache::Projection)
     PtrSymbol l, r;
     /// binary operation op kind.
-    ExprKind op;
+    BinaryExprKind op;
     /// flag if arithmetic is unsigned operation.
     bool uns;
 
-    CHIRRelIntBinopArgs(
-        const Mem<SIntDomain>& ld, const Mem<SIntDomain>& rd, PtrSymbol l, PtrSymbol r, ExprKind op, bool isUnsigned)
+    CHIRRelIntBinopArgs(const Mem<SIntDomain>& ld, const Mem<SIntDomain>& rd, PtrSymbol l, PtrSymbol r,
+        BinaryExprKind op, bool isUnsigned)
         : ld{ld}, rd{rd}, l{std::move(l)}, r{std::move(r)}, op{op}, uns{isUnsigned}
     {
     }
@@ -269,7 +269,7 @@ struct CHIRRelIntBinopArgs {
 /// compute relation binary op with two SIntDomain inputs, BoolDomain output
 BoolDomain ComputeRelIntBinop(CHIRRelIntBinopArgs&& args);
 /// compute equality binary op with two BoolDomain inputs, BoolDomain output
-BoolDomain ComputeEqualityBoolBinop(const BoolDomain& ld, const BoolDomain& rd, ExprKind op);
+BoolDomain ComputeEqualityBoolBinop(const BoolDomain& ld, const BoolDomain& rd, BinaryExprKind op);
 
 /// constant range converter from unsigned to signed or signed to unsigned.
 ConstantRange NumericConversion(

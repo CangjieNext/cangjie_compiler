@@ -258,7 +258,8 @@ llvm::Value* GenerateCondCheckUpperBound(
         auto targetTyKind = irBuilder.GetTypeKindFromType(targetTy);
         auto srcTyKind = irBuilder.GetTypeKindFromType(srcTy);
         if (IsUInt2Int(srcTy, targetTy)) {
-            auto maxType = NeedsUIntToIntConversion(irBuilder, srcTy, targetTyKind) ? targetType.GetLLVMType() : srcValue.getType();
+            auto maxType = NeedsUIntToIntConversion(
+                irBuilder, srcTy, targetTyKind) ? targetType.GetLLVMType() : srcValue.getType();
             auto maxVal = llvm::ConstantInt::getSigned(maxType, GetIntMaxOrMin(irBuilder, targetTy, true));
             auto tempSrcValue = NeedsUIntToIntConversion(irBuilder, srcTy, targetTyKind)
                 ? irBuilder.CreateZExtOrTrunc(&srcValue, targetType.GetLLVMType())
@@ -591,11 +592,6 @@ llvm::Value* GenerateTypeCast(IRBuilder2& irBuilder, const CHIR::TypeCast& typeC
     auto srcTy = typeCast.GetSourceType();
     CJC_ASSERT(srcTy && targetTy);
 
-    OverflowStrategy overflowStrategy = OverflowStrategy::NA;
-    if (auto numericCast = DynamicCast<const CHIR::NumericCastBase*>(&typeCast)) {
-        overflowStrategy = numericCast->GetOverflowStrategy();
-    }
-
     auto& cgMod = irBuilder.GetCGModule();
     auto cgSrcValue = cgMod | typeCast.GetSourceValue();
     auto srcValue = **cgSrcValue;
@@ -630,6 +626,10 @@ llvm::Value* GenerateTypeCast(IRBuilder2& irBuilder, const CHIR::TypeCast& typeC
     }
 #endif
 
+    OverflowStrategy overflowStrategy = OverflowStrategy::NA;
+    if (auto numericCast = DynamicCast<const CHIR::NumericCastBase*>(&typeCast)) {
+        overflowStrategy = numericCast->GetOverflowStrategy();
+    }
     if (targetTy->IsFloat() && srcTy->IsFloat()) {
         return GenerateFloatConvExpr(irBuilder, srcValue, targetType->GetLLVMType(),
             *StaticCast<CHIR::NumericType*>(srcTy), *StaticCast<CHIR::NumericType*>(targetTy));
