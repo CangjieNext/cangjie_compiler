@@ -96,7 +96,7 @@ Value* Translator::TranslateVArrayAssign(const AssignExpr& assign)
         bool mayHaveException = OverloadableExprMayThrowException(assign, *lhs->GetType());
         auto binaryOpResult = TryCreateWithOV<BinaryExpression>(
             currentBlock, mayHaveException, assign.overflowStrategy,
-            loc, lhs->GetType(), op2ExprKind.at(COMPOUND_ASSIGN_EXPR_MAP.at(assign.op)), lhs, rhsValue)->GetResult();
+            loc, lhs->GetType(), tokenKindToBinaryExprKind.at(COMPOUND_ASSIGN_EXPR_MAP.at(assign.op)), lhs, rhsValue)->GetResult();
         CreateAndAppendVArraySet(*lhsBase, *binaryOpResult, *index, *lhsType, loc);
     }
     return nullptr;
@@ -190,7 +190,7 @@ Value* Translator::TranslateCompoundAssign(const AssignExpr& assign)
         // Translate the RHS part "Y"
         Value* rhs = TranslateExprArg(*assign.rightExpr);
         auto binOp = TryCreateWithOV<BinaryExpression>(currentBlock, mayHaveException, assign.overflowStrategy, loc,
-            lhsRightValue->GetType(), op2ExprKind.at(COMPOUND_ASSIGN_EXPR_MAP.at(assign.op)), lhsRightValue, rhs);
+            lhsRightValue->GetType(), tokenKindToBinaryExprKind.at(COMPOUND_ASSIGN_EXPR_MAP.at(assign.op)), lhsRightValue, rhs);
         compoundValue = binOp->GetResult();
     }
 

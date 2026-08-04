@@ -102,39 +102,6 @@ private:
     const InvokeStaticWithException* exprE;
 };
 
-class UnaryExprBase : public ExpressionBase {
-public:
-    explicit UnaryExprBase(const Expression* e);
-    explicit UnaryExprBase(const UnaryExpression* expr);
-    explicit UnaryExprBase(const IntOpWithException* exprE);
-
-    ExprKind GetOpKind() const;
-    std::string GetExprKindName() const;
-    Value* GetOperand() const;
-    OverflowStrategy GetOverflowStrategy() const;
-
-private:
-    const UnaryExpression* expr;
-    const IntOpWithException* exprE;
-};
-
-class BinaryExprBase : public ExpressionBase {
-public:
-    explicit BinaryExprBase(const Expression* e);
-    explicit BinaryExprBase(const BinaryExpression* expr);
-    explicit BinaryExprBase(const IntOpWithException* exprE);
-
-    ExprKind GetOpKind() const;
-    std::string GetExprKindName() const;
-    Value* GetLHSOperand() const;
-    Value* GetRHSOperand() const;
-    OverflowStrategy GetOverflowStrategy() const;
-    
-private:
-    const BinaryExpression* expr;
-    const IntOpWithException* exprE;
-};
-
 class IntrinsicBase : public ExpressionBase {
 public:
     explicit IntrinsicBase(const Expression* e);

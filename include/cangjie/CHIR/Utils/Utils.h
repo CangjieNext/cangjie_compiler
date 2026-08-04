@@ -24,6 +24,7 @@
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/CHIRContext.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
+#include "cangjie/CHIR/IR/Expression/Expression.h"
 #include "cangjie/CHIR/IR/Type/CHIRType.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 #include "cangjie/Utils/CastingTemplate.h"
@@ -806,6 +807,16 @@ uint64_t GetRefDims(const Type& type);
  * @return True if func is from standard library.
  */
 bool IsSTDFunction(const Function& func);
+
+/**
+ * @brief Operator literal for diagnostic / printing, e.g. "-" / "!" / "~".
+ */
+std::string GetUnaryExprKindLiteral(UnaryExprKind kind);
+
+/**
+ * @brief Operator literal for diagnostic / printing, e.g. "+" / "<<" / "&&".
+ */
+std::string GetBinaryExprKindLiteral(BinaryExprKind kind);
 
 /**
  * @brief Retrieves the non-debug users of a value.
