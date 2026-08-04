@@ -13,16 +13,9 @@
 #ifndef CANGJIE_SEMA_NATIVE_FFI_OBJC_INTEROP_TRANSPILER
 #define CANGJIE_SEMA_NATIVE_FFI_OBJC_INTEROP_TRANSPILER
 
-#include <fstream>
-#include <string_view>
-#include <unordered_set>
-
 #include "NativeFFI/ObjC/AfterTypeCheck/Interop/Context.h"
-#include "NativeFFI/ObjC/Utils/Handler.h"
-#include "cangjie/AST/Match.h"
 #include "cangjie/AST/Types.h"
 #include "ObjCParamMapper.h"
-#include "Utils.h"
 
 namespace Cangjie::Interop::ObjC {
 
@@ -31,10 +24,7 @@ using ArgsList = std::vector<std::pair<std::string, std::string>>;
 class Transpiler {
 public:
     Transpiler(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
-        const std::string& cjLibOutputPath, InteropType interopType);
-    Transpiler(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
-        const std::string& cjLibOutputPath, InteropType interopType, Native::FFI::GenericConfigInfo* genericConfig,
-        bool isGenericGlueCode);
+        const std::string& cjLibOutputPath);
     void Generate();
 
 private:
@@ -68,14 +58,8 @@ private:
     size_t currentBlockIndent = 0;
     Ptr<AST::Decl> decl;
     InteropContext& ctx;
-    InteropType interopType;
-    
-    std::stringstream buffer;
-    Native::FFI::GenericConfigInfo* genericConfig = nullptr;
-    bool isGenericGlueCode{false};
 
-    bool SkipSetterForValueTypeDecl(AST::Decl& declArg) const;
-    bool IsNotThisActualTyFunc(const OwnedPtr<AST::Decl>& declPtr) const;
+    std::stringstream buffer;
 
     std::string FormatCJLibName();
     void WriteToFile();
@@ -90,7 +74,7 @@ private:
     void WriteFor(const std::string& header, const std::function<void()> loop);
     void WriteBlock(
         std::function<void()> action, const std::string& pre = "", const std::string& suf = "", bool flush = false);
-    
+
     void ProcessPreamble(
         struct EmittableObjCClassMetainfo metainfo,
         bool hasImplicitImplParent

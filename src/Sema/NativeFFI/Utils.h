@@ -27,34 +27,6 @@ constexpr std::string_view INIT_IDENT = "init";
 
 using namespace AST;
 
-/*
-Generic Config Example:
-generic_object_configuration = [
-    { name = "GenericClass", type_arguments = ["Int32"]},
-    { name = "GenericClass<Int32>", symbols = [
-        "getValue",
-        "GenericClass",
-        "value",
-        "setValue"
-    ]}
-]
-*/
-struct GenericConfigInfo {
-    // Reference type symbol name
-    std::string declSymbolName;
-    // Definition name with generics, such as: GenericClassint32
-    std::string declInstName;
-    // item: <"T", "int32">
-    std::vector<std::pair<std::string, std::string>> instTypes;
-    // Config func symbol name
-    std::unordered_set<std::string> funcNames;
-    GenericConfigInfo(std::string name, std::string declInstName,
-        std::vector<std::pair<std::string, std::string>>& insts, std::unordered_set<std::string>& funcs)
-        : declSymbolName(name), declInstName(declInstName), instTypes(insts), funcNames(funcs)
-    {
-    }
-};
-
 enum class ArrayOperationKind : uint8_t { CREATE, GET, SET, GET_LENGTH };
 
 OwnedPtr<RefExpr> CreateThisRef(Ptr<Decl> target, Ptr<Ty> ty, Ptr<File> curFile);
@@ -169,7 +141,7 @@ std::string GetCangjieLibName(
     const std::string& outputLibPath, const std::string& fullPackageName, bool trimmed = true);
 
 std::string GetMangledMethodName(const BaseMangler& mangler, const std::vector<OwnedPtr<FuncParam>>& params,
-    const std::string& methodName, TypeManager& typeManager, GenericConfigInfo* genericConfig = nullptr);
+    const std::string& methodName);
 
 Ptr<Annotation> GetForeignNameAnnotation(const Decl& decl);
 Ptr<Annotation> GetAnnotation(const Decl& decl, AnnotationKind annotationKind);
@@ -185,45 +157,15 @@ bool IsThisConstructorCall(const CallExpr& call);
 
 OwnedPtr<PrimitiveType> GetPrimitiveType(std::string typeName, AST::TypeKind typekind);
 OwnedPtr<Type> GetTypeByName(std::string typeStr);
-OwnedPtr<Type> GetGenericInstType(const GenericConfigInfo* config, std::string genericName);
-OwnedPtr<Type> GetGenericInstType(const GenericConfigInfo* config, const Ptr<Ty>& genericTy, TypeManager& typeManager);
-std::string GetGenericActualType(const GenericConfigInfo* config, std::string genericName);
 TypeKind GetActualTypeKind(std::string configType);
-Ptr<Ty> GetGenericInstTy(const GenericConfigInfo* config, std::string genericName);
-Ptr<Ty> GetGenericInstTy(const GenericConfigInfo* config, const Ptr<Ty>& genericTy, TypeManager& typeManager);
 Ptr<Ty> GetTyByName(std::string typeStr);
-
-bool IsGenericParam(const Ptr<Ty> ty, const AST::Decl& decl, Native::FFI::GenericConfigInfo* genericConfig);
-
-bool IsVisibalFunc(const FuncDecl& funcDecl, const AST::Decl& decl, Native::FFI::GenericConfigInfo* genericConfig);
-
-bool IsCJMappingGeneric(const Decl& decl);
 
 void SplitAndTrim(std::string str, std::vector<std::string>& types);
 
 std::string JoinVector(const std::vector<std::string>& vec, const std::string& delimiter = "");
 
-void InitGenericConfigs(
-    const File& file, const AST::Decl* decl, std::vector<GenericConfigInfo*>& genericConfigs, bool& isGenericGlueCode);
-
-/**
- * If function param or return param is generic ty, replace it to instance ty by genericConfig.
- */
-void ReplaceGenericTyForFunc(Ptr<FuncDecl> funcDecl, GenericConfigInfo* genericConfig, TypeManager& typeManager);
-
-void ReplaceGenericTyForFuncTy(Ptr<Ty> ty, GenericConfigInfo* genericConfig, TypeManager& typeManager);
-
-void GetArgsAndRetGenericActualTyVector(const GenericConfigInfo* config, FuncDecl& ctor,
-    std::unordered_map<std::string, Ptr<Ty>>& actualTyArgMap, std::vector<Ptr<Ty>>& funcTyParams,
-    std::vector<OwnedPtr<Type>>& actualPrimitiveType, TypeManager& typeManager);
-
 Ptr<Ty> GetInstantyForGenericTy(
     Decl& decl, const std::unordered_map<std::string, Ptr<Ty>>& actualTyArgMap, TypeManager& typeManager);
-
-std::string GetLambdaJavaClassName(LambdaPattern& pattern);
-std::string GetLambdaJavaClassName(Ptr<Ty> ty);
-
-std::string GetCjMappingTupleName(const Ty& tupleTy);
 
 ClassDecl& GetExceptionDecl(const ImportManager& importManager);
 OwnedPtr<ThrowExpr> CreateThrowExceptionCall(const ImportManager& importManager,

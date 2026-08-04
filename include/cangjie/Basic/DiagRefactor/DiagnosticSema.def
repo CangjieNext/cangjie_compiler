@@ -225,12 +225,6 @@ ERROR(sema_shadow_cannot_in_type_args,
     "'%s' is not allowd to be used here as type argument, because it shadows field '%s' with its super type '%s'")
 ERROR(sema_unsupported_type_argument_in_java_interop,
     "type argument in java interoperation should meet 'JType' constraint")
-ERROR(sema_cjmapping_struct_generic_not_supported, "cangjie mirror struct type generic %s is not supported")
-ERROR(sema_cjmapping_struct_inheritance_interface_not_supported, "cangjie mirror struct type inheritance interface is not supported")
-ERROR(sema_cjmapping_decl_not_supported, "cangjie mirror decl type is not supported for %s")
-ERROR(sema_cjmapping_method_arg_not_supported, "argument type of cangjie mirror decl type member function is not supported")
-ERROR(sema_cjmapping_method_ret_unsupported, "return type '%s' of function inside %s type is not supported")
-ERROR(sema_cj_mapping_generic_method_not_get_instance_config, "Instance configuration '%s' has incorrect format.")
 
 // VArray
 ERROR(sema_varray_size_match, "mismatch 'VArray' type's size", "expected size is %s, found %s")
@@ -378,10 +372,6 @@ ERROR(sema_objc_func_argument_must_be_objc_compatible, "%s can only be used with
 ERROR(sema_objc_func_call_property_can_only_be_called, "%s property 'call' can only be called directly, no other operations are permitted")
 ERROR(sema_objc_impl_must_have_objc_mirror_super_class, "@ObjCImpl class must have @ObjCMirror super class")
 ERROR(sema_objc_setter_name_on_immutable_prop, "@ForeignSetterName cannot be specified on immutable property")
-
-// CJMapping for Objective-C
-ERROR(sema_objc_cjmapping_inheritance_interface_not_supported, "cangjie mirror decl type inheritance interface is not supported")
-ERROR(sema_objc_cjmapping_generic_not_supported, "cangjie mirror decl type generic %s is not supported")
 
 ERROR(sema_foreign_name_appeared_in_child, "@%s could not appear on overridden declaration")
 ERROR(sema_foreign_name_conflicting_annotation, "Declaration '%s' has a conflicting @%s annotation")

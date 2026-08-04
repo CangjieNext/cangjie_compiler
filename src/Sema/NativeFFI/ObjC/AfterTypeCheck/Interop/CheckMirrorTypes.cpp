@@ -22,7 +22,7 @@ void CheckMirrorTypes::HandleImpl(InteropContext& ctx)
                        .Use<CheckMirrorInheritMirror>()
                        .Use<CheckInitMethod>()
                        .Use<CheckForeignName>()
-                       .Use<CheckMemberTypes>(InteropType::ObjC_Mirror);
+                       .Use<CheckMemberTypes>();
 
     for (auto mirror : ctx.mirrors) {
         auto typeCheckCtx = TypeCheckContext(*mirror, ctx.diag, ctx.typeMapper, ctx.typeManager);

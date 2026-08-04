@@ -62,29 +62,20 @@ public:
             AST::FuncParam& objOrClass,
             std::vector<Ptr<AST::FuncParam>> userParams)> builder) const;
 
-    std::string GetJniMethodName(const AST::FuncDecl& method, const std::string* genericActualName = nullptr) const;
+    std::string GetJniMethodName(const AST::FuncDecl& method) const;
 
-    std::string GetJniTupleItemName(const Ptr<AST::TupleTy>& tupleTy, AST::Package& pkg, size_t index) const;
+    std::string GetJniMethodNameForProp(const AST::PropDecl& propDecl, bool isSet) const;
 
-    std::string GetJniMethodNameForProp(const AST::PropDecl& propDecl, bool isSet,
-        const std::string* genericActualName = nullptr) const;
-
-    std::string GetJniInitCjObjectFuncName(const AST::FuncDecl& ctor, bool isGeneratedCtor,
-        const std::string* genericActualName = nullptr) const;
-    std::string GetJniInitCjObjectFuncName(const Ptr<AST::TupleTy>& tupleTy, AST::Package& pkg) const;
+    std::string GetJniInitCjObjectFuncName(const AST::FuncDecl& ctor, bool isGeneratedCtor) const;
 
     std::string GetJniInitCjObjectFuncNameForVarDecl(const AST::VarDecl& ctor) const;
 
     std::string GetJniDeleteCjObjectFuncName(const AST::Decl& decl) const;
 
-    std::string GetJniDetachCjObjectFuncName(const AST::Decl& decl) const;
-
-    std::string GetLambdaCallImplJniMethodName(const AST::Decl& decl) const;
-
     std::string GetJavaNativeFunctionName(const std::string& fqTypeName, const std::string& memberName) const;
 
     /**
-     * For CType ty, ty is returned. For mirrors, impls and CJMapping JNI jobject is returned
+     * For CType ty, ty is returned. For mirrors and impls JNI jobject is returned
      */
     AST::Ty& ConvertCangjieToJniTy(AST::Ty& javaCompatibleTy) const;
 private:

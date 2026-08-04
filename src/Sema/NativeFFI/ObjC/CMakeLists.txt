@@ -4,7 +4,7 @@
 #
 # See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-file(GLOB SEMA_NATIVE_FFI_OBJ_C_SRC *.cpp)
+file(GLOB SEMA_NATIVE_FFI_OBJ_C_SRC CONFIGURE_DEPENDS *.cpp)
 add_subdirectory(AfterTypeCheck)
 add_subdirectory(BeforeTypeCheck)
 add_subdirectory(ObjCCodeTranspiler)

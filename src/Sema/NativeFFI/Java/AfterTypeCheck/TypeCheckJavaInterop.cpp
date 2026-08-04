@@ -58,14 +58,10 @@ bool IsJavaMirrorSubtype(const Ty& ty)
 
 struct JavaInteropTypeChecker {
     bool isImpl;
-    bool isCJMappingTypeCheck = false;
     DiagnosticEngine& diag;
 
     auto GetJavaClassKind() const
     {
-        if (isCJMappingTypeCheck) {
-            return "cangjie mirror decl";
-        }
         if (isImpl) {
             return "@JavaImpl";
         } else {
@@ -86,11 +82,6 @@ struct JavaInteropTypeChecker {
                 typeArgs.begin(), typeArgs.end(), [this, pos](const auto& argTy) { return IsSupported(*argTy, pos); });
         };
 
-        // Use IsCJMapping to check a ty is supported or not.
-        if (isCJMappingTypeCheck && (IsCJMapping(ty) || ty.IsTuple())) {
-            return true;
-        }
-
         switch (ty.kind) {
             case TypeKind::TYPE_UNIT:
             case TypeKind::TYPE_BOOLEAN:
@@ -101,8 +92,6 @@ struct JavaInteropTypeChecker {
             case TypeKind::TYPE_INT64:
             case TypeKind::TYPE_FLOAT32:
             case TypeKind::TYPE_FLOAT64:
-            case TypeKind::TYPE_GENERICS:
-            case TypeKind::TYPE_FUNC:
                 return true;
             case TypeKind::TYPE_ENUM:
                 if (!ty.IsCoreOptionType() || ty.typeArgs[0]->IsCoreOptionType()) {
@@ -226,48 +215,6 @@ struct JavaInteropTypeChecker {
             }
         }
     }
-
-    void CheckCJMappingMethodTypes(FuncDecl& fd)
-    {
-        if (fd.funcBody && fd.funcBody->retType &&
-            (fd.funcBody->retType->GetTy()->IsCoreOptionType() ||
-                !IsJavaCompatible(*fd.funcBody->retType->GetTy(), Position::OUT))) {
-            Ptr<Node> node;
-            if (!fd.funcBody->retType->begin.IsZero()) {
-                node = fd.funcBody->retType;
-            } else {
-                node = &fd;
-            }
-            if (!fd.funcBody->retType->GetTy()->IsGeneric()) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmapping_method_ret_unsupported, *node,
-                    Ty::ToString(fd.funcBody->retType->GetTy()), GetJavaClassKind());
-                fd.EnableAttr(Attribute::IS_BROKEN);
-            }
-        }
-
-        CheckCJMappingCompatibleParamTypes(fd);
-    }
-
-    void CheckCJMappingCompatibleParamTypes(FuncDecl& fdecl)
-    {
-        if (!fdecl.funcBody) {
-            return;
-        }
-        for (auto& paramList : fdecl.funcBody->paramLists) {
-            for (auto& param : paramList->params) {
-                bool isOptionArg = (*param->GetTy()).IsCoreOptionType();
-                if ((*param->GetTy()).IsInterface()) {
-                    continue;
-                }
-                if (isOptionArg || !IsJavaCompatible(*param->GetTy())) {
-                    diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmapping_method_arg_not_supported, *param);
-                    fdecl.EnableAttr(Attribute::IS_BROKEN);
-                    fdecl.outerDecl->EnableAttr(Attribute::HAS_BROKEN);
-                    fdecl.outerDecl->EnableAttr(Attribute::IS_BROKEN);
-                }
-            }
-        }
-    }
 };
 } // namespace
 
@@ -380,7 +327,6 @@ void JavaInteropManager::CheckTypes(File& file)
             CheckExtendDecl(*extendDecl);
         }
 
-        CheckCJMappingType(*decl);
         CheckGenericsInstantiation(*decl);
     }
 }
@@ -400,48 +346,6 @@ void JavaInteropManager::CheckTypes(ClassLikeDecl& classLikeDecl)
         CJC_ASSERT(classLikeDecl.astKind != ASTKind::INTERFACE_DECL);
         CJC_ASSERT(!classLikeDecl.TestAttr(Attribute::ABSTRACT));
         CheckJavaImplTypes(classLikeDecl);
-    }
-}
-
-void JavaInteropManager::CheckCJMappingDeclSupportRange(Decl& decl)
-{
-    switch (decl.astKind) {
-        case ASTKind::STRUCT_DECL:
-        case ASTKind::ENUM_DECL:
-        case ASTKind::CLASS_DECL:
-        case ASTKind::INTERFACE_DECL:
-        case ASTKind::EXTEND_DECL:
-            break;
-        default:
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmapping_decl_not_supported, MakeRange(decl.identifier),
-                std::string{decl.identifier});
-            decl.EnableAttr(Attribute::IS_BROKEN);
-    }
-}
-
-void JavaInteropManager::CheckCJMappingType(Decl& decl)
-{
-    if (!IsCJMapping(decl)) {
-        return;
-    }
-
-    CheckCJMappingDeclSupportRange(decl);
-    JavaInteropTypeChecker checker{
-        .isImpl = false,
-        .isCJMappingTypeCheck = true,
-        .diag = diag,
-    };
-    for (auto& member : decl.GetMemberDecls()) {
-        switch (member->astKind) {
-            case ASTKind::FUNC_DECL:
-                if (!member->TestAttr(Attribute::PUBLIC)) {
-                    continue;
-                }
-                checker.CheckCJMappingMethodTypes(*StaticAs<ASTKind::FUNC_DECL>(member.get()));
-                break;
-            default:
-                continue;
-        }
     }
 }
 

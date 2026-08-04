@@ -59,8 +59,8 @@ void GenerateSyntheticClassFuncStub(ClassDecl& synthetic, FuncDecl& fd)
 }
 } // namespace
 
-Utils::Utils(ImportManager& importManager, TypeManager& typeManager, Package& pkg)
-    : importManager(importManager), typeManager(typeManager), pkg(pkg)
+Utils::Utils(ImportManager& importManager, TypeManager& typeManager)
+    : importManager(importManager), typeManager(typeManager)
 {
 }
 
@@ -156,8 +156,8 @@ Ptr<VarDecl> GetJavaRefField(ClassDecl& mirrorLike)
         return GetJavaRefField(*superClass);
     }
 
-    CJC_ASSERT(mirrorLike.IsJavaMirror() || mirrorLike.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD));
-    CJC_ASSERT(IsJObject(mirrorLike) || IsFwdClass(mirrorLike));
+    CJC_ASSERT(mirrorLike.IsJavaMirror());
+    CJC_ASSERT(IsJObject(mirrorLike));
     CJC_ASSERT(mirrorLike.body);
 
     for (auto& member : mirrorLike.body->decls) {
@@ -225,7 +225,7 @@ OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr, VarDecl& javaref)
     // expr ty decl and javaref outerDecl must be the same
 
     CJC_ASSERT(expr->GetTy()->IsClassLike());
-    CJC_ASSERT(IsMirror(*expr->GetTy()) || IsImpl(*expr->GetTy()) || IsFwdClass(*Ty::GetDeclOfTy(expr->GetTy())));
+    CJC_ASSERT(IsMirror(*expr->GetTy()) || IsImpl(*expr->GetTy()));
 
     auto curFile = expr->curFile;
     CJC_NULLPTR_CHECK(curFile);
@@ -235,7 +235,7 @@ OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr, VarDecl& javaref)
 
 OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr, ClassLikeDecl& mirrorLike)
 {
-    CJC_ASSERT(mirrorLike.IsJavaMirror() || mirrorLike.IsJavaImpl() || IsFwdClass(mirrorLike));
+    CJC_ASSERT(mirrorLike.IsJavaMirror() || mirrorLike.IsJavaImpl());
     if (auto mirrorLikeClass = As<ASTKind::CLASS_DECL>(&mirrorLike)) {
         return CreateJavaRefCall(std::move(expr), *GetJavaRefField(*mirrorLikeClass));
     }
@@ -445,7 +445,7 @@ std::string GetJavaFQNameFromExtendDecl(const ExtendDecl& extendDecl)
     return GetJavaFQName(*rt->ref.target);
 }
 
-std::string GetJavaFQName(const Decl& decl, const std::string* genericActualName)
+std::string GetJavaFQName(const Decl& decl)
 {
     if (auto extendDecl = DynamicCast<const ExtendDecl*>(&decl)) {
         return GetJavaFQNameFromExtendDecl(*extendDecl);
@@ -456,11 +456,7 @@ std::string GetJavaFQName(const Decl& decl, const std::string* genericActualName
             return GetFQNameJoinBy(*attr, "$");
         }
     }
-    if (genericActualName && !genericActualName->empty()) {
-        return decl.GetFullPackageName() + "." + *genericActualName;
-    } else {
-        return decl.GetFullPackageName() + "." + decl.identifier;
-    }
+    return decl.GetFullPackageName() + "." + decl.identifier;
 }
 
 std::string GetJavaFQSourceCodeName(const ClassLikeDecl& decl)
@@ -614,7 +610,7 @@ std::string Utils::GetJavaClassNormalizeSignature(const Ty& cjtype) const
 /*
  * Should be called only on java compatible type or a function type over java compatible types
  */
-std::string Utils::GetJavaTypeSignature(const Ty& cjtype, std::string fullPackageName)
+std::string Utils::GetJavaTypeSignature(const Ty& cjtype)
 {
     std::string jsig;
 
@@ -685,14 +681,10 @@ std::string Utils::GetJavaTypeSignature(const Ty& cjtype, std::string fullPackag
             auto& funcTy = *StaticCast<FuncTy>(&cjtype);
             jsig = "(";
             for (auto paramTy : funcTy.paramTys) {
-                jsig.append(GetParamJavaSignature(paramTy, fullPackageName));
+                jsig.append(GetJavaTypeSignature(*paramTy));
             }
             jsig.append(")");
-            jsig.append(GetParamJavaSignature(funcTy.retTy, fullPackageName));
-            break;
-        }
-        case TypeKind::TYPE_TUPLE: {
-            jsig = "L" + NormalizeJavaSignature(pkg.fullPackageName + "." + GetCjMappingTupleName(cjtype)) + ";";
+            jsig.append(GetJavaTypeSignature(*funcTy.retTy));
             break;
         }
         default:
@@ -703,20 +695,9 @@ std::string Utils::GetJavaTypeSignature(const Ty& cjtype, std::string fullPackag
     return jsig;
 }
 
-std::string Utils::GetParamJavaSignature(const Ptr<Ty> ty, std::string fullPackageName)
+std::string Utils::GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& params)
 {
-    if (ty->kind == TypeKind::TYPE_FUNC) {
-        CJC_ASSERT(!fullPackageName.empty());
-        std::string javaClassName = GetLambdaJavaClassName(ty);
-        return "L" + NormalizeJavaSignature(fullPackageName + "." + javaClassName) + ";";
-    } else {
-        return GetJavaTypeSignature(*ty, fullPackageName);
-    }
-}
-
-std::string Utils::GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& params, std::string fullPackageName)
-{
-    return GetJavaTypeSignature(*typeManager.GetFunctionTy(params, &retTy), fullPackageName);
+    return GetJavaTypeSignature(*typeManager.GetFunctionTy(params, &retTy));
 }
 
 OwnedPtr<CallExpr> Utils::CreateZeroValue(Ptr<Ty> ty, File& curFile) const
@@ -803,41 +784,6 @@ bool IsImpl(const Ty& ty)
 {
     auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty);
     return classLikeTy && classLikeTy->commonDecl && IsImpl(*classLikeTy->commonDecl);
-}
-
-bool IsCJMappingInterface(const Ty& ty)
-{
-    auto interfaceTy = DynamicCast<InterfaceTy*>(&ty);
-    return interfaceTy && interfaceTy->decl && IsCJMapping(*interfaceTy->decl);
-}
-
-bool IsCJMapping(const Ty& ty)
-{
-    // currently only support struct type, enum type, class type.
-    if (auto structTy = DynamicCast<StructTy*>(&ty)) {
-        return structTy->decl && IsCJMapping(*structTy->decl);
-    }
-
-    if (auto enumTy = DynamicCast<EnumTy*>(&ty)) {
-        return enumTy->decl && IsCJMapping(*enumTy->decl);
-    }
-
-    if (auto classTy = DynamicCast<ClassTy*>(&ty)) {
-        return classTy && classTy->decl && IsCJMapping(*classTy->decl);
-    }
-
-    return false;
-}
-
-bool IsCJMappingTuple(const Ptr<Ty>& ty, std::unordered_set<Ptr<Ty>> tupleConfigs)
-{
-    if (ty->IsTuple()) {
-        if (tupleConfigs.count(ty)) {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 std::string ReplaceClassName(std::string& classTypeSignature, std::string newSegment)

@@ -51,12 +51,10 @@ public:
  */
 class InsertNativeHandleField : public Handler<InsertNativeHandleField, InteropContext> {
 public:
-    explicit InsertNativeHandleField(InteropType interopType) : interopType(interopType)
+    explicit InsertNativeHandleField()
     {
     }
     void HandleImpl(InteropContext& ctx);
-private:
-    InteropType interopType{InteropType::NA};
 };
 
 /**
@@ -67,12 +65,10 @@ private:
  */
 class InsertNativeHandleGetterDecl : public Handler<InsertNativeHandleGetterDecl, InteropContext> {
 public:
-    explicit InsertNativeHandleGetterDecl(InteropType interopType) : interopType(interopType)
+    explicit InsertNativeHandleGetterDecl()
     {
     }
     void HandleImpl(InteropContext& ctx);
-private:
-    InteropType interopType{InteropType::NA};
 };
 
 /**
@@ -87,12 +83,10 @@ private:
  */
 class InsertNativeHandleGetterBody : public Handler<InsertNativeHandleGetterBody, InteropContext> {
 public:
-    explicit InsertNativeHandleGetterBody(InteropType interopType) : interopType(interopType)
+    explicit InsertNativeHandleGetterBody()
     {
     }
     void HandleImpl(InteropContext& ctx);
-private:
-    InteropType interopType{InteropType::NA};
 };
 
 /**
@@ -116,12 +110,10 @@ public:
  */
 class InsertBaseCtorDecl : public Handler<InsertBaseCtorDecl, InteropContext> {
 public:
-    explicit InsertBaseCtorDecl(InteropType interopType) : interopType(interopType)
+    explicit InsertBaseCtorDecl()
     {
     }
     void HandleImpl(InteropContext& ctx);
-private:
-    InteropType interopType{InteropType::NA};
 };
 
 /**
@@ -141,12 +133,10 @@ private:
  */
 class InsertBaseCtorBody : public Handler<InsertBaseCtorBody, InteropContext> {
 public:
-    explicit InsertBaseCtorBody(InteropType interopType) : interopType(interopType)
+    explicit InsertBaseCtorBody()
     {
     }
     void HandleImpl(InteropContext& ctx);
-private:
-    InteropType interopType{InteropType::NA};
 };
 
 /**
@@ -160,12 +150,10 @@ private:
  */
 class InsertFinalizer : public Handler<InsertFinalizer, InteropContext> {
 public:
-    explicit InsertFinalizer(InteropType interopType) : interopType(interopType)
+    explicit InsertFinalizer()
     {
     }
     void HandleImpl(InteropContext& ctx);
-private:
-    InteropType interopType{InteropType::NA};
 };
 
 /**
@@ -174,13 +162,10 @@ private:
  */
 class GenerateDeleteCJObjectMethod : public Handler<GenerateDeleteCJObjectMethod, InteropContext> {
 public:
-    explicit GenerateDeleteCJObjectMethod(InteropType interopType) : interopType(interopType)
+    explicit GenerateDeleteCJObjectMethod()
     {
     }
     void HandleImpl(InteropContext& ctx);
-
-private:
-    InteropType interopType{InteropType::NA};
 };
 
 /**
@@ -236,13 +221,12 @@ public:
  */
 class DesugarMirrors : public Handler<DesugarMirrors, InteropContext> {
 public:
-    explicit DesugarMirrors(InteropType interopType) : interopType(interopType)
+    explicit DesugarMirrors()
     {
     }
     void HandleImpl(InteropContext& ctx);
 
 private:
-    InteropType interopType{InteropType::NA};
     void DesugarTopLevelFunc(InteropContext& ctx, AST::FuncDecl& func);
     void DesugarMethod(InteropContext& ctx, AST::ClassLikeDecl& mirror, AST::FuncDecl& method);
     void DesugarCtor(InteropContext& ctx, AST::ClassLikeDecl& mirror, AST::FuncDecl& ctor);
@@ -277,15 +261,12 @@ private:
  */
 class GenerateInitCJObjectMethods : public Handler<GenerateInitCJObjectMethods, InteropContext> {
 public:
-    explicit GenerateInitCJObjectMethods(InteropType interopType) : interopType(interopType)
+    explicit GenerateInitCJObjectMethods()
     {
     }
     void HandleImpl(InteropContext& ctx);
 
 private:
-    InteropType interopType{InteropType::NA};
-    void GenNativeInitMethodForEnumCtor(InteropContext& ctx, AST::EnumDecl& enumDecl, bool isGenericGlueCode,
-            const std::vector<Native::FFI::GenericConfigInfo*>& genericConfigsVector);
 };
 
 /**
@@ -320,23 +301,18 @@ private:
  */
 class GenerateWrappers : public Handler<GenerateWrappers, InteropContext> {
 public:
-    explicit GenerateWrappers(InteropType interopType) : interopType(interopType)
+    explicit GenerateWrappers()
     {
     }
     void HandleImpl(InteropContext& ctx);
 
 private:
-    void GenerateWrapper(InteropContext& ctx, AST::FuncDecl& method, bool isGenericGlueCode,
-        const std::vector<Native::FFI::GenericConfigInfo*>& genericConfigsVector);
+    void GenerateWrapper(InteropContext& ctx, AST::FuncDecl& method);
     // Generic methods for prop and field with SFINAE?
-    void GenerateWrapper(InteropContext& ctx, AST::PropDecl& prop, bool isGenericGlueCode,
-        const std::vector<Native::FFI::GenericConfigInfo*>& genericConfigsVector);
+    void GenerateWrapper(InteropContext& ctx, AST::PropDecl& prop);
     void GenerateSetterWrapper(InteropContext& ctx, AST::PropDecl& prop);
-    void GenerateWrapper(InteropContext& ctx, AST::VarDecl& field, bool isGenericGlueCode,
-        const std::vector<Native::FFI::GenericConfigInfo*>& genericConfigsVector);
+    void GenerateWrapper(InteropContext& ctx, AST::VarDecl& field);
     void GenerateSetterWrapper(InteropContext& ctx, AST::VarDecl& field);
-    bool SkipSetterForValueTypeDecl(AST::Decl& decl) const;
-    InteropType interopType{InteropType::NA};
 };
 
 /**
@@ -347,13 +323,10 @@ private:
  */
 class GenerateGlueCode : public Handler<GenerateGlueCode, InteropContext> {
 public:
-    explicit GenerateGlueCode(InteropType interopType) : interopType(interopType)
+    explicit GenerateGlueCode()
     {
     }
     void HandleImpl(InteropContext& ctx);
-
-private:
-    InteropType interopType{InteropType::NA};
 };
 
 /**
@@ -404,208 +377,12 @@ public:
     void HandleImpl(InteropContext& ctx);
 };
 
-
 /**
  * Drains all declarations generated on the previous step to their corresponding files which finishes the desugaring.
  */
 class DrainGeneratedDecls : public Handler<DrainGeneratedDecls, InteropContext> {
 public:
     void HandleImpl(InteropContext& ctx);
-};
-
-/**
- * Finds all Cangjie declarations which are mapped to Objective-C side.
- */
-class FindCJMapping : public Handler<FindCJMapping, InteropContext> {
-public:
-    void HandleImpl(InteropContext& ctx);
-};
-
-/**
- * Finds all Cangjie interface declarations which are mapped to Objective-C side.
- */
-class FindCJMappingInterface : public Handler<FindCJMappingInterface, InteropContext> {
-public:
-    void HandleImpl(InteropContext& ctx);
-};
-
-/**
- * Finds all forward classes previously generated.
- */
-class FindFwdClass : public Handler<FindFwdClass, InteropContext> {
-public:
-    void HandleImpl(InteropContext& ctx);
-};
-
-/**
- * Performs all necessary syntax and semantic checks on CJMapping declarations.
- */
-class CheckCJMappingTypes : public Handler<CheckCJMappingTypes, InteropContext> {
-public:
-    void HandleImpl(InteropContext& ctx);
-};
-
-/**
- * Generate and insert a forward class for each CJ-Mapping interface
- */
-class InsertFwdClasses : public Handler<InsertFwdClasses, InteropContext> {
-public:
-    void HandleImpl(InteropContext& ctx);
-    OwnedPtr<AST::ClassDecl> InitInterfaceFwdClassDecl(const Ptr<AST::ClassLikeDecl>& interfaceDecl);
-    OwnedPtr<AST::FuncDecl> GenerateInterfaceFwdclassMethod(InteropContext& ctx, AST::ClassDecl& fwdclassDecl,
-        AST::FuncDecl& interfaceFuncDecl, Native::FFI::GenericConfigInfo* genericConfig = nullptr);
-    OwnedPtr<AST::ClassDecl> GenerateGenericInterfaceFwdclassMethod(InteropContext& ctx, Ptr<AST::ClassLikeDecl>& fwdclassDecl,
-        Native::FFI::GenericConfigInfo* genericConfig);
-    void GenerateInterfaceFwdClassBody(InteropContext& ctx, AST::ClassDecl& fwdclassDecl, AST::ClassLikeDecl& interfaceDecl,
-        Native::FFI::GenericConfigInfo* genericConfig = nullptr);
-};
-
-/**
- * Generates forward class for `public open class A` in Cangjie:
- */
-class GenerateFwdClass : public Handler<GenerateFwdClass, InteropContext> {
-public:
-    void HandleImpl(InteropContext& ctx);
-
-private:
-    /**
-     * Generate forward class for open class.
-     * includes:
-     *     // helper fields, objc object handle, mutex etc.
-     *     // constructors
-     *     // member override implementations for open methods of A
-     *     // member implementations directly call open methods in A
-     */
-    OwnedPtr<AST::ClassDecl> GenerateFwdClassDecl(AST::ClassDecl& decl);
-    /**
-     * Generate @C warpper
-     * `func CJImpl_ObjC_glue_A_Fwd_initCJObject(obj: NativeObjCId, overrideMask: UInt64)`
-     */
-    void GenerateInitCJObject(AST::FuncDecl& ctor, AST::FuncDecl& fwdCtor);
-    /**
-     * Generate @C warpper
-     * `func CJImpl_ObjC_glue_A_Fwd_deleteCJObject(registryId: RegistryId)`
-     */
-    void GenerateDeleteCJObject();
-    /**
-     * Generate @C warpper
-     * `func CJImpl_ObjC_glue_A_Fwd_lock/unlockCJObject(registryId: RegistryId)`
-     */
-    void GenerateLockOrUnlockCJObject(bool isLock);
-
-    /**
-     * Generate @C warpper
-     * `func CJImpl_ObjC_glue_A_Fwd_foo(registryId: RegistryId, ...)`
-     */
-    void GenerateFwdMemberFuncWrapper(AST::FuncDecl& decl, AST::FuncDecl& impl);
-
-    void GenerateCtors(AST::ClassDecl& decl);
-    void GenerateMemberFuncsAndWrappers(AST::ClassDecl& decl);
-
-    /**
-     * Generate member variable for objc object.
-     * `let obj: NativeObjCId`
-     */
-    void GenerateObjVar();
-
-    /**
-     * Generate member variable for objc overrideMask.
-     * `let overrideMask: UInt64`
-     */
-    void GenerateOverrideMaskVar();
-
-    /**
-     * Generate member variable for cj finalizable.
-     * `let cjFinalizable: Bool = false`
-     */
-    void GenerateCjFinalizableVar();
-
-    /**
-     * Generate member variable for mutex (std.sync.Mutex).
-     * `let mtx: ForwarderMutex = ForwarderMutex()`
-     */
-    void GenerateMtxVar();
-    /**
-     * Generate global func for pure cangjie object create objective-c object.
-     * `static func objcObjForPureCJ(cjA: A): NativeObjCId`
-     */
-    void GenerateObjcObjForPureCJ(AST::ClassDecl& decl);
-
-    /**
-     * Generate forward class constructor
-     * `init(obj: NativeObjCId, overrideMask: UInt64, ...)`
-     */
-    void GenerateConstructor4FwdClass(AST::FuncDecl& decl);
-    /**
-     * Generate forward class objcObj
-     * `func objcObj(): NativeObjCId`
-     */
-    void GenerateObjcObj4FwdClass();
-    /**
-     * Generate forward class objcObj
-     * `func objcObjAutoreleased(): NativeObjCId`
-     */
-    void GenerateAutoreleased4FwdClass();
-    /**
-     * Generate forward class implementation method
-     * `func fooImpl()`
-     */
-    Ptr<AST::FuncDecl> GenerateImplMethod4FwdClass(AST::FuncDecl& decl);
-    /**
-     * Generate forward class override method
-     * `public/protected override func foo()`
-     */
-    void GenerateOverrideMethod4FwdClass(AST::FuncDecl& decl, Ptr<AST::FuncDecl> impl, size_t mid);
-    /**
-     * Generate forward class finalizer
-     * `~init()`
-     */
-    void GenerateFinalizer4FwdClass();
-    /**
-     * Put declaration into forward class
-     */
-    void PutIntoFwdClass(OwnedPtr<AST::Decl> decl);
-    /**
-     * Create `this` reference of forward class.
-     */
-    OwnedPtr<AST::RefExpr> CreateThisOfFwdClass();
-    /**
-     * Create `this.${decl}` of forward class.
-     */
-    OwnedPtr<AST::MemberAccess> CreateMemberAccessOfFwdClass(AST::Decl& decl);
-    /**
-     * Create `unsafe { CFunc<>(${objcObj}, "initWithRegistryId", putToRegistry(${cjobj}))}`
-     */
-    OwnedPtr<AST::Block> RegCjObjAndInitObjcObj(
-        OwnedPtr<AST::Expr> objcObj, OwnedPtr<AST::Expr> cjObj, bool reinit = false);
-    /**
-     * Create `withAutoreleasePool({ => ... })`
-     */
-    OwnedPtr<AST::Expr> CreateAutoReleaseCall(AST::FuncDecl& decl, const std::vector<OwnedPtr<AST::FuncParam>>& params);
-    /**
-     * Create `this.overrideMask & (1 << ${mid})) != 0`
-     */
-    OwnedPtr<AST::Expr> CreateMaskCond(size_t mid);
-    /**
-     * Clear temporary data.
-     */
-    void Clear();
-
-    void PutIntoContext(OwnedPtr<AST::Decl> decl);
-
-private:
-    Ptr<InteropContext> pctx{nullptr};
-    // Forward class
-    Ptr<AST::ClassDecl> fwdClass{nullptr};
-    Ptr<AST::File> curFile{nullptr};
-    // Necessary members generated for each forward class.
-    Ptr<AST::VarDecl> objVar{nullptr};
-    Ptr<AST::VarDecl> maskVar{nullptr};
-    Ptr<AST::VarDecl> cjFinalizableVar{nullptr};
-    Ptr<AST::VarDecl> mtxVar{nullptr};
-    Ptr<AST::FuncDecl> objcObj4PureCJFunc{nullptr};
-    Ptr<AST::FuncDecl> objcObjFunc{nullptr};
-    Ptr<AST::FuncDecl> objcAutoReleaseFunc{nullptr};
 };
 
 /**

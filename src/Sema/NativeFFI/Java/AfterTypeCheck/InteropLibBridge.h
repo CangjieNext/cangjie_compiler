@@ -35,31 +35,13 @@ struct MemberJNISignature {
     {
         auto& retTy = *member.funcBody->retType->GetTy();
         std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
-        signature = utils.GetJavaTypeSignature(retTy, paramTys, member.fullPackageName);
-    }
-
-    // Constructor added for using generic types in Java
-    MemberJNISignature(Utils& utils, FuncDecl& member, GenericConfigInfo* genericConfig)
-    {
-        auto jobject = StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl);
-        CJC_ASSERT(jobject);
-        Ptr<Ty> ty = jobject->GetTy();
-        classTypeSignature = utils.GetJavaClassNormalizeSignature(*ty);
-        // turn "cj/A" to "cj/A${type}"
-        classTypeSignature = ReplaceClassName(classTypeSignature, genericConfig->declInstName);
-        name = GetJavaMemberName(member);
-
-        CJC_ASSERT(member.astKind == ASTKind::FUNC_DECL);
-
-        auto& retTy = *member.funcBody->retType->GetTy();
-        std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
-        signature = utils.GetJavaTypeSignature(retTy, paramTys, member.fullPackageName);
+        signature = utils.GetJavaTypeSignature(retTy, paramTys);
     }
 
     MemberJNISignature(Utils& utils, PropDecl& member)
         : MemberJNISignature(utils, member, StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
     {
-        signature = utils.GetJavaTypeSignature(*member.GetTy(), member.fullPackageName);
+        signature = utils.GetJavaTypeSignature(*member.GetTy());
     }
 
     MemberJNISignature(Utils& utils, Decl& member, Ptr<ClassLikeDecl> jobject)
@@ -78,7 +60,7 @@ struct MemberJNISignature {
         classTypeSignature = utils.GetJavaClassNormalizeSignature(*ty);
         name = GetJavaMemberName(member);
         CJC_ASSERT(member.astKind == ASTKind::FUNC_DECL || member.astKind == ASTKind::PROP_DECL);
-        signature = utils.GetJavaTypeSignature(*member.GetTy(), member.fullPackageName);
+        signature = utils.GetJavaTypeSignature(*member.GetTy());
     }
 };
 
@@ -102,11 +84,6 @@ public:
      * Java_CFFI_JavaEntityKind
      */
     Ptr<EnumDecl> GetJavaEntityKindDecl();
-
-    /**
-     * JavaObjectController<T>
-     */
-    Ptr<ClassDecl> GetJavaObjectControllerDecl();
 
     /**
      * Java_CFFI_JavaEntityKind.JOBJECT
@@ -147,11 +124,6 @@ public:
      * Java_CFFI_newJavaArray
      */
     Ptr<FuncDecl> GetNewJavaArrayDecl();
-
-    /**
-     * Java_CFFI_newJavaProxyObjectForCJMapping
-     */
-    Ptr<FuncDecl> GetNewJavaProxyObjectForCJMappingDecl();
 
     /**
      * Java_CFFI_arrayGet
@@ -294,35 +266,10 @@ public:
     Ptr<FuncDecl> GetFieldIdConstr();
     Ptr<FuncDecl> GetFieldIdConstrStatic();
 
-     /**
-     * JavaObjectController init() decl
-     */
-    Ptr<FuncDecl> GetJavaObjectControllerInitDecl();
-
-    /**
-     * JavaObjectController attachCJObject() decl
-     */
-    Ptr<FuncDecl> GetAttachCJObjectDecl();
-
-    /**
-     * JavaObjectController detachCJObject() decl
-     */
-    Ptr<FuncDecl> GetDetachCJObjectDecl();
-
     /**
      * deleteLocalRef()
      */
     Ptr<FuncDecl> GetDeleteLocalRefDecl();
-
-    /**
-     * getJavaLambdaObject(fun : Any, className: String) decl
-     */
-    Ptr<FuncDecl> GetJavaLambdaObjectDecl();
-
-    /**
-     * getJavaLambdaEntity(fun : Any, className: String) decl
-     */
-    Ptr<FuncDecl> GetJavaLambdaEntityDecl();
 
     Ptr<Ty> GetJValueTy();
 
@@ -405,25 +352,9 @@ public:
         Ptr<File> curFile, bool isMirror);
 
     /**
-     * JavaObjectController<T>(javaEntity, className)
-     */
-    OwnedPtr<CallExpr> CreateJavaObjectControllerCall(OwnedPtr<Expr> javaEntity,
-        OwnedPtr<Expr> className,
-        ClassDecl& classDecl);
-
-    /**
      * Java_CFFI_newJavaArray(env, signature, [args])
      */
     OwnedPtr<CallExpr> CreateCFFINewJavaArrayCall(OwnedPtr<Expr> jniEnv, FuncParamList& params);
-
-    /**
-     * Java_CFFI_newJavaProxyObjectForCJMapping(env, entity, name, withMarkerParam)
-     * For StrcutTy, withMarkerParam is true; for EnumTy, withMarkerParam is false.
-     */
-    OwnedPtr<CallExpr> CreateCFFINewJavaCFFINewJavaProxyObjectForCJMappingCall(OwnedPtr<Expr> jniEnv,
-        OwnedPtr<Expr> entity,
-        std::string name,
-        bool withMarkerParam);
 
     /**
      * Java_CFFI_newGlobalReference(env, obj, isWeak)
@@ -485,7 +416,7 @@ public:
     /**
      * Java_CFFI_removeFromRegistry(registryId)
      */
-    OwnedPtr<CallExpr> CreateRemoveFromRegistryCall(OwnedPtr<Expr> self);
+    OwnedPtr<CallExpr> CreateRemoveFromRegistryCall(OwnedPtr<Expr> regId);
 
     /**
      * Java_CFFI_put_to_registry_1(obj)
@@ -519,14 +450,14 @@ public:
     OwnedPtr<CallExpr> CreateCangjieStringToJavaCall(OwnedPtr<Expr> env, OwnedPtr<Expr> string);
 
     /**
-     * Java_CFFI_getFromRegistry<ty>(env, self)
+     * Java_CFFI_getFromRegistry<ty>(env, regId)
      */
-    OwnedPtr<CallExpr> CreateGetFromRegistryCall(OwnedPtr<Expr> env, OwnedPtr<Expr> self, Ptr<Ty> ty);
+    OwnedPtr<CallExpr> CreateGetFromRegistryCall(OwnedPtr<Expr> env, OwnedPtr<Expr> regId, Ptr<Ty> ty);
 
     /**
-     * Java_CFFI_getFromRegistryOption<ty>(self)
+     * Java_CFFI_getFromRegistryOption<ty>(regId)
      */
-    OwnedPtr<CallExpr> CreateGetFromRegistryOptionCall(OwnedPtr<Expr> self, Ptr<Ty> ty);
+    OwnedPtr<CallExpr> CreateGetFromRegistryOptionCall(OwnedPtr<Expr> regId, Ptr<Ty> ty);
 
     /**
      * Java_CFFI_getField_raw(env, obj, typeSignature, fieldName, fieldSignature)
@@ -626,17 +557,6 @@ public:
     std::map<std::string, OwnedPtr<Expr>> GenerateTypeMappingWithSelector(
         std::function<OwnedPtr<Expr>(TypeKind, Ptr<Ty>)> selector
     );
-
-    OwnedPtr<CallExpr> CreateGetJavaLambdaObjectCall(OwnedPtr<RefExpr> refExpr,
-        std::string classSign,
-        Ptr<File> curFile);
-    OwnedPtr<CallExpr> CreateGetJavaLambdaEntityCall(OwnedPtr<RefExpr> refExpr,
-        std::string classSign,
-        Ptr<File> curFile);
-    OwnedPtr<CallExpr> CreateGetJavaLambdaCall(Ptr<FuncDecl> fd,
-        OwnedPtr<RefExpr> refExpr,
-        std::string classSign,
-        Ptr<File> curFile);
 
     /**
      * ~init() {
@@ -746,7 +666,6 @@ private:
         OwnedPtr<Expr> methodID, OwnedPtr<Expr> argsExpr);
 
     OwnedPtr<CallExpr> CreateJNICall(Ptr<Expr> env, Ptr<VarDecl> jniFunction, std::vector<OwnedPtr<FuncArg>> callArgs);
-    Ptr<FuncDecl> GetJavaObjectControllerMethodDecl(std::string methodName);
     Ptr<StructDecl> GetJNINativeInterfaceDecl() const;
     Ptr<VarDecl> GetJNINativeInterfaceField(const std::string_view name);
     OwnedPtr<FuncArg> PrepareJNIArgsVArray(OwnedPtr<Expr> expr);

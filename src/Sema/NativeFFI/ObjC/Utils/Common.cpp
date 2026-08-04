@@ -119,7 +119,7 @@ bool HasMirrorSuperInterface(const ClassLikeDecl& target)
 Ptr<VarDecl> GetNativeVarHandle(const ClassDecl& target)
 {
     CJC_ASSERT(TypeMapper::IsObjCMirror(*target.GetTy()) || TypeMapper::IsObjCImpl(*target.GetTy()) ||
-        TypeMapper::IsSyntheticWrapper(target) || TypeMapper::IsObjCFwdClass(target));
+        TypeMapper::IsSyntheticWrapper(target));
 
     auto mirrorSuperClass = GetMirrorSuperClass(target);
     if (mirrorSuperClass != nullptr) {
@@ -142,7 +142,7 @@ bool IsStaticInitMethod(const Node& node)
 Ptr<FuncDecl> GetNativeHandleGetter(const ClassLikeDecl& target)
 {
     CJC_ASSERT(TypeMapper::IsObjCMirror(*target.GetTy()) || TypeMapper::IsObjCImpl(*target.GetTy()) ||
-        TypeMapper::IsSyntheticWrapper(target) || TypeMapper::IsObjCFwdClass(target));
+        TypeMapper::IsSyntheticWrapper(target));
 
     auto mirrorSuperClass = GetMirrorSuperClass(target);
     if (mirrorSuperClass != nullptr) {
