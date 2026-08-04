@@ -20,6 +20,7 @@
 #include "cangjie/CHIR/Optimization/ConstPropagation.h"
 #include "cangjie/CHIR/Optimization/DeadCodeElimination.h"
 #include "cangjie/CHIR/Optimization/Devirtualization.h"
+#include "cangjie/CHIR/Optimization/DevirtualizeTrivialStatics.h"
 #include "cangjie/CHIR/Optimization/FunctionInline.h"
 #include "cangjie/CHIR/Optimization/GetRefToArrayElem.h"
 #include "cangjie/CHIR/Optimization/MergeBlocks.h"
@@ -367,6 +368,8 @@ void ToCHIR::Devirtualization(DevirtualizationInfo& devirtInfo)
     typeAnalysisWrapper.RunOnPackage(chirPkg, opts.chirDebugOptimizer, threadNum, devirtInfo);
     auto devirt = CHIR::Devirtualization(&typeAnalysisWrapper, devirtInfo);
     devirt.RunOnFuncs(funcs, builder, opts.chirDebugOptimizer);
+    auto devirtStatics = CHIR::DevirtualizeTrivialStatics();
+    devirtStatics.RunOnPackage(*chirPkg, builder, opts.chirDebugOptimizer);
 
     // if get frozen inst funcs after first devirtualization, opt them in the second round
     if (!devirt.GetFrozenInstFuns().empty()) {
