@@ -471,10 +471,9 @@ private:
 };
 
 /**
- * @brief `Unary` or `Binary` expression wroten in `try` block
+ * @brief `Unary` expression written in `try` block (Neg only).
  */
-class IntOpWithException : public ExpressionWithException {
-    friend class CHIRDeserializer;
+class UnaryExpressionWithException : public UnaryExpressionBase {
     friend class CHIRContext;
     friend class CHIRBuilder;
 public:
@@ -482,51 +481,57 @@ public:
     // Base Information
     // ===--------------------------------------------------------------------===//
     /**
-     * @brief Retrieves the operation kind.
+     * @brief Retrieves the success block.
      *
-     * @return The operation kind.
+     * @return The success block.
      */
-    ExprKind GetOpKind() const;
+    Block* GetSuccessBlock() const;
 
     /**
-     * @brief Retrieves the operation kind name.
+     * @brief Retrieves the error block.
      *
-     * @return The operation kind name.
+     * @return The error block.
      */
-    std::string GetOpKindName() const;
-
-    /**
-     * @brief Retrieves the left-hand side operand.
-     *
-     * @return The left-hand side operand.
-     */
-    Value* GetLHSOperand() const;
-
-    /**
-     * @brief Retrieves the right-hand side operand.
-     *
-     * @return The right-hand side operand.
-     */
-    Value* GetRHSOperand() const;
-
-    /**
-     * @brief Retrieves the overflow strategy.
-     *
-     * @return The overflow strategy.
-     */
-    OverflowStrategy GetOverflowStrategy() const;
+    Block* GetErrorBlock() const;
 
 private:
-    explicit IntOpWithException(
-        ExprKind unaryKind, Value* operand, OverflowStrategy ofs, Block* normal, Block* exception, Block* parent);
-    explicit IntOpWithException(ExprKind binaryKind, Value* lhs, Value* rhs, OverflowStrategy ofs, Block* normal,
-        Block* exception, Block* parent);
-    ~IntOpWithException() override = default;
+    explicit UnaryExpressionWithException(
+        UnaryExprKind unaryKind, Value* operand, Block* normal, Block* exception, Block* parent);
+    ~UnaryExpressionWithException() override = default;
 
-    IntOpWithException* Clone(CHIRBuilder& builder, Block& parent) const override;
+    UnaryExpressionWithException* Clone(CHIRBuilder& builder, Block& parent) const override;
+};
 
-    ExprKind opKind; // Operator Kind
-    Cangjie::OverflowStrategy overflowStrategy{Cangjie::OverflowStrategy::NA};
+/**
+ * @brief `Binary` expression written in `try` block.
+ */
+class BinaryExpressionWithException : public BinaryExpressionBase {
+    friend class CHIRContext;
+    friend class CHIRBuilder;
+public:
+    // ===--------------------------------------------------------------------===//
+    // Base Information
+    // ===--------------------------------------------------------------------===//
+    /**
+     * @brief Retrieves the success block.
+     *
+     * @return The success block.
+     */
+    Block* GetSuccessBlock() const;
+
+    /**
+     * @brief Retrieves the error block.
+     *
+     * @return The error block.
+     */
+    Block* GetErrorBlock() const;
+
+private:
+    explicit BinaryExpressionWithException(BinaryExprKind binaryKind, Value* lhs, Value* rhs, OverflowStrategy ofs,
+        Block* normal, Block* exception, Block* parent);
+    ~BinaryExpressionWithException() override = default;
+
+    BinaryExpressionWithException* Clone(CHIRBuilder& builder, Block& parent) const override;
 };
 
 /**

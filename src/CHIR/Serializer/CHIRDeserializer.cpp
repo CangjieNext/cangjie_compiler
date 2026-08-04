@@ -801,15 +801,16 @@ Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const PackageFor
     auto operand = GetValue<Value>(obj->base()->operands()->Get(0));
     auto parentBlock = GetValue<Block>(obj->base()->owner());
     auto resultTy = GetType<Type>(obj->base()->resultTy());
-    auto ofs = DeserializeOverflowStrategy(obj->overflowStrategy());
     auto [kind, isException] = CHIRExprKindToExprKind(obj->base()->kind());
     if (isException) {
         auto normalBlock = StaticCast<Block*>(GetValue<Value>(obj->base()->operands()->Get(1)));
         auto exceptionBlock = StaticCast<Block*>(GetValue<Value>(obj->base()->operands()->Get(2)));
-        return builder.CreateExpression<IntOpWithException>(
-            resultTy, kind, operand, ofs, normalBlock, exceptionBlock, parentBlock);
+        return builder.CreateExpression<UnaryExpressionWithException>(
+            resultTy, ExprKindMgr::ToUnaryExprKind(kind), operand, normalBlock, exceptionBlock, parentBlock);
     } else {
-        return builder.CreateExpression<UnaryExpression>(resultTy, kind, operand, ofs, parentBlock);
+        auto ofs = DeserializeOverflowStrategy(obj->overflowStrategy());
+        return builder.CreateExpression<UnaryExpression>(
+            resultTy, ExprKindMgr::ToUnaryExprKind(kind), operand, ofs, parentBlock);
     }
 }
 
@@ -825,10 +826,11 @@ Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const PackageFor
     if (isException) {
         auto normalBlock = StaticCast<Block*>(GetValue<Value>(obj->base()->operands()->Get(2)));
         auto exceptionBlock = StaticCast<Block*>(GetValue<Value>(obj->base()->operands()->Get(3)));
-        return builder.CreateExpression<IntOpWithException>(
-            resultTy, kind, lhs, rhs, ofs, normalBlock, exceptionBlock, parentBlock);
+        return builder.CreateExpression<BinaryExpressionWithException>(
+            resultTy, ExprKindMgr::ToBinaryExprKind(kind), lhs, rhs, ofs, normalBlock, exceptionBlock, parentBlock);
     } else {
-        return builder.CreateExpression<BinaryExpression>(resultTy, kind, lhs, rhs, ofs, parentBlock);
+        return builder.CreateExpression<BinaryExpression>(
+            resultTy, ExprKindMgr::ToBinaryExprKind(kind), lhs, rhs, ofs, parentBlock);
     }
 }
 

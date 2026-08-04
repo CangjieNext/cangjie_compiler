@@ -54,19 +54,19 @@ bool IsBuiltinOverflowOperator(const CustomTypeDef& def, const VirtualMethodInfo
     return false;
 }
 
-CHIR::ExprKind ToExprKind(const std::string& name)
+CHIR::BinaryExprKind OperatorNameToBinaryExprKind(const std::string& name)
 {
     if (name == "+") {
-        return CHIR::ExprKind::ADD;
+        return CHIR::BinaryExprKind::ADD;
     }
     if (name == "-") {
-        return CHIR::ExprKind::SUB;
+        return CHIR::BinaryExprKind::SUB;
     }
     if (name == "*") {
-        return CHIR::ExprKind::MUL;
+        return CHIR::BinaryExprKind::MUL;
     }
     CJC_ASSERT(name == "/");
-    return CHIR::ExprKind::DIV;
+    return CHIR::BinaryExprKind::DIV;
 }
 } // namespace
 
@@ -147,7 +147,7 @@ Function* UpdateOperatorVTable::GenerateBuiltinOverflowOperatorFunc(
         auto p1 = builder.CreateParameter(type, INVALID_LOCATION, *func);
         auto p2 = builder.CreateParameter(type, INVALID_LOCATION, *func);
         auto add = builder.CreateExpression<BinaryExpression>(
-            INVALID_LOCATION, type, ToExprKind(name), p1, p2, ovf, block);
+            INVALID_LOCATION, type, OperatorNameToBinaryExprKind(name), p1, p2, ovf, block);
         block->AppendExpression(add);
         auto store = builder.CreateExpression<Store>(
             INVALID_LOCATION, builder.GetUnitTy(), add->GetResult(), retValue->GetResult(), block);
@@ -156,7 +156,7 @@ Function* UpdateOperatorVTable::GenerateBuiltinOverflowOperatorFunc(
         auto p1 = builder.CreateParameter(type, INVALID_LOCATION, *func);
         CJC_ASSERT(name == "-");
         auto add = builder.CreateExpression<UnaryExpression>(
-            INVALID_LOCATION, type, ExprKind::NEG, p1, ovf, block);
+            INVALID_LOCATION, type, UnaryExprKind::NEG, p1, ovf, block);
         block->AppendExpression(add);
         auto store = builder.CreateExpression<Store>(
             INVALID_LOCATION, builder.GetUnitTy(), add->GetResult(), retValue->GetResult(), block);

@@ -134,7 +134,8 @@ private:
     void TranslateApplyWithExceptionExpression(Context& ctx, const ApplyWithException& apply);
     void TranslateMultiBranch(Context& ctx, const MultiBranch& branch);
     void TranslateAllocate(Context& ctx, const Expression& expr);
-    void TranslateIntOpWithException(Context& ctx, const IntOpWithException& expr);
+    void TranslateUnaryExpressionWithException(Context& ctx, const UnaryExpressionWithException& expr);
+    void TranslateBinaryExpressionWithException(Context& ctx, const BinaryExpressionWithException& expr);
     void TranslateBox(Context& ctx, const Box& expr);
     void TranslateInstanceOf(Context& ctx, const InstanceOf& expr);
 
