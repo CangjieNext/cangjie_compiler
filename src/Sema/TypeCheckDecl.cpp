@@ -574,13 +574,6 @@ void TypeChecker::TypeCheckerImpl::CheckStructDecl(ASTContext& ctx, StructDecl& 
     CJC_NULLPTR_CHECK(sd.body);
     TypeCheckCompositeBody(ctx, sd, sd.body->decls);
     CheckRecursiveConstructorCall(sd.body->decls);
-    if (sd.TestAnyAttr(Attribute::JAVA_CJ_MAPPING)) {
-        CheckJavaInteropLibImport(sd);
-        if (!sd.inheritedTypes.empty()) {
-            diag.DiagnoseRefactor(
-                DiagKindRefactor::sema_cjmapping_struct_inheritance_interface_not_supported, MakeRange(sd.identifier));
-        }
-    }
 }
 
 void TypeChecker::TypeCheckerImpl::GetRevTypeMapping(

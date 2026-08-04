@@ -35,7 +35,7 @@ enum class ArrayOperationKind: uint8_t {
 
 class Utils final {
 public:
-    Utils(ImportManager& importManager, TypeManager& typeManager, Package& pkg);
+    Utils(ImportManager& importManager, TypeManager& typeManager);
 
     // Ty of `Option<ty>`
     Ptr<Ty> GetOptionTy(Ptr<Ty> ty);
@@ -60,9 +60,8 @@ public:
     StructDecl& GetStringDecl();
 
     std::string GetJavaClassNormalizeSignature(const Ty& cjtype) const;
-    std::string GetJavaTypeSignature(const Ty& cjtype, std::string fullpackageName = "");
-    std::string GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& args, std::string fullpackageName = "");
-    std::string GetParamJavaSignature(const Ptr<Ty> ty, std::string fullpackageName);
+    std::string GetJavaTypeSignature(const Ty& cjtype);
+    std::string GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& args);
     std::string GetJavaObjectTypeName(const Ty& ty);
 
     OwnedPtr<Expr> CreateOptionMatch(
@@ -94,7 +93,6 @@ private:
 private:
     ImportManager& importManager;
     TypeManager& typeManager;
-    Package& pkg;
 };
 
 /**
@@ -170,7 +168,7 @@ std::string GetJavaFQNameFromExtendDecl(const ExtendDecl& extendDecl);
  * Returns fully-qualified name of the decl or fq-name specified in @JavaMirror as attribute,
  * which is suitable for specifying in JNI calls
  */
-std::string GetJavaFQName(const Decl& decl, const std::string* genericActualName = nullptr);
+std::string GetJavaFQName(const Decl& decl);
 
 /**
  * Returns fully-qualified name of the decl or fq-name specified in @JavaMirror as attribute,
@@ -225,9 +223,6 @@ bool IsOptionOfString(Ptr<Ty> ty);
 bool IsMirror(const Ty& ty);
 
 bool IsImpl(const Ty& ty);
-bool IsCJMappingInterface(const Ty& ty);
-bool IsCJMapping(const Ty& ty);
-bool IsCJMappingTuple(const Ptr<Ty>& ty, std::unordered_set<Ptr<Ty>> tupleConfigs);
 std::string ReplaceClassName(std::string& classTypeSignature, std::string newSegment);
 std::string NormalizeJavaSignature(const std::string& sig);
 

@@ -130,10 +130,10 @@ void TypeChecker::TypeCheckerImpl::CheckClassDecl(ASTContext& ctx, ClassDecl& cd
     }
     TypeCheckCompositeBody(ctx, cd, cd.body->decls);
     CheckRecursiveConstructorCall(cd.body->decls);
-    if (cd.IsJavaMirror() || cd.IsJavaImpl() || Interop::Java::IsCJMapping(cd)) {
+    if (cd.IsJavaMirror() || cd.IsJavaImpl()) {
         CheckJavaInteropLibImport(cd);
     }
-    if (cd.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE, Attribute::OBJ_C_CJ_MAPPING)) {
+    if (cd.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE)) {
         CheckObjCInteropLibImport(cd);
     }
 }

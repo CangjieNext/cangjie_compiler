@@ -620,14 +620,14 @@ enum class Attribute {
      * W: Parser
      * R: Sema.
      */
-    JAVA_CJ_MAPPING,
+    JAVA_CJ_MAPPING_COMPAT,
 
     /**
      * Mark whether a pure cangjie decl is mapped to use by Objective-C side.
      * W: Parser
      * R: Sema.
      */
-    OBJ_C_CJ_MAPPING,
+    OBJ_C_CJ_MAPPING_COMPAT,
 
     /**
      * Mark whether a class decl is an interface-forward class.
@@ -635,7 +635,7 @@ enum class Attribute {
      * W: Sema.
      * R: Sema.
      */
-    CJ_MIRROR_JAVA_INTERFACE_FWD,
+    CJ_MIRROR_JAVA_INTERFACE_FWD_COMPAT,
 
     /**
      * Mark whether a node is a desugared mirror field decl.
@@ -665,7 +665,7 @@ enum class Attribute {
      * W: Sema.
      * R: Sema.
      */
-    CJ_MIRROR_JAVA_INTERFACE_DEFAULT,
+    CJ_MIRROR_JAVA_INTERFACE_DEFAULT_COMPAT,
 
     /**
      * Mark whether a class decl is an interface-forward class.
@@ -673,7 +673,7 @@ enum class Attribute {
      * W: Sema.
      * R: Sema.
      */
-    CJ_MIRROR_OBJC_INTERFACE_FWD,
+    CJ_MIRROR_OBJC_INTERFACE_FWD_COMPAT,
 
     /**
      * Mark declaration that was already loaded from another CJO,

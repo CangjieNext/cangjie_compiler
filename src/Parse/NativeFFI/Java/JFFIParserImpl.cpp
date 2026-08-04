@@ -83,8 +83,7 @@ void JFFIParserImpl::CheckImplSignature(AST::ClassLikeDecl& decl, const PtrVecto
     decl.MarkAsJavaImpl();
     decl.EnableAttr(Attribute::NO_REFLECT_INFO);
 
-    // Avoid CJ-MAPPING Generic Check.
-    if (decl.GetGeneric() != nullptr && !decl.TestAttr(Attribute::JAVA_CJ_MAPPING)) {
+    if (decl.GetGeneric() != nullptr) {
         DiagJavaImplCannotBeGeneric(decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }

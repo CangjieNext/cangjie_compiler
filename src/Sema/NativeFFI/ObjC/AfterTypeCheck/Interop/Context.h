@@ -34,7 +34,7 @@ struct InteropContext {
         const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& structMemberSignatures,
         const Triple::OSType targetOsType)
         : pkg(pkg), diag(diag), typeManager(typeManager), importManager(importManager), bridge(importManager, diag),
-          typeMapper(bridge, typeManager), mangler(mangler), nameGenerator(mangler, typeManager),
+          typeMapper(bridge, typeManager), mangler(mangler), nameGenerator(mangler),
           factory(bridge, typeManager, nameGenerator, typeMapper, importManager),
           cjLibOutputPath(cjLibOutputPath), outputObjCGenDir(outputObjCGenDir),
           structMemberSignatures(structMemberSignatures),
@@ -46,13 +46,6 @@ struct InteropContext {
     std::vector<Ptr<AST::ClassLikeDecl>> mirrors;
     std::vector<Ptr<AST::FuncDecl>> mirrorTopLevelFuncs;
     std::vector<Ptr<AST::ClassDecl>> impls;
-    std::vector<Ptr<AST::Decl>> cjMappings;
-    std::vector<Ptr<AST::ClassLikeDecl>> cjMappingInterfaces;
-    std::vector<Ptr<AST::ClassDecl>> fwdClasses;
-    // forward class map for open class
-    std::unordered_map<Ptr<AST::Decl>, Ptr<AST::ClassDecl>> fwdClassMap;
-    // override member func (in fwd) -> open member func (in original class)
-    std::unordered_map<Ptr<AST::FuncDecl>, Ptr<AST::FuncDecl>> fwdOverrideTable;
     std::vector<Ptr<AST::ClassDecl>> synWrappers;
     std::vector<OwnedPtr<AST::Decl>> genDecls;
 
