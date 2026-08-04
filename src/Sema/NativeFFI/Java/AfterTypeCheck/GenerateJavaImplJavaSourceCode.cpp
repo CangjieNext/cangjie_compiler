@@ -17,7 +17,7 @@ void JavaDesugarManager::GenerateJavaSourceCode(AfterTypeCheckContext& ctx)
 {
     for (auto& decl : ctx.GetJavaImplReferenceWrappers()) {
         const std::string fileJ = decl->identifier.Val() + ".java";
-        auto codegen = JavaSourceCodeGenerator(decl, mangler, typeManager, ctx, javaCodeGenPath, fileJ,
+        auto codegen = JavaSourceCodeGenerator(decl, mangler, ctx, javaCodeGenPath, fileJ,
             GetCangjieLibName(outputLibPath, decl->GetFullPackageName()), {});
         CJC_ASSERT(&codegen);
         codegen.Generate();

@@ -241,8 +241,6 @@ private:
     bool parseDeclFile{false};
 
     bool enableEH{false};
-    bool enableInteropCJMapping{false};
-    GlobalOptions::InteropLanguage targetInteropLanguage{GlobalOptions::InteropLanguage::NA};
     Triple::BackendType backend{Triple::BackendType::CJNATIVE};
     bool calculateLineNum{false};
     // we store line number info from all tokens
@@ -1043,7 +1041,6 @@ private:
     void CheckPrimaryCtorDeclJavaMirror(AST::PrimaryCtorDecl& ctor);
     void CheckMemberFuncJavaMirror(AST::FuncDecl& decl);
     void CheckMemberFuncObjCMirror(AST::FuncDecl& func);
-    void CheckCJMappingAttr(Decl& decl) const;
     void CheckInitCtorDeclBody(AST::FuncDecl& ctor);
     void CheckInitCtorDeclJavaMirror(AST::FuncDecl& ctor);
     void CheckInitCtorDeclObjCMirror(AST::FuncDecl& ctor);
