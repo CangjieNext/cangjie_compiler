@@ -538,6 +538,7 @@ void Collector::CollectLitConstExpr(ASTContext& ctx, LitConstExpr& lce, bool bui
     if (stringKindToRef.find(lce.kind) != stringKindToRef.end() && !lce.ref) {
         auto tmp = MakeOwned<RefType>();
         tmp->begin = lce.begin;
+        tmp->end = lce.end;
         tmp->ref.identifier = stringKindToRef[lce.kind];
         tmp->EnableAttr(Attribute::COMPILER_ADD, Attribute::IN_CORE);
         lce.ref = std::move(tmp);

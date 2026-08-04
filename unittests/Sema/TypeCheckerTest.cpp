@@ -746,3 +746,69 @@ main(): Int64 {
     EXPECT_TRUE(foundDiagnostic);
     EXPECT_EQ(diag.GetErrorCount(), 1);
 }
+
+// The string interpolation literal is desugared into a StringBuilder-based block in
+// `DesugarStrInterpolationExpr`. Every synthesized node (the StringBuilder ctor call, the
+// `$tmp` var decl, the `append` calls and the final `toString` call) must carry a valid
+// source position copied from the original interpolation expression. Nodes with a zero
+// position used to trigger an ICE in `DiagnosticEngine::CheckRange` when a later phase
+// (e.g. recursive-constructor detection) emitted a diagnostic anchored on them.
+TEST_F(TypeCheckerTest, StrInterpolationDesugarNodesHaveValidPosition)
+{
+    // Cover both branches of `DesugarStrPartExpr` inside the InterpolationExpr arm:
+    //  - `count` (Int64) has a matching `append(Int64)` overload -> matchedAppend branch.
+    //  - `p` (user type P <: ToString) has no direct append overload -> toString() fallback
+    //    branch, which routes a Block through `CreateMemberAccess`/`CreateFuncArg` and is the
+    //    path that previously left a zero-position '$dummy' wrapper.
+    std::string code = R"(
+class P <: ToString {
+    public func toString(): String {
+        return "P"
+    }
+}
+main(): Int64 {
+    let count = 42
+    let p = P()
+    let s = "count is ${count}, p is ${p}."
+    return 0
+}
+)";
+
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    auto ret = instance->Compile(CompileStage::DESUGAR_AFTER_SEMA);
+    ret = ret && instance->PerformDesugarAfterSema();
+    ASSERT_TRUE(ret);
+    // The desugared interpolation must type-check without errors.
+    ASSERT_EQ(diag.GetErrorCount(), 0) << "interpolation desugar should not produce errors";
+
+    // Locate the desugared interpolation literal and walk its synthesized sub-tree.
+    Ptr<Expr> desugarRoot {nullptr};
+    Walker finder(instance->GetSourcePackages()[0]->files[0].get(), [&desugarRoot](Ptr<Node> node) -> VisitAction {
+        if (auto lce = DynamicCast<LitConstExpr>(node); lce && lce->siExpr && lce->desugarExpr) {
+            desugarRoot = lce->desugarExpr.get();
+            return VisitAction::SKIP_CHILDREN;
+        }
+        return VisitAction::WALK_CHILDREN;
+    });
+    finder.Walk();
+    ASSERT_NE(desugarRoot, nullptr) << "no desugared string interpolation found";
+
+    // `DesugarStrInterpolationExpr` synthesizes the StringBuilder ctor call, the `$tmp` var
+    // decl, the `append`/`toString` calls and their args, copying the source position of the
+    // original interpolation expression onto each. These synthesized nodes (Expr/Decl/Type)
+    // carry the COMPILER_ADD attribute. A zero position on one of them used to trigger an ICE
+    // in `DiagnosticEngine::CheckRange` when a later phase (e.g. recursive-constructor
+    // detection) emitted a diagnostic anchored on it, so every synthesized node is guarded.
+    Walker checker(desugarRoot.get(), [](Ptr<Node> node) -> VisitAction {
+        if (!node->TestAttr(Attribute::COMPILER_ADD)) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        EXPECT_FALSE(node->begin.IsZero())
+            << "synthesized interpolation desugar node has zero begin position";
+        EXPECT_FALSE(node->end.IsZero())
+            << "synthesized interpolation desugar node has zero end position";
+        return VisitAction::WALK_CHILDREN;
+    });
+    checker.Walk();
+}
