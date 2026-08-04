@@ -30,6 +30,7 @@ std::vector<OwnedPtr<FuncArg>> EstimatingLengthOfString(const StrInterpolationEx
     }
     auto int64Ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64);
     auto ctorArg = CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(size), int64Ty);
+    CopyBasicInfo(&sie, ctorArg.get());
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateFuncArg(std::move(ctorArg)));
     return args;
@@ -86,7 +87,11 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::DesugarStrPartExpr(
         // Find an 'append' function that matches with ie->block->GetTy().
         auto matchedAppend = MatchAppendFuncByParamTy(appendDecls, *ie->block->GetTy());
         if (matchedAppend) {
-            appendArgs.emplace_back(CreateFuncArg(std::move(ie->block)));
+            auto arg = CreateFuncArg(std::move(ie->block));
+            // The block arg is wrapped in a compiler-generated '$dummy' RefExpr by CreateFuncArg;
+            // give that wrapper the source position so downstream diagnostics don't anchor on zero.
+            CopyBasicInfo(&expr, arg->expr.get());
+            appendArgs.emplace_back(std::move(arg));
             // Select append of the corresponding parameter type version: $tmp.append({...}).
             appendDecl = matchedAppend;
         } else {
@@ -158,10 +163,13 @@ void TypeChecker::TypeCheckerImpl::DesugarStrInterpolationExpr(ASTContext& ctx, 
     auto sbDecl = importManager.GetCoreDecl<InheritableDecl>("StringBuilder");
     CJC_NULLPTR_CHECK(sbDecl);
     // Roughly estimate the length of the interpolated string, which is used to initialize the StringBuilder capacity.
-    auto sbCtorCall = CreateCallExpr(CreateRefExpr(*sbDecl), EstimatingLengthOfString(*siexpr));
+    auto sbCtor = CreateRefExpr(*sbDecl);
+    CopyBasicInfo(siexpr, sbCtor.get());
+    auto sbCtorCall = CreateCallExpr(std::move(sbCtor), EstimatingLengthOfString(*siexpr));
     sbCtorCall->baseFunc->EnableAttr(Attribute::IMPLICIT_ADD);
-    CopyBasicInfo(siexpr, sbCtorCall.get());
-    blk->body.emplace_back(CreateTmpVarDecl(nullptr, sbCtorCall.get()));
+    auto tmpVar = CreateTmpVarDecl(nullptr, sbCtorCall.get());
+    CopyBasicInfo(siexpr, tmpVar.get());
+    blk->body.emplace_back(std::move(tmpVar));
     // Get '$tmpN' var declaration, and synthesize it's ty by initializer expression.
     auto sbItem = StaticCast<VarDecl*>(blk->body.front().get());
     CopyNodeScopeInfo(siexpr, sbItem);
