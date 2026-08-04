@@ -6,6 +6,8 @@
 
 #include "cangjie/CHIR/Optimization/Devirtualization.h"
 
+#include <optional>
+
 #include "cangjie/CHIR/Optimization/DeadCodeElimination.h"
 #include "cangjie/CHIR/Analysis/DevirtualizationInfo.h"
 #include "cangjie/CHIR/Analysis/Engine.h"
@@ -112,20 +114,25 @@ void Devirtualization::RunOnFunc(const Function* func, CHIRBuilder& builder)
 namespace {
 struct BuiltinOpInfo {
     BuiltinOpInfo(FuncInfo info, ExprKind exprKind, size_t operandsNum)
-        : funcInfo(std::move(info)), targetExprKind(exprKind), operandsNum(operandsNum) {}
+        : funcInfo(std::move(info)), targetExprKind(exprKind), targetBinaryKind(std::nullopt),
+          operandsNum(operandsNum) {}
+    BuiltinOpInfo(FuncInfo info, BinaryExprKind binaryKind, size_t operandsNum)
+        : funcInfo(std::move(info)), targetExprKind(ExprKind::INVALID), targetBinaryKind(binaryKind),
+          operandsNum(operandsNum) {}
 
     FuncInfo funcInfo;
     ExprKind targetExprKind{ExprKind::INVALID};
+    std::optional<BinaryExprKind> targetBinaryKind;
     size_t operandsNum{0};
 };
 
 static const std::vector<BuiltinOpInfo> COMPARABLE_FUNC_LISTS = {
-    {FuncInfo(">", NOT_CARE, {NOT_CARE}, ANY_TYPE, "std.core"),    ExprKind::GT,       2U},
-    {FuncInfo("<", NOT_CARE, {NOT_CARE}, ANY_TYPE, "std.core"),    ExprKind::LT,       2U},
-    {FuncInfo(">=", NOT_CARE, {NOT_CARE}, ANY_TYPE, "std.core"),   ExprKind::GE,       2U},
-    {FuncInfo("<=", NOT_CARE, {NOT_CARE}, ANY_TYPE, "std.core"),   ExprKind::LE,       2U},
-    {FuncInfo("==", NOT_CARE, {NOT_CARE}, ANY_TYPE, "std.core"),   ExprKind::EQUAL,    2U},
-    {FuncInfo("!=", NOT_CARE, {NOT_CARE}, ANY_TYPE, "std.core"),   ExprKind::NOTEQUAL, 2U},
+    {FuncInfo(">", NOT_CARE, {NOT_CARE}, ANY_TYPE, "std.core"),    BinaryExprKind::GT,       2U},
+    {FuncInfo("<", NOT_CARE, {NOT_CARE}, ANY_TYPE, "std.core"),    BinaryExprKind::LT,       2U},
+    {FuncInfo(">=", NOT_CARE, {NOT_CARE}, ANY_TYPE, "std.core"),   BinaryExprKind::GE,       2U},
+    {FuncInfo("<=", NOT_CARE, {NOT_CARE}, ANY_TYPE, "std.core"),   BinaryExprKind::LE,       2U},
+    {FuncInfo("==", NOT_CARE, {NOT_CARE}, ANY_TYPE, "std.core"),   BinaryExprKind::EQUAL,    2U},
+    {FuncInfo("!=", NOT_CARE, {NOT_CARE}, ANY_TYPE, "std.core"),   BinaryExprKind::NOTEQUAL, 2U},
     {FuncInfo("next", NOT_CARE, {NOT_CARE}, ANY_TYPE, "std.core"), ExprKind::APPLY,    2U}
 };
 
@@ -141,7 +148,7 @@ Ptr<Apply> BuiltinOpCreateNewApply(CHIRBuilder& builder, const Invoke& oriInvoke
         .thisType = thisType}, oriInvoke.GetParentBlock());
 }
 
-Ptr<BinaryExpression> BuiltinOpCreateNewBinary(CHIRBuilder& builder, const Invoke& oriInvoke, ExprKind kind,
+Ptr<BinaryExpression> BuiltinOpCreateNewBinary(CHIRBuilder& builder, const Invoke& oriInvoke, BinaryExprKind kind,
     const Ptr<Value>& thisValue, const std::vector<Value*>& args)
 {
     CJC_ASSERT(args.size() == 1U);
@@ -158,16 +165,18 @@ bool Devirtualization::RewriteToBuiltinOp(CHIRBuilder& builder, const RewriteInf
     auto func = info.realCallee->Get<WrappedRawMethod>() ? info.realCallee->Get<WrappedRawMethod>() : info.realCallee;
 
     ExprKind targetExprKind{ExprKind::INVALID};
+    std::optional<BinaryExprKind> targetBinaryKind;
     size_t operandsNum = 0;
     for (auto& it : COMPARABLE_FUNC_LISTS) {
         if (IsExpectedFunction(*func, it.funcInfo)) {
             targetExprKind = it.targetExprKind;
+            targetBinaryKind = it.targetBinaryKind;
             operandsNum = it.operandsNum;
         }
     }
     auto args = invoke->GetArgs();
     args.erase(args.begin());  // remove `this`
-    if (targetExprKind == ExprKind::INVALID || args.size() != operandsNum - 1U) {
+    if ((targetExprKind == ExprKind::INVALID && !targetBinaryKind.has_value()) || args.size() != operandsNum - 1U) {
         return false;
     }
     for (auto& arg : args) {
@@ -197,7 +206,8 @@ bool Devirtualization::RewriteToBuiltinOp(CHIRBuilder& builder, const RewriteInf
     if (targetExprKind == ExprKind::APPLY) {
         op = BuiltinOpCreateNewApply(builder, *invoke, func, thisValue, args);
     } else {
-        op = BuiltinOpCreateNewBinary(builder, *invoke, targetExprKind, thisValue, args);
+        CJC_ASSERT(targetBinaryKind.has_value());
+        op = BuiltinOpCreateNewBinary(builder, *invoke, *targetBinaryKind, thisValue, args);
     }
     invoke->ReplaceWith(*op);
     for (auto e : castExprs) {

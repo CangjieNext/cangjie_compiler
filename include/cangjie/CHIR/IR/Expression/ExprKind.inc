@@ -7,6 +7,9 @@
 // Tips:
 // 1. EXPRKIND(expression kind, exression name for human reading, Expression class)
 // 2. Remember to modify CHIRCasting.h and PackageFormat.fbs after adding a new expression
+// 3. When adding a new unary/binary expression (including *_WITH_EXCEPTION), also update
+//    UNARY_EXPR_KIND_TABLE / BINARY_EXPR_KIND_TABLE in Expression.cpp, and the matching
+//    UnaryExprKind / BinaryExprKind enumerators if needed
 
 #if defined(MAJORKIND) && defined(EXPRKIND)
 
@@ -19,7 +22,15 @@ EXPRKIND(APPLY_WITH_EXCEPTION, "ApplyWithException", ApplyWithException)
 EXPRKIND(INVOKE_WITH_EXCEPTION, "InvokeWithException", InvokeWithException)
 EXPRKIND(INVOKESTATIC_WITH_EXCEPTION, "InvokeStaticWithException", InvokeStaticWithException)
 EXPRKIND(RAISE_EXCEPTION, "RaiseException", RaiseException)
-EXPRKIND(INT_OP_WITH_EXCEPTION, "IntOpWithException", IntOpWithException)
+EXPRKIND(NEG_WITH_EXCEPTION, "NegWithException", UnaryExpressionWithException)
+EXPRKIND(ADD_WITH_EXCEPTION, "AddWithException", BinaryExpressionWithException)
+EXPRKIND(SUB_WITH_EXCEPTION, "SubWithException", BinaryExpressionWithException)
+EXPRKIND(MUL_WITH_EXCEPTION, "MulWithException", BinaryExpressionWithException)
+EXPRKIND(DIV_WITH_EXCEPTION, "DivWithException", BinaryExpressionWithException)
+EXPRKIND(MOD_WITH_EXCEPTION, "ModWithException", BinaryExpressionWithException)
+EXPRKIND(EXP_WITH_EXCEPTION, "ExpWithException", BinaryExpressionWithException)
+EXPRKIND(LSHIFT_WITH_EXCEPTION, "LShiftWithException", BinaryExpressionWithException)
+EXPRKIND(RSHIFT_WITH_EXCEPTION, "RShiftWithException", BinaryExpressionWithException)
 EXPRKIND(SPAWN_WITH_EXCEPTION, "SpawnWithException", SpawnWithException)
 EXPRKIND(NUMERIC_CAST_WITH_EXCEPTION, "NumericCastWithException", NumericCastWithException)
 EXPRKIND(INTRINSIC_WITH_EXCEPTION, "IntrinsicWithException", IntrinsicWithException)

@@ -121,8 +121,8 @@ private:
     void TranslateIntValue(Context& ctx, const IntLiteral& value);
     void TranslateFloatValue(Context& ctx, const FloatLiteral& value);
     void TranslateTerminatorExpression(Context& ctx, const Expression& expr);
-    void TranslateUnaryExpression(Context& ctx, const Expression& expr);
-    void TranslateBinaryExpression(Context& ctx, const Expression& expr);
+    void TranslateUnaryExpression(Context& ctx, const UnaryExpressionBase& expr);
+    void TranslateBinaryExpression(Context& ctx, const BinaryExpressionBase& expr);
     void TranslateMemoryExpression(Context& ctx, const Expression& expr);
     void TranslateOthersExpression(Context& ctx, const Expression& expr);
     void TranslateField(Context& ctx, const Expression& expr);
@@ -134,7 +134,6 @@ private:
     void TranslateApplyWithExceptionExpression(Context& ctx, const ApplyWithException& apply);
     void TranslateMultiBranch(Context& ctx, const MultiBranch& branch);
     void TranslateAllocate(Context& ctx, const Expression& expr);
-    void TranslateIntOpWithException(Context& ctx, const IntOpWithException& expr);
     void TranslateBox(Context& ctx, const Box& expr);
     void TranslateInstanceOf(Context& ctx, const InstanceOf& expr);
 

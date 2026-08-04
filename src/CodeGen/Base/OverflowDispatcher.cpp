@@ -94,7 +94,8 @@ llvm::Value* GenerateOverflowWrappingArithmeticOp(
     if (kind == CHIR::ExprKind::EXP) {
         return GenerateBinaryExpOperation(irBuilder, argGenValues[0], argGenValues[1]);
     }
-    return GenerateArithmeticOperation(irBuilder, kind, ty, argGenValues[0], argGenValues[1]);
+    return GenerateArithmeticOperation(
+        irBuilder, CHIR::ExprKindMgr::ToBinaryExprKind(kind), ty, argGenValues[0], argGenValues[1]);
 }
 
 llvm::Value* GenerateOverflowApply(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic)

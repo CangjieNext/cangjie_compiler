@@ -357,47 +357,43 @@ std::vector<Value*> InvokeStaticWithException::GetArgs() const
     return {operands.begin() + 2, operands.begin() + static_cast<long>(GetSuccessorIndex(0))};
 }
 
-// IntOpWithException
-IntOpWithException::IntOpWithException(
-    ExprKind unaryKind, Value* operand, OverflowStrategy ofs, Block* normal, Block* exception, Block* parent)
-    : ExpressionWithException(ExprKind::INT_OP_WITH_EXCEPTION, {operand}, {normal, exception}, parent),
-    opKind(unaryKind), overflowStrategy(ofs)
+// UnaryExpressionWithException
+UnaryExpressionWithException::UnaryExpressionWithException(
+    UnaryExprKind unaryKind, Value* operand, Block* normal, Block* exception, Block* parent)
+    : UnaryExpressionBase(unaryKind, operand, Cangjie::OverflowStrategy::THROWING, true, {normal, exception}, parent)
 {
 }
 
-IntOpWithException::IntOpWithException(
-    ExprKind binaryKind, Value* lhs, Value* rhs, OverflowStrategy ofs, Block* normal, Block* exception, Block* parent)
-    : ExpressionWithException(ExprKind::INT_OP_WITH_EXCEPTION, {lhs, rhs}, {normal, exception}, parent),
-    opKind(binaryKind), overflowStrategy(ofs)
+Block* UnaryExpressionWithException::GetSuccessBlock() const
 {
+    return GetSuccessor(0);
 }
 
-ExprKind IntOpWithException::GetOpKind() const
+Block* UnaryExpressionWithException::GetErrorBlock() const
 {
-    return opKind;
+    return GetSuccessor(1);
 }
 
-std::string IntOpWithException::GetOpKindName() const
+// BinaryExpressionWithException
+BinaryExpressionWithException::BinaryExpressionWithException(BinaryExprKind binaryKind, Value* lhs, Value* rhs,
+    OverflowStrategy ofs, Block* normal, Block* exception, Block* parent)
+    : BinaryExpressionBase(binaryKind, lhs, rhs, ofs, true, {normal, exception}, parent)
 {
-    return ExprKindMgr::Instance()->GetKindName(static_cast<size_t>(opKind)) + "WithException";
-}
-
-Value* IntOpWithException::GetLHSOperand() const
-{
-    return GetOperand(0);
-}
-
-Value* IntOpWithException::GetRHSOperand() const
-{
-    return GetOperand(1);
-}
-
-Cangjie::OverflowStrategy IntOpWithException::GetOverflowStrategy() const
-{
-    if (opKind == ExprKind::DIV) {
-        return overflowStrategy;
+    // Only DIV may overflow under a non-THROWING strategy (e.g. MIN / -1).
+    // Other ops reach here for exceptions like div-by-zero or overshift, so force THROWING.
+    if (binaryKind != BinaryExprKind::DIV) {
+        overflowStrategy = Cangjie::OverflowStrategy::THROWING;
     }
-    return Cangjie::OverflowStrategy::THROWING;
+}
+
+Block* BinaryExpressionWithException::GetSuccessBlock() const
+{
+    return GetSuccessor(0);
+}
+
+Block* BinaryExpressionWithException::GetErrorBlock() const
+{
+    return GetSuccessor(1);
 }
 
 // NumericCastWithException
@@ -687,17 +683,21 @@ InvokeStaticWithException* InvokeStaticWithException::Clone(CHIRBuilder& builder
     return newNode;
 }
 
-IntOpWithException* IntOpWithException::Clone(CHIRBuilder& builder, Block& parent) const
+UnaryExpressionWithException* UnaryExpressionWithException::Clone(CHIRBuilder& builder, Block& parent) const
 {
     CJC_NULLPTR_CHECK(result);
-    IntOpWithException* newNode = nullptr;
-    if (GetSuccessorIndex(0) == 1) {
-        newNode = builder.CreateExpression<IntOpWithException>(result->GetType(), GetOpKind(), GetLHSOperand(),
-            overflowStrategy, GetSuccessBlock(), GetErrorBlock(), &parent);
-    } else {
-        newNode = builder.CreateExpression<IntOpWithException>(result->GetType(), GetOpKind(), GetLHSOperand(),
-            GetRHSOperand(), overflowStrategy, GetSuccessBlock(), GetErrorBlock(), &parent);
-    }
+    auto newNode = builder.CreateExpression<UnaryExpressionWithException>(result->GetType(), GetOpKind(), GetOperand(),
+        GetSuccessBlock(), GetErrorBlock(), &parent);
+    parent.AppendExpression(newNode);
+    newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
+    return newNode;
+}
+
+BinaryExpressionWithException* BinaryExpressionWithException::Clone(CHIRBuilder& builder, Block& parent) const
+{
+    CJC_NULLPTR_CHECK(result);
+    auto newNode = builder.CreateExpression<BinaryExpressionWithException>(result->GetType(), GetOpKind(),
+        GetLHSOperand(), GetRHSOperand(), overflowStrategy, GetSuccessBlock(), GetErrorBlock(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;

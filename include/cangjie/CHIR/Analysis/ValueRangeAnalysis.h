@@ -173,9 +173,9 @@ private:
 
     void HandleNormalExpressionEffect(RangeDomain& state, const Expression* expression) override;
 
-    void HandleUnaryExpr(RangeDomain& state, const UnaryExpression* unaryExpr) const;
+    void HandleUnaryExpr(RangeDomain& state, const UnaryExpressionBase* unaryExpr) const;
 
-    void HandleBinaryExpr(RangeDomain& state, const BinaryExpression* binaryExpr);
+    void HandleBinaryExpr(RangeDomain& state, const BinaryExpressionBase* binaryExpr);
 
     void HandleOthersExpr(RangeDomain& state, const Expression* expression);
 
@@ -213,7 +213,8 @@ private:
         return ExceptionKind::NA;
     }
 
-    BoolDomain GenerateBoolRangeFromBinaryOp(RangeDomain& state, const Ptr<const BinaryExpression>& binaryExpr) const;
+    BoolDomain GenerateBoolRangeFromBinaryOp(
+        RangeDomain& state, const Ptr<const BinaryExpressionBase>& binaryExpr) const;
 
     DiagnosticEngine& diag;
 

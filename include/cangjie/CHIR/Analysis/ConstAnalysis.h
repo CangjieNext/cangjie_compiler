@@ -255,10 +255,10 @@ private:
             case ExprMajorKind::MEMORY_EXPR:
                 return;
             case ExprMajorKind::UNARY_EXPR:
-                HandleUnaryExpr(state, StaticCast<const UnaryExpression*>(expression), exceptionKind);
+                HandleUnaryExpr(state, StaticCast<const UnaryExpressionBase*>(expression), exceptionKind);
                 break;
             case ExprMajorKind::BINARY_EXPR:
-                HandleBinaryExpr(state, StaticCast<const BinaryExpression*>(expression), exceptionKind);
+                HandleBinaryExpr(state, StaticCast<const BinaryExpressionBase*>(expression), exceptionKind);
                 break;
             case ExprMajorKind::OTHERS:
                 HandleOthersExpr(state, expression, exceptionKind);
@@ -288,7 +288,7 @@ private:
 
     enum class ExceptionKind : uint8_t { SUCCESS, FAIL, NA };
 
-    void HandleUnaryExpr(TConstDomain& state, const UnaryExpression* unaryExpr, ExceptionKind& exceptionKind)
+    void HandleUnaryExpr(TConstDomain& state, const UnaryExpressionBase* unaryExpr, ExceptionKind& exceptionKind)
     {
         auto operand = unaryExpr->GetOperand();
         auto dest = unaryExpr->GetResult();
@@ -296,8 +296,8 @@ private:
         if (absVal == nullptr) {
             return state.SetToBound(dest, /* isTop = */ true);
         }
-        switch (unaryExpr->GetExprKind()) {
-            case ExprKind::NEG: {
+        switch (unaryExpr->GetOpKind()) {
+            case UnaryExprKind::NEG: {
                 if (absVal->GetConstKind() == ConstValue::ConstKind::UINT) {
                     exceptionKind = HandleNegOpOfInt<ConstUIntVal>(state, unaryExpr, absVal);
                     return;
@@ -315,11 +315,11 @@ private:
                 }
                 CJC_ABORT();
             }
-            case ExprKind::NOT: {
+            case UnaryExprKind::NOT: {
                 auto boolVal = StaticCast<const ConstBoolVal*>(absVal)->GetVal();
                 return state.Update(dest, std::make_unique<ConstBoolVal>(!boolVal));
             }
-            case ExprKind::BITNOT: {
+            case UnaryExprKind::BITNOT: {
                 if (absVal->GetConstKind() == ConstValue::ConstKind::UINT) {
                     auto uintVal = StaticCast<const ConstUIntVal*>(absVal)->GetVal();
                     uintVal = CutOffHighBits(~uintVal, operand->GetType()->GetTypeKind());
@@ -335,40 +335,22 @@ private:
         }
     }
 
-    void HandleBinaryExpr(TConstDomain& state, const BinaryExpression* binaryExpr, ExceptionKind& exceptionKind)
+    void HandleBinaryExpr(TConstDomain& state, const BinaryExpressionBase* binaryExpr, ExceptionKind& exceptionKind)
     {
-        auto kind = binaryExpr->GetExprKind();
-        switch (kind) {
-            case ExprKind::ADD:
-            case ExprKind::SUB:
-            case ExprKind::MUL:
-            case ExprKind::DIV:
-            case ExprKind::MOD: {
-                exceptionKind = HandleArithmeticOp(state, binaryExpr, kind);
-                return;
-            }
-            case ExprKind::EXP: {
+        if (binaryExpr->IsMathematicalOperator()) {
+            if (binaryExpr->GetOpKind() == BinaryExprKind::EXP) {
                 exceptionKind = HandleExpOp(state, binaryExpr);
-                return;
+            } else {
+                exceptionKind = HandleArithmeticOp(state, binaryExpr, binaryExpr->GetOpKind());
             }
-            case ExprKind::LSHIFT:
-            case ExprKind::RSHIFT:
-            case ExprKind::BITAND:
-            case ExprKind::BITXOR:
-            case ExprKind::BITOR:
-                return (void)HandleBitwiseOp(state, binaryExpr, kind);
-            case ExprKind::LT:
-            case ExprKind::GT:
-            case ExprKind::LE:
-            case ExprKind::GE:
-            case ExprKind::EQUAL:
-            case ExprKind::NOTEQUAL:
-                return HandleRelationalOp(state, binaryExpr);
-            case ExprKind::AND:
-            case ExprKind::OR:
-                return HandleLogicalOp(state, binaryExpr);
-            default:
-                CJC_ABORT();
+        } else if (binaryExpr->IsBitwiseOperator()) {
+            exceptionKind = HandleBitwiseOp(state, binaryExpr, binaryExpr->GetOpKind());
+        } else if (binaryExpr->IsComparisonOperator()) {
+            HandleRelationalOp(state, binaryExpr);
+        } else if (binaryExpr->IsLogicalOperator()) {
+            HandleLogicalOp(state, binaryExpr);
+        } else {
+            CJC_ABORT();
         }
     }
 
@@ -376,11 +358,11 @@ private:
     {
         switch (expression->GetExprKind()) {
             case ExprKind::NUMERIC_CAST: {
-                exceptionKind = HandleTypeCast(state, StaticCast<const NumericCast*>(expression));
+                exceptionKind = HandleNumericCast(state, StaticCast<const NumericCast*>(expression));
                 return;
             }
             case ExprKind::CLASS_STATIC_CAST: {
-                exceptionKind = HandleTypeCast(state, StaticCast<const ClassStaticCast*>(expression));
+                HandleClassStaticCast(state, StaticCast<const ClassStaticCast*>(expression));
                 return;
             }
             case ExprKind::INTRINSIC: {
@@ -417,10 +399,20 @@ private:
             case ExprKind::MULTIBRANCH:
                 return HandleMultiBranchTerminator(state, StaticCast<const MultiBranch*>(terminator));
             case ExprKind::NUMERIC_CAST_WITH_EXCEPTION:
-                res = HandleTypeCast(state, StaticCast<const NumericCastWithException*>(terminator));
+                res = HandleNumericCast(state, StaticCast<const NumericCastWithException*>(terminator));
                 break;
-            case ExprKind::INT_OP_WITH_EXCEPTION:
-                res = HandleIntOpWithExcepTerminator(state, StaticCast<const IntOpWithException*>(terminator));
+            case ExprKind::NEG_WITH_EXCEPTION:
+                HandleUnaryExpr(state, StaticCast<const UnaryExpressionBase*>(terminator), res);
+                break;
+            case ExprKind::ADD_WITH_EXCEPTION:
+            case ExprKind::SUB_WITH_EXCEPTION:
+            case ExprKind::MUL_WITH_EXCEPTION:
+            case ExprKind::DIV_WITH_EXCEPTION:
+            case ExprKind::MOD_WITH_EXCEPTION:
+            case ExprKind::EXP_WITH_EXCEPTION:
+            case ExprKind::LSHIFT_WITH_EXCEPTION:
+            case ExprKind::RSHIFT_WITH_EXCEPTION:
+                HandleBinaryExpr(state, StaticCast<const BinaryExpressionBase*>(terminator), res);
                 break;
             case ExprKind::INTRINSIC_WITH_EXCEPTION:
                 res = HandleIntrinsic(state, StaticCast<const IntrinsicWithException*>(terminator));
@@ -469,38 +461,9 @@ private:
         return std::nullopt;
     }
 
-    ExceptionKind HandleIntOpWithExcepTerminator(TConstDomain& state, const IntOpWithException* intOp)
-    {
-        auto kind = intOp->GetOpKind();
-        if (kind == ExprKind::NEG) {
-            auto operand = intOp->GetOperand(0);
-            auto absVal = state.CheckAbstractValue(operand);
-            if (!absVal) {
-                state.SetToBound(intOp->GetResult(), /* isTop = */ true);
-                return ExceptionKind::NA;
-            }
-            if (absVal->GetConstKind() == ConstValue::ConstKind::UINT) {
-                return HandleNegOpOfInt<ConstUIntVal>(state, intOp, absVal);
-            } else {
-                return HandleNegOpOfInt<ConstIntVal>(state, intOp, absVal);
-            }
-        }
-        if (kind >= ExprKind::ADD && kind < ExprKind::EXP) {
-            return HandleArithmeticOp(state, intOp, kind);
-        }
-        if (kind == ExprKind::EXP) {
-            return HandleExpOp(state, intOp);
-        }
-        if (kind >= ExprKind::LSHIFT && kind <= ExprKind::RSHIFT) {
-            return HandleBitwiseOp(state, intOp, kind);
-        }
-        InternalError("Unsupported IntOpWithException terminator");
-        return ExceptionKind::NA;
-    }
-
     // ============= Helper functions for Unary/BinaryExpression ============= //
-    template <typename T, typename TUnary>
-    ExceptionKind HandleNegOpOfInt(TConstDomain& state, const TUnary* expr, const ConstValue* constVal)
+    template <typename T>
+    ExceptionKind HandleNegOpOfInt(TConstDomain& state, const UnaryExpressionBase* expr, const ConstValue* constVal)
     {
         auto dest = expr->GetResult();
         auto os = expr->GetOverflowStrategy();
@@ -537,8 +500,8 @@ private:
     }
 
     // (a+b), (a-b), (a*b), (a/b), (a%b)
-    template <typename TBinary>
-    ExceptionKind HandleArithmeticOp(TConstDomain& state, const TBinary* binary, ExprKind kind)
+    ExceptionKind HandleArithmeticOp(
+        TConstDomain& state, const BinaryExpressionBase* binary, BinaryExprKind kind)
     {
         auto lhs = binary->GetLHSOperand();
         auto rhs = binary->GetRHSOperand();
@@ -558,7 +521,7 @@ private:
             } else {
                 return HandleArithmeticOpOfInt<ConstUIntVal>(state, binary, kind, lhsAbsVal, rhsAbsVal);
             }
-        } else if constexpr (std::is_same_v<BinaryExpression, TBinary>) {
+        } else if (lhs->GetType()->IsFloat()) {
             HandleArithmeticOpOfFloat(state, binary, lhsAbsVal, rhsAbsVal);
         }
         return ExceptionKind::NA;
@@ -582,9 +545,9 @@ private:
      * its parameter is different. The types of all the other binary expressions' parameters
      * are the same. See @fn HandleExpOp for details.
      */
-    template <typename T, typename TBinary>
-    ExceptionKind HandleArithmeticOpOfInt(
-        TConstDomain& state, const TBinary* expr, ExprKind kind, const ConstValue* lhs, const ConstValue* rhs)
+    template <typename T>
+    ExceptionKind HandleArithmeticOpOfInt(TConstDomain& state, const BinaryExpressionBase* expr, BinaryExprKind kind,
+        const ConstValue* lhs, const ConstValue* rhs)
     {
         auto dest = expr->GetResult();
         auto os = expr->GetOverflowStrategy();
@@ -596,7 +559,7 @@ private:
         if (isTrivial != ExceptionKind::NA) {
             return isTrivial;
         }
-        if (expr->GetLHSOperand() == expr->GetRHSOperand() && kind == ExprKind::SUB) {
+        if (expr->GetLHSOperand() == expr->GetRHSOperand() && kind == BinaryExprKind::SUB) {
             // `a - a` => 0
             state.Update(dest, std::make_unique<T>(0));
             return ExceptionKind::SUCCESS;
@@ -612,10 +575,11 @@ private:
         ValType x = left->GetVal();
         ValType y = right->GetVal();
         bool isOverflow = false;
+        auto exprKind = ExprKindMgr::ToExprKind(kind);
         if constexpr (std::is_same_v<ValType, int64_t>) {
-            isOverflow = OverflowChecker::IsIntOverflow(dest->GetType()->GetTypeKind(), kind, x, y, os, &res);
+            isOverflow = OverflowChecker::IsIntOverflow(dest->GetType()->GetTypeKind(), exprKind, x, y, os, &res);
         } else if constexpr (std::is_same_v<ValType, uint64_t>) {
-            isOverflow = OverflowChecker::IsUIntOverflow(dest->GetType()->GetTypeKind(), kind, x, y, os, &res);
+            isOverflow = OverflowChecker::IsUIntOverflow(dest->GetType()->GetTypeKind(), exprKind, x, y, os, &res);
         } else {
             CJC_ABORT();
         }
@@ -647,32 +611,32 @@ private:
      * e) MOD: `a % 0`, `0 % a = 0` and `a % 1 == 0`
      * f) EXP: We don't handle this kind of operations in this funciton. See @fn HandleExpOp.
      */
-    template <typename T, typename TBinary>
-    ExceptionKind HandleTrivialArithmeticOp(
-        TConstDomain& state, const TBinary* expr, ExprKind kind, const T* left, const T* right)
+    template <typename T>
+    ExceptionKind HandleTrivialArithmeticOp(TConstDomain& state, const BinaryExpressionBase* expr, BinaryExprKind kind,
+        const T* left, const T* right)
     {
         auto dest = expr->GetResult();
         if (right) {
             if (right->GetVal() == 0) {
-                if (kind == ExprKind::DIV || kind == ExprKind::MOD) {
+                if (kind == BinaryExprKind::DIV || kind == BinaryExprKind::MOD) {
                     // `a / 0` or `a % 0` => error
                     RaiseDivByZeroError(expr, kind);
                     state.SetToBound(dest, /* isTop = */ true);
                     return ExceptionKind::FAIL;
-                } else if (kind == ExprKind::MUL) {
+                } else if (kind == BinaryExprKind::MUL) {
                     // `a * 0` => 0
                     state.Update(dest, std::make_unique<T>(0));
                     return ExceptionKind::SUCCESS;
                 }
             }
-            if (right->GetVal() == 1 && kind == ExprKind::MOD) {
+            if (right->GetVal() == 1 && kind == BinaryExprKind::MOD) {
                 // `a % 1` => 0
                 state.Update(dest, std::make_unique<T>(0));
                 return ExceptionKind::SUCCESS;
             }
         }
         if (left && left->GetVal() == 0) {
-            if (kind == ExprKind::MUL || kind == ExprKind::DIV || kind == ExprKind::MOD) {
+            if (kind == BinaryExprKind::MUL || kind == BinaryExprKind::DIV || kind == BinaryExprKind::MOD) {
                 // `0 * a`, `0 \ a` or `0 % a`
                 state.Update(dest, std::make_unique<T>(0));
                 return ExceptionKind::SUCCESS;
@@ -682,7 +646,7 @@ private:
     }
 
     // a**b
-    template <typename TBinary> ExceptionKind HandleExpOp(TConstDomain& state, const TBinary* binary)
+    ExceptionKind HandleExpOp(TConstDomain& state, const BinaryExpressionBase* binary)
     {
         auto dest = binary->GetResult();
         if (!dest->GetType()->IsInteger()) {
@@ -717,7 +681,7 @@ private:
         int64_t res = 0;
         bool isOverflow = OverflowChecker::IsExpOverflow(lhsAbsVal->GetVal(), rhsAbsVal->GetVal(), os, &res);
         if (isOverflow && os == OverflowStrategy::THROWING) {
-            RaiseArithmeticOverflowError(binary, ExprKind::EXP, lhsAbsVal, rhsAbsVal);
+            RaiseArithmeticOverflowError(binary, BinaryExprKind::EXP, lhsAbsVal, rhsAbsVal);
             state.SetToBound(dest, /* isTop = */ true);
             return ExceptionKind::FAIL;
         } else {
@@ -739,8 +703,8 @@ private:
      * ** note **:
      * 1. We don't handle EXP binary operations whose operands are floats. See @fn HandleExpOp.
      */
-    void HandleArithmeticOpOfFloat(
-        TConstDomain& state, const BinaryExpression* binaryExpr, const ConstValue* lhs, const ConstValue* rhs) const
+    void HandleArithmeticOpOfFloat(TConstDomain& state, const BinaryExpressionBase* binaryExpr, const ConstValue* lhs,
+        const ConstValue* rhs) const
     {
         auto dest = binaryExpr->GetResult();
         if (!lhs || !rhs) {
@@ -751,17 +715,17 @@ private:
         auto right = StaticCast<const ConstFloatVal*>(rhs);
 
         double res = 0.0;
-        switch (binaryExpr->GetExprKind()) {
-            case ExprKind::ADD:
+        switch (binaryExpr->GetOpKind()) {
+            case BinaryExprKind::ADD:
                 res = left->GetVal() + right->GetVal();
                 break;
-            case ExprKind::SUB:
+            case BinaryExprKind::SUB:
                 res = left->GetVal() - right->GetVal();
                 break;
-            case ExprKind::MUL:
+            case BinaryExprKind::MUL:
                 res = left->GetVal() * right->GetVal();
                 break;
-            case ExprKind::DIV:
+            case BinaryExprKind::DIV:
                 res = left->GetVal() / right->GetVal();
                 break;
             default:
@@ -776,8 +740,7 @@ private:
         }
     }
 
-    template <typename TBinary>
-    ExceptionKind HandleBitwiseOp(TConstDomain& state, const TBinary* binaryExpr, ExprKind kind)
+    ExceptionKind HandleBitwiseOp(TConstDomain& state, const BinaryExpressionBase* binaryExpr, BinaryExprKind kind)
     {
         auto lhs = binaryExpr->GetLHSOperand();
         auto rhs = binaryExpr->GetRHSOperand();
@@ -812,15 +775,15 @@ private:
      * ** note **:
      * 1. Both parameter @p lhs and @p rhs are required to be non-null values.
      */
-    template <typename L, typename R, typename TBinary>
-    ExceptionKind HandleBitwiseOpOfType(
-        TConstDomain& state, const TBinary* binaryExpr, ExprKind kind, const ConstValue* lhs, const ConstValue* rhs)
+    template <typename L, typename R>
+    ExceptionKind HandleBitwiseOpOfType(TConstDomain& state, const BinaryExpressionBase* binaryExpr,
+        BinaryExprKind kind, const ConstValue* lhs, const ConstValue* rhs)
     {
         const L* left = static_cast<const L*>(lhs);
         const R* right = static_cast<const R*>(rhs);
 
         auto dest = binaryExpr->GetResult();
-        bool isShiftOp = kind == ExprKind::LSHIFT || kind == ExprKind::RSHIFT;
+        bool isShiftOp = kind == BinaryExprKind::LSHIFT || kind == BinaryExprKind::RSHIFT;
 
         if (!right) {
             state.SetToBound(dest, /* isTop = */ true);
@@ -852,12 +815,17 @@ private:
         using RValType = decltype(right->GetVal());
         // Use common type for bitwise operations to avoid sign-conversion warnings
         using CommonType = std::common_type_t<LValType, RValType>;
-        const static std::unordered_map<ExprKind, std::function<LValType(LValType, RValType)>> ops = {
-            {ExprKind::LSHIFT, [](LValType x, RValType y) { return static_cast<LValType>(static_cast<CommonType>(x) << static_cast<CommonType>(y)); }},
-            {ExprKind::RSHIFT, [](LValType x, RValType y) { return static_cast<LValType>(static_cast<CommonType>(x) >> static_cast<CommonType>(y)); }},
-            {ExprKind::BITAND, [](LValType x, RValType y) { return static_cast<LValType>(static_cast<CommonType>(x) & static_cast<CommonType>(y)); }},
-            {ExprKind::BITXOR, [](LValType x, RValType y) { return static_cast<LValType>(static_cast<CommonType>(x) ^ static_cast<CommonType>(y)); }},
-            {ExprKind::BITOR, [](LValType x, RValType y) { return static_cast<LValType>(static_cast<CommonType>(x) | static_cast<CommonType>(y)); }}};
+        const static std::unordered_map<BinaryExprKind, std::function<LValType(LValType, RValType)>> ops = {
+            {BinaryExprKind::LSHIFT, [](LValType x, RValType y) {
+                return static_cast<LValType>(static_cast<CommonType>(x) << static_cast<CommonType>(y)); }},
+            {BinaryExprKind::RSHIFT, [](LValType x, RValType y) {
+                return static_cast<LValType>(static_cast<CommonType>(x) >> static_cast<CommonType>(y)); }},
+            {BinaryExprKind::BITAND, [](LValType x, RValType y) {
+                return static_cast<LValType>(static_cast<CommonType>(x) & static_cast<CommonType>(y)); }},
+            {BinaryExprKind::BITXOR, [](LValType x, RValType y) {
+                return static_cast<LValType>(static_cast<CommonType>(x) ^ static_cast<CommonType>(y)); }},
+            {BinaryExprKind::BITOR, [](LValType x, RValType y) {
+                return static_cast<LValType>(static_cast<CommonType>(x) | static_cast<CommonType>(y)); }}};
 
         auto op = ops.find(kind);
         CJC_ASSERT(op != ops.end());
@@ -868,9 +836,9 @@ private:
         return ExceptionKind::SUCCESS;
     }
 
-    void HandleRelationalOp(TConstDomain& state, const BinaryExpression* binaryExpr)
+    void HandleRelationalOp(TConstDomain& state, const BinaryExpressionBase* binaryExpr)
     {
-        auto kind = binaryExpr->GetExprKind();
+        auto kind = binaryExpr->GetOpKind();
         auto dest = binaryExpr->GetResult();
         auto lhs = binaryExpr->GetLHSOperand();
         auto rhs = binaryExpr->GetRHSOperand();
@@ -878,7 +846,7 @@ private:
         CJC_ASSERT(lhsTy == rhs->GetType());
         if (lhsTy->IsUnit() || (lhs == rhs && !lhsTy->IsFloat())) {
             bool res = true;
-            if (kind == ExprKind::LT || kind == ExprKind::GT || kind == ExprKind::NOTEQUAL) {
+            if (kind == BinaryExprKind::LT || kind == BinaryExprKind::GT || kind == BinaryExprKind::NOTEQUAL) {
                 res = false;
             }
             return state.Update(dest, std::make_unique<ConstBoolVal>(res));
@@ -918,36 +886,36 @@ private:
      */
     template <typename T>
     void HandleRelationalOpOfType(
-        TConstDomain& state, const BinaryExpression* binaryExpr, const ConstValue* lhs, const ConstValue* rhs)
+        TConstDomain& state, const BinaryExpressionBase* binaryExpr, const ConstValue* lhs, const ConstValue* rhs)
     {
         const T* left = static_cast<const T*>(lhs);
         const T* right = static_cast<const T*>(rhs);
 
         using ValType = decltype(left->GetVal());
-        const static std::unordered_map<ExprKind, std::function<bool(ValType, ValType)>> ops = {
-            {ExprKind::LT, std::less<ValType>{}},
-            {ExprKind::LE, std::less_equal<ValType>{}},
-            {ExprKind::GT, std::greater<ValType>{}},
-            {ExprKind::GE, std::greater_equal<ValType>{}},
-            {ExprKind::EQUAL, std::equal_to<ValType>{}},
-            {ExprKind::NOTEQUAL, std::not_equal_to<ValType>{}},
+        const static std::unordered_map<BinaryExprKind, std::function<bool(ValType, ValType)>> ops = {
+            {BinaryExprKind::LT, std::less<ValType>{}},
+            {BinaryExprKind::LE, std::less_equal<ValType>{}},
+            {BinaryExprKind::GT, std::greater<ValType>{}},
+            {BinaryExprKind::GE, std::greater_equal<ValType>{}},
+            {BinaryExprKind::EQUAL, std::equal_to<ValType>{}},
+            {BinaryExprKind::NOTEQUAL, std::not_equal_to<ValType>{}},
         };
 
-        auto op = ops.find(binaryExpr->GetExprKind());
+        auto op = ops.find(binaryExpr->GetOpKind());
         CJC_ASSERT(op != ops.end());
 
         bool res = op->second(left->GetVal(), right->GetVal());
         state.Update(binaryExpr->GetResult(), std::make_unique<ConstBoolVal>(res));
     }
 
-    void HandleLogicalOp(TConstDomain& state, const BinaryExpression* binaryExpr) const
+    void HandleLogicalOp(TConstDomain& state, const BinaryExpressionBase* binaryExpr) const
     {
         auto lhs = binaryExpr->GetLHSOperand();
         auto rhs = binaryExpr->GetRHSOperand();
         auto dest = binaryExpr->GetResult();
         auto lhsVal = RawStaticCast<const ConstBoolVal*>(state.CheckAbstractValue(lhs));
         auto rhsVal = RawStaticCast<const ConstBoolVal*>(state.CheckAbstractValue(rhs));
-        if (binaryExpr->GetExprKind() == ExprKind::AND) {
+        if (binaryExpr->GetOpKind() == BinaryExprKind::AND) {
             if (lhsVal && rhsVal) {
                 return state.Update(dest, std::make_unique<ConstBoolVal>(lhsVal->GetVal() && rhsVal->GetVal()));
             } else if ((lhsVal && !lhsVal->GetVal()) || (rhsVal && !rhsVal->GetVal())) {
@@ -965,42 +933,34 @@ private:
 
     // =============== Error reporting functions for DIV_BY_ZERO or OVERFLOW erros  =============== //
 
-    template <typename TBinary> void RaiseDivByZeroError(const TBinary* binary, ExprKind kind)
+    void RaiseDivByZeroError(const BinaryExpressionBase* binary, BinaryExprKind kind)
     {
         if (this->isStable) {
             auto& loc = binary->GetDebugLocation();
-            auto prompt = kind == ExprKind::DIV ? "divide" : "modulo";
+            auto prompt = kind == BinaryExprKind::DIV ? "divide" : "modulo";
             auto builder = diag.DiagnoseRefactor(DiagKindRefactor::chir_divisor_is_zero, ToRange(loc), prompt);
             builder.AddMainHintArguments(prompt);
         }
     }
 
-    template <typename TBinary, typename T, typename U>
-    void RaiseArithmeticOverflowError(const TBinary* expr, ExprKind kind, const T* leftVal, const U* rightVal)
+    template <typename T, typename U>
+    void RaiseArithmeticOverflowError(
+        const BinaryExpressionBase* expr, BinaryExprKind kind, const T* leftVal, const U* rightVal)
     {
         if (this->isStable) {
             auto& loc = expr->GetDebugLocation();
             auto ty = expr->GetResult()->GetType();
-            const static std::unordered_map<ExprKind, std::string> ops = {
-                {ExprKind::ADD, "+"},
-                {ExprKind::SUB, "-"},
-                {ExprKind::MUL, "*"},
-                {ExprKind::DIV, "/"},
-                {ExprKind::MOD, "%"},
-                {ExprKind::EXP, "**"},
-            };
-            auto token = ops.find(kind);
-            CJC_ASSERT(token != ops.end());
+            auto token = GetBinaryExprKindLiteral(kind);
             auto builder = diag.DiagnoseRefactor(
-                DiagKindRefactor::chir_arithmetic_operator_overflow, ToRange(loc), token->second);
-            std::string hint = ty->ToString() + "(" + leftVal->ToString() + ") " + token->second + " " +
+                DiagKindRefactor::chir_arithmetic_operator_overflow, ToRange(loc), token);
+            std::string hint = ty->ToString() + "(" + leftVal->ToString() + ") " + token + " " +
                 expr->GetRHSOperand()->GetType()->ToString() + "(" + rightVal->ToString() + ")";
             builder.AddMainHintArguments(hint);
             builder.AddNote(GenerateTypeRangePrompt(expr->GetResult()->GetType()));
         }
     }
 
-    template <typename T, typename TBinary> void RaiseNegativeShiftError(const TBinary* expr, T rightVal)
+    template <typename T> void RaiseNegativeShiftError(const BinaryExpressionBase* expr, T rightVal)
     {
         if (this->isStable) {
             auto& loc = expr->GetDebugLocation();
@@ -1010,8 +970,8 @@ private:
         }
     }
 
-    template <typename T, typename TBinary>
-    void RaiseOvershiftError(const TBinary* expr, T rightVal, uint64_t leftValBit)
+    template <typename T>
+    void RaiseOvershiftError(const BinaryExpressionBase* expr, T rightVal, uint64_t leftValBit)
     {
         if (this->isStable) {
             auto& loc = expr->GetDebugLocation();
@@ -1045,7 +1005,7 @@ private:
 
     // =============== Transfer functions for TypeCast expression =============== //
 
-    template <typename TTypeCast> ExceptionKind HandleTypeCast(TConstDomain& state, const TTypeCast* cast)
+    ExceptionKind HandleNumericCast(TConstDomain& state, const NumericCastBase* cast)
     {
         auto dest = cast->GetResult();
         auto srcTy = cast->GetSourceType();
@@ -1054,17 +1014,24 @@ private:
                 return HandleTypecastOfInt(state, cast, srcAbsVal);
             }
         }
-        if (srcTy->IsRef() || srcTy->IsClass()) {
-            state.Propagate(cast->GetSourceValue(), dest);
-            return ExceptionKind::NA;
-        }
 
         state.SetToTopOrTopRef(dest, /* isRef = */ dest->GetType()->IsRef());
         return ExceptionKind::NA;
     }
 
-    template <typename TTypeCast>
-    ExceptionKind HandleTypecastOfInt(TConstDomain& state, const TTypeCast* cast, const ConstValue* srcAbsVal)
+    void HandleClassStaticCast(TConstDomain& state, const ClassStaticCast* cast)
+    {
+        auto dest = cast->GetResult();
+        auto src = cast->GetSourceValue();
+        auto srcTy = cast->GetSourceType();
+        if (srcTy->IsRef() || srcTy->IsClass()) {
+            state.Propagate(src, dest);
+            return;
+        }
+        state.SetToTopOrTopRef(dest, /* isRef = */ dest->GetType()->IsRef());
+    }
+
+    ExceptionKind HandleTypecastOfInt(TConstDomain& state, const NumericCastBase* cast, const ConstValue* srcAbsVal)
     {
         switch (cast->GetSourceType()->GetTypeKind()) {
             case Type::TypeKind::TYPE_INT8: {
@@ -1115,8 +1082,8 @@ private:
         }
     }
 
-    template <typename SrcTy, typename TTypeCast>
-    ExceptionKind HandleTypecastOfIntDispatcher(TConstDomain& state, const TTypeCast* cast, SrcTy val)
+    template <typename SrcTy>
+    ExceptionKind HandleTypecastOfIntDispatcher(TConstDomain& state, const NumericCastBase* cast, SrcTy val)
     {
         auto targetTyKind = cast->GetTargetType()->GetTypeKind();
         switch (targetTyKind) {
@@ -1146,13 +1113,10 @@ private:
         }
     }
 
-    template <typename SrcTy, typename TargetTy, typename TTypeCast>
-    ExceptionKind CastOrRaiseExceptionForInt(TConstDomain& state, const TTypeCast* cast, SrcTy val)
+    template <typename SrcTy, typename TargetTy>
+    ExceptionKind CastOrRaiseExceptionForInt(TConstDomain& state, const NumericCastBase* cast, SrcTy val)
     {
-        OverflowStrategy os = OverflowStrategy::NA;
-        if constexpr (std::is_base_of_v<NumericCastBase, TTypeCast>) {
-            os = cast->GetOverflowStrategy();
-        }
+        auto os = cast->GetOverflowStrategy();
         TargetTy res = 0;
         bool isOverflow = OverflowChecker::IsTypecastOverflowForInt<SrcTy, TargetTy>(val, &res, os);
         if (isOverflow && os == OverflowStrategy::THROWING) {
@@ -1166,7 +1130,7 @@ private:
         }
     }
 
-    template <typename T, typename TTypeCast> void RaiseTypeCastOverflowError(const TTypeCast* cast, T srcVal)
+    template <typename T> void RaiseTypeCastOverflowError(const NumericCastBase* cast, T srcVal)
     {
         if (this->isStable) {
             auto& loc = cast->GetDebugLocation();

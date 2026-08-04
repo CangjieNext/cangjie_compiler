@@ -435,8 +435,32 @@ PackageFormat::CHIRExprKind Serialize(const ExprKind& kind)
         case ExprKind::RAISE_EXCEPTION:
             ret = CHIRExprKind_RaiseException;
             break;
-        case ExprKind::INT_OP_WITH_EXCEPTION:
-            ret = CHIRExprKind_Invalid;
+        case ExprKind::NEG_WITH_EXCEPTION:
+            ret = CHIRExprKind_TryNeg;
+            break;
+        case ExprKind::ADD_WITH_EXCEPTION:
+            ret = CHIRExprKind_TryAdd;
+            break;
+        case ExprKind::SUB_WITH_EXCEPTION:
+            ret = CHIRExprKind_TrySub;
+            break;
+        case ExprKind::MUL_WITH_EXCEPTION:
+            ret = CHIRExprKind_TryMul;
+            break;
+        case ExprKind::DIV_WITH_EXCEPTION:
+            ret = CHIRExprKind_TryDiv;
+            break;
+        case ExprKind::MOD_WITH_EXCEPTION:
+            ret = CHIRExprKind_TryMod;
+            break;
+        case ExprKind::EXP_WITH_EXCEPTION:
+            ret = CHIRExprKind_TryExp;
+            break;
+        case ExprKind::LSHIFT_WITH_EXCEPTION:
+            ret = CHIRExprKind_TryLShift;
+            break;
+        case ExprKind::RSHIFT_WITH_EXCEPTION:
+            ret = CHIRExprKind_TryRShift;
             break;
         case ExprKind::SPAWN_WITH_EXCEPTION:
             ret = CHIRExprKind_TrySpawn;

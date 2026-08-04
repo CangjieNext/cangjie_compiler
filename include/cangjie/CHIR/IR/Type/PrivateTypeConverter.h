@@ -112,11 +112,9 @@ public:
 
 protected:
     virtual R VisitExprDefaultImpl([[maybe_unused]] Expression& o, [[maybe_unused]] Args... args) = 0;
-    virtual R VisitSubExpression(Allocate& o, Args... args) = 0;
-    virtual R VisitSubExpression(AllocateWithException& o, Args... args) = 0;
+    virtual R VisitSubExpression(AllocateBase& o, Args... args) = 0;
     virtual R VisitSubExpression(InstanceOf& o, Args... args) = 0;
-    virtual R VisitSubExpression(RawArrayAllocate& o, Args... args) = 0;
-    virtual R VisitSubExpression(RawArrayAllocateWithException& o, Args... args) = 0;
+    virtual R VisitSubExpression(RawArrayAllocateBase& o, Args... args) = 0;
     virtual R VisitSubExpression(Apply& o, Args... args) = 0;
     virtual R VisitSubExpression(ApplyWithException& o, Args... args) = 0;
     virtual R VisitSubExpression(Invoke& o, Args... args) = 0;
@@ -134,11 +132,11 @@ private:
     static Dispatcher InitExprVTable()
     {
         Dispatcher dispatcher = {
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::ALLOCATE, Allocate),
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::ALLOCATE_WITH_EXCEPTION, AllocateWithException),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::ALLOCATE, AllocateBase),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::ALLOCATE_WITH_EXCEPTION, AllocateBase),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::INSTANCEOF, InstanceOf),
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::RAW_ARRAY_ALLOCATE, RawArrayAllocate),
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION, RawArrayAllocateWithException),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::RAW_ARRAY_ALLOCATE, RawArrayAllocateBase),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION, RawArrayAllocateBase),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::APPLY, Apply),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::APPLY_WITH_EXCEPTION, ApplyWithException),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::INVOKE, Invoke),
@@ -223,11 +221,9 @@ public:
 
 protected:
     void VisitExprDefaultImpl(Expression& o) override;
-    void VisitSubExpression(Allocate& o) override;
-    void VisitSubExpression(AllocateWithException& o) override;
+    void VisitSubExpression(AllocateBase& o) override;
     void VisitSubExpression(InstanceOf& o) override;
-    void VisitSubExpression(RawArrayAllocate& o) override;
-    void VisitSubExpression(RawArrayAllocateWithException& o) override;
+    void VisitSubExpression(RawArrayAllocateBase& o) override;
     void VisitSubExpression(Apply& o) override;
     void VisitSubExpression(ApplyWithException& o) override;
     void VisitSubExpression(Invoke& o) override;
@@ -325,8 +321,7 @@ public:
     void VisitValueDefaultImpl(Value& o) override;
 
 protected:
-    void VisitSubExpression(RawArrayAllocate& o) override;
-    void VisitSubExpression(RawArrayAllocateWithException& o) override;
+    void VisitSubExpression(RawArrayAllocateBase& o) override;
 
     Type* ConvertType(Type& type) override;
 

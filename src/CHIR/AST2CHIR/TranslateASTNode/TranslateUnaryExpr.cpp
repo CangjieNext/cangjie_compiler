@@ -12,11 +12,11 @@ using namespace Cangjie;
 Ptr<Value> Translator::Visit(const AST::UnaryExpr& unaryExpr)
 {
     auto chirType = TranslateType(*unaryExpr.GetTy());
-    ExprKind kd = ExprKind::INVALID;
+    UnaryExprKind kd = UnaryExprKind::NEG;
     if (unaryExpr.op == Cangjie::TokenKind::NOT) {
-        kd = unaryExpr.GetTy()->IsBoolean() ? ExprKind::NOT : ExprKind::BITNOT;
+        kd = unaryExpr.GetTy()->IsBoolean() ? UnaryExprKind::NOT : UnaryExprKind::BITNOT;
     } else if (unaryExpr.op == Cangjie::TokenKind::SUB) {
-        kd = ExprKind::NEG;
+        kd = UnaryExprKind::NEG;
     } else {
         CJC_ASSERT(false && "Visit UnaryExpr: invalid unary operation!");
     }

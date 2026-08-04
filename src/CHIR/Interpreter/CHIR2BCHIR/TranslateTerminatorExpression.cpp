@@ -102,10 +102,23 @@ void CHIR2BCHIR::TranslateTerminatorExpression(Context& ctx, const Expression& e
             PushOpCodeWithAnnotations(ctx, OpCode::ABORT, expr);
             break;
         }
-        case ExprKind::INT_OP_WITH_EXCEPTION: {
-            auto intOpWithException = StaticCast<const IntOpWithException*>(&expr);
-            TranslateIntOpWithException(ctx, *intOpWithException);
-            TranslateTryTerminatorJumps(ctx, *intOpWithException);
+        case ExprKind::NEG_WITH_EXCEPTION: {
+            auto& unaryWithException = StaticCast<const UnaryExpressionWithException&>(expr);
+            TranslateUnaryExpression(ctx, unaryWithException);
+            TranslateTryTerminatorJumps(ctx, unaryWithException);
+            break;
+        }
+        case ExprKind::ADD_WITH_EXCEPTION:
+        case ExprKind::SUB_WITH_EXCEPTION:
+        case ExprKind::MUL_WITH_EXCEPTION:
+        case ExprKind::DIV_WITH_EXCEPTION:
+        case ExprKind::MOD_WITH_EXCEPTION:
+        case ExprKind::EXP_WITH_EXCEPTION:
+        case ExprKind::LSHIFT_WITH_EXCEPTION:
+        case ExprKind::RSHIFT_WITH_EXCEPTION: {
+            auto& binaryWithException = StaticCast<const BinaryExpressionWithException&>(expr);
+            TranslateBinaryExpression(ctx, binaryWithException);
+            TranslateTryTerminatorJumps(ctx, binaryWithException);
             break;
         }
         case ExprKind::ALLOCATE_WITH_EXCEPTION: {
@@ -182,25 +195,5 @@ void CHIR2BCHIR::TranslateMultiBranch(Context& ctx, const MultiBranch& branch)
         // These are sorted
         auto bbIndex = BlockIndex(ctx, *it->second, ctx.def.NextIndex());
         ctx.def.Push(bbIndex);
-    }
-}
-
-void CHIR2BCHIR::TranslateIntOpWithException(Context& ctx, const IntOpWithException& expr)
-{
-    auto opCode = Cangjie::CHIR::Interpreter::BinExprKindWitException2OpCode(expr.GetOpKind());
-    auto typeKind = expr.GetOperand(0)->GetType()->GetTypeKind();
-    auto overflowStrat = static_cast<Bchir::ByteCodeContent>(Cangjie::OverflowStrategy::THROWING);
-
-    if (opCode == OpCode::UN_NEG_EXC) {
-        CJC_ASSERT(expr.GetNumOfNonSuccessorOperands() == 1);
-    } else {
-        CJC_ASSERT(expr.GetNumOfNonSuccessorOperands() == Bchir::FLAG_TWO);
-        CJC_ASSERT(opCode == OpCode::BIN_ADD_EXC || opCode == OpCode::BIN_SUB_EXC || opCode == OpCode::BIN_MUL_EXC ||
-            opCode == OpCode::BIN_DIV_EXC || opCode == OpCode::BIN_MOD_EXC || opCode == OpCode::BIN_EXP_EXC ||
-            opCode == OpCode::BIN_LSHIFT_EXC || opCode == OpCode::BIN_RSHIFT_EXC);
-    }
-    PushOpCodeWithAnnotations<false, true>(ctx, opCode, expr, typeKind, overflowStrat);
-    if (opCode == OpCode::BIN_LSHIFT_EXC || opCode == OpCode::BIN_RSHIFT_EXC) {
-        ctx.def.Push(static_cast<Bchir::ByteCodeContent>(expr.GetOperand(1)->GetType()->GetTypeKind()));
     }
 }
