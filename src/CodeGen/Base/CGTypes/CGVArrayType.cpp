@@ -6,10 +6,28 @@
 
 #include "Base/CGTypes/CGVArrayType.h"
 
+#include "llvm/IR/Metadata.h"
+
 #include "CGContext.h"
 #include "CGModule.h"
 
 namespace Cangjie::CodeGen {
+static constexpr llvm::StringLiteral VARRAY_SIZE_OVERFLOW_METADATA = "cangjie.varray_size_overflow";
+
+static void RecordVArraySizeOverflow(llvm::Module& module, uint64_t numOfElements, uint64_t elementByteSize)
+{
+    uint64_t totalByteSize = 0;
+    if (!__builtin_mul_overflow(numOfElements, elementByteSize, &totalByteSize)) {
+        return;
+    }
+    auto& llvmCtx = module.getContext();
+    auto* i64Ty = llvm::Type::getInt64Ty(llvmCtx);
+    auto* count = llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(i64Ty, numOfElements));
+    auto* size = llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(i64Ty, elementByteSize));
+    module.getOrInsertNamedMetadata(VARRAY_SIZE_OVERFLOW_METADATA)
+        ->addOperand(llvm::MDNode::get(llvmCtx, {count, size}));
+}
+
 void CGVArrayType::CalculateSizeAndAlign()
 {
     if (auto arrayType = llvm::dyn_cast<llvm::ArrayType>(llvmType)) {
@@ -27,7 +45,11 @@ llvm::Type* CGVArrayType::GenLLVMType()
 
     auto& varrType = StaticCast<const CHIR::VArrayType&>(chirType);
     auto varrElementType = varrType.GetElementType();
-    llvmType = llvm::ArrayType::get(CGType::GetOrCreate(cgMod, varrElementType)->GetLLVMType(), varrType.GetSize());
+    auto* elementLLVMType = CGType::GetOrCreate(cgMod, varrElementType)->GetLLVMType();
+    auto* module = cgMod.GetLLVMModule();
+    auto elementByteSize = module->getDataLayout().getTypeAllocSize(elementLLVMType);
+    RecordVArraySizeOverflow(*module, varrType.GetSize(), elementByteSize);
+    llvmType = llvm::ArrayType::get(elementLLVMType, varrType.GetSize());
 
     auto layoutName = "VArray." + std::to_string(varrType.GetSize()) + MangleType(*varrElementType);
     layoutType = llvm::StructType::getTypeByName(cgCtx.GetLLVMContext(), layoutName);
@@ -78,7 +100,7 @@ llvm::Constant* CGVArrayType::GenOffsetsOfTypeInfo()
 
 llvm::Constant* CGVArrayType::GenTypeArgsOfTypeInfo()
 {
-   return CGType::GenTypeArgsOfTypeInfo();
+    return CGType::GenTypeArgsOfTypeInfo();
 }
 
 llvm::Constant* CGVArrayType::GenSuperOfTypeInfo()

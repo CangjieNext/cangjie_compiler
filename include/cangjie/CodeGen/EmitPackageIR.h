@@ -30,12 +30,8 @@ std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(
     DefaultCompilerInstance& compilerInstance, bool enableIncrement);
 
 /**
- * @brief Scan generated LLVM modules for a VArray whose total byte size (elementCount * elementByteSize)
- * overflows uint64. Such a VArray would reach the backend with a wrapped, tiny allocation size and
- * silently bypass the backend's stacksize limit, producing a binary that crashes at runtime. The
- * stacksize limit itself is enforced solely by the LLVM backend (and may change); this check rejects
- * any overflow, which is invalid regardless of the limit's value. Returns false (after printing the
- * error) if an overflow is found, so cjc exits non-zero without running llc.
+ * @brief Check overflow records produced while lowering VArray types. If a VArray's total byte size
+ * overflows uint64, print an error and return false so cjc exits non-zero before running the backend.
  */
 bool CheckVArraySizeOverflow(const std::vector<std::unique_ptr<llvm::Module>>& llvmModules);
 #endif

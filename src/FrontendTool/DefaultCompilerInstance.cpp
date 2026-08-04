@@ -261,12 +261,8 @@ bool DefaultCIImpl::EmitLLVMSimilarBytecode(bool enableIncrement)
     auto fullPackageName = curPackage->GetName();
     auto llvmModules = CodeGen::GenPackageModules(ci, enableIncrement);
 
-    // VArray total-size overflow check (issue #1036): a VArray whose numOfElements * elemByteSize
-    // overflows uint64 would reach the backend with a wrapped, tiny allocation size, silently
-    // bypassing the backend's stacksize limit. CodeGen builds such modules fine (the huge [N x T]
-    // type is valid metadata), so detect the overflow here, single-threaded after the parallel
-    // CodeGen joined and before handing modules to llc. The stacksize limit itself is owned by
-    // the backend and may change; any overflow is rejected here regardless of the limit's value.
+    // VArray total-size overflow is detected while lowering each VArray type. Check the recorded errors here,
+    // after parallel CodeGen has joined, so the driver exits cleanly before handing invalid IR to the backend.
     if (!CodeGen::CheckVArraySizeOverflow(llvmModules)) {
         return false;
     }
