@@ -261,8 +261,8 @@ void RangePropagation::CheckVarrayIndex(const Ptr<Intrinsic>& intrin, const Rang
         }
         SIntDomain varraySizeNode{ConstantRange{SInt{IntWidth::I64, static_cast<uint64_t>(size)}}, false};
         SIntDomain zeroNode{ConstantRange{SInt::Zero(IntWidth::I64)}, false};
-        auto ltUpperBound{ComputeRelIntBinop({indexRange, varraySizeNode, index, nullptr, ExprKind::LT, false})};
-        auto geLowerBound{ComputeRelIntBinop({indexRange, zeroNode, index, nullptr, ExprKind::GE, false})};
+        auto ltUpperBound{ComputeRelIntBinop({indexRange, varraySizeNode, index, nullptr, BinaryExprKind::LT, false})};
+        auto geLowerBound{ComputeRelIntBinop({indexRange, zeroNode, index, nullptr, BinaryExprKind::GE, false})};
         if (ltUpperBound.IsFalse() || geLowerBound.IsFalse()) {
             auto bd =
                 diag.DiagnoseRefactor(DiagKindRefactor::chir_idx_out_of_bounds, ToRange(intrin->GetDebugLocation()));

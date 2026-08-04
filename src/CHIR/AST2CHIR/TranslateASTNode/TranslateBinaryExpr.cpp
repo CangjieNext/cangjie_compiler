@@ -43,39 +43,17 @@ Ptr<Value> Translator::Visit(const AST::BinaryExpr& binaryExpr)
 
 Ptr<Value> Translator::ProcessBinaryExpr(const AST::BinaryExpr& binaryExpr)
 {
-    // BinaryExpression init func is (ExprKind, Value*, Value*, OverflowStrategy, Block*)
-    static const std::unordered_map<Cangjie::TokenKind, ExprKind> OP2_EXPR_KIND = {
-        {Cangjie::TokenKind::ADD, ExprKind::ADD},
-        {Cangjie::TokenKind::SUB, ExprKind::SUB},
-        {Cangjie::TokenKind::MUL, ExprKind::MUL},
-        {Cangjie::TokenKind::DIV, ExprKind::DIV},
-        {Cangjie::TokenKind::MOD, ExprKind::MOD},
-        {Cangjie::TokenKind::EXP, ExprKind::EXP},
-        {Cangjie::TokenKind::AND, ExprKind::AND},
-        {Cangjie::TokenKind::OR, ExprKind::OR},
-        {Cangjie::TokenKind::BITAND, ExprKind::BITAND},
-        {Cangjie::TokenKind::BITOR, ExprKind::BITOR},
-        {Cangjie::TokenKind::BITXOR, ExprKind::BITXOR},
-        {Cangjie::TokenKind::LSHIFT, ExprKind::LSHIFT},
-        {Cangjie::TokenKind::RSHIFT, ExprKind::RSHIFT},
-        {Cangjie::TokenKind::LT, ExprKind::LT},
-        {Cangjie::TokenKind::GT, ExprKind::GT},
-        {Cangjie::TokenKind::LE, ExprKind::LE},
-        {Cangjie::TokenKind::GE, ExprKind::GE},
-        {Cangjie::TokenKind::NOTEQ, ExprKind::NOTEQUAL},
-        {Cangjie::TokenKind::EQUAL, ExprKind::EQUAL},
-    };
     const auto chirType = TranslateType(*binaryExpr.GetTy());
     const auto& loc = TranslateLocation(binaryExpr);
-    auto it = OP2_EXPR_KIND.find(binaryExpr.op);
-    CJC_ASSERT(it != OP2_EXPR_KIND.end());
-    ExprKind kd = it->second;
+    auto it = tokenKindToBinaryExprKind.find(binaryExpr.op);
+    CJC_ASSERT(it != tokenKindToBinaryExprKind.end());
+    BinaryExprKind kd = it->second;
     auto lhs = TranslateExprArg(*binaryExpr.leftExpr);
     CJC_NULLPTR_CHECK(lhs);
-    if (kd == ExprKind::AND) {
+    if (kd == BinaryExprKind::AND) {
         return TransShortCircuitAnd(lhs, *binaryExpr.rightExpr, loc, binaryExpr.TestAttr(AST::Attribute::COMPILER_ADD));
     }
-    if (kd == ExprKind::OR) {
+    if (kd == BinaryExprKind::OR) {
         return TransShortCircuitOr(lhs, *binaryExpr.rightExpr, loc, binaryExpr.TestAttr(AST::Attribute::COMPILER_ADD));
     }
     auto rightExpr = TranslateExprArg(*binaryExpr.rightExpr);

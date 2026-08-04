@@ -9,11 +9,12 @@
 
 #include "llvm/IR/Value.h"
 
+#include "cangjie/CHIR/IR/Expression/Terminator.h"
+
 namespace Cangjie {
 namespace CodeGen {
 class IRBuilder2;
-class CHIRBinaryExprWrapper;
-llvm::Value* GenerateBooleanOperation(IRBuilder2& irBuilder, const CHIRBinaryExprWrapper& binOp);
+llvm::Value* GenerateBooleanOperation(IRBuilder2& irBuilder, const CHIR::BinaryExpressionBase& binOp);
 } // namespace CodeGen
 } // namespace Cangjie
 

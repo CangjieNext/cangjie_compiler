@@ -1344,8 +1344,7 @@ private:
         state.PropagateWithoutChildren(value, targetObj);
     }
 
-    template <typename TAllocate>
-    Value* PreHandleAllocateExpr(State<ValueDomain, ValueStatePool>& state, const TAllocate* allocate)
+    Value* PreHandleAllocateExpr(State<ValueDomain, ValueStatePool>& state, const AllocateBase* allocate)
     {
         // In our framework, we associate a *single* memory location with every static allocation site.
         // That is, when we meet an Allocation expression again, we won't come up with a new Ref, instead
@@ -1540,9 +1539,8 @@ private:
         return true;
     }
 
-    template <typename TRawArrayAllocate>
     std::optional<Block*> PreHandleRawArrayAllocate(
-        State<ValueDomain, ValueStatePool>& state, const TRawArrayAllocate* allocate)
+        State<ValueDomain, ValueStatePool>& state, const RawArrayAllocateBase* allocate)
     {
         state.GetReferencedObjAndSetToTop(allocate->GetResult(), allocate);
         return std::nullopt;

@@ -193,18 +193,19 @@ TEST(SIntDomainTest, DomainLevel)
     auto c = ec->GetResult();
     SIntDomain s1{ConstantRange::Full(IntWidth::I32), false};
     SIntDomain s2{ConstantRange{{IntWidth::I32, 0x80000000}}, false};
-    auto sub1{ComputeArithmeticBinop({s1, s2, a, b, ExprKind::SUB, Cangjie::OverflowStrategy::THROWING, false})};
+    auto sub1{ComputeArithmeticBinop({s1, s2, a, b, BinaryExprKind::SUB, Cangjie::OverflowStrategy::THROWING, false})};
     EXPECT_EQ(sub1.SymbolicBounds().Begin(), sub1.SymbolicBounds().End());
-    auto sub2{ComputeArithmeticBinop({s2, s1, a, b, ExprKind::SUB, Cangjie::OverflowStrategy::WRAPPING, false})};
+    auto sub2{ComputeArithmeticBinop({s2, s1, a, b, BinaryExprKind::SUB, Cangjie::OverflowStrategy::WRAPPING, false})};
     EXPECT_EQ(sub2.SymbolicBounds().Begin(), sub2.SymbolicBounds().End());
-    auto sub3{ComputeArithmeticBinop({s2, s2, a, b, ExprKind::SUB, Cangjie::OverflowStrategy::SATURATING, false})};
+    auto sub3{ComputeArithmeticBinop({
+		s2, s2, a, b, BinaryExprKind::SUB, Cangjie::OverflowStrategy::SATURATING, false})};
     EXPECT_EQ(sub3.SymbolicBounds().Begin(), sub3.SymbolicBounds().End());
 
     SIntDomain s3{ConstantRange::Full(IntWidth::I32), SIntDomain::SymbolicBoundsMap{{c, {{0u}, {10u}}}}, true};
     SIntDomain s4{ConstantRange::Full(IntWidth::I32), SIntDomain::SymbolicBoundsMap{{c, {{15u}, {20u}}}}, true};
-    EXPECT_TRUE(ComputeRelIntBinop({s3, s4, a, b, ExprKind::NOTEQUAL, true}).IsTrue());
-    EXPECT_TRUE(ComputeRelIntBinop({s3, s4, a, b, ExprKind::EQUAL, true}).IsFalse());
+    EXPECT_TRUE(ComputeRelIntBinop({s3, s4, a, b, BinaryExprKind::NOTEQUAL, true}).IsTrue());
+    EXPECT_TRUE(ComputeRelIntBinop({s3, s4, a, b, BinaryExprKind::EQUAL, true}).IsFalse());
     SIntDomain s5{ConstantRange::Full(IntWidth::I32), SIntDomain::SymbolicBoundsMap{{c, {{5u}, {15u}}}}, true};
-    EXPECT_TRUE(ComputeRelIntBinop({s3, s5, a, b, ExprKind::NOTEQUAL, true}).IsTop());
-    EXPECT_TRUE(ComputeRelIntBinop({s3, s5, a, b, ExprKind::EQUAL, true}).IsTop());
+    EXPECT_TRUE(ComputeRelIntBinop({s3, s5, a, b, BinaryExprKind::NOTEQUAL, true}).IsTop());
+    EXPECT_TRUE(ComputeRelIntBinop({s3, s5, a, b, BinaryExprKind::EQUAL, true}).IsTop());
 }

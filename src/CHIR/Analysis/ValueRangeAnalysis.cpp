@@ -9,6 +9,7 @@
 #include <climits>
 #include "cangjie/CHIR/Checker/OverflowChecking.h"
 #include "cangjie/CHIR/Analysis/Arithmetic.h"
+#include "cangjie/CHIR/Utils/Utils.h"
 
 namespace Cangjie::CHIR {
 ValueRange::ValueRange(RangeKind kind) : kind(kind)
@@ -146,7 +147,8 @@ const SIntDomain& GetDefaultIntCache(const Ptr<Type>& ty)
 
 inline bool IsBasicBinaryExpr(const Expression& expr)
 {
-    return expr.GetExprKind() >= ExprKind::ADD && expr.GetExprKind() <= ExprKind::MOD;
+    auto binary = DynamicCast<const BinaryExpressionBase*>(&expr);
+    return binary != nullptr && binary->IsMathematicalOperator() && binary->GetOpKind() != BinaryExprKind::EXP;
 }
 
 template <> const std::string Analysis<RangeDomain>::name = "range-analysis";
@@ -196,10 +198,10 @@ void RangeAnalysis::HandleNormalExpressionEffect(RangeDomain& state, const Expre
         case ExprMajorKind::MEMORY_EXPR:
             return;
         case ExprMajorKind::UNARY_EXPR:
-            HandleUnaryExpr(state, StaticCast<const UnaryExpression*>(expression));
+            HandleUnaryExpr(state, StaticCast<const UnaryExpressionBase*>(expression));
             break;
         case ExprMajorKind::BINARY_EXPR:
-            HandleBinaryExpr(state, StaticCast<const BinaryExpression*>(expression));
+            HandleBinaryExpr(state, StaticCast<const BinaryExpressionBase*>(expression));
             break;
         case ExprMajorKind::OTHERS:
             HandleOthersExpr(state, expression);
@@ -234,19 +236,20 @@ void RangeAnalysis::HandleNormalExpressionEffect(RangeDomain& state, const Expre
 }
 
 BoolDomain RangeAnalysis::GenerateBoolRangeFromBinaryOp(
-    RangeDomain& state, const Ptr<const BinaryExpression>& binaryExpr) const
+    RangeDomain& state, const Ptr<const BinaryExpressionBase>& binaryExpr) const
 {
     auto lhs = binaryExpr->GetLHSOperand();
     auto rhs = binaryExpr->GetRHSOperand();
+    auto opKind = binaryExpr->GetOpKind();
     if (lhs->GetType()->IsInteger()) {
         const auto& lRange = GetSIntDomainFromState(state, lhs);
         const auto& rRange = GetSIntDomainFromState(state, rhs);
         return ComputeRelIntBinop(CHIRRelIntBinopArgs{
-            lRange, rRange, lhs, rhs, binaryExpr->GetExprKind(), IsUnsignedArithmetic(*binaryExpr)});
+            lRange, rRange, lhs, rhs, opKind, IsUnsignedArithmetic(*binaryExpr)});
     }
     const auto& lRange = GetBoolDomainFromState(state, lhs);
     const auto& rRange = GetBoolDomainFromState(state, rhs);
-    return ComputeEqualityBoolBinop(lRange, rRange, binaryExpr->GetExprKind());
+    return ComputeEqualityBoolBinop(lRange, rRange, opKind);
 }
 
 bool RangeAnalysis::CheckInQueueTimes(const Block* block, RangeDomain& curState)
@@ -263,7 +266,7 @@ bool RangeAnalysis::CheckInQueueTimes(const Block* block, RangeDomain& curState)
     return false;
 }
 
-void RangeAnalysis::HandleUnaryExpr(RangeDomain& state, const UnaryExpression* unaryExpr) const
+void RangeAnalysis::HandleUnaryExpr(RangeDomain& state, const UnaryExpressionBase* unaryExpr) const
 {
     auto dest = unaryExpr->GetResult();
     return state.SetToBound(dest, true);
@@ -288,34 +291,26 @@ std::string GenerateTypeRangePrompt(const Ptr<Type>& type)
 }
 
 template <typename TBinary, typename T>
-void RaiseArithmeticOverflowError(const TBinary* expr, ExprKind kind, T leftVal, T rightVal, DiagnosticEngine& diag)
+void RaiseArithmeticOverflowError(
+    const TBinary* expr, BinaryExprKind kind, T leftVal, T rightVal, DiagnosticEngine& diag)
 {
     auto& loc = expr->GetDebugLocation();
     auto ty = expr->GetResult()->GetType();
-    const static std::unordered_map<ExprKind, std::string> OPS = {
-        {ExprKind::ADD, "+"},
-        {ExprKind::SUB, "-"},
-        {ExprKind::MUL, "*"},
-        {ExprKind::DIV, "/"},
-        {ExprKind::MOD, "%"},
-        {ExprKind::EXP, "**"},
-    };
-    auto token = OPS.find(kind);
-    CJC_ASSERT(token != OPS.end());
+    auto token = GetBinaryExprKindLiteral(kind);
     auto builder =
-        diag.DiagnoseRefactor(DiagKindRefactor::chir_arithmetic_operator_overflow, ToRange(loc), token->second);
-    std::string hint = ty->ToString() + "(" + std::to_string(leftVal) + ") " + token->second + " " +
+        diag.DiagnoseRefactor(DiagKindRefactor::chir_arithmetic_operator_overflow, ToRange(loc), token);
+    std::string hint = ty->ToString() + "(" + std::to_string(leftVal) + ") " + token + " " +
         expr->GetRHSOperand()->GetType()->ToString() + "(" + std::to_string(rightVal) + ")";
     builder.AddMainHintArguments(hint);
     builder.AddNote(GenerateTypeRangePrompt(expr->GetResult()->GetType()));
 }
 
 template <typename T>
-bool CheckDivZero(ExprKind exprKind, const Ptr<const BinaryExpression>& binary, T rVal, DiagnosticEngine& diag)
+bool CheckDivZero(BinaryExprKind kind, const Ptr<const BinaryExpressionBase>& binary, T rVal, DiagnosticEngine& diag)
 {
-    if (rVal == 0 && (exprKind == ExprKind::DIV || exprKind == ExprKind::MOD)) {
+    if (rVal == 0 && (kind == BinaryExprKind::DIV || kind == BinaryExprKind::MOD)) {
         auto& loc = binary->GetDebugLocation();
-        auto prompt = exprKind == ExprKind::DIV ? "divide" : "modulo";
+        auto prompt = kind == BinaryExprKind::DIV ? "divide" : "modulo";
         auto builder = diag.DiagnoseRefactor(DiagKindRefactor::chir_divisor_is_zero, ToRange(loc), prompt);
         builder.AddMainHintArguments(prompt);
         return true;
@@ -323,20 +318,21 @@ bool CheckDivZero(ExprKind exprKind, const Ptr<const BinaryExpression>& binary, 
     return false;
 }
 
-SIntDomain CheckSingleValueOverflow(const CHIRArithmeticBinopArgs& args, const Ptr<const BinaryExpression>& expr,
-    ExprKind exprKind, DiagnosticEngine& diag)
+SIntDomain CheckSingleValueOverflow(
+    const CHIRArithmeticBinopArgs& args, const Ptr<const BinaryExpressionBase>& expr, DiagnosticEngine& diag)
 {
+    auto exprKind = ExprKindMgr::ToExprKind(args.op);
     bool isOv = false;
     if (args.uns) {
         uint64_t a = args.ld.NumericBound().Lower().UVal();
         uint64_t b = args.rd.NumericBound().Lower().UVal();
         uint64_t res = 0;
-        if (CheckDivZero(exprKind, expr, b, diag)) {
+        if (CheckDivZero(args.op, expr, b, diag)) {
             return SIntDomain::Top(args.ld.Width(), true);
         }
         isOv = OverflowChecker::IsUIntOverflow(args.l->GetType()->GetTypeKind(), exprKind, a, b, args.ov, &res);
         if (isOv && args.ov == OverflowStrategy::THROWING) {
-            RaiseArithmeticOverflowError(expr.get(), exprKind, a, b, diag);
+            RaiseArithmeticOverflowError(expr.get(), expr->GetOpKind(), a, b, diag);
             return SIntDomain::Top(args.ld.Width(), true);
         }
         return {ConstantRange{{args.ld.Width(), res}}, true};
@@ -344,19 +340,19 @@ SIntDomain CheckSingleValueOverflow(const CHIRArithmeticBinopArgs& args, const P
         int64_t a = args.ld.NumericBound().Lower().SVal();
         int64_t b = args.rd.NumericBound().Lower().SVal();
         int64_t res = 0;
-        if (CheckDivZero(exprKind, expr, b, diag)) {
+        if (CheckDivZero(args.op, expr, b, diag)) {
             return SIntDomain::Top(args.ld.Width(), false);
         }
         isOv = OverflowChecker::IsIntOverflow(args.l->GetType()->GetTypeKind(), exprKind, a, b, args.ov, &res);
         if (isOv && args.ov == OverflowStrategy::THROWING) {
-            RaiseArithmeticOverflowError(expr.get(), exprKind, a, b, diag);
+            RaiseArithmeticOverflowError(expr.get(), expr->GetOpKind(), a, b, diag);
             return SIntDomain::Top(args.ld.Width(), false);
         }
         return {ConstantRange{{args.ld.Width(), static_cast<uint64_t>(res)}}, false};
     }
 }
 
-void RangeAnalysis::HandleBinaryExpr(RangeDomain& state, const BinaryExpression* binaryExpr)
+void RangeAnalysis::HandleBinaryExpr(RangeDomain& state, const BinaryExpressionBase* binaryExpr)
 {
     auto dest = binaryExpr->GetResult();
     auto lhs = binaryExpr->GetLHSOperand();
@@ -364,6 +360,7 @@ void RangeAnalysis::HandleBinaryExpr(RangeDomain& state, const BinaryExpression*
     if (!CanAnalyse(dest->GetType()) || !CanAnalyse(lhs->GetType()) || !CanAnalyse(rhs->GetType())) {
         return state.SetToBound(binaryExpr->GetResult(), true);
     }
+    auto opKind = binaryExpr->GetOpKind();
     if (dest->GetType()->IsInteger()) {
         if (!IsBasicBinaryExpr(*binaryExpr)) {
             return state.SetToBound(binaryExpr->GetResult(), true);
@@ -374,13 +371,12 @@ void RangeAnalysis::HandleBinaryExpr(RangeDomain& state, const BinaryExpression*
         auto isUnsigned = IsUnsignedArithmetic(*binaryExpr);
         if (lRange.IsSingleValue() && rRange.IsSingleValue()) {
             auto domain = CheckSingleValueOverflow(
-                CHIRArithmeticBinopArgs{lRange, rRange, lhs, rhs, binaryExpr->GetExprKind(), ov, isUnsigned},
-                binaryExpr, binaryExpr->GetExprKind(), diag);
+                CHIRArithmeticBinopArgs{lRange, rRange, lhs, rhs, opKind, ov, isUnsigned}, binaryExpr, diag);
             state.Update(dest, std::make_unique<SIntRange>(domain));
             return;
         }
         auto res = ComputeArithmeticBinop(
-            CHIRArithmeticBinopArgs{lRange, rRange, lhs, rhs, binaryExpr->GetExprKind(), ov, isUnsigned});
+            CHIRArithmeticBinopArgs{lRange, rRange, lhs, rhs, opKind, ov, isUnsigned});
         if (res.IsNonTrivial()) {
             return state.Update(dest, std::make_unique<SIntRange>(res));
         }
@@ -455,7 +451,15 @@ std::optional<Block*> RangeAnalysis::HandleTerminatorEffect(RangeDomain& state, 
         case ExprKind::NUMERIC_CAST_WITH_EXCEPTION:
             res = HandleTypeCast(state, StaticCast<const NumericCastWithException*>(terminator));
             break;
-        case ExprKind::INT_OP_WITH_EXCEPTION:
+        case ExprKind::NEG_WITH_EXCEPTION:
+        case ExprKind::ADD_WITH_EXCEPTION:
+        case ExprKind::SUB_WITH_EXCEPTION:
+        case ExprKind::MUL_WITH_EXCEPTION:
+        case ExprKind::DIV_WITH_EXCEPTION:
+        case ExprKind::MOD_WITH_EXCEPTION:
+        case ExprKind::EXP_WITH_EXCEPTION:
+        case ExprKind::LSHIFT_WITH_EXCEPTION:
+        case ExprKind::RSHIFT_WITH_EXCEPTION:
         case ExprKind::INTRINSIC_WITH_EXCEPTION:
         default: {
             auto dest = terminator->GetResult();

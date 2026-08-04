@@ -128,7 +128,6 @@ private:
     void DiagUnusedVariableForParam(const Debug& expr);
     void DiagUnusedVariableForLocalVar(const Debug& expr, bool isDebug);
     void DiagUnusedLambdaVariable(const Debug& expr);
-    std::string GetLiteralFromExprKind(const ExprKind& kind) const;
 
     // ============== Functions for clean code in parallel ===========//
     void ReportUnusedCodeInFunc(const BlockGroup& body, const GlobalOptions& opts);

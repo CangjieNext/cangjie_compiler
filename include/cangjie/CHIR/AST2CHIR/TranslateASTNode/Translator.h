@@ -662,7 +662,15 @@ private:
         if (tryCatchContext.empty() || !mayThrowE) {
             return CreateAndAppendExpression<CHIRNodeNormalT<TExpr>>(std::forward<Args>(args)..., ofs, parent);
         }
-        return TryCreateExceptionTerminator<CHIRNodeExceptionT<TExpr>>(*parent, std::forward<Args>(args)..., ofs);
+        // UnaryExpressionWithException always uses THROWING; do not forward OverflowStrategy.
+        if constexpr (std::is_same_v<CHIRNodeExceptionT<TExpr>, UnaryExpressionWithException>) {
+            CJC_ASSERT(ofs == OverflowStrategy::THROWING);
+            return TryCreateExceptionTerminator<UnaryExpressionWithException>(
+                *parent, std::forward<Args>(args)...);
+        } else {
+            return TryCreateExceptionTerminator<CHIRNodeExceptionT<TExpr>>(
+                *parent, std::forward<Args>(args)..., ofs);
+        }
     }
 
     template <typename... Args>
@@ -1136,24 +1144,26 @@ private:
     void AddMemberMethodToCustomTypeDef(const AST::FuncDecl& decl, CustomTypeDef& def);
 };
 
-static const std::unordered_map<Cangjie::TokenKind, ExprKind> op2ExprKind = {
-    {Cangjie::TokenKind::ADD, ExprKind::ADD},
-    {Cangjie::TokenKind::SUB, ExprKind::SUB},
-    {Cangjie::TokenKind::MUL, ExprKind::MUL},
-    {Cangjie::TokenKind::DIV, ExprKind::DIV},
-    {Cangjie::TokenKind::MOD, ExprKind::MOD},
-    {Cangjie::TokenKind::EXP, ExprKind::EXP},
-    {Cangjie::TokenKind::BITAND, ExprKind::BITAND},
-    {Cangjie::TokenKind::BITOR, ExprKind::BITOR},
-    {Cangjie::TokenKind::BITXOR, ExprKind::BITXOR},
-    {Cangjie::TokenKind::LSHIFT, ExprKind::LSHIFT},
-    {Cangjie::TokenKind::RSHIFT, ExprKind::RSHIFT},
-    {Cangjie::TokenKind::LT, ExprKind::LT},
-    {Cangjie::TokenKind::GT, ExprKind::GT},
-    {Cangjie::TokenKind::LE, ExprKind::LE},
-    {Cangjie::TokenKind::GE, ExprKind::GE},
-    {Cangjie::TokenKind::NOTEQ, ExprKind::NOTEQUAL},
-    {Cangjie::TokenKind::EQUAL, ExprKind::EQUAL},
+static const std::unordered_map<Cangjie::TokenKind, BinaryExprKind> tokenKindToBinaryExprKind = {
+    {Cangjie::TokenKind::ADD, BinaryExprKind::ADD},
+    {Cangjie::TokenKind::SUB, BinaryExprKind::SUB},
+    {Cangjie::TokenKind::MUL, BinaryExprKind::MUL},
+    {Cangjie::TokenKind::DIV, BinaryExprKind::DIV},
+    {Cangjie::TokenKind::MOD, BinaryExprKind::MOD},
+    {Cangjie::TokenKind::EXP, BinaryExprKind::EXP},
+    {Cangjie::TokenKind::AND, BinaryExprKind::AND},
+    {Cangjie::TokenKind::OR, BinaryExprKind::OR},
+    {Cangjie::TokenKind::BITAND, BinaryExprKind::BITAND},
+    {Cangjie::TokenKind::BITOR, BinaryExprKind::BITOR},
+    {Cangjie::TokenKind::BITXOR, BinaryExprKind::BITXOR},
+    {Cangjie::TokenKind::LSHIFT, BinaryExprKind::LSHIFT},
+    {Cangjie::TokenKind::RSHIFT, BinaryExprKind::RSHIFT},
+    {Cangjie::TokenKind::LT, BinaryExprKind::LT},
+    {Cangjie::TokenKind::GT, BinaryExprKind::GT},
+    {Cangjie::TokenKind::LE, BinaryExprKind::LE},
+    {Cangjie::TokenKind::GE, BinaryExprKind::GE},
+    {Cangjie::TokenKind::NOTEQ, BinaryExprKind::NOTEQUAL},
+    {Cangjie::TokenKind::EQUAL, BinaryExprKind::EQUAL},
 };
 
 const static std::unordered_map<std::string, const std::unordered_map<std::string, IntrinsicKind>> packageMap = {

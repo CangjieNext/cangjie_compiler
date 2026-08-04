@@ -9,6 +9,7 @@
 #include <cinttypes>
 
 #include "Base/ArithmeticOpImpl.h"
+#include "Base/CHIRExprWrapper.h"
 #include "Base/LogicalOpImpl.h"
 #include "Base/OverflowDispatcher.h"
 #include "CGModule.h"
@@ -18,50 +19,32 @@
 using namespace Cangjie::CHIR;
 
 namespace Cangjie::CodeGen {
-llvm::Value* HandleNonOverflowBinaryExpression(IRBuilder2& irBuilder, const CHIRBinaryExprWrapper& chirExpr)
+llvm::Value* HandleNonOverflowBinaryExpression(IRBuilder2& irBuilder, const CHIR::BinaryExpressionBase& chirExpr)
 {
-    switch (chirExpr.GetBinaryExprKind()) {
-        case CHIR::ExprKind::ADD:
-        case CHIR::ExprKind::SUB:
-        case CHIR::ExprKind::MUL:
-        case CHIR::ExprKind::DIV:
-        case CHIR::ExprKind::MOD: {
-            return GenerateArithmeticOperation(irBuilder, chirExpr);
-        }
-        case CHIR::ExprKind::EXP: {
+    if (chirExpr.IsMathematicalOperator()) {
+        if (chirExpr.GetOpKind() == CHIR::BinaryExprKind::EXP) {
             return GenerateBinaryExpOperation(irBuilder, chirExpr);
         }
-        case CHIR::ExprKind::LSHIFT:
-        case CHIR::ExprKind::RSHIFT:
-        case CHIR::ExprKind::BITAND:
-        case CHIR::ExprKind::BITOR:
-        case CHIR::ExprKind::BITXOR: {
-            return GenerateBitwiseOperation(irBuilder, chirExpr);
-        }
-        case CHIR::ExprKind::LT:
-        case CHIR::ExprKind::GT:
-        case CHIR::ExprKind::LE:
-        case CHIR::ExprKind::GE:
-        case CHIR::ExprKind::EQUAL:
-        case CHIR::ExprKind::NOTEQUAL: {
-            return GenerateBooleanOperation(irBuilder, chirExpr);
-        }
-        // AND and OR are short circuit operators. They are transformed to simple branches by CHIR
-        // thus we are free from generating code for these expression kinds.
-        case CHIR::ExprKind::AND:
-        case CHIR::ExprKind::OR:
-        default: {
-            auto exprKindStr = std::to_string(static_cast<uint64_t>(chirExpr.GetBinaryExprKind()));
-            CJC_ASSERT_WITH_MSG(false, std::string("Unexpected CHIRBinaryExprKind: " + exprKindStr + "\n").c_str());
-            return nullptr;
-        }
+        return GenerateArithmeticOperation(irBuilder, chirExpr);
     }
+    if (chirExpr.IsBitwiseOperator()) {
+        return GenerateBitwiseOperation(irBuilder, chirExpr);
+    }
+    if (chirExpr.IsComparisonOperator()) {
+        return GenerateBooleanOperation(irBuilder, chirExpr);
+    }
+    // AND and OR are short circuit operators. They are transformed to simple branches by CHIR
+    // thus we are free from generating code for these expression kinds.
+    auto exprKindStr = std::to_string(static_cast<uint64_t>(chirExpr.GetOpKind()));
+    CJC_ASSERT_WITH_MSG(false, std::string("Unexpected CHIRBinaryExprKind: " + exprKindStr + "\n").c_str());
+    return nullptr;
 }
 
-llvm::Value* HandleBinaryExpression(IRBuilder2& irBuilder, const CHIRBinaryExprWrapper& chirExpr)
+llvm::Value* HandleBinaryExpression(IRBuilder2& irBuilder, const CHIR::BinaryExpressionBase& chirExpr)
 {
     const CHIR::Type* ty = chirExpr.GetResult()->GetType();
-    const CHIR::ExprKind& kind = chirExpr.GetBinaryExprKind();
+    const CHIR::BinaryExprKind opKind = chirExpr.GetOpKind();
+    const CHIR::ExprKind kind = CHIR::ExprKindMgr::ToExprKind(opKind);
     OverflowStrategy overflowStrategy = chirExpr.GetOverflowStrategy();
     if (!ty) {
         return nullptr;
@@ -70,7 +53,7 @@ llvm::Value* HandleBinaryExpression(IRBuilder2& irBuilder, const CHIRBinaryExprW
         return HandleNonOverflowBinaryExpression(irBuilder, chirExpr);
     }
     if ((overflowStrategy == OverflowStrategy::NA || overflowStrategy == OverflowStrategy::WRAPPING) &&
-        kind != CHIR::ExprKind::DIV && kind != CHIR::ExprKind::MOD) {
+        opKind != CHIR::BinaryExprKind::DIV && opKind != CHIR::BinaryExprKind::MOD) {
         return HandleNonOverflowBinaryExpression(irBuilder, chirExpr);
     }
     // There is a possibility of integer overflow when the result of an arithmetic expression is an integer type.(spec)
@@ -81,7 +64,7 @@ llvm::Value* HandleBinaryExpression(IRBuilder2& irBuilder, const CHIRBinaryExprW
     auto& cgMod = irBuilder.GetCGModule();
     CGValue* valLeft = cgMod | chirExpr.GetLHSOperand();
     CGValue* valRight = cgMod | chirExpr.GetRHSOperand();
-    irBuilder.EmitLocation(chirExpr);
+    irBuilder.EmitLocation(CHIRExprWrapper(chirExpr));
     return GenerateOverflow(irBuilder, overflowStrategy, kind, std::make_pair(intTy, nullptr), {valLeft, valRight});
 }
 

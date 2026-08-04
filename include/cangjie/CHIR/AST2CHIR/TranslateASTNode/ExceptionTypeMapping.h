@@ -34,15 +34,8 @@ DEFINE_CHIR_TYPE_MAPPING(CHIR::Allocate);
 DEFINE_CHIR_TYPE_MAPPING(CHIR::Spawn);
 DEFINE_CHIR_TYPE_MAPPING(CHIR::Intrinsic);
 DEFINE_CHIR_TYPE_MAPPING(CHIR::RawArrayAllocate);
-
-template <> struct CHIRNodeMap<UnaryExpression> {
-    using Normal = CHIR::UnaryExpression;
-    using Exception = CHIR::IntOpWithException;
-};
-template <> struct CHIRNodeMap<BinaryExpression> {
-    using Normal = CHIR::BinaryExpression;
-    using Exception = CHIR::IntOpWithException;
-};
+DEFINE_CHIR_TYPE_MAPPING(CHIR::UnaryExpression);
+DEFINE_CHIR_TYPE_MAPPING(CHIR::BinaryExpression);
 
 template <typename T> using CHIRNodeNormalT = typename CHIRNodeMap<T>::Normal;
 template <typename T> using CHIRNodeExceptionT = typename CHIRNodeMap<T>::Exception;
