@@ -264,7 +264,6 @@ void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorInitializa
     CJC_ASSERT(ctor.funcBody->paramLists.size() == 1);
     auto& paramList = *ctor.funcBody->paramLists[0];
 
-    // Java_CFFI_newJavaObject_raw call.
     // No global reference is created here:
     // it is wrapped into global reference in `super` constructors chain call: within `JObject`.
     auto javaCtorExpr = ilib.CreateJavaConstructorBlock(refWrapper.GetTy(), paramList, curFile, false);

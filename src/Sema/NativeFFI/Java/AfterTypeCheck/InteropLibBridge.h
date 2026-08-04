@@ -143,11 +143,6 @@ public:
     Ptr<FuncDecl> GetCreateJavaEntityNullDecl();
 
     /**
-     * Java_CFFI_newJavaObject
-     */
-    Ptr<FuncDecl> GetNewJavaObjectDecl();
-
-    /**
      * Java_CFFI_newJavaArray
      */
     Ptr<FuncDecl> GetNewJavaArrayDecl();
@@ -289,6 +284,7 @@ public:
     Ptr<FuncDecl> GetJClassDecl() const;
     Ptr<FuncDecl> GetJClassIdDecl() const;
     Ptr<FuncDecl> GetGetMethodIdDecl() const;
+    Ptr<FuncDecl> GetGetStaticMethodIdDecl() const;
     Ptr<FuncDecl> GetParseMethodSignatureDecl();
     Ptr<FuncDecl> GetParseComponentSignatureDecl();
     Ptr<FuncDecl> GetCallNestDecl();

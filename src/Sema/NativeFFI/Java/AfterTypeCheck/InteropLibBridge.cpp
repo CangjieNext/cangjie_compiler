@@ -42,10 +42,10 @@ constexpr auto INTEROPLIB_JNI_JNINativeInterface_ID = "JNINativeInterface_";
 // funcs
 constexpr auto INTEROPLIB_JNI_GET_ENV_ID = "Java_CFFI_get_env";
 constexpr auto INTEROPLIB_CFFI_GET_METHOD_ID = "Java_CFFI_getMethodID";
+constexpr auto INTEROPLIB_CFFI_GET_STATIC_METHOD_ID = "Java_CFFI_getStaticMethodID";
 constexpr auto INTEROPLIB_JNI_HANDLE_PENDING_EXCEPTION_DECL_ID = "handlePendingException";
 constexpr auto INTEROPLIB_CFFI_NEW_GLOBAL_REF_ID = "Java_CFFI_newGlobalReference";
 constexpr auto INTEROPLIB_CFFI_DELETE_GLOBAL_REF_ID = "Java_CFFI_deleteGlobalReference";
-constexpr auto INTEROPLIB_CFFI_NEW_JAVA_OBJECT_ID = "Java_CFFI_newJavaObject";
 constexpr auto INTEROPLIB_CFFI_NEW_JAVA_ARRAY_ID = "Java_CFFI_newJavaArray";
 constexpr auto INTEROPLIB_CFFI_NEW_JAVA_PROXY_OBJECT_FOR_CJMAPPING_ID = "Java_CFFI_newJavaProxyObjectForCJMapping";
 constexpr auto INTEROPLIB_CFFI_JAVA_ARRAY_GET_ID = "Java_CFFI_arrayGet";
@@ -159,11 +159,6 @@ Ptr<FuncDecl> InteropLibBridge::GetCreateJavaEntityNullDecl()
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_ENTITY_NULL_ID);
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetNewJavaObjectDecl()
-{
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_NEW_JAVA_OBJECT_ID);
-}
-
 Ptr<FuncDecl> InteropLibBridge::GetNewJavaArrayDecl()
 {
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_NEW_JAVA_ARRAY_ID);
@@ -258,6 +253,11 @@ Ptr<FuncDecl> InteropLibBridge::GetJNIHandlePendingExceptionDecl() const
 Ptr<FuncDecl> InteropLibBridge::GetGetMethodIdDecl() const
 {
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_GET_METHOD_ID);
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetGetStaticMethodIdDecl() const
+{
+    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_GET_STATIC_METHOD_ID);
 }
 
 Ptr<Ty> InteropLibBridge::GetJValueTy()
@@ -1009,15 +1009,15 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateJNICall(Ptr<Expr> env, Ptr<VarDecl> j
 OwnedPtr<CallExpr> InteropLibBridge::CreateJNIMethodId(Ptr<Expr> env, OwnedPtr<Expr> clazz,
     const std::string& name, const std::string& signature, bool isStatic)
 {
-    static auto getMethodIdFuncDecl = GetGetMethodIdDecl();
+    static auto getInstanceMethodIdFuncDecl = GetGetMethodIdDecl();
+    static auto getStaticMethodIdFuncDecl = GetGetStaticMethodIdDecl();
+    auto getMethodIdFuncDecl = isStatic ? getStaticMethodIdFuncDecl : getInstanceMethodIdFuncDecl;
     CJC_NULLPTR_CHECK(getMethodIdFuncDecl);
     auto strTy = utils.GetStringDecl().GetTy();
-    auto boolTy = typeManager.GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
     auto methodName = CreateLitConstExpr(LitConstKind::STRING, name, strTy);
     auto signatureStr = CreateLitConstExpr(LitConstKind::STRING, signature, strTy);
-    auto staticExpr = CreateLitConstExpr(LitConstKind::BOOL, isStatic ? "true" : "false", boolTy);
     return CreateCall(getMethodIdFuncDecl, env->curFile, ASTCloner::Clone(env),
-        std::move(clazz), std::move(methodName), std::move(signatureStr), std::move(staticExpr));
+        std::move(clazz), std::move(methodName), std::move(signatureStr));
 }
 
 OwnedPtr<CallExpr> InteropLibBridge::CreateAsJObjectCall(OwnedPtr<Expr> javaEntity)
