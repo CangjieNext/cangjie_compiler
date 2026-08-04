@@ -16,6 +16,28 @@ using namespace Cangjie::IncrementalCompilation;
 
 namespace {
 
+// Returns whether a locally changed declaration directly inherits from a sealed type. Imported declarations were
+// already analyzed in their source package, so they cannot change the current package's sealed hierarchy and must not
+// trigger an unnecessary incremental-compilation rollback. A declaration may have multiple inherited types; inspect
+// each resolved type and stop as soon as one sealed parent is found.
+bool IsNonImportedSealedSubtype(const InheritableDecl& decl)
+{
+    if (decl.TestAttr(Attribute::IMPORTED)) {
+        return false;
+    }
+    for (const auto& inheritedType : decl.inheritedTypes) {
+        CJC_ASSERT(inheritedType);
+        CJC_ASSERT(inheritedType->GetTy());
+        auto parentDecl = Ty::GetDeclOfTy(inheritedType->GetTy());
+        // During incremental AST reconstruction, an inherited type may be valid before its declaration is restored.
+        // It cannot prove a sealed hierarchy change until that declaration is available.
+        if (parentDecl != nullptr && parentDecl->TestAttr(Attribute::SEALED)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 void TypeMap::CollectImportedDeclExtraRelation(const AST::Decl& decl)
@@ -179,6 +201,11 @@ void PollutionAnalyzer::PollutionForAddedDecl(const Decl& decl)
 
 void PollutionAnalyzer::PollutionForAddedTypeDecl(const Decl& decl)
 {
+    CJC_ASSERT(decl.IsNominalDecl());
+    if (IsNonImportedSealedSubtype(StaticCast<const InheritableDecl&>(decl))) {
+        sealedHierarchyChanges.push_back(&decl);
+    }
+
     if (decl.TestAttr(Attribute::IMPORTED)) {
         // All imported stuff has been sema-d in upstream package. We only need to:
         // 1) analysis the pollution for the added decl
@@ -722,6 +749,18 @@ void PollutionAnalyzer::PollutionForChangedTypeDecl(const InheritableDecl& decl,
     CJC_ASSERT(decl.astKind == ASTKind::ENUM_DECL || decl.astKind == ASTKind::STRUCT_DECL ||
         decl.astKind == ASTKind::CLASS_DECL || decl.astKind == ASTKind::INTERFACE_DECL ||
         decl.astKind == ASTKind::EXTEND_DECL);
+
+    // SrcUseHash includes OPEN/ABSTRACT/SEALED. A modifier change can alter hierarchy closure even when no
+    // inherited type changed, so it must invalidate incremental match analysis.
+    if (!decl.TestAttr(Attribute::IMPORTED) && c.srcUse &&
+        (decl.astKind == ASTKind::CLASS_DECL || decl.astKind == ASTKind::INTERFACE_DECL ||
+            decl.astKind == ASTKind::EXTEND_DECL)) {
+        sealedHierarchyChanges.push_back(&decl);
+    }
+
+    if (IsNonImportedSealedSubtype(decl)) {
+        sealedHierarchyChanges.push_back(&decl);
+    }
 
     // For imported non-public type decl, we just add it into the recompilation list so the
     // backend will update its metadata info
@@ -1327,7 +1366,8 @@ void PollutionAnalyzer::PollutedGlobalChangeToPackageQualifiedUses(const Decl& d
 // Returns true if we can tell incremental compilation must rollback to full
 bool PollutionAnalyzer::FallBack() const
 {
-    return !typeAliases.empty() || !unfoundExtends.empty() || !unfoundNames.empty() || !removedNotSupported.empty();
+    return !typeAliases.empty() || !sealedHierarchyChanges.empty() || !unfoundExtends.empty() || !unfoundNames.empty() ||
+        !removedNotSupported.empty();
 }
 
 void PollutionAnalyzer::PrintFallbackInfo()
@@ -1343,6 +1383,13 @@ void PollutionAnalyzer::PrintFallbackInfo()
     if (!typeAliases.empty()) {
         for (auto decl : std::as_const(typeAliases)) {
             out << "changed typealias: ";
+            PrintDecl(out, *decl);
+            out << '\n';
+        }
+    }
+    if (!sealedHierarchyChanges.empty()) {
+        for (auto decl : std::as_const(sealedHierarchyChanges)) {
+            out << "changed subtype of sealed type: ";
             PrintDecl(out, *decl);
             out << '\n';
         }

@@ -393,6 +393,10 @@ private:
     // changed decls that cause rollback
     std::list<Ptr<const AST::Decl>> typeAliases;    // type alias cannot be incrementally compiled and must fall back to
                                                     // full compilation if any change to them exists
+    // Exhaustiveness of a match over a sealed type depends on the complete set and modifiers of its subtypes. Adding
+    // a subtype or changing a subtype modifier can change that result without changing the match declaration, so
+    // incremental compilation must fall back to a full compilation.
+    std::list<Ptr<const AST::Decl>> sealedHierarchyChanges;
     std::list<Ptr<const AST::Decl>> unfoundExtends; // ExtendDecl's whose extended type is not found.
     std::list<RawMangledName> unfoundNames;
     // std::list<Ptr<const Decl>> virtChanges{}; // changes of vtable shall rollback
