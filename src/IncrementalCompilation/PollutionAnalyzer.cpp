@@ -16,6 +16,27 @@ using namespace Cangjie::IncrementalCompilation;
 
 namespace {
 
+bool IsNonImportedSealedSubtype(const Decl& decl)
+{
+    if (decl.TestAttr(Attribute::IMPORTED)) {
+        return false;
+    }
+    auto inheritableDecl = DynamicCast<const InheritableDecl*>(&decl);
+    if (inheritableDecl == nullptr) {
+        return false;
+    }
+    for (const auto& inheritedType : inheritableDecl->inheritedTypes) {
+        if (!inheritedType || inheritedType->GetTy() == nullptr) {
+            continue;
+        }
+        auto parentDecl = Ty::GetDeclOfTy(inheritedType->GetTy());
+        if (parentDecl != nullptr && parentDecl->TestAttr(Attribute::SEALED)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 void TypeMap::CollectImportedDeclExtraRelation(const AST::Decl& decl)
@@ -179,6 +200,10 @@ void PollutionAnalyzer::PollutionForAddedDecl(const Decl& decl)
 
 void PollutionAnalyzer::PollutionForAddedTypeDecl(const Decl& decl)
 {
+    if (IsNonImportedSealedSubtype(decl)) {
+        sealedHierarchyChanges.push_back(&decl);
+    }
+
     if (decl.TestAttr(Attribute::IMPORTED)) {
         // All imported stuff has been sema-d in upstream package. We only need to:
         // 1) analysis the pollution for the added decl
@@ -722,6 +747,10 @@ void PollutionAnalyzer::PollutionForChangedTypeDecl(const InheritableDecl& decl,
     CJC_ASSERT(decl.astKind == ASTKind::ENUM_DECL || decl.astKind == ASTKind::STRUCT_DECL ||
         decl.astKind == ASTKind::CLASS_DECL || decl.astKind == ASTKind::INTERFACE_DECL ||
         decl.astKind == ASTKind::EXTEND_DECL);
+
+    if (IsNonImportedSealedSubtype(decl)) {
+        sealedHierarchyChanges.push_back(&decl);
+    }
 
     // For imported non-public type decl, we just add it into the recompilation list so the
     // backend will update its metadata info
@@ -1327,7 +1356,8 @@ void PollutionAnalyzer::PollutedGlobalChangeToPackageQualifiedUses(const Decl& d
 // Returns true if we can tell incremental compilation must rollback to full
 bool PollutionAnalyzer::FallBack() const
 {
-    return !typeAliases.empty() || !unfoundExtends.empty() || !unfoundNames.empty() || !removedNotSupported.empty();
+    return !typeAliases.empty() || !sealedHierarchyChanges.empty() || !unfoundExtends.empty() || !unfoundNames.empty() ||
+        !removedNotSupported.empty();
 }
 
 void PollutionAnalyzer::PrintFallbackInfo()
@@ -1343,6 +1373,13 @@ void PollutionAnalyzer::PrintFallbackInfo()
     if (!typeAliases.empty()) {
         for (auto decl : std::as_const(typeAliases)) {
             out << "changed typealias: ";
+            PrintDecl(out, *decl);
+            out << '\n';
+        }
+    }
+    if (!sealedHierarchyChanges.empty()) {
+        for (auto decl : std::as_const(sealedHierarchyChanges)) {
+            out << "changed subtype of sealed type: ";
             PrintDecl(out, *decl);
             out << '\n';
         }
