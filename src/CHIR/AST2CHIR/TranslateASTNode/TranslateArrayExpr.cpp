@@ -281,8 +281,9 @@ Ptr<Value> Translator::InitVArrayByItem(const AST::ArrayExpr& vArray)
     auto vArrayTy = StaticCast<VArrayType*>(chirTy.TranslateType(*vArray.GetTy()));
     auto eleTy = vArrayTy->GetElementType();
 
+    auto size = vArrayTy->GetSize();
     auto sizeVal =
-        CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, vArrayTy->GetSize())
+        CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, static_cast<uint64_t>(size))
             ->GetResult();
     auto valArg = vArray.args[0].get();
     auto val = TranslateExprArg(*valArg);
@@ -298,8 +299,9 @@ Ptr<Value> Translator::InitVArrayByLambda(const AST::ArrayExpr& vArray)
     auto loc = TranslateLocation(vArray);
     auto vArrayTy = StaticCast<VArrayType*>(chirTy.TranslateType(*vArray.GetTy()));
     auto eleTy = vArrayTy->GetElementType();
+    auto size = vArrayTy->GetSize();
     auto sizeVal =
-        CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, vArrayTy->GetSize())
+        CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, static_cast<uint64_t>(size))
             ->GetResult();
     auto initFn = TranslateExprArg(*vArray.args[0]);
     auto nullItem = CreateAndAppendConstantExpression<NullLiteral>(eleTy, *currentBlock)->GetResult();

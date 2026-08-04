@@ -1407,12 +1407,8 @@ llvm::Value* IRBuilder2::CreateTypeInfo(const CHIR::Type& gt,
         genericArgs = funcType.GetParamTypes();
         genericArgs.insert(genericArgs.begin(), funcType.GetReturnType());
     } else if (baseType->IsVArray()) {
-        auto& varrayType = StaticCast<CHIR::VArrayType&>(*baseType);
-        tt = CGType::GetOrCreate(cgMod, baseType)->GetOrCreateTypeTemplate();
-        auto argType = varrayType.GetElementType();
-        for (int64_t arrayIdx = 0; arrayIdx < varrayType.GetSize(); arrayIdx++) {
-            genericArgs.emplace_back(argType);
-        }
+        CJC_ASSERT_WITH_MSG(false, "Dynamic generic VArray is unsupported.");
+        return nullptr;
     } else if (baseType->IsRawArray()) {
         auto& rawArrayType = StaticCast<CHIR::RawArrayType&>(*baseType);
         tt = CGType::GetOrCreate(cgMod, baseType)->GetOrCreateTypeTemplate();
