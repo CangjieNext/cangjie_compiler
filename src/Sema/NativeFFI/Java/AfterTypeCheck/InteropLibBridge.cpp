@@ -13,6 +13,7 @@
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include <utility>
@@ -73,8 +74,7 @@ constexpr auto INTEROPLIB_CFFI_GET_REGISTRY_ID_OR_NONE = "Java_CFFI_getRegistryI
 constexpr auto INTEROPLIB_CFFI_JAVA_STRING_TO_CANGJIE = "Java_CFFI_JavaStringToCangjie";
 constexpr auto INTEROPLIB_CFFI_CANGJIE_STRING_TO_JAVA = "Java_CFFI_CangjieStringToJava";
 constexpr auto INTEROPLIB_CFFI_WITH_EXCEPTION_HANDLING_ID = "withExceptionHandling";
-constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_CLASS_INIT = "Java_CFFI_ClassInit";
-constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_CLASS = "Java_CFFI_getClass";
+constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_GET_CLASS = "Java_CFFI_getClass";
 constexpr auto INTEROPLIB_CFFI_PARSE_METHOD_SIGNATURE_ID = "Java_CFFI_parseMethodSignature";
 constexpr auto INTEROPLIB_CFFI_PARSE_COMPONENT_SIGNATURE_ID = "Java_CFFI_parseComponentSignature";
 constexpr auto INTEROPLIB_CFFI_JAVA_CALLNEST_ID = "Java_CFFI_JavaCallNestInit";
@@ -354,14 +354,9 @@ Ptr<FuncDecl> InteropLibBridge::GetWithExceptionHandlingDecl()
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_WITH_EXCEPTION_HANDLING_ID);
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetJClassDecl() const
+Ptr<FuncDecl> InteropLibBridge::GetGetClassDecl() const
 {
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_CFFI_CLASS_INIT);
-}
-
-Ptr<FuncDecl> InteropLibBridge::GetJClassIdDecl() const
-{
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_CFFI_CLASS);
+    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_CFFI_GET_CLASS);
 }
 
 Ptr<FuncDecl> InteropLibBridge::GetParseMethodSignatureDecl()
@@ -425,6 +420,13 @@ Ptr<Ty> InteropLibBridge::GetJavaEntityTy()
 }
 
 Ty& InteropLibBridge::GetJniJobjectTy() const
+{
+    static auto ty = typeManager.GetPointerTy(typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT));
+    CJC_NULLPTR_CHECK(ty);
+    return *ty;
+}
+
+AST::Ty& InteropLibBridge::GetJniJClassTy() const
 {
     static auto ty = typeManager.GetPointerTy(typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT));
     CJC_NULLPTR_CHECK(ty);
@@ -683,7 +685,7 @@ OwnedPtr<Block> InteropLibBridge::CreateJavaConstructorBlock(Ptr<Ty> classTy, Fu
         argsRef = WithinFile(CreateRefExpr(*argsVar), curFile);
     }
     auto ctorSignature = utils.GetJavaTypeSignature(*TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT), paramTys);
-    auto className = utils.GetJavaClassNormalizeSignature(*classTy);
+    auto className = utils.GetJavaJniClassName(*classTy);
     auto clazzVar = CreateJNIClassVar(WithinFile(CreateRefExpr(*jniEnvVar), curFile), className);
     auto ctorMethodId = CreateJNIMethodId(WithinFile(CreateRefExpr(*jniEnvVar), curFile),
         WithinFile(CreateRefExpr(*clazzVar), curFile), JAVA_CONSTRUCTOR, ctorSignature, false);
@@ -964,7 +966,7 @@ OwnedPtr<Block> InteropLibBridge::CreateJavaMethodCallBlock(Ptr<File> curFile, F
     CJC_NULLPTR_CHECK(jniEnvPtrDecl);
     auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, CreateGetJniEnvCall(curFile));
     const bool hasParams = !paramList.params.empty();
-    
+
     OwnedPtr<VarDecl> argsVar = nullptr;
     OwnedPtr<Expr> argsRef = nullptr;
 
@@ -1952,6 +1954,22 @@ OwnedPtr<FuncDecl> InteropLibBridge::CreateDeletingGlobalRefFinalizer(ClassDecl&
     // is guaranteed non-null here since the finalizer body was built from it above.
     fd->curFile = curFile;
     return fd;
+}
+
+OwnedPtr<Expr> InteropLibBridge::CreateGetClassCall(const Ty& javaTy, Ptr<Expr> envPtr, File& curFile)
+{
+    return CreateGetClassCall(utils.GetJavaJniClassName(javaTy), envPtr, curFile);
+}
+
+OwnedPtr<Expr> InteropLibBridge::CreateGetClassCall(const std::string& className, Ptr<Expr> envPtr, File& curFile)
+{
+    static auto getClassDecl = GetGetClassDecl();
+    CJC_ASSERT_WITH_MSG(!getClassDecl->funcBody->paramLists.empty(), "paramLists cannot be empty");
+    CJC_ASSERT_WITH_MSG(getClassDecl->funcBody->paramLists[0]->params.size() == 2, "expected 2 parameters");
+
+    static auto& string = GetStringDecl(importManager);
+    auto classNameExpr = CreateLitConstExpr(LitConstKind::STRING, className, string.GetTy());
+    return CreateCall(getClassDecl, &curFile, ASTCloner::Clone(envPtr), std::move(classNameExpr));
 }
 
 bool InteropLibBridge::IsInteropLibAccessible(const ImportManager& importManager)

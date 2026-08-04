@@ -601,7 +601,7 @@ std::string Utils::GetJavaObjectTypeName(const Ty& ty)
  * Call only when the type is a class or interface.
  * such as: turn class 'Integer' to 'java/lang/Integer'
  */
-std::string Utils::GetJavaClassNormalizeSignature(const Ty& cjtype) const
+std::string Utils::GetJavaJniClassName(const Ty& cjtype) const
 {
     CJC_ASSERT(!IsJArray(cjtype));
     return NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(cjtype).commonDecl));

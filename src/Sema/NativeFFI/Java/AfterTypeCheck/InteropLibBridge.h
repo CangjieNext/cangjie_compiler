@@ -57,7 +57,7 @@ struct MemberJNISignature {
                 ty = jobject->inheritedTypes[0]->GetTy(); // take superclass ty
             }
         }
-        classTypeSignature = utils.GetJavaClassNormalizeSignature(*ty);
+        classTypeSignature = utils.GetJavaJniClassName(*ty);
         name = GetJavaMemberName(member);
         CJC_ASSERT(member.astKind == ASTKind::FUNC_DECL || member.astKind == ASTKind::PROP_DECL);
         signature = utils.GetJavaTypeSignature(*member.GetTy());
@@ -254,8 +254,7 @@ public:
      */
     Ptr<FuncDecl> GetWithExceptionHandlingDecl();
 
-    Ptr<FuncDecl> GetJClassDecl() const;
-    Ptr<FuncDecl> GetJClassIdDecl() const;
+    Ptr<FuncDecl> GetGetClassDecl() const;
     Ptr<FuncDecl> GetGetMethodIdDecl() const;
     Ptr<FuncDecl> GetGetStaticMethodIdDecl() const;
     Ptr<FuncDecl> GetParseMethodSignatureDecl();
@@ -287,6 +286,11 @@ public:
      * jobject ty
      */
     AST::Ty& GetJniJobjectTy() const;
+
+    /**
+     * jclass ty
+     */
+    AST::Ty& GetJniJClassTy() const;
 
     /**
      * jlong
@@ -564,6 +568,9 @@ public:
      * }
      */
     OwnedPtr<AST::FuncDecl> CreateDeletingGlobalRefFinalizer(AST::ClassDecl& decl);
+
+    OwnedPtr<Expr> CreateGetClassCall(const AST::Ty& javaTy, Ptr<Expr> envPtr, File& curFile);
+    OwnedPtr<Expr> CreateGetClassCall(const std::string& className, Ptr<Expr> envPtr, File& curFile);
 
     bool IsInteropLibAccessible() const;
     void CheckInteropLibVersion();

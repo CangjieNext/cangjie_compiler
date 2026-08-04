@@ -26,6 +26,9 @@ constexpr std::string_view NSOBJECT_CLASS_IDENT = "NSObject";
 constexpr std::string_view TOSTRING_METHOD_IDENT = "toString";
 constexpr std::string_view INIT_IDENT = "init";
 
+constexpr std::string_view READ_POINTER_INTRINSIC = "readPointer";
+constexpr std::string_view GET_POINTER_ADDRESS_INTRINSIC = "getPointerAddress";
+
 using namespace AST;
 
 enum class ArrayOperationKind : uint8_t { CREATE, GET, SET, GET_LENGTH };
@@ -147,6 +150,12 @@ OwnedPtr<Expr> CreateBoolMatch(
     OwnedPtr<Expr> selector, OwnedPtr<Expr> trueBranch, OwnedPtr<Expr> falseBranch, Ptr<Ty> ty);
 
 StructDecl& GetStringDecl(const ImportManager& importManager);
+FuncDecl& GetReadPointerIntrinsicDecl(const ImportManager& importManager);
+FuncDecl& GetGetPointerAddressIntrinsicDecl(const ImportManager& importManager);
+
+OwnedPtr<Expr> CreateReadPointerCall(const ImportManager& importManager, TypeManager& typeManager, Ptr<Expr> ptr);
+OwnedPtr<Expr> CreateGetPointerAddressCall(const ImportManager& importManager, TypeManager& typeManager, Ptr<Expr> ptr);
+OwnedPtr<Expr> CreateIsPtrNullCheckCall(const ImportManager& importManager, TypeManager& typeManager, Ptr<Expr> ptr);
 
 /**
  * Returns synthetic lambda call that includes nodes. The result of the call expr is the last node:

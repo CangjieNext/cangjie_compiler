@@ -16,6 +16,7 @@
 #include "InteropLibBridge.h"
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "NativeFFI/Java/AfterTypeCheck/JniBridge.h"
+#include "NativeFFI/Java/CachingApi/JClassCache.h"
 #include "Utils.h"
 
 #include "cangjie/AST/Node.h"
@@ -47,6 +48,7 @@ public:
           mangler(mangler),
           lib(importManager, typeManager, diag, utils),
           jniBridge(typeManager, importManager, mangler, utils, *lib.GetJniEnvPtrDecl(), *lib.GetJobjectDecl(), *lib.GetJNINativeInterfaceDecl()),
+          jclassCache(importManager, typeManager, lib, utils),
           javaCodeGenPath(javaCodeGenPath),
           outputLibPath(outputLibPath),
           memberMap(memberMap)
@@ -226,6 +228,8 @@ private:
     const BaseMangler& mangler;
     InteropLibBridge lib;
     JniBridge jniBridge;
+    JClassCache jclassCache;
+
     const std::optional<std::string>& javaCodeGenPath;
     const std::string& outputLibPath;
 

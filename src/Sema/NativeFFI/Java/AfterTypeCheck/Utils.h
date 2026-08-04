@@ -59,7 +59,7 @@ public:
     // Decl of String
     StructDecl& GetStringDecl();
 
-    std::string GetJavaClassNormalizeSignature(const Ty& cjtype) const;
+    std::string GetJavaJniClassName(const Ty& cjtype) const;
     std::string GetJavaTypeSignature(const Ty& cjtype);
     std::string GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& args);
     std::string GetJavaObjectTypeName(const Ty& ty);
