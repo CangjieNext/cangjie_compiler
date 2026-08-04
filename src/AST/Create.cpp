@@ -170,6 +170,7 @@ OwnedPtr<FuncArg> CreateFuncArg(OwnedPtr<Expr> expr, const std::string& argName,
         // Create a dummy desugar block expr, in order to create a CHIR `Goto` node.
         auto re = CreateRefExpr("$dummy");
         re->ty = expr->ty;
+        CopyBasicInfo(expr.get(), re.get());
         re->desugarExpr = std::move(expr);
         ret->expr = std::move(re);
     } else {
@@ -441,6 +442,7 @@ OwnedPtr<MemberAccess> CreateMemberAccess(OwnedPtr<Expr> expr, const std::string
         // NOTE: Block should be attached to 'desugarExpr'.
         // Create a dummy desugar block expr, in order to create a CHIR `Goto` node.
         auto re = CreateRefExpr("$dummy");
+        CopyBasicInfo(expr.get(), re.get());
         re->ty = expr->ty;
         re->desugarExpr = std::move(expr);
         memberAccess->baseExpr = std::move(re);
@@ -490,6 +492,7 @@ OwnedPtr<AST::MemberAccess> CreateMemberAccess(OwnedPtr<AST::Expr> expr, Decl& f
         // NOTE: Block should be attached to 'desugarExpr'.
         // Create a dummy desugar block expr, in order to create a CHIR `Goto` node.
         auto re = CreateRefExpr("$dummy");
+        CopyBasicInfo(expr.get(), re.get());
         re->ty = expr->ty;
         re->desugarExpr = std::move(expr);
         ret->baseExpr = std::move(re);
