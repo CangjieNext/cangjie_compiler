@@ -62,7 +62,7 @@ llvm::Value* CodeGen::GenerateVArray(IRBuilder2& irBuilder, const CHIR::VArray& 
     auto varrayType = varrayCGType->GetLLVMType();
     auto varrayPtr = irBuilder.CreateEntryAlloca(varrayType, nullptr, "varray");
 
-    for (size_t i = 0; i < varrayChirType->GetSize(); ++i) {
+    for (size_t i = 0; i < static_cast<size_t>(varrayChirType->GetSize()); ++i) {
         auto indexName = "varray.idx" + std::to_string(i) + "E";
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
         auto elementPtr =

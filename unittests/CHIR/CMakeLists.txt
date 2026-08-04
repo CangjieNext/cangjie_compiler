@@ -19,7 +19,7 @@ if(CANGJIE_CODEGEN_CJNATIVE_BACKEND)
     add_test(NAME CHIRSerialzierTest COMMAND CHIRSerialzierTest)
 
     add_executable(CHIROptTests ActiveStatePoolTest.cpp AnalysisToStringTest.cpp ArithmeticTest.cpp
-        ConstantRangeTest.cpp SIntDomainTest.cpp SIntTest.cpp)
+        ConstantRangeTest.cpp SIntDomainTest.cpp SIntTest.cpp VArrayTypeTest.cpp)
     target_link_libraries(
         CHIROptTests
         cangjie-lsp

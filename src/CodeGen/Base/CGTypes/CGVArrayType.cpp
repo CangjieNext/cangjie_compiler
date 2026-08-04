@@ -26,8 +26,10 @@ llvm::Type* CGVArrayType::GenLLVMType()
     }
 
     auto& varrType = StaticCast<const CHIR::VArrayType&>(chirType);
+    auto varrSize = varrType.GetSize();
     auto varrElementType = varrType.GetElementType();
-    llvmType = llvm::ArrayType::get(CGType::GetOrCreate(cgMod, varrElementType)->GetLLVMType(), varrType.GetSize());
+    llvmType = llvm::ArrayType::get(
+        CGType::GetOrCreate(cgMod, varrElementType)->GetLLVMType(), static_cast<uint64_t>(varrSize));
 
     auto layoutName = "VArray." + std::to_string(varrType.GetSize()) + MangleType(*varrElementType);
     layoutType = llvm::StructType::getTypeByName(cgCtx.GetLLVMContext(), layoutName);
@@ -78,7 +80,7 @@ llvm::Constant* CGVArrayType::GenOffsetsOfTypeInfo()
 
 llvm::Constant* CGVArrayType::GenTypeArgsOfTypeInfo()
 {
-   return CGType::GenTypeArgsOfTypeInfo();
+    return CGType::GenTypeArgsOfTypeInfo();
 }
 
 llvm::Constant* CGVArrayType::GenSuperOfTypeInfo()
