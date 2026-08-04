@@ -78,7 +78,7 @@ llvm::Constant* CGVArrayType::GenOffsetsOfTypeInfo()
 
 llvm::Constant* CGVArrayType::GenTypeArgsOfTypeInfo()
 {
-   return CGType::GenTypeArgsOfTypeInfo();
+    return CGType::GenTypeArgsOfTypeInfo();
 }
 
 llvm::Constant* CGVArrayType::GenSuperOfTypeInfo()

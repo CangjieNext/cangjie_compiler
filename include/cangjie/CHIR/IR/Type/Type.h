@@ -985,9 +985,9 @@ public:
 
     bool operator==(const Type& other) const override;
 
-    unsigned int GetSize() const
+    uint64_t GetSize() const
     {
-        return static_cast<unsigned>(size);
+        return static_cast<uint64_t>(size);
     }
 
     Type* GetElementType() const
