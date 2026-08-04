@@ -22,5 +22,4 @@ void DrainGeneratedDecls::HandleImpl(InteropContext& ctx)
     }
 
     ctx.genDecls.clear();
-    ctx.fwdClasses.clear();
 }

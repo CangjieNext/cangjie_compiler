@@ -126,14 +126,9 @@ inline const std::string INTEROP_JSTRING_NAME = "JString";
 inline const std::string INTEROP_JARRAY_NAME = "JArray";
 inline const std::string INTEROP_JAVA_LANG_PACKAGE = "java.lang";
 inline const std::string JAVA_REF_FIELD_NAME = "$javaref";
-inline const std::string JAVA_FWD_CLASS_SUFFIX = "_fwd";
-inline const std::string JAVA_INTERFACE_FWD_CLASS_DEFAULT_METHOD_SUFFIX = "_default_impl";
 inline const std::string JAVA_SELF_OBJECT = "selfobj";
 constexpr auto JAVA_REF_GETTER_FUNC_NAME = "$getJavaRef";
 constexpr auto INTEROPLIB_CFFI_JAVA_ENTITY = "Java_CFFI_JavaEntity";
-constexpr auto JAVA_OBJECT_CONTROLLER = "JavaObjectController";
-constexpr auto JAVA_OBJECT_CONTROLLER_NAME = "controller";
-constexpr auto JAVA_OVERRIDE_MASK_NAME = "overrideMask";
 constexpr auto ENV = "env";
 } // namespace Cangjie::Interop::Java
 
@@ -149,7 +144,6 @@ inline const std::string REGISTRY_ID_IDENT = "$registryId";
 inline const std::string REGISTRY_ID_SETTER_SELECTOR = "set$registryId:";
 inline const std::string SYNTHETIC_CLASS_SUFFIX = "$impl";
 inline const std::string NATIVE_HANDLE_GETTER_IDENT = "$getObj";
-inline const std::string OBJ_C_FWD_CLASS_SUFFIX = "_fwd";
 } // namespace Interop::ObjC
 
 // Headless instrinsics

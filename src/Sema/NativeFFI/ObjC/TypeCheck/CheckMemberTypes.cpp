@@ -114,12 +114,5 @@ void CheckMemberTypes::CheckFuncParamTypes(FuncDecl& fd, TypeCheckContext& ctx)
 
 std::string CheckMemberTypes::GetDeclInteropName()
 {
-    if (interopType == InteropType::ObjC_Mirror) {
-        return "Objective-C mirror";
-    } else if (interopType == InteropType::CJ_Mapping) {
-        return "cangjie mirror decl";
-    } else {
-        CJC_ABORT();
-        return "";
-    }
+    return "Objective-C mirror";
 }

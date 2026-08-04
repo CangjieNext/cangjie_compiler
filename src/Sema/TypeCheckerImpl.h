@@ -148,9 +148,6 @@ public:
      */
     void PerformDesugarAfterInstantiation(ASTContext& ctx, AST::Package& pkg);
 
-    // Parse package config file and storage to corresponding pkg.
-    void ParsePackageConfigFile(Ptr<AST::Package>& pkg, InteropCJPackageConfigReader packagesFullConfig);
-
     // Desugar after sema.
     void PerformDesugarAfterSema(std::vector<Ptr<AST::Package>>& pkgs);
 
@@ -448,7 +445,7 @@ private:
     /**
      * Add Object to all ClassDecls' inheritedTypes if there is no one.
      */
-    void AddSuperClassObjectForClassDecl(ASTContext& ctx);    
+    void AddSuperClassObjectForClassDecl(ASTContext& ctx);
     /**
      * Add super interface to all ClassDecls' inheritedTypes if there is no one.
      */
@@ -464,7 +461,7 @@ private:
     /**
      * CJNative-java interop scenario.
      */
-    bool AddJObjectSuperClassJavaInterop(ASTContext& ctx, AST::ClassDecl& cd);    
+    bool AddJObjectSuperClassJavaInterop(ASTContext& ctx, AST::ClassDecl& cd);
     /**
      * CJNative-objc interop scenario.
      */
@@ -1332,7 +1329,7 @@ private:
 
     void CheckLegalityOfUsage(ASTContext &ctx, AST::Package &pkg);
     void CheckClosures(const ASTContext &ctx, AST::Node &node) const;
-    
+
     // Desugar primary constructor into `init` and fields before cjmp customDef merging
     void CheckPrimaryCtorBeforeMerge(AST::Node& root);
     /**
