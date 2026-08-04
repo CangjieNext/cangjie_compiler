@@ -73,43 +73,34 @@ OwnedPtr<FuncParam> JniBridge::CreateRegistryIdParam(const std::string& name) co
     return CreateFuncParam(name, CreateType(&GetRegistryIdJavaTy()), nullptr, &GetRegistryIdJavaTy());
 }
 
-std::string JniBridge::GetJniMethodName(const FuncDecl& method, const std::string* genericActualName) const
+std::string JniBridge::GetJniMethodName(const FuncDecl& method) const
 {
     auto sampleJavaName = GetJavaMemberName(method);
-    std::string fqname = GetJavaFQName(*(method.outerDecl), genericActualName);
+    std::string fqname = GetJavaFQName(*method.outerDecl);
     CJC_ASSERT_WITH_MSG(!method.funcBody->paramLists.empty(), "paramLists cannot be empty");
-    auto mangledFuncName =
-        GetMangledMethodName(mangler, method.funcBody->paramLists[0]->params, sampleJavaName, typeManager);
+    auto mangledFuncName = GetMangledMethodName(mangler, method.funcBody->paramLists[0]->params, sampleJavaName);
 
     return GetJavaNativeFunctionName(fqname, mangledFuncName);
 }
 
-std::string JniBridge::GetJniTupleItemName(const Ptr<TupleTy>& tupleTy, Package& pkg, size_t index) const
-{
-    std::string fqname = pkg.fullPackageName + "." + GetCjMappingTupleName(*tupleTy);
-    return GetJavaNativeFunctionName(fqname, "item" + std::to_string(index));
-}
-
 std::string JniBridge::GetJniMethodNameForProp(
     const PropDecl& propDecl,
-    bool isSet,
-    const std::string* genericActualName) const
+    bool isSet) const
 {
     std::string varDecl = GetJavaMemberName(propDecl);
     std::string varDeclSuffix = varDecl;
     CJC_ASSERT_WITH_MSG(!varDeclSuffix.empty(), "identifier cannot be an empty string");
     varDeclSuffix[0] = static_cast<char>(toupper(varDeclSuffix[0]));
-    std::string fqname = GetJavaFQName(*(propDecl.outerDecl), genericActualName);
+    std::string fqname = GetJavaFQName(*(propDecl.outerDecl));
 
     return GetJavaNativeFunctionName(fqname, (isSet ? "set" : "get") + varDeclSuffix + "Impl");
 }
 
 std::string JniBridge::GetJniInitCjObjectFuncName(
     const FuncDecl& ctor,
-    bool isGeneratedCtor,
-    const std::string* genericActualName) const
+    bool isGeneratedCtor) const
 {
-    std::string fqname = GetJavaFQName(*(ctor.outerDecl), genericActualName);
+    std::string fqname = GetJavaFQName(*(ctor.outerDecl));
     auto mangledFuncName = GetMangledJniInitCjObjectFuncName(mangler,
         ctor.funcBody->paramLists[0]->params, isGeneratedCtor);
 
@@ -120,13 +111,6 @@ std::string JniBridge::GetJniInitCjObjectFuncName(
     return GetJavaNativeFunctionName(fqname, mangledFuncName);
 }
 
-std::string JniBridge::GetJniInitCjObjectFuncName(const Ptr<TupleTy>& tupleTy, Package& pkg) const
-{
-    std::string fqname = pkg.fullPackageName + "." + GetCjMappingTupleName(*tupleTy);
-    std::string mangledFuncName = GetMangledJniInitCjObjectFuncName(mangler, tupleTy->typeArgs);
-    return GetJavaNativeFunctionName(fqname, mangledFuncName);
-}
-
 std::string JniBridge::GetJniInitCjObjectFuncNameForVarDecl(const AST::VarDecl& ctor) const
 {
     std::string fqname = GetJavaFQName(*(ctor.outerDecl));
@@ -134,23 +118,10 @@ std::string JniBridge::GetJniInitCjObjectFuncNameForVarDecl(const AST::VarDecl& 
     return GetJavaNativeFunctionName(fqname, mangledFuncName + "initCJObject");
 }
 
-std::string JniBridge::GetJniDetachCjObjectFuncName(const Decl& decl) const
-{
-    std::string fqname = GetJavaFQName(decl);
-    return GetJavaNativeFunctionName(fqname, "detachCJObject");
-}
-
 std::string JniBridge::GetJniDeleteCjObjectFuncName(const Decl& decl) const
 {
     std::string fqname = GetJavaFQName(decl);
     return GetJavaNativeFunctionName(fqname, "deleteCJObject");
-}
-
-std::string JniBridge::GetLambdaCallImplJniMethodName(const Decl& decl) const
-{
-    static auto sampleJavaName = "callImpl";
-    std::string fqname = GetJavaFQName(decl);
-    return GetJavaNativeFunctionName(fqname, sampleJavaName);
 }
 
 OwnedPtr<FuncDecl> JniBridge::CreateNativeJavaABIFunc(
@@ -219,19 +190,6 @@ Ty& JniBridge::ConvertCangjieToJniTy(Ty& javaCompatibleTy) const
         return GetJniJobjectDeclTy();
     }
 
-    if (IsCJMappingInterface(javaCompatibleTy) || javaCompatibleTy.IsFunc()) {
-        // cangjie mirrorred interface or function
-        return GetJniJobjectDeclTy();
-    }
-
-    if (IsCJMapping(javaCompatibleTy)) {
-        // cangjie mirror
-        return GetRegistryIdJavaTy();
-    }
-    if (javaCompatibleTy.IsTuple()) {
-        // cangjie mirrorred to java tuple
-        return GetRegistryIdJavaTy();
-    }
     if (javaCompatibleTy.IsBuiltin()) {
         return javaCompatibleTy;
     }

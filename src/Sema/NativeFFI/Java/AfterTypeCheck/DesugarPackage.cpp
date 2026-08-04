@@ -50,26 +50,16 @@ void JavaDesugarManager::ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx,
     Process<DesugarTypeCheckingAndCasting>(ctx, lib, diag, utils);
 }
 
-void JavaDesugarManager::ProcessCangjieMirrorStages(AfterTypeCheckContext& ctx)
-{
-    GenerateTuplesGlueCode(ctx);
-    PreGenerateInCJMapping(ctx);
-    GenerateFwdClassInCJMapping(ctx);
-    GenerateInCJMapping(ctx);
-    DesugarInCJMapping(ctx);
-    ctx.FlushGeneratedDecls();
-}
-
 void JavaInteropManager::DesugarPackage(Package& pkg,
     const std::unordered_map<Ptr<const InheritableDecl>,
     MemberMap>& memberMap,
     std::function<void(AST::Node&)> desugarPropRef)
 {
-    if (!(hasMirrorOrImpl || targetInteropLanguage == GlobalOptions::InteropLanguage::Java)) {
+    if (!hasMirrorOrImpl) {
         return;
     }
     JavaDesugarManager desugarer{
-        importManager, typeManager, diag, mangler, javagenOutputPath, outputPath, memberMap, pkg};
+        importManager, typeManager, diag, mangler, javagenOutputPath, outputPath, memberMap};
 
     if (!InteropLibBridge::IsInteropLibAccessible(importManager)) {
         return;
@@ -78,12 +68,6 @@ void JavaInteropManager::DesugarPackage(Package& pkg,
     if (hasMirrorOrImpl) {
         AfterTypeCheckContext ctx{importManager, typeManager, pkg};
         desugarer.ProcessJavaMirrorImplStages(ctx, desugarPropRef);
-    }
-
-    // Currently CJMapping has no publicly available flags to be enabled.
-    if (targetInteropLanguage == GlobalOptions::InteropLanguage::Java) {
-        AfterTypeCheckContext ctx{importManager, typeManager, pkg};
-        desugarer.ProcessCangjieMirrorStages(ctx);
     }
 }
 

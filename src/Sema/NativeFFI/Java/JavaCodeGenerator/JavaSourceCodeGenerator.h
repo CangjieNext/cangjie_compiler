@@ -28,24 +28,9 @@ using namespace Cangjie::Native::FFI::Java;
 
 class JavaSourceCodeGenerator : public AbstractSourceCodeGenerator {
 public:
-    JavaSourceCodeGenerator(Decl* decl, const BaseMangler& mangler, TypeManager& typeManager,
+    JavaSourceCodeGenerator(Decl* decl, const BaseMangler& mangler,
         AfterTypeCheckContext& ctx, const std::optional<std::string>& folderPath, const std::string& outputFileName,
-        std::string cjLibName);
-    JavaSourceCodeGenerator(Decl* decl, const BaseMangler& mangler, TypeManager& typeManager,
-        AfterTypeCheckContext& ctx, const std::optional<std::string>& folderPath, const std::string& outputFileName,
-        std::string cjLibName, std::vector<Ptr<ExtendDecl>> extends, bool isInteropCJPackageConfig = false);
-    JavaSourceCodeGenerator(Decl* decl, const BaseMangler& mangler, TypeManager& typeManager,
-        AfterTypeCheckContext& ctx, const std::optional<std::string>& outputFolderPath,
-        const std::string& outputFileName, std::string cjLibName, GenericConfigInfo* genericConfig,
-        bool isInteropCJPackageConfig);
-    JavaSourceCodeGenerator(Decl* decl, const BaseMangler& mangler, TypeManager& typeManager,
-        AfterTypeCheckContext& ctx, const std::optional<std::string>& outputFolderPath,
-        const std::string& outputFileName, std::string cjLibName, Ptr<TupleTy>& tupleTy, bool isCjMappingTuple,
-        bool isInteropCJpackageConfig = false);
-    JavaSourceCodeGenerator(const BaseMangler& mangler, TypeManager& typeManager,
-        AfterTypeCheckContext& ctx, const std::optional<std::string>& outputFolderPath,
-        const std::string& outputFileName, std::string cjLibName, Ptr<LambdaPattern> pattern);
-    static bool IsDeclAppropriateForGeneration(const Decl& declArg);
+        std::string cjLibName, std::vector<Ptr<ExtendDecl>> extends);
 
 private:
     static const std::string DEFAULT_OUTPUT_DIR;
@@ -62,18 +47,14 @@ private:
     static std::string GenerateParamLists(const std::vector<OwnedPtr<FuncParamList>>& paramLists,
         const std::function<std::string(const OwnedPtr<FuncParam>& ptr)>& transform);
 
+    bool IsMemberExportable(const AST::Decl& member) const;
+
     Decl* decl;
     std::set<std::string> imports;
     const std::string cjLibName;
     const BaseMangler& mangler;
-    TypeManager& typeManager;
     AfterTypeCheckContext& ctx;
     std::vector<Ptr<ExtendDecl>> extendDecls;
-    GenericConfigInfo* genericConfig = nullptr;
-    Ptr<TupleTy> tupleTy{nullptr};
-    bool isCjMappingTuple{false};
-    bool isInteropCJPackageConfig{false};
-    Ptr<LambdaPattern> lambdaPattern = nullptr;
 
     std::string GenerateFuncParams(const std::vector<OwnedPtr<FuncParam>>& params, bool isNativeMethod = false);
     std::string GenerateFuncParamLists(
@@ -81,13 +62,10 @@ private:
     std::string GenerateFuncParamClasses(const std::vector<OwnedPtr<FuncParamList>>& paramLists);
     void ConstructResult() override;
     void AddClassDeclaration();
-    void AddInterfaceDeclaration();
     void AddLoadLibrary();
-    void AddSelfIdField();
+    void AddRegistryIdIdField();
     void AddProperties();
     std::string GenerateConstructorDecl(const FuncDecl& func, bool isForCangjie);
-    // Generate all constructors for each ctor in Enum.
-    std::string GenerateConstructorForEnumDecl(const OwnedPtr<Decl>& ctor);
     // Generate super call argument and native declaration.
     std::pair<std::string, std::string> GenNativeSuperArgCall(
         const FuncArg& arg, const FuncDecl& nativeFunc, const std::vector<OwnedPtr<FuncParam>>& params);
@@ -101,48 +79,16 @@ private:
     // Generate constructors and native funcs.
     void AddConstructor(const FuncDecl& ctor);
     void AddConstructors();
-    void AddAllCtorsForCJMappingEnum(const EnumDecl& enumDecl);
     void AddInstanceMethod(const FuncDecl& funcDecl);
     void AddStaticMethod(const FuncDecl& funcDecl);
     void AddMethods();
-    void AddInterfaceMethods();
-    void AddTupleItemMethod();
-
-    /**
-     * This Class is used to forward default call to CJ side.
-     * final class CJMappingInterface_fwd {
-     *     private CJMappingInterface_fwd() {}
-     *     static {
-     *         loadLibrary("UNNAMED");
-     *     }
-     *
-     *     public static native void foo_default_impl(CJMappingInterface selfobj);
-     * }
-     */
-    void AddInterfaceFwdClass();
-    void AddInterfaceFwdClassNativeMethod();
 
     void AddEndClassParenthesis();
     void AddNativeInitCJObject(const std::vector<OwnedPtr<Cangjie::AST::FuncParam>>& params, const FuncDecl& ctor);
     void AddNativeDeleteCJObject();
     void AddFinalize();
     void AddHeader();
-    void AddPrivateCtorForCJMappring();
-    void AddPrivateCtorForCJMappringEnum();
-    void AddEqualOrIdentityMethod(bool hasHascodeMethod, bool hasEqualsMethod, bool hasToStringMethod);
-    void AddGuardClass();
-    void AddClassAnalyser();
-    void AddClassAnalyserCtorParams();
-    void AddCJLockField();
-    void AddGuardField();
-    void AddOverrideMaskField();
-    void AddAttachCJObject();
-    void AddDetachCJObject();
-    void AddNativeDetachCJObject();
     void AddHeaderWithPackageName(std::string& curPackageName);
-    void GenerateLambdaJavaSourceCode();
-    std::string GenerateLambdaRetType();
-    std::string GenerateLambdaParamType(bool isVar = false);
 };
 } // namespace Cangjie::Interop::Java
 

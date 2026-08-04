@@ -94,7 +94,7 @@ OwnedPtr<ParenExpr> ASTFactory::CreateParenExpr(OwnedPtr<Expr> expr)
 OwnedPtr<Expr> ASTFactory::CreateNativeHandleExpr(OwnedPtr<Expr> entity)
 {
     CJC_ASSERT(typeMapper.IsObjCMirror(*entity->GetTy()) || typeMapper.IsObjCImpl(*entity->GetTy()) ||
-        typeMapper.IsSyntheticWrapper(*entity->GetTy()) || typeMapper.IsObjCFwdClass(*entity->GetTy()));
+        typeMapper.IsSyntheticWrapper(*entity->GetTy()));
     auto entityTy = StaticCast<ClassLikeTy>(entity->GetTy());
     auto curFile = entity->curFile;
     auto getter = GetNativeHandleGetter(*entityTy->commonDecl);
@@ -106,8 +106,7 @@ OwnedPtr<Expr> ASTFactory::CreateNativeHandleExpr(OwnedPtr<Expr> entity)
 
 OwnedPtr<Expr> ASTFactory::CreateNativeHandleExpr(ClassLikeTy& ty, Ptr<File> curFile)
 {
-    CJC_ASSERT(typeMapper.IsObjCMirror(ty) || typeMapper.IsObjCImpl(ty) || typeMapper.IsSyntheticWrapper(ty) ||
-        typeMapper.IsObjCFwdClass(ty));
+    CJC_ASSERT(typeMapper.IsObjCMirror(ty) || typeMapper.IsObjCImpl(ty) || typeMapper.IsSyntheticWrapper(ty));
     auto thisRef = CreateThisRef(ty.commonDecl, &ty, curFile);
 
     return CreateNativeHandleExpr(std::move(thisRef));
@@ -128,10 +127,6 @@ OwnedPtr<Expr> ASTFactory::UnwrapEntity(OwnedPtr<Expr> expr)
 {
     if (typeMapper.IsObjCMirror(*expr->GetTy()) || typeMapper.IsObjCImpl(*expr->GetTy())) {
         return CreateNativeHandleExpr(std::move(expr));
-    }
-
-    if (typeMapper.IsObjCCJMapping(*expr->GetTy())) {
-        return CreatePutToRegistryCall(std::move(expr));
     }
 
     if (expr->GetTy()->IsCoreOptionType()) {
@@ -253,31 +248,6 @@ OwnedPtr<Expr> ASTFactory::WrapEntity(OwnedPtr<Expr> expr, Ty& wrapTy, Retain wi
         ctorRef->instTys.push_back(wrapTy.typeArgs[0]);
         ctorRef->typeArguments.push_back(CreateType(wrapTy.typeArgs[0]));
         return CreateCallExpr(std::move(ctorRef), Nodes<FuncArg>(CreateFuncArg(std::move(expr))), ctor, &wrapTy,
-            CallKind::CALL_OBJECT_CREATION);
-    }
-
-    if (typeMapper.IsObjCCJMapping(wrapTy)) {
-        if (auto decl = Ty::GetDeclOfTy<InheritableDecl>(&wrapTy)) {
-            return CreateGetFromRegistryByIdCall(std::move(expr), CreateRefType(*decl));
-        }
-        CJC_ABORT(); // other CJMapping is not supported
-    }
-
-    if (typeMapper.IsObjCCJMappingInterface(wrapTy)) {
-        CJC_ASSERT(expr->GetTy()->IsPointer());
-        auto classLikeTy = StaticCast<ClassLikeTy>(&wrapTy);
-        Ptr<Ty> fwdTy = TypeManager::GetInvalidTy();
-        for (auto it : classLikeTy->directSubtypes) {
-            if (it->name == classLikeTy->name + OBJ_C_FWD_CLASS_SUFFIX) {
-                fwdTy = it;
-                break;
-            }
-        }
-        CJC_ASSERT(Ty::IsTyCorrect(fwdTy));
-        auto fwdClassDecl = Ty::GetDeclOfTy(fwdTy);
-
-        auto ctor = GetGeneratedBaseCtor(*fwdClassDecl);
-        return CreateCallExpr(CreateRefExpr(*ctor), Nodes<FuncArg>(CreateFuncArg(std::move(expr))), ctor, fwdTy,
             CallKind::CALL_OBJECT_CREATION);
     }
 
@@ -591,8 +561,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateGetObjCClass(ClassLikeDecl& target)
     return classDecl;
 }
 
-OwnedPtr<FuncDecl> ASTFactory::CreateInitCjObject(Decl& target, FuncDecl& ctor, bool generateForOneWayMapping,
-    const Native::FFI::GenericConfigInfo* genericConfig)
+OwnedPtr<FuncDecl> ASTFactory::CreateInitCjObject(Decl& target, FuncDecl& ctor, bool generateForOneWayMapping)
 {
     auto curFile = ctor.curFile;
     auto registryIdTy = bridge.GetRegistryIdTy();
@@ -600,10 +569,6 @@ OwnedPtr<FuncDecl> ASTFactory::CreateInitCjObject(Decl& target, FuncDecl& ctor, 
     std::unordered_map<std::string, Ptr<Ty>> actualTyArgMap;
     std::vector<Ptr<Ty>> funcTyParams;
     std::vector<OwnedPtr<Type>> actualPrimitiveType;
-    if (genericConfig && genericConfig->instTypes.size() != 0) {
-        GetArgsAndRetGenericActualTyVector(
-            genericConfig, ctor, actualTyArgMap, funcTyParams, actualPrimitiveType, typeManager);
-    }
 
     auto wrapperParamList = MakeOwned<FuncParamList>();
     auto& wrapperParams = wrapperParamList->params;
@@ -684,8 +649,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateInitCjObject(Decl& target, FuncDecl& ctor, 
     auto wrapperBody = CreateFuncBody(std::move(wrapperParamLists), CreateType(registryIdTy),
         CreateBlock(Nodes<Node>(std::move(putToRegistryCall)), registryIdTy), wrapperTy);
 
-    auto wrapperName = genericConfig ? nameGenerator.GenerateInitCjObjectName(ctor, &genericConfig->declInstName) :
-        nameGenerator.GenerateInitCjObjectName(ctor);
+    auto wrapperName = nameGenerator.GenerateInitCjObjectName(ctor);
 
     auto wrapper = CreateFuncDecl(wrapperName, std::move(wrapperBody), wrapperTy);
     wrapper->moduleName = ctor.moduleName;
@@ -780,8 +744,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateInitCjObjectForEnumNoParams(AST::EnumDecl& 
     return wrapper;
 }
 
-OwnedPtr<FuncDecl> ASTFactory::CreateDeleteCjObject(Decl& target, bool generateForOneWayMapping,
-    const Native::FFI::GenericConfigInfo* genericConfig)
+OwnedPtr<FuncDecl> ASTFactory::CreateDeleteCjObject(Decl& target)
 {
     auto registryIdTy = bridge.GetRegistryIdTy();
     auto param = CreateFuncParam(REGISTRY_ID_IDENT, CreateType(registryIdTy), nullptr, registryIdTy);
@@ -796,20 +759,16 @@ OwnedPtr<FuncDecl> ASTFactory::CreateDeleteCjObject(Decl& target, bool generateF
     auto removeFromRegistryCall = CreateRemoveFromRegistryCall(std::move(paramRef));
 
     std::vector<OwnedPtr<Node>> funcNodes;
-    if (!generateForOneWayMapping) {
-        auto getFromRegistryCall = CreateGetFromRegistryByIdCall(
-            ASTCloner::Clone(paramRefTmp), CreateRefType(static_cast<InheritableDecl&>(target)));
-        auto objTmpVarDecl =
-            CreateTmpVarDecl(CreateRefType(static_cast<InheritableDecl&>(target)), std::move(getFromRegistryCall));
-        auto nativeHandleExpr = CreateMemberAccess(CreateRefExpr(*objTmpVarDecl), NATIVE_HANDLE_IDENT);
-        auto releaseCall = CreateObjCReleaseCall(std::move(nativeHandleExpr));
+    auto getFromRegistryCall = CreateGetFromRegistryByIdCall(
+        ASTCloner::Clone(paramRefTmp), CreateRefType(static_cast<InheritableDecl&>(target)));
+    auto objTmpVarDecl =
+        CreateTmpVarDecl(CreateRefType(static_cast<InheritableDecl&>(target)), std::move(getFromRegistryCall));
+    auto nativeHandleExpr = CreateMemberAccess(CreateRefExpr(*objTmpVarDecl), NATIVE_HANDLE_IDENT);
+    auto releaseCall = CreateObjCReleaseCall(std::move(nativeHandleExpr));
 
-        funcNodes.emplace_back(std::move(objTmpVarDecl));
-        funcNodes.emplace_back(std::move(removeFromRegistryCall));
-        funcNodes.emplace_back(std::move(releaseCall));
-    } else {
-        funcNodes.emplace_back(std::move(removeFromRegistryCall));
-    }
+    funcNodes.emplace_back(std::move(objTmpVarDecl));
+    funcNodes.emplace_back(std::move(removeFromRegistryCall));
+    funcNodes.emplace_back(std::move(releaseCall));
 
     std::vector<OwnedPtr<FuncParam>> funcParams;
     funcParams.emplace_back(std::move(param));
@@ -820,8 +779,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateDeleteCjObject(Decl& target, bool generateF
     auto funcBody = CreateFuncBody(std::move(paramLists), Native::FFI::CreateUnitType(target.curFile),
         CreateBlock(std::move(funcNodes), unitTy), funcTy);
 
-    auto funcName = genericConfig ? nameGenerator.GenerateDeleteCjObjectName(target, &genericConfig->declInstName) :
-        nameGenerator.GenerateDeleteCjObjectName(target);
+    auto funcName = nameGenerator.GenerateDeleteCjObjectName(target);
 
     auto ret = CreateFuncDecl(funcName, std::move(funcBody), funcTy);
     ret->moduleName = target.moduleName;
@@ -833,7 +791,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateDeleteCjObject(Decl& target, bool generateF
     return ret;
 }
 
-OwnedPtr<FuncDecl> ASTFactory::CreateMethodWrapper(FuncDecl& method, const Native::FFI::GenericConfigInfo* genericConfig)
+OwnedPtr<FuncDecl> ASTFactory::CreateMethodWrapper(FuncDecl& method)
 {
     auto outerDecl = static_cast<InheritableDecl*>(method.outerDecl.get());
     CJC_NULLPTR_CHECK(outerDecl);
@@ -849,10 +807,6 @@ OwnedPtr<FuncDecl> ASTFactory::CreateMethodWrapper(FuncDecl& method, const Nativ
     std::unordered_map<std::string, Ptr<Ty>> actualTyArgMap;
     std::vector<Ptr<Ty>> funcTyParams;
     std::vector<OwnedPtr<Type>> actualPrimitiveType;
-    if (genericConfig && genericConfig->instTypes.size() != 0) {
-        GetArgsAndRetGenericActualTyVector(
-            genericConfig, method, actualTyArgMap, funcTyParams, actualPrimitiveType, typeManager);
-    }
     auto instantTy = GetInstantyForGenericTy(*method.outerDecl, actualTyArgMap, typeManager);
     auto retActualTy =
         methodRetType.GetTy()->IsGeneric() ? actualTyArgMap[methodRetType.GetTy()->name] : methodRetType.GetTy();
@@ -911,8 +865,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateMethodWrapper(FuncDecl& method, const Nativ
             CJC_NULLPTR_CHECK(finalTy);
             auto convertedParamTy = typeMapper.Cj2CType(finalTy);
             CJC_NULLPTR_CHECK(convertedParamTy);
-            return CreateFuncParam(p->identifier.GetRawText() + (typeMapper.IsObjCCJMapping(*finalTy) ? "Id" : ""),
-                CreateType(convertedParamTy), nullptr, convertedParamTy);
+            return CreateFuncParam(p->identifier, CreateType(convertedParamTy), nullptr, convertedParamTy);
         }
     );
 
@@ -981,12 +934,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateMethodWrapper(FuncDecl& method, const Nativ
     auto wrapperBody = CreateFuncBody(std::move(wrapperParamLists), CreateType(retWrapperTy->retTy),
         CreateBlock(std::move(wrapperNodes), retWrapperTy->retTy), retWrapperTy);
 
-    bool isInnerGenericProp = false;
-    if (genericConfig && method.propDecl) {
-        isInnerGenericProp = genericConfig->funcNames.find(method.propDecl->identifier) != genericConfig->funcNames.end();
-    }
-    auto wrapperName = genericConfig ? nameGenerator.GenerateMethodWrapperName(method, &genericConfig->declInstName, isInnerGenericProp) :
-        nameGenerator.GenerateMethodWrapperName(method);
+    auto wrapperName = nameGenerator.GenerateMethodWrapperName(method);
 
     auto wrapper = CreateFuncDecl(wrapperName, std::move(wrapperBody), retWrapperTy);
     wrapper->moduleName = method.moduleName;
@@ -1159,7 +1107,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateSetterWrapper(PropDecl& prop)
     return wrapper;
 }
 
-OwnedPtr<FuncDecl> ASTFactory::CreateGetterWrapper(VarDecl& field, const Native::FFI::GenericConfigInfo* genericConfig)
+OwnedPtr<FuncDecl> ASTFactory::CreateGetterWrapper(VarDecl& field)
 {
     auto outerDecl = static_cast<InheritableDecl*>(field.outerDecl.get());
     CJC_NULLPTR_CHECK(outerDecl);
@@ -1172,19 +1120,6 @@ OwnedPtr<FuncDecl> ASTFactory::CreateGetterWrapper(VarDecl& field, const Native:
     auto wrapperParamList = MakeOwned<FuncParamList>();
     auto& wrapperParams = wrapperParamList->params;
 
-    if (field.GetTy()->IsGeneric()) {
-        genericActualTy =
-            typeManager.GetPrimitiveTy(GetActualTypeKind(GetGenericActualType(genericConfig, field.GetTy()->name)));
-        if (outerDecl->GetTy()->HasGeneric()) {
-            for (auto argTy : outerDecl->GetTy()->typeArgs) {
-                if (argTy->IsGeneric()) {
-                    Ptr<Ty> actualRetTy = typeManager.GetPrimitiveTy(GetActualTypeKind(GetGenericActualType(genericConfig, argTy->name)));
-                    actualTyArgMap[argTy->name] = actualRetTy;
-                    actualPrimitiveType.emplace_back(GetGenericInstType(genericConfig, actualRetTy, typeManager));
-                }
-            }
-        }
-    }
     OwnedPtr<VarDecl> objTmpVarDecl;
     OwnedPtr<MemberAccess> fieldExpr;
     if (field.TestAttr(Attribute::STATIC)) {
@@ -1245,8 +1180,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateGetterWrapper(VarDecl& field, const Native:
         CreateBlock(std::move(wrapperNodes), wrapperTy->retTy), wrapperTy);
 
     // Generate wrapper name from ORIGIN field, not a mirror one.
-    auto wrapperName = genericConfig ? nameGenerator.GetFieldGetterWrapperName(field, &genericConfig->declInstName) :
-        nameGenerator.GetFieldGetterWrapperName(field);
+    auto wrapperName = nameGenerator.GetFieldGetterWrapperName(field);
 
     auto wrapper = CreateFuncDecl(wrapperName, std::move(wrapperBody), wrapperTy);
     wrapper->moduleName = field.moduleName;
@@ -1503,7 +1437,7 @@ Ptr<FuncDecl> ASTFactory::GetGeneratedBaseCtor(Decl& decl)
 {
     CJC_ASSERT(decl.astKind == ASTKind::CLASS_DECL);
     CJC_ASSERT(TypeMapper::IsObjCMirror(*decl.GetTy()) || TypeMapper::IsObjCImpl(*decl.GetTy()) ||
-        TypeMapper::IsSyntheticWrapper(*decl.GetTy()) || TypeMapper::IsObjCFwdClass(*decl.GetTy()));
+        TypeMapper::IsSyntheticWrapper(*decl.GetTy()));
 
     if (TypeMapper::IsObjCImpl(decl)) {
         auto cd = StaticCast<ClassDecl>(&decl);
@@ -1746,7 +1680,7 @@ OwnedPtr<CallExpr> ASTFactory::CreateGetFromRegistryByIdCall(OwnedPtr<Expr> regi
     auto getFromRegistryByIdExpr = CreateRefExpr(*getFromRegistryByIdDecl);
 
     auto ty = typeArg->GetTy();
-    CJC_ASSERT(TypeMapper::IsObjCImpl(*ty) || TypeMapper::IsObjCCJMapping(*ty) || TypeMapper::IsObjCFwdClass4Open(*ty));
+    CJC_ASSERT(TypeMapper::IsObjCImpl(*ty));
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateFuncArg(std::move(registryId)));

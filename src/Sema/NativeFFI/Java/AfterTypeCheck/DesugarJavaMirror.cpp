@@ -139,7 +139,7 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
 
     std::vector<OwnedPtr<Node>> ctorNodes;
 
-    if (isJObject || decl.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
+    if (isJObject) {
         // for JObject, body can be created and filled in one step
         if (!doStub) {
             return;
@@ -307,8 +307,7 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
     body.push_back(std::move(thisCall));
 }
 
-void JavaDesugarManager::AddJavaMirrorMethodBody(
-    ClassLikeDecl& mirror, FuncDecl& fun, OwnedPtr<Expr> javaRefCall, GenericConfigInfo* genericConfig)
+void JavaDesugarManager::AddJavaMirrorMethodBody(ClassLikeDecl& mirror, FuncDecl& fun, OwnedPtr<Expr> javaRefCall)
 {
     if (fun.TestAttr(Attribute::ABSTRACT) && !IsSyntheticMirrorWrapper(mirror)) {
         return;
@@ -333,8 +332,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
         methodCall = lib.CreateCFFICallArrayMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
             std::move(javaRefCall), paramList, genericParam, GetArrayOperationKind(fun));
     } else {
-        auto memberJNISignature = genericConfig ?
-            MemberJNISignature(utils, fun, genericConfig) : MemberJNISignature(utils, fun);
+        auto memberJNISignature = MemberJNISignature(utils, fun);
         auto methodBlock = lib.CreateJavaMethodCallBlock(curFile, paramList, retTy,
             fun.TestAttr(Attribute::STATIC), std::move(javaRefCall), memberJNISignature);
         if (!methodBlock) {
@@ -355,13 +353,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     methodCallRes.begin = fun.begin;
     methodCallRes.curFile = curFile;
     auto callResRef = WithinFile(CreateRefExpr(methodCallRes), curFile);
-    OwnedPtr<Expr> retCallExpr = nullptr;
-    // CJMapping interface return parameters support lambdas.
-    if (retTy->kind == TypeKind::TYPE_FUNC && fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
-        retCallExpr = CreateGetCJLambdaCallExpr(std::move(callResRef), retTy, mirror);
-    } else {
-        retCallExpr = lib.ConvertJavaResultToCJ(std::move(callResRef), retTy, mirror);
-    }
+    OwnedPtr<Expr> retCallExpr = lib.ConvertJavaResultToCJ(std::move(callResRef), retTy, mirror);
     if (!retCallExpr) {
         fun.EnableAttr(Attribute::IS_BROKEN);
         return;
@@ -373,19 +365,15 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     retExpr.refFuncBody = fun.funcBody.get();
 
     fun.funcBody->SetTy(TypeManager::GetNothingTy());
-    if (fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
-        fun.funcBody->parentClassLike = &mirror;
-    }
     if (IsSyntheticMirrorWrapper(mirror)) {
         fun.DisableAttr(Attribute::ABSTRACT);
     }
 }
 
-void JavaDesugarManager::DesugarJavaMirrorMethod(FuncDecl& fun, ClassLikeDecl& mirror, GenericConfigInfo* genericConfig)
+void JavaDesugarManager::DesugarJavaMirrorMethod(FuncDecl& fun, ClassLikeDecl& mirror)
 {
-    CJC_ASSERT(!fun.TestAttr(Attribute::CONSTRUCTOR) &&
-        (mirror.IsJavaMirror() || fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)));
-    AddJavaMirrorMethodBody(mirror, fun, CreateJavaRefCall(mirror, mirror.curFile), genericConfig);
+    CJC_ASSERT(!fun.TestAttr(Attribute::CONSTRUCTOR) && mirror.IsJavaMirror());
+    AddJavaMirrorMethodBody(mirror, fun, CreateJavaRefCall(mirror, mirror.curFile));
 }
 
 void JavaDesugarManager::InsertJavaMirrorPropGetter(PropDecl& prop)

@@ -53,9 +53,6 @@ constexpr auto INTEROPLIB_OBJ_C_RELEASE = "objCRelease";
 constexpr auto INTEROPLIB_OBJ_C_RESPONSE_TO_SELECTOR = "respondsToSelector";
 constexpr auto INTEROPLIB_OBJ_C_AUTO_RELEASE = "objCAutorelease";
 constexpr auto INTEROPLIB_OBJ_C_RETAIN = "objCRetain";
-constexpr auto INTEROPLIB_FORWARDER_MUTEX = "ForwarderMutex";
-constexpr auto MUTEX_LOCK_IDENT = "lock";
-constexpr auto MUTEX_UNLOCK_IDENT = "unlock";
 constexpr auto INTEROPLIB_OBJC_STORE_LAMBDA_AS_BLOCK = "registerCangjieLambdaAsBlock";
 constexpr auto INTEROPLIB_OBJC_GET_LAMBDA_FROM_BLOCK = "getCangjieLambdaFromBlock";
 constexpr auto INTEROPLIB_OBJ_C_OBJECT_GET_CLASS = "objectGetClass";
@@ -82,77 +79,6 @@ Ptr<T> GetMemberOfDecl(Decl& decl, std::function<bool(const Decl&)> pred)
     return Cangjie::DynamicCast<T>(result);
 }
 } // namespace
-
-/**
- * Gets ForwarderMutex declaration.
- */
-Ptr<TypeAliasDecl> InteropLibBridge::GetForwarderMutexDecl()
-{
-    static auto decl = GetInteropLibDecl<ASTKind::TYPE_ALIAS_DECL>(INTEROPLIB_FORWARDER_MUTEX);
-    return decl;
-}
-
-/**
- * Gets ForwarderMutex semantic type (std.sync.Mutex).
- */
-Ptr<Ty> InteropLibBridge::GetForwarderMutexTy()
-{
-    return GetForwarderMutexDecl()->type->GetTy();
-}
-
-/**
- * Gets the lock decl of ForwarderMutex (std.sync.Mutex).
- */
-Ptr<FuncDecl> InteropLibBridge::GetMutexLock()
-{
-    static Ptr<FuncDecl> result = nullptr;
-    if (result) {
-        return result;
-    }
-    auto decl = Ty::GetDeclOfTy(GetForwarderMutexTy());
-    CJC_NULLPTR_CHECK(decl);
-    result = GetMemberOfDecl<FuncDecl>(*decl, [](const Decl& mem) {
-        return mem.identifier == MUTEX_LOCK_IDENT;
-    });
-    CJC_NULLPTR_CHECK(result);
-    return result;
-}
-
-/**
- * Gets the unlock decl of ForwarderMutex (std.sync.Mutex).
- */
-Ptr<FuncDecl> InteropLibBridge::GetMutexUnlock()
-{
-    static Ptr<FuncDecl> result = nullptr;
-    if (result) {
-        return result;
-    }
-    auto decl = Ty::GetDeclOfTy(GetForwarderMutexTy());
-    CJC_NULLPTR_CHECK(decl);
-    result = GetMemberOfDecl<FuncDecl>(*decl, [](const Decl& mem) {
-        return mem.identifier == MUTEX_UNLOCK_IDENT;
-    });
-    CJC_NULLPTR_CHECK(result);
-    return result;
-}
-
-/**
- * Gets the constructor decl of ForwarderMutex.
- */
-Ptr<FuncDecl> InteropLibBridge::GetMutexConstructor()
-{
-    static Ptr<FuncDecl> result = nullptr;
-    if (result) {
-        return result;
-    }
-    auto decl = Ty::GetDeclOfTy(GetForwarderMutexTy());
-    CJC_NULLPTR_CHECK(decl);
-    result = GetMemberOfDecl<FuncDecl>(*decl, [](const Decl& mem) {
-        return mem.TestAttr(Attribute::CONSTRUCTOR);
-    });
-    CJC_NULLPTR_CHECK(result);
-    return result;
-}
 
 Ptr<TypeAliasDecl> InteropLibBridge::GetNativeObjCIdDecl()
 {
