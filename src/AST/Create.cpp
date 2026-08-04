@@ -170,6 +170,7 @@ OwnedPtr<FuncArg> CreateFuncArg(OwnedPtr<Expr> expr, const std::string& argName,
         // Create a dummy desugar block expr, in order to create a CHIR `Goto` node.
         auto re = CreateRefExpr("$dummy");
         re->SetTy(expr->GetTy());
+        CopyBasicInfo(expr.get(), re.get());
         re->desugarExpr = std::move(expr);
         ret->expr = std::move(re);
     } else {
