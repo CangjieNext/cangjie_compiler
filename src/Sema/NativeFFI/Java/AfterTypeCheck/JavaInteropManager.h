@@ -23,15 +23,13 @@ using namespace AST;
 class JavaInteropManager {
 public:
     JavaInteropManager(ImportManager& importManager, TypeManager& typeManager, DiagnosticEngine& diag,
-        const BaseMangler& mangler, const std::optional<std::string>& javagenOutputPath, const std::string outputPath,
-        GlobalOptions::InteropLanguage& targetInteropLanguage)
+        const BaseMangler& mangler, const std::optional<std::string>& javagenOutputPath, const std::string outputPath)
         : importManager(importManager),
           typeManager(typeManager),
           diag(diag),
           mangler(mangler),
           javagenOutputPath(javagenOutputPath),
-          outputPath(outputPath),
-          targetInteropLanguage(targetInteropLanguage)
+          outputPath(outputPath)
     {
     }
 
@@ -41,13 +39,11 @@ public:
     void CheckTypes(ClassLikeDecl& classLikeDecl);
     void CheckJavaMirrorTypes(ClassLikeDecl& decl);
     void CheckJavaImplTypes(ClassLikeDecl& decl);
-    void CheckCJMappingType(Decl& decl);
-    void CheckCJMappingDeclSupportRange(Decl& decl);
 
     /**
      * DesugarPackage is responsible for coordinating the desugaring process of Java interop features within a package.
-     * It processes Java mirror and impl stubs, actual desugaring, and typechecks for both Java mirrors and CJMappings
-     * depending on the compilation configuration and presence of Java interop entities.
+     * It processes Java mirror and impl stubs, actual desugaring, and typechecks for Java compatible types
+     * depending on the presence of Java interop declarations.
      *
      * @param pkg The package that contains files to be desugared.
      * @param memberMap A reference to a collection containing member signature metadata,
@@ -76,7 +72,6 @@ private:
      * Flag that informs on presence of any @JavaMirror- or @JavaImpl-annotated entities in the compilation package
      */
     bool hasMirrorOrImpl = false;
-    GlobalOptions::InteropLanguage& targetInteropLanguage;
 };
 } // namespace Cangjie::Interop::Java
 

@@ -137,7 +137,7 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
 
     std::vector<OwnedPtr<Node>> ctorNodes;
 
-    if (isJObject || decl.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
+    if (isJObject) {
         // for JObject, body can be created and filled in one step
         if (!doStub) {
             return;
@@ -317,8 +317,7 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
     }
 }
 
-void JavaDesugarManager::AddJavaMirrorMethodBody(
-    ClassLikeDecl& mirror, FuncDecl& fun, OwnedPtr<Expr> javaRefCall, GenericConfigInfo* genericConfig)
+void JavaDesugarManager::AddJavaMirrorMethodBody(ClassLikeDecl& mirror, FuncDecl& fun, OwnedPtr<Expr> javaRefCall)
 {
     if (fun.TestAttr(Attribute::ABSTRACT) && !IsSyntheticMirrorWrapper(mirror)) {
         return;
@@ -338,8 +337,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     CJC_ASSERT_WITH_MSG(!fun.funcBody->paramLists.empty(), "paramLists cannot be empty");
     auto& paramList = *fun.funcBody->paramLists[0].get();
     if (fun.TestAttr(Attribute::STATIC)) {
-        auto memberJNISignature =
-            genericConfig ? MemberJNISignature(utils, fun, genericConfig) : MemberJNISignature(utils, fun);
+        auto memberJNISignature = MemberJNISignature(utils, fun);
         methodCall = lib.CreateCFFICallStaticMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
             memberJNISignature, paramList, *curFile);
     } else {
@@ -350,9 +348,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
             methodCall = lib.CreateCFFICallArrayMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
                 std::move(javaRefCall), paramList, genericParam, GetArrayOperationKind(fun));
         } else {
-            auto memberJNISignature = genericConfig
-                ? MemberJNISignature(utils, fun, genericConfig)
-                : MemberJNISignature(utils, fun);
+            auto memberJNISignature = MemberJNISignature(utils, fun);
             methodCall = lib.CreateCFFICallMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
                 std::move(javaRefCall), memberJNISignature, paramList, *fun.curFile);
         }
@@ -373,13 +369,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     auto callResRef = CreateRefExpr(methodCallRes);
     CopyBasicInfo(&methodCallRes, callResRef.get());
 
-    OwnedPtr<Expr> retCallExpr = nullptr;
-    // cjmapping interface return param support lambda.
-    if (retTy->kind == TypeKind::TYPE_FUNC && fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
-        retCallExpr = CreateGetCJLambdaCallExpr(std::move(callResRef), retTy, mirror);
-    } else {
-        retCallExpr = lib.UnwrapJavaEntity(std::move(callResRef), retTy, mirror);
-    }
+    OwnedPtr<Expr> retCallExpr = lib.UnwrapJavaEntity(std::move(callResRef), retTy, mirror);
 
     if (!retCallExpr) {
         fun.EnableAttr(Attribute::IS_BROKEN);
@@ -390,19 +380,15 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     retExpr.SetTy(TypeManager::GetNothingTy());
     retExpr.refFuncBody = fun.funcBody.get();
     fun.funcBody->SetTy(TypeManager::GetNothingTy());
-    if (fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
-        fun.funcBody->parentClassLike = &mirror;
-    }
     if (IsSyntheticMirrorWrapper(mirror)) {
         fun.DisableAttr(Attribute::ABSTRACT);
     }
 }
 
-void JavaDesugarManager::DesugarJavaMirrorMethod(FuncDecl& fun, ClassLikeDecl& mirror, GenericConfigInfo* genericConfig)
+void JavaDesugarManager::DesugarJavaMirrorMethod(FuncDecl& fun, ClassLikeDecl& mirror)
 {
-    CJC_ASSERT(!fun.TestAttr(Attribute::CONSTRUCTOR) &&
-        (mirror.IsJavaMirror() || fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)));
-    AddJavaMirrorMethodBody(mirror, fun, CreateJavaRefCall(mirror, mirror.curFile), genericConfig);
+    CJC_ASSERT(!fun.TestAttr(Attribute::CONSTRUCTOR) && mirror.IsJavaMirror());
+    AddJavaMirrorMethodBody(mirror, fun, CreateJavaRefCall(mirror, mirror.curFile));
 }
 
 void JavaDesugarManager::InsertJavaMirrorPropGetter(PropDecl& prop)
