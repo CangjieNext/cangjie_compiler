@@ -212,72 +212,9 @@ protected:
 };
 
 /**
- * @brief An expression for function call, including
- * ApplyWithException, InvokeWithException and InvokeStaticWithException
+ * @brief `Apply` expression written in `try` block
  */
-class FuncCallWithException : public ExpressionWithException {
-    friend class ExprTypeConverter;
-    friend class CHIRSerializer;
-public:
-    // ===--------------------------------------------------------------------===//
-    // Base Information
-    // ===--------------------------------------------------------------------===//
-    /**
-     * @brief Retrieves a list of the application argument nodes.
-     *
-     * @return A vector of pointers to the application argument nodes.
-     */
-    virtual std::vector<Value*> GetArgs() const = 0;
-
-    /**
-     * @brief Retrieves the type of 'this'.
-     *
-     * @return The type of 'this'.
-     */
-    Type* GetThisType() const;
-
-    /**
-     * @brief Sets the type of 'this'.
-     *
-     * @param type The type of 'this'.
-     */
-    void SetThisType(Type* type);
-
-    /**
-     * @brief Retrieves the instantiated argument types.
-     *
-     * @return A vector of pointers to the instantiated argument types.
-     */
-    const std::vector<Type*>& GetInstantiatedTypeArgs() const;
-
-protected:
-    explicit FuncCallWithException(ExprKind kind, const FuncCallContext& funcCallCtx, Block* parent);
-
-    /**
-     * @brief Record instantiated type args.
-     * Cangjie Code:
-     *      func foo<T1, T2>() {}
-     *      foo<Bool, Int32>()  // {Bool, Int32} is current Apply's instantiated type args
-     */
-    std::vector<Type*> instantiatedTypeArgs;
-
-    /**
-     * @brief Record object type if callee is member method.
-     * 1. foo(), global func, `thisType` is nullptr
-     * 2. obj.foo(), instance member method, `thisType` is obj's type
-     * 3. A<Bool>.foo(), static member method, `thisType` is A<Bool>
-     * 4. method(), a member method with implicit `this`, `thisType` is parent custom type
-     *
-     * As for global func and instance member method, we can compute `thisType` from callee's args,
-     * but for static member method, we can't.
-     */
-    Type* thisType{nullptr};
-};
-
-/**
- * @brief `Apply` expression wroten in `try` block
- */
-class ApplyWithException : public FuncCallWithException {
+class ApplyWithException : public ApplyBase {
     friend class ExprTypeConverter;
     friend class TypeConverterForCC;
     friend class CHIRSerializer;
@@ -288,31 +225,18 @@ public:
     // Base Information
     // ===--------------------------------------------------------------------===//
     /**
-     * @brief Retrieves the callee of this ApplyWithException operation.
+     * @brief Retrieves the success block.
      *
-     * @return The callee of this ApplyWithException operation.
+     * @return The success block.
      */
-    Value* GetCallee() const;
+    Block* GetSuccessBlock() const;
 
     /**
-     * @brief Retrieves a list of the ApplyWithException operation argument nodes.
+     * @brief Retrieves the error block.
      *
-     * @return A vector of pointers to the argument nodes.
+     * @return The error block.
      */
-    std::vector<Value*> GetArgs() const override;
-
-    // ===--------------------------------------------------------------------===//
-    // Instantiated Types
-    // ===--------------------------------------------------------------------===//
-    /**
-     * @brief Retrieves the instantiated parent custom type of the callee.
-     *
-     * @return The instantiated parent custom type of the callee.
-     */
-    Type* GetInstParentCustomTyOfCallee(CHIRBuilder& builder) const;
-
-protected:
-    std::string OperandsToString() const override;
+    Block* GetErrorBlock() const;
 
 private:
     explicit ApplyWithException(
@@ -323,83 +247,9 @@ private:
 };
 
 /**
- * @brief An expression for virtual function call, including Invoke and InvokeStatic
+ * @brief `Invoke` expression written in `try` block
  */
-class DynamicDispatchWithException : public FuncCallWithException {
-    friend class ExprTypeConverter;
-    friend class PrivateTypeConverterNoInvokeOriginal;
-    friend class CHIRSerializer;
-public:
-    // ===--------------------------------------------------------------------===//
-    // Base Information
-    // ===--------------------------------------------------------------------===//
-    /**
-     * @brief Retrieves the virtual method of this Invoke operation.
-     *
-     * @return The virtual method of this Invoke operation.
-     */
-    Function* GetCallee() const;
-
-    /**
-     * @brief Retrieves the method name of this Invoke operation.
-     *
-     * @return The method name of this Invoke operation.
-     */
-    std::string GetMethodName() const;
-
-    /**
-     * @brief Retrieves the method type of this Invoke operation.
-     *
-     * @return The method type of this Invoke operation.
-     */
-    FuncType* GetMethodType() const;
-
-    const std::vector<GenericType*>& GetGenericTypeParams() const;
-    /**
-     * @brief Retrieves the method's offset in vtable.
-     *
-     * @return The offset, greater than or equal to zero.
-     */
-    size_t GetVirtualMethodOffset(CHIRBuilder* builder = nullptr) const;
-
-    // ===--------------------------------------------------------------------===//
-    // Instantiated Types
-    // ===--------------------------------------------------------------------===//
-    /**
-     * @brief Retrieves base class's instantiated type, base class is the one in which method first appears.
-     *
-     * @return Base class's instantiated type.
-     */
-    ClassType* GetInstSrcParentCustomTypeOfMethod(CHIRBuilder& builder) const;
-
-    // ===--------------------------------------------------------------------===//
-    // Others
-    // ===--------------------------------------------------------------------===//
-    /*
-     * @brief Retrieves virtual method's attribute.
-     *
-     * @return Virtual method's attribute.
-     */
-    AttributeInfo GetVirtualMethodAttr() const;
-
-protected:
-    std::string OperandsToString() const override;
-
-    std::string AddExtraComment() const override;
-
-    explicit DynamicDispatchWithException(
-        ExprKind kind, const InvokeCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent);
-
-    Cangjie::OverflowStrategy overflowStrategy{Cangjie::OverflowStrategy::NA};
-
-private:
-    std::vector<VTableSearchRes> GetVirtualMethodInfo(CHIRBuilder& builder) const;
-};
-
-/**
- * @brief `Invoke` expression wroten in `try` block
- */
-class InvokeWithException : public DynamicDispatchWithException {
+class InvokeWithException : public InvokeBase {
     friend class ExprTypeConverter;
     friend class TypeConverterForCC;
     friend class PrivateTypeConverterNoInvokeOriginal;
@@ -411,18 +261,18 @@ public:
     // Base Information
     // ===--------------------------------------------------------------------===//
     /**
-     * @brief Retrieves the object of this InvokeWithException operation.
+     * @brief Retrieves the success block.
      *
-     * @return The object of this InvokeWithException operation.
+     * @return The success block.
      */
-    Value* GetObject() const;
+    Block* GetSuccessBlock() const;
 
     /**
-     * @brief Retrieves the call arguments of this InvokeWithException operation.
+     * @brief Retrieves the error block.
      *
-     * @return A vector of pointers to the call arguments.
+     * @return The error block.
      */
-    std::vector<Value*> GetArgs() const override;
+    Block* GetErrorBlock() const;
 
 private:
     explicit InvokeWithException(
@@ -434,9 +284,9 @@ private:
 };
 
 /**
- * @brief `InvokeStatic` expression wroten in `try` block
+ * @brief `InvokeStatic` expression written in `try` block
  */
-class InvokeStaticWithException : public DynamicDispatchWithException {
+class InvokeStaticWithException : public InvokeStaticBase {
     friend class ExprTypeConverter;
     friend class TypeConverterForCC;
     friend class PrivateTypeConverterNoInvokeOriginal;
@@ -448,18 +298,18 @@ public:
     // Base Information
     // ===--------------------------------------------------------------------===//
     /**
-     * @brief Retrieves the RTTI value.
+     * @brief Retrieves the success block.
      *
-     * @return The RTTI value.
+     * @return The success block.
      */
-    Value* GetRTTIValue() const;
+    Block* GetSuccessBlock() const;
 
     /**
-     * @brief Retrieves the call arguments of this InvokeStaticWithException operation.
+     * @brief Retrieves the error block.
      *
-     * @return A vector of pointers to the call arguments.
+     * @return The error block.
      */
-    std::vector<Value*> GetArgs() const override;
+    Block* GetErrorBlock() const;
 
 private:
     explicit InvokeStaticWithException(

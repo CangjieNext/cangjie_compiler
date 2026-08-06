@@ -8,6 +8,7 @@
 
 #include "cangjie/CHIR/Analysis/Engine.h"
 #include "cangjie/CHIR/IR/Annotation.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 
 using namespace Cangjie::CHIR;
 
@@ -56,7 +57,7 @@ void ConstPropagation::VisitFunc(const Function& func, bool isDebug, bool isCJLi
     const auto actionAfterVisitExpr = [this, &toBeRewrited, &func, isDebug, isCJLint](
                                           const TConstDomain& state, Expression* expr, size_t index) -> void {
         auto exprType = expr->GetResult()->GetType();
-        if (expr->IsBinaryExpr()) {
+        if (Is<BinaryExpression>(expr)) {
             if (auto absVal = state.CheckAbstractValue(expr->GetResult()); absVal) {
                 return (void)toBeRewrited.emplace_back(expr, index, GenerateConstExpr(exprType, absVal, isCJLint));
             } else if (expr->GetResult()->GetType()->IsInteger()) {
@@ -68,7 +69,7 @@ void ConstPropagation::VisitFunc(const Function& func, bool isDebug, bool isCJLi
                 }
             }
         }
-        if (expr->IsUnaryExpr()) {
+        if (Is<UnaryExpression>(expr)) {
             if (auto absVal = state.CheckAbstractValue(expr->GetResult()); absVal) {
                 return (void)toBeRewrited.emplace_back(expr, index, GenerateConstExpr(exprType, absVal, isCJLint));
             } else {
@@ -77,7 +78,7 @@ void ConstPropagation::VisitFunc(const Function& func, bool isDebug, bool isCJLi
         }
         if ((exprType->IsInteger() || exprType->IsFloat() || exprType->IsRune() ||
             exprType->IsBoolean() || exprType->IsString()) &&
-            (expr->IsLoad() || expr->IsTypeCast() || expr->IsField())) {
+            (Is<Load>(expr) || Is<TypeCast>(expr) || Is<Field>(expr))) {
             auto absVal = state.CheckAbstractValue(expr->GetResult());
             if (absVal) {
                 toBeRewrited.emplace_back(expr, index, GenerateConstExpr(exprType, absVal, isCJLint));

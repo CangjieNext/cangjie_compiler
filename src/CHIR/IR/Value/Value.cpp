@@ -134,7 +134,7 @@ bool Value::IsCompileTimeValue() const
     }
 
     if (kind == ValueKind::KIND_LOCALVAR) {
-        if (static_cast<const LocalVar*>(this)->GetExpr()->IsConstant()) {
+        if (Is<Constant>(static_cast<const LocalVar*>(this)->GetExpr())) {
             return true;
         }
     }
@@ -774,10 +774,10 @@ void BlockGroup::SetOwnerExpression(Expression& expr)
 {
 #ifndef NDEBUG
     // we can't move func or lambdas' body to other expression, vice versa
-    if (expr.IsLambda()) {
-        CJC_ASSERT(ownerExpression == nullptr || ownerExpression->IsLambda());
+    if (Is<Lambda>(expr)) {
+        CJC_ASSERT(ownerExpression == nullptr || Is<Lambda>(ownerExpression));
     } else {
-        CJC_ASSERT(ownerFunc == nullptr && (ownerExpression == nullptr || !ownerExpression->IsLambda()));
+        CJC_ASSERT(ownerFunc == nullptr && (ownerExpression == nullptr || !Is<Lambda>(ownerExpression)));
     }
 #endif
     if (Is<Lambda*>(&expr)) {

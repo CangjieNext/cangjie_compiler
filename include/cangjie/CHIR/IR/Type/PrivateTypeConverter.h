@@ -115,12 +115,7 @@ protected:
     virtual R VisitSubExpression(AllocateBase& o, Args... args) = 0;
     virtual R VisitSubExpression(InstanceOf& o, Args... args) = 0;
     virtual R VisitSubExpression(RawArrayAllocateBase& o, Args... args) = 0;
-    virtual R VisitSubExpression(Apply& o, Args... args) = 0;
-    virtual R VisitSubExpression(ApplyWithException& o, Args... args) = 0;
-    virtual R VisitSubExpression(Invoke& o, Args... args) = 0;
-    virtual R VisitSubExpression(InvokeWithException& o, Args... args) = 0;
-    virtual R VisitSubExpression(InvokeStatic& o, Args... args) = 0;
-    virtual R VisitSubExpression(InvokeStaticWithException& o, Args... args) = 0;
+    virtual R VisitSubExpression(FuncCall& o, Args... args) = 0;
     virtual R VisitSubExpression(Constant& o, Args... args) = 0;
     virtual R VisitSubExpression(Intrinsic& o, Args... args) = 0;
     virtual R VisitSubExpression(IntrinsicWithException& o, Args... args) = 0;
@@ -137,12 +132,12 @@ private:
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::INSTANCEOF, InstanceOf),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::RAW_ARRAY_ALLOCATE, RawArrayAllocateBase),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION, RawArrayAllocateBase),
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::APPLY, Apply),
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::APPLY_WITH_EXCEPTION, ApplyWithException),
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::INVOKE, Invoke),
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::INVOKE_WITH_EXCEPTION, InvokeWithException),
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::INVOKESTATIC, InvokeStatic),
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::INVOKESTATIC_WITH_EXCEPTION, InvokeStaticWithException),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::APPLY, FuncCall),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::APPLY_WITH_EXCEPTION, FuncCall),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::INVOKE, FuncCall),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::INVOKE_WITH_EXCEPTION, FuncCall),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::INVOKESTATIC, FuncCall),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::INVOKESTATIC_WITH_EXCEPTION, FuncCall),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::CONSTANT, Constant),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::INTRINSIC, Intrinsic),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::INTRINSIC_WITH_EXCEPTION, IntrinsicWithException),
@@ -224,12 +219,7 @@ protected:
     void VisitSubExpression(AllocateBase& o) override;
     void VisitSubExpression(InstanceOf& o) override;
     void VisitSubExpression(RawArrayAllocateBase& o) override;
-    void VisitSubExpression(Apply& o) override;
-    void VisitSubExpression(ApplyWithException& o) override;
-    void VisitSubExpression(Invoke& o) override;
-    void VisitSubExpression(InvokeWithException& o) override;
-    void VisitSubExpression(InvokeStatic& o) override;
-    void VisitSubExpression(InvokeStaticWithException& o) override;
+    void VisitSubExpression(FuncCall& o) override;
     void VisitSubExpression(Constant& o) override;
     void VisitSubExpression(Intrinsic& o) override;
     void VisitSubExpression(IntrinsicWithException& o) override;
@@ -292,10 +282,7 @@ public:
     }
 
 private:
-    void VisitSubExpression(Invoke& o) override;
-    void VisitSubExpression(InvokeWithException& o) override;
-    void VisitSubExpression(InvokeStatic& o) override;
-    void VisitSubExpression(InvokeStaticWithException& o) override;
+    void VisitSubExpression(FuncCall& o) override;
 };
 
 class TypeConverterForCC : public ExprTypeConverter, public ValueTypeConverter, public CustomDefTypeConverter {

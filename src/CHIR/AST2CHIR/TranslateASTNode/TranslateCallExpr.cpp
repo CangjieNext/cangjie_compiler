@@ -10,6 +10,7 @@
 #include "cangjie/AST/Walker.h"
 #include "cangjie/CHIR/Utils/ConstantUtils.h"
 #include "cangjie/CHIR/IR/IntrinsicKind.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 
 using namespace Cangjie::CHIR;
 using namespace Cangjie;
@@ -489,7 +490,7 @@ void Translator::BlackBoxModifyArgTypeToRef(std::vector<Value*>& args)
         if (arg->IsLocalVar()) {
             auto localVar = StaticCast<LocalVar*>(arg);
             auto expr = localVar->GetExpr();
-            if (expr->IsLoad()) {
+            if (Is<Load>(expr)) {
                 newArg = StaticCast<Load*>(expr)->GetLocation();
                 if (GetNonDebugUsers(*expr->GetResult()).empty()) {
                     if (expr->GetResult()->GetDebugExpr()) {
