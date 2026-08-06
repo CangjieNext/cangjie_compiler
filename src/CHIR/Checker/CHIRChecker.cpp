@@ -341,7 +341,7 @@ Value* GetOwnerFuncOrLambda(const BlockGroup& blockGroup)
     }
     auto ownerExpr = blockGroup.GetOwnerExpression();
     CJC_NULLPTR_CHECK(ownerExpr);
-    if (ownerExpr->IsLambda()) {
+    if (Cangjie::Is<Lambda>(ownerExpr)) {
         return ownerExpr->GetResult();
     }
     auto parentBG = ownerExpr->GetParentBlockGroup();
@@ -1409,8 +1409,8 @@ void CHIRChecker::CheckLocalId(BlockGroup& blockGroup, const Function& topLevelF
         } else if (!allIds.emplace(result->GetIdentifier()).second) {
             duplicatedLocalIds.emplace(result->GetIdentifier());
         }
-        if (expr.IsLambda()) {
-            for (auto p : StaticCast<Lambda&>(expr).GetParams()) {
+        if (auto lambda = DynamicCast<Lambda*>(&expr)) {
+            for (auto p : lambda->GetParams()) {
                 if (!allIds.emplace(p->GetIdentifier()).second) {
                     duplicatedLocalIds.emplace(p->GetIdentifier());
                 }
@@ -1447,8 +1447,7 @@ void CHIRChecker::CheckUnreachableOpAndGenericTyInBG(const BlockGroup& blockGrou
 {
     auto valSize = reachableValues.size();
     auto tySize = reachableGenericTypes.size();
-    if (auto e = blockGroup.GetOwnerExpression(); e && e->IsLambda()) {
-        auto lambda = StaticCast<Lambda*>(e);
+    if (auto lambda = DynamicCast<Lambda*>(blockGroup.GetOwnerExpression())) {
         for (auto genericTy : lambda->GetGenericTypeParams()) {
             reachableGenericTypes.emplace_back(genericTy);
         }
@@ -1575,10 +1574,9 @@ void CHIRChecker::CheckUnreachableGenericTypeInExpr(
                 " is unreachable, the type is allocated type in expression " + expr.ToString(0) + ".";
             ErrorInFunc(*expr.GetTopLevelFunc(), errMsg);
         }
-    } else if (Is<FuncCall>(expr) || Is<FuncCallWithException>(expr)) {
-        auto base = FuncCallBase(&expr);
+    } else if (auto funcCall = DynamicCast<const FuncCall*>(&expr)) {
         // 3. generic type in instantiated type args must be reachable
-        const auto& instantiatedTypeArgs = base.GetInstantiatedTypeArgs();
+        const auto& instantiatedTypeArgs = funcCall->GetInstantiatedTypeArgs();
         for (size_t i = 0; i < instantiatedTypeArgs.size(); ++i) {
             if (!GenericTypeIsInContainer(*instantiatedTypeArgs[i], reachableGenericTypes)) {
                 auto errMsg = "generic type " + instantiatedTypeArgs[i]->ToString() + "is unreachable, the type is " +
@@ -1587,7 +1585,7 @@ void CHIRChecker::CheckUnreachableGenericTypeInExpr(
             }
         }
         // 4. generic type in ThisType must be reachable
-        if (auto thisType = base.GetThisType()) {
+        if (auto thisType = funcCall->GetThisType()) {
             if (!GenericTypeIsInContainer(*thisType, reachableGenericTypes)) {
                 auto errMsg = "generic type " + thisType->ToString() +
                     " is unreachable, the type is ThisType in expression " + expr.ToString(0) + ".";
@@ -2025,7 +2023,7 @@ void CHIRChecker::CheckApplyWithException(const ApplyWithException& expr, const 
         return;
     }
 
-    CheckApplyBase(ApplyBase(&expr), topLevelFunc);
+    CheckApplyBase(expr, topLevelFunc);
 }
 
 void CHIRChecker::CheckApplyBase(const ApplyBase& expr, const Function& topLevelFunc)
@@ -2036,7 +2034,7 @@ void CHIRChecker::CheckApplyBase(const ApplyBase& expr, const Function& topLevel
     }
 
     // 2. check callee
-    if (!CheckCallee(*expr.GetCallee(), *expr.GetRawExpr(), topLevelFunc)) {
+    if (!CheckCallee(*expr.GetCallee(), expr, topLevelFunc)) {
         return;
     }
 
@@ -2050,12 +2048,12 @@ void CHIRChecker::CheckApplyBase(const ApplyBase& expr, const Function& topLevel
         }
     }
     auto instTypeArgs = expr.GetInstantiatedTypeArgs();
-    if (!CheckInstantiatedTypeArgs(instTypeArgs, genericTypeParams, *expr.GetRawExpr(), topLevelFunc)) {
+    if (!CheckInstantiatedTypeArgs(instTypeArgs, genericTypeParams, expr, topLevelFunc)) {
         return;
     }
 
     // 4. check thisType
-    if (!CheckApplyThisType(*expr.GetCallee(), expr.GetThisType(), *expr.GetRawExpr(), topLevelFunc)) {
+    if (!CheckApplyThisType(*expr.GetCallee(), expr.GetThisType(), expr, topLevelFunc)) {
         return;
     }
 
@@ -2064,10 +2062,10 @@ void CHIRChecker::CheckApplyBase(const ApplyBase& expr, const Function& topLevel
     auto instFuncType = CalculateInstFuncType(
         *calleeType, instTypeArgs, genericTypeParams, expr.GetInstParentCustomTyOfCallee(builder));
     CheckApplyFuncArgs(
-        expr.GetArgs(), instFuncType->GetParamTypes(), calleeType->HasVarArg(), *expr.GetRawExpr(), topLevelFunc);
+        expr.GetArgs(), instFuncType->GetParamTypes(), calleeType->HasVarArg(), expr, topLevelFunc);
 
     // 6. check return value
-    CheckApplyFuncRetValue(*instFuncType->GetReturnType(), *expr.GetRawExpr(), topLevelFunc);
+    CheckApplyFuncRetValue(*instFuncType->GetReturnType(), expr, topLevelFunc);
 }
 
 bool CHIRChecker::CheckCallee(const Value& callee, const Expression& expr, const Function& topLevelFunc)
@@ -2269,7 +2267,7 @@ void CHIRChecker::CheckInvokeWithException(const InvokeWithException& expr, cons
         return;
     }
 
-    CheckInvokeBase(InvokeBase(&expr), topLevelFunc);
+    CheckInvokeBase(expr, topLevelFunc);
 }
 
 void CHIRChecker::CheckInvokeBase(const InvokeBase& expr, const Function& topLevelFunc)
@@ -2277,12 +2275,12 @@ void CHIRChecker::CheckInvokeBase(const InvokeBase& expr, const Function& topLev
     // 1. check instantiated type args
     const auto& genericTypeParams = expr.GetGenericTypeParams();
     auto instTypeArgs = expr.GetInstantiatedTypeArgs();
-    if (!CheckInstantiatedTypeArgs(instTypeArgs, genericTypeParams, *expr.GetRawExpr(), topLevelFunc)) {
+    if (!CheckInstantiatedTypeArgs(instTypeArgs, genericTypeParams, expr, topLevelFunc)) {
         return;
     }
 
     // 2. check thisType
-    if (!CheckInvokeThisType(*expr.GetObject()->GetType(), expr.GetThisType(), *expr.GetRawExpr(), topLevelFunc)) {
+    if (!CheckInvokeThisType(*expr.GetObject()->GetType(), expr.GetThisType(), expr, topLevelFunc)) {
         return;
     }
 
@@ -2298,14 +2296,14 @@ void CHIRChecker::CheckInvokeBase(const InvokeBase& expr, const Function& topLev
             .thisType = thisType,
             .srcParentType = expr.GetInstSrcParentCustomTypeOfMethod(builder)
         };
-        if (!CheckVirtualMethod(virMethodCtx, *expr.GetRawExpr(), topLevelFunc)) {
+        if (!CheckVirtualMethod(virMethodCtx, expr, topLevelFunc)) {
             return;
         }
     }
 
     // 4. check func args
     auto paramTypes = expr.GetMethodType()->GetParamTypes();
-    CheckInvokeFuncArgs(expr.GetArgs(), paramTypes, *expr.GetRawExpr(), topLevelFunc);
+    CheckInvokeFuncArgs(expr.GetArgs(), paramTypes, expr, topLevelFunc);
 }
 
 bool CHIRChecker::CheckInvokeThisType(
@@ -2435,11 +2433,11 @@ bool CHIRChecker::CheckVirtualMethod(
         std::to_string(methodCtx.offset) + "-th ";
     // 3. `InvokeStatic` must call a static member method
     // 4. `Invoke` must call a non-static member method
-    if (expr.IsInvokeStaticBase() && !funcInfo.TestAttr(Attribute::STATIC)) {
+    if (Is<InvokeStaticBase>(expr) && !funcInfo.TestAttr(Attribute::STATIC)) {
         auto errMsg = errMsgBase + "virtual method is not static, `InvokeStatic` should call a static method.";
         ErrorInFunc(topLevelFunc, errMsg);
         return false;
-    } else if (!expr.IsInvokeStaticBase() && funcInfo.TestAttr(Attribute::STATIC)) {
+    } else if (!Is<InvokeStaticBase>(expr) && funcInfo.TestAttr(Attribute::STATIC)) {
         auto errMsg = errMsgBase + "virtual method is static, `Invoke` shouldn't call a static method.";
         ErrorInFunc(topLevelFunc, errMsg);
         return false;
@@ -2708,7 +2706,7 @@ void CHIRChecker::CheckInvokeStaticWithException(const InvokeStaticWithException
         return;
     }
 
-    CheckInvokeStaticBase(InvokeStaticBase(&expr), topLevelFunc);
+    CheckInvokeStaticBase(expr, topLevelFunc);
 }
 
 void CHIRChecker::CheckInvokeStaticBase(const InvokeStaticBase& expr, const Function& topLevelFunc)
@@ -2716,7 +2714,7 @@ void CHIRChecker::CheckInvokeStaticBase(const InvokeStaticBase& expr, const Func
     // 1. check instantiated type args
     const auto& genericTypeParams = expr.GetGenericTypeParams();
     auto instTypeArgs = expr.GetInstantiatedTypeArgs();
-    if (!CheckInstantiatedTypeArgs(instTypeArgs, genericTypeParams, *expr.GetRawExpr(), topLevelFunc)) {
+    if (!CheckInstantiatedTypeArgs(instTypeArgs, genericTypeParams, expr, topLevelFunc)) {
         return;
     }
 
@@ -2724,7 +2722,7 @@ void CHIRChecker::CheckInvokeStaticBase(const InvokeStaticBase& expr, const Func
     auto rtti = DynamicCast<LocalVar*>(expr.GetRTTIValue());
     if (rtti == nullptr) {
         auto errMsg = "its first operand must be from `GetRTTI` or `GetRTTIStatic`.";
-        ErrorInExpr(topLevelFunc, *expr.GetRawExpr(), errMsg);
+        ErrorInExpr(topLevelFunc, expr, errMsg);
         return;
     }
     Type* objectType = nullptr;
@@ -2734,12 +2732,12 @@ void CHIRChecker::CheckInvokeStaticBase(const InvokeStaticBase& expr, const Func
         objectType = getRttiStatic->GetRTTIType();
     } else {
         auto errMsg = "its first operand must be from `GetRTTI` or `GetRTTIStatic`.";
-        ErrorInExpr(topLevelFunc, *expr.GetRawExpr(), errMsg);
+        ErrorInExpr(topLevelFunc, expr, errMsg);
         return;
     }
 
     // 3. check thisType
-    if (!CheckInvokeThisType(*objectType, expr.GetThisType(), *expr.GetRawExpr(), topLevelFunc)) {
+    if (!CheckInvokeThisType(*objectType, expr.GetThisType(), expr, topLevelFunc)) {
         return;
     }
 
@@ -2752,13 +2750,13 @@ void CHIRChecker::CheckInvokeStaticBase(const InvokeStaticBase& expr, const Func
         .thisType = expr.GetThisType()->StripAllRefs(),
         .srcParentType = expr.GetInstSrcParentCustomTypeOfMethod(builder)
     };
-    if (!CheckVirtualMethod(virMethodCtx, *expr.GetRawExpr(), topLevelFunc)) {
+    if (!CheckVirtualMethod(virMethodCtx, expr, topLevelFunc)) {
         return;
     }
 
     // 5. check func args
     auto paramTypes = expr.GetMethodType()->GetParamTypes();
-    CheckInvokeFuncArgs(expr.GetArgs(), paramTypes, *expr.GetRawExpr(), topLevelFunc);
+    CheckInvokeFuncArgs(expr.GetArgs(), paramTypes, expr, topLevelFunc);
 }
 
 void CHIRChecker::CheckUnaryExpressionWithException(
@@ -3122,8 +3120,7 @@ void CHIRChecker::CheckInoutOpSrc(const Value& op, const IntrinsicBase& expr, co
             CheckInoutOpSrc(*field->GetBase(), expr, topLevelFunc);
         } else if (Is<NumericCastBase>(localExpr)) {
             CheckInoutOpSrc(*localExpr->GetOperand(0), expr, topLevelFunc);
-        } else if (!Is<FuncCallWithException>(localExpr) && !Is<FuncCall>(localExpr) &&
-                   !Is<AllocateWithException>(localExpr) && !Is<Allocate>(localExpr)) {
+        } else if (!Is<FuncCall>(localExpr) && !Is<AllocateBase>(localExpr)) {
             ErrorInExpr(topLevelFunc, *expr.GetRawExpr(),
                 "a wrong expression `" + op.ToString(0) + "` in `inout` operand chain.");
             return;
@@ -3187,10 +3184,10 @@ void CHIRChecker::CheckInout(const IntrinsicBase& expr, const Function& topLevel
         [this, &checkUsers, &expr, &topLevelFunc](const LocalVar& localVar) {
             for (auto user : localVar.GetUsers()) {
                 auto errMsgBase = "the result is used in a wrong expression `" + user->ToString(0) + "`, ";
-                if (Is<ApplyWithException>(user) || Is<Apply>(user)) {
+                if (Is<ApplyBase>(user)) {
                     continue;
-                } else if (Is<InvokeWithException>(user) || Is<Invoke>(user)) {
-                    auto funcName = InvokeBase(user).GetMethodName();
+                } else if (auto invoke = DynamicCast<InvokeBase*>(user)) {
+                    auto funcName = invoke->GetMethodName();
                     if (funcName != INST_VIRTUAL_FUNC && funcName != GENERIC_VIRTUAL_FUNC) {
                         ErrorInExpr(topLevelFunc, *expr.GetRawExpr(),
                             errMsgBase + "the result can't be used as virtual method's argument.");
@@ -3738,7 +3735,7 @@ void CHIRChecker::CheckApply(const Apply& expr, const Function& topLevelFunc)
         return;
     }
     
-    CheckApplyBase(ApplyBase(&expr), topLevelFunc);
+    CheckApplyBase(expr, topLevelFunc);
 }
 
 void CHIRChecker::CheckInvoke(const Invoke& expr, const Function& topLevelFunc)
@@ -3746,7 +3743,7 @@ void CHIRChecker::CheckInvoke(const Invoke& expr, const Function& topLevelFunc)
     if (!OperandNumAtLeast(1, expr, topLevelFunc)) {
         return;
     }
-    CheckInvokeBase(InvokeBase(&expr), topLevelFunc);
+    CheckInvokeBase(expr, topLevelFunc);
 }
 
 void CHIRChecker::CheckInvokeStatic(const InvokeStatic& expr, const Function& topLevelFunc)
@@ -3754,7 +3751,7 @@ void CHIRChecker::CheckInvokeStatic(const InvokeStatic& expr, const Function& to
     if (!OperandNumAtLeast(1, expr, topLevelFunc)) {
         return;
     }
-    CheckInvokeStaticBase(InvokeStaticBase(&expr), topLevelFunc);
+    CheckInvokeStaticBase(expr, topLevelFunc);
 }
 
 void CHIRChecker::CheckInstanceOf(const InstanceOf& expr, const Function& topLevelFunc)

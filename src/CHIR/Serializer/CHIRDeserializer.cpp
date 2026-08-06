@@ -602,8 +602,8 @@ template <> BlockGroup* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
         auto ownedExpression = GetExpression<Expression>(obj->ownedExpression());
         CJC_NULLPTR_CHECK(ownedExpression);
         blockGroup = builder.CreateBlockGroup(*ownedExpression->GetTopLevelFunc());
-        if (ownedExpression->IsLambda()) {
-            StaticCast<Lambda*>(ownedExpression)->InitBody(*blockGroup);
+        if (auto lambda = DynamicCast<Lambda*>(ownedExpression)) {
+            lambda->InitBody(*blockGroup);
         }
     }
     return blockGroup;

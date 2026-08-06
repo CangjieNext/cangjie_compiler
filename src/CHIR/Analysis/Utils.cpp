@@ -188,20 +188,12 @@ std::unordered_set<Value*> GetLambdaCapturedVarsRecursively(const Lambda& lambda
         [&allCapturedVars, &collectRecursively](const Lambda& lambda, std::unordered_set<const Lambda*>& visited) {
         visited.emplace(&lambda);
         auto visitAction = [&visited, &collectRecursively](Expression& expr) {
-            if (expr.IsApply()) {
-                auto callee = DynamicCast<LocalVar*>(StaticCast<Apply&>(expr).GetCallee());
-                if (callee != nullptr && callee->GetExpr()->IsLambda()) {
-                    auto child = StaticCast<const Lambda*>(callee->GetExpr());
-                    if (visited.find(child) == visited.end()) {
-                        collectRecursively(*child, visited);
-                    }
-                }
-            } else if (expr.IsApplyWithException()) {
-                auto callee = DynamicCast<LocalVar*>(StaticCast<ApplyWithException&>(expr).GetCallee());
-                if (callee != nullptr && callee->GetExpr()->IsLambda()) {
-                    auto child = StaticCast<const Lambda*>(callee->GetExpr());
-                    if (visited.find(child) == visited.end()) {
-                        collectRecursively(*child, visited);
+            if (auto apply = DynamicCast<ApplyBase*>(&expr)) {
+                if (auto callee = DynamicCast<LocalVar*>(apply->GetCallee())) {
+                    if (auto child = DynamicCast<const Lambda*>(callee->GetExpr())) {
+                        if (visited.find(child) == visited.end()) {
+                            collectRecursively(*child, visited);
+                        }
                     }
                 }
             }

@@ -46,7 +46,7 @@ void RemoveOldRetValue(LocalVar& oldRet)
 
                 there may be other safety cases that you can remove the store's operand, you can add them here.
             */
-            if (unitVal->GetExpr()->IsConstant()) {
+            if (Cangjie::Is<Constant>(unitVal->GetExpr())) {
                 unitVal->GetExpr()->RemoveSelfFromBlock();
             }
         }
@@ -81,32 +81,29 @@ void OptFuncRetType::Unit2Void()
         }
         // 4. replace all call sites with the new return type
         for (auto user : func->GetUsers()) {
-            if (auto apply = DynamicCast<Apply*>(user)) {
-                CJC_ASSERT(apply->GetCallee() == func);
-                auto funcCallContext = FuncCallContext{
-                    .args = apply->GetArgs(),
-                    .instTypeArgs = apply->GetInstantiatedTypeArgs(),
-                    .thisType = apply->GetThisType()
-                };
-                auto newApply = builder.CreateExpression<Apply>(
-                    apply->GetDebugLocation(), func->GetReturnType(), apply->GetCallee(), funcCallContext, apply->GetParentBlock());
-                if (apply->IsSuperCall()) {
-                    newApply->SetSuperCall();
-                }
-                apply->ReplaceWith(*newApply);
+            auto apply = StaticCast<ApplyBase*>(user);
+            CJC_ASSERT(apply->GetCallee() == func);
+            auto funcCallContext = FuncCallContext{
+                .args = apply->GetArgs(),
+                .instTypeArgs = apply->GetInstantiatedTypeArgs(),
+                .thisType = apply->GetThisType()
+            };
+            Expression* newApply = nullptr;
+            if (apply->IsTerminator()) {
+                auto& awe = StaticCast<ApplyWithException&>(*apply);
+                newApply = builder.CreateExpression<ApplyWithException>(awe.GetDebugLocation(),
+                    func->GetReturnType(), awe.GetCallee(), funcCallContext, awe.GetSuccessBlock(),
+                    awe.GetErrorBlock(), awe.GetParentBlock());
             } else {
-                auto awe = StaticCast<ApplyWithException*>(user);
-                CJC_ASSERT(awe->GetCallee() == func);
-                auto funcCallContext = FuncCallContext{
-                    .args = awe->GetArgs(),
-                    .instTypeArgs = awe->GetInstantiatedTypeArgs(),
-                    .thisType = awe->GetThisType()
-                };
-                auto newApply = builder.CreateExpression<ApplyWithException>(
-                    awe->GetDebugLocation(), func->GetReturnType(), awe->GetCallee(), funcCallContext,
-                    awe->GetSuccessBlock(), awe->GetErrorBlock(), awe->GetParentBlock());
-                awe->ReplaceWith(*newApply);
+                auto& a = StaticCast<Apply&>(*apply);
+                auto created = builder.CreateExpression<Apply>(
+                    a.GetDebugLocation(), func->GetReturnType(), a.GetCallee(), funcCallContext, a.GetParentBlock());
+                if (a.IsSuperCall()) {
+                    created->SetSuperCall();
+                }
+                newApply = created;
             }
+            apply->ReplaceWith(*newApply);
         }
     }
 }

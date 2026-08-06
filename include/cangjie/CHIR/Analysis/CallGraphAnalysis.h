@@ -9,6 +9,7 @@
 
 #include "cangjie/CHIR/IR/Package.h"
 #include "cangjie/CHIR/Optimization/Devirtualization.h"
+#include "cangjie/CHIR/IR/Expression/Expression.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 
 namespace Cangjie::CHIR {
@@ -122,9 +123,9 @@ private:
     /// or calling an external function.
     std::unique_ptr<Node> exitNode;
 
-    void AddVirtualEdgeToNode(Node& node, const Expression& expression);
+    void AddVirtualEdgeToNode(Node& node, const InvokeBase& expression);
 
-    void AddDirectEdgeToNode(Node& node, const Expression& expression);
+    void AddDirectEdgeToNode(Node& node, const ApplyBase& expression);
 };
 
 class CallGraphAnalysis {
