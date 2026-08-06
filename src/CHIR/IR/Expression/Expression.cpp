@@ -42,24 +42,6 @@ std::pair<size_t, size_t> GetAllocExprOfRetVal(const BlockGroup& body)
     CJC_ABORT();
     return {0, 0};
 }
-
-void GetAllSuperClassDefs(const ClassDef& def, std::unordered_set<ClassDef*>& allSuperDefs)
-{
-    for (auto parent : def.GetImplementedInterfaceDefs()) {
-        allSuperDefs.emplace(parent);
-        GetAllSuperClassDefs(*parent, allSuperDefs);
-    }
-    if (auto superClass = def.GetSuperClassDef()) {
-        allSuperDefs.emplace(superClass);
-        GetAllSuperClassDefs(*superClass, allSuperDefs);
-    }
-    for (auto extendDef : def.GetExtends()) {
-        for (auto parent : extendDef->GetImplementedInterfaceDefs()) {
-            allSuperDefs.emplace(parent);
-            GetAllSuperClassDefs(*parent, allSuperDefs);
-        }
-    }
-}
 }
 
 Expression::Expression(
@@ -97,15 +79,6 @@ bool Expression::IsConstantInt() const
     return false;
 }
 
-bool Expression::IsConstantFloat() const
-{
-    if (kind == ExprKind::CONSTANT) {
-        auto constant = StaticCast<const Constant*>(this);
-        return constant->IsFloatLit();
-    }
-    return false;
-}
-
 bool Expression::IsConstantBool() const
 {
     if (kind == ExprKind::CONSTANT) {
@@ -134,94 +107,10 @@ ExprKind Expression::GetExprKind() const
     return kind;
 }
 
-bool Expression::IsConstant() const
-{
-    return kind == ExprKind::CONSTANT;
-}
 
 bool Expression::IsTerminator() const
 {
     return ExprKindMgr::Instance()->GetMajorKind(kind) == ExprMajorKind::TERMINATOR;
-}
-
-bool Expression::IsUnaryExpr() const
-{
-    return ExprKindMgr::Instance()->GetMajorKind(kind) == ExprMajorKind::UNARY_EXPR;
-}
-
-bool Expression::IsLoad() const
-{
-    return kind == ExprKind::LOAD;
-}
-
-bool Expression::IsTypeCast() const
-{
-    return TypeAs<TypeCast>::IsInstanceOf(*this);
-}
-
-bool Expression::IsNumericCast() const
-{
-    return kind == ExprKind::NUMERIC_CAST;
-}
-
-bool Expression::IsDynamicDispatch() const
-{
-    return kind == ExprKind::INVOKE || kind == ExprKind::INVOKESTATIC;
-}
-
-bool Expression::IsFuncCall() const
-{
-    return kind == ExprKind::APPLY || kind == ExprKind::INVOKE || kind == ExprKind::INVOKESTATIC;
-}
-
-bool Expression::IsField() const
-{
-    return kind == ExprKind::FIELD;
-}
-
-bool Expression::IsApply() const
-{
-    return kind == ExprKind::APPLY;
-}
-
-bool Expression::IsApplyWithException() const
-{
-    return kind == ExprKind::APPLY_WITH_EXCEPTION;
-}
-
-bool Expression::IsInvoke() const
-{
-    return kind == ExprKind::INVOKE;
-}
-
-bool Expression::IsLambda() const
-{
-    return kind == ExprKind::LAMBDA;
-}
-
-bool Expression::IsBinaryExpr() const
-{
-    return ExprKindMgr::Instance()->GetMajorKind(kind) == ExprMajorKind::BINARY_EXPR;
-}
-
-bool Expression::IsUnaryExpressionWithException() const
-{
-    return kind == ExprKind::NEG_WITH_EXCEPTION;
-}
-
-bool Expression::IsBinaryExpressionWithException() const
-{
-    return kind >= ExprKind::ADD_WITH_EXCEPTION && kind <= ExprKind::RSHIFT_WITH_EXCEPTION;
-}
-
-bool Expression::IsInvokeStaticBase() const
-{
-    return kind == ExprKind::INVOKESTATIC || kind == ExprKind::INVOKESTATIC_WITH_EXCEPTION;
-}
-
-bool Expression::IsDebug() const
-{
-    return kind == ExprKind::DEBUGEXPR;
 }
 
 std::string Expression::GetExprKindName() const
@@ -549,8 +438,8 @@ bool Expression::HasExceptionBranch() const
     return kind == ExprKind::APPLY_WITH_EXCEPTION ||
         kind == ExprKind::INVOKE_WITH_EXCEPTION ||
         kind == ExprKind::INVOKESTATIC_WITH_EXCEPTION ||
-        IsUnaryExpressionWithException() ||
-        IsBinaryExpressionWithException() ||
+        Is<UnaryExpressionWithException>(*this) ||
+        Is<BinaryExpressionWithException>(*this) ||
         kind == ExprKind::SPAWN_WITH_EXCEPTION ||
         kind == ExprKind::NUMERIC_CAST_WITH_EXCEPTION ||
         kind == ExprKind::INTRINSIC_WITH_EXCEPTION ||
@@ -1049,20 +938,60 @@ const std::vector<Type*>& FuncCall::GetInstantiatedTypeArgs() const
     return instantiatedTypeArgs;
 }
 
-// Apply
-Apply::Apply(Value* callee, const FuncCallContext& callContext, Block* parent)
-    : FuncCall(ExprKind::APPLY, callContext, parent)
+// ApplyBase
+ApplyBase::ApplyBase(ExprKind kind, Value* callee, const FuncCallContext& callContext,
+    const std::vector<Block*>& successors, Block* parent)
+    : FuncCall(kind, callContext, parent)
 {
+    CJC_NULLPTR_CHECK(callee);
     CJC_NULLPTR_CHECK(parent);
     AppendOperand(*callee);
     for (auto op : callContext.args) {
         AppendOperand(*op);
     }
+    for (auto succ : successors) {
+        AppendOperand(*succ);
+    }
 }
 
-Value* Apply::GetCallee() const
+Value* ApplyBase::GetCallee() const
 {
     return operands[0];
+}
+
+std::vector<Value*> ApplyBase::GetArgs() const
+{
+    auto end = GetSuccessorIndex(0);
+    if (end <= 1) {
+        return {};
+    }
+    return {operands.begin() + 1, operands.begin() + static_cast<long>(end)};
+}
+
+Type* ApplyBase::GetInstParentCustomTyOfCallee(CHIRBuilder& builder) const
+{
+    return GetInstParentCustomTypeForApplyCallee(*this, builder);
+}
+
+std::string ApplyBase::OperandsToString() const
+{
+    std::vector<std::string> res;
+    std::string func;
+    if (thisType != nullptr) {
+        func += thisType->ToString() + "->";
+    }
+    func += GetCallee()->GetIdentifier();
+    func += TypeVecToString("<", instantiatedTypeArgs, ">");
+    res.emplace_back(func);
+    auto ops = std::vector<Value*>(operands.begin() + 1, operands.end());
+    res.emplace_back(ValueIdVecToString("", ops, "", IsTerminator()));
+    return StringJoin(res, ", ");
+}
+
+// Apply
+Apply::Apply(Value* callee, const FuncCallContext& callContext, Block* parent)
+    : ApplyBase(ExprKind::APPLY, callee, callContext, {}, parent)
+{
 }
 
 void Apply::SetSuperCall()
@@ -1073,34 +1002,6 @@ void Apply::SetSuperCall()
 bool Apply::IsSuperCall() const
 {
     return isSuperCall;
-}
-
-Type* Apply::GetInstParentCustomTyOfCallee(CHIRBuilder& builder) const
-{
-    return GetInstParentCustomTypeForApplyCallee(*this, builder);
-}
-
-std::vector<Value*> Apply::GetArgs() const
-{
-    std::vector<Value*> args;
-    if (operands.size() > 1) {
-        args.assign(operands.begin() + 1, operands.end());
-    }
-    return args;
-}
-
-std::string Apply::OperandsToString() const
-{
-    std::vector<std::string> res;
-    std::string func;
-    if (thisType != nullptr) {
-        func += thisType->ToString() + "->";
-    }
-    func += GetCallee()->GetIdentifier();
-    func += TypeVecToString("<", instantiatedTypeArgs, ">");
-    res.emplace_back(func);
-    res.emplace_back(ValueIdVecToString("", GetArgs(), ""));
-    return StringJoin(res, ", ");
 }
 
 std::string Apply::AddExtraComment() const
@@ -1154,7 +1055,7 @@ std::vector<VTableSearchRes> DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& 
     for (auto arg : GetArgs()) {
         instParamTypes.emplace_back(arg->GetType());
     }
-    if (!IsInvokeStaticBase()) {
+    if (!Is<InvokeStaticBase>(*this)) {
         instParamTypes.erase(instParamTypes.begin());
     }
     auto instFuncType = builder.GetType<FuncType>(instParamTypes, builder.GetUnitTy());
@@ -1207,7 +1108,8 @@ std::string DynamicDispatch::OperandsToString() const
     func += GetCallee()->GetIdentifier();
     func += TypeVecToString("<", instantiatedTypeArgs, ">");
     res.emplace_back(func);
-    res.emplace_back(ValueIdVecToString("", std::vector<Value*>(operands.begin() + 1, operands.end()), ""));
+    auto ops = std::vector<Value*>(operands.begin() + 1, operands.end());
+    res.emplace_back(ValueIdVecToString("", ops, "", IsTerminator()));
     return StringJoin(res, ", ");
 }
 
@@ -1219,86 +1121,74 @@ std::string DynamicDispatch::AddExtraComment() const
     return "";
 }
 
-// Invoke
-Invoke::Invoke(const InvokeCallContext& callContext, Block* parent)
-    : DynamicDispatch(ExprKind::INVOKE, callContext, parent)
+inline static void CheckVirFuncInvokeInfo(const InvokeCallContext& callContext)
+{
+    CJC_NULLPTR_CHECK(callContext.method);
+    CJC_NULLPTR_CHECK(callContext.caller);
+    CJC_NULLPTR_CHECK(callContext.funcCallCtx.thisType);
+}
+
+// InvokeBase
+InvokeBase::InvokeBase(
+    ExprKind kind, const InvokeCallContext& callContext, const std::vector<Block*>& successors, Block* parent)
+    : DynamicDispatch(kind, callContext, parent)
 {
     CJC_NULLPTR_CHECK(parent);
+    CheckVirFuncInvokeInfo(callContext);
     AppendOperand(*callContext.caller);
     for (auto op : callContext.funcCallCtx.args) {
         AppendOperand(*op);
     }
+    for (auto succ : successors) {
+        AppendOperand(*succ);
+    }
 }
 
-Value* Invoke::GetObject() const
+Value* InvokeBase::GetObject() const
 {
     return operands[1];
 }
 
-void Invoke::UpdateThisType()
+std::vector<Value*> InvokeBase::GetArgs() const
 {
-    auto objType = GetObject()->GetType();
-    auto objDerefType = DynamicCast<ClassType*>(objType->StripAllRefs());
-    auto thisDerefType = DynamicCast<ClassType*>(thisType->StripAllRefs());
-    // for now, we only care about class type, maybe we can handle other types later
-    if (objDerefType == thisDerefType || objDerefType == nullptr || thisDerefType == nullptr) {
-        return;
+    return {operands.begin() + 1, operands.begin() + static_cast<long>(GetSuccessorIndex(0))};
+}
+
+// Invoke
+Invoke::Invoke(const InvokeCallContext& callContext, Block* parent)
+    : InvokeBase(ExprKind::INVOKE, callContext, {}, parent)
+{
+}
+
+// InvokeStaticBase
+InvokeStaticBase::InvokeStaticBase(
+    ExprKind kind, const InvokeCallContext& callContext, const std::vector<Block*>& successors, Block* parent)
+    : DynamicDispatch(kind, callContext, parent)
+{
+    CJC_NULLPTR_CHECK(parent);
+    CheckVirFuncInvokeInfo(callContext);
+    AppendOperand(*callContext.caller);
+    for (auto op : callContext.funcCallCtx.args) {
+        AppendOperand(*op);
     }
-    // `ThisType` must be sub type or equal to object's type, in fact, they should be same,
-    // but original object may be casted to parent type for func param type matched.
-    // after function inlining, object may be changed to sub type of `ThisType`, so we need to update `ThisType`
-    auto parentDef = objDerefType->GetClassDef();
-    std::unordered_set<ClassDef*> allSuperDefs;
-    GetAllSuperClassDefs(*thisDerefType->GetClassDef(), allSuperDefs);
-    auto it = allSuperDefs.find(parentDef);
-    if (it == allSuperDefs.end()) {
-        SetThisType(objType);
+    for (auto succ : successors) {
+        AppendOperand(*succ);
     }
 }
 
-void Invoke::ReplaceOperand(Value* oldOperand, Value* newOperand)
+Value* InvokeStaticBase::GetRTTIValue() const
 {
-    auto needUpdateThisType = false;
-    if (GetObject() == oldOperand) {
-        needUpdateThisType = true;
-    }
-    Expression::ReplaceOperand(oldOperand, newOperand);
-    if (needUpdateThisType) {
-        UpdateThisType();
-    }
+    return operands[1];
 }
 
-void Invoke::ReplaceOperand(size_t idx, Value* newOperand)
+std::vector<Value*> InvokeStaticBase::GetArgs() const
 {
-    Expression::ReplaceOperand(idx, newOperand);
-    if (idx == 1) {
-        UpdateThisType();
-    }
-}
-
-std::vector<Value*> Invoke::GetArgs() const
-{
-    return {operands.begin() + 1, operands.end()};
+    return {operands.begin() + 2, operands.begin() + static_cast<long>(GetSuccessorIndex(0))};
 }
 
 InvokeStatic::InvokeStatic(const InvokeCallContext& callContext, Block* parent)
-    : DynamicDispatch(ExprKind::INVOKESTATIC, callContext, parent)
+    : InvokeStaticBase(ExprKind::INVOKESTATIC, callContext, {}, parent)
 {
-    CJC_NULLPTR_CHECK(parent);
-    AppendOperand(*callContext.caller);
-    for (auto op : callContext.funcCallCtx.args) {
-        AppendOperand(*op);
-    }
-}
-
-Value* InvokeStatic::GetRTTIValue() const
-{
-    return operands[1];
-}
-
-std::vector<Value*> InvokeStatic::GetArgs() const
-{
-    return {operands.begin() + 2, operands.end()};
 }
 
 InvokeStatic* InvokeStatic::Clone(CHIRBuilder& builder, Block& parent) const
@@ -1794,7 +1684,7 @@ std::vector<Value*> Lambda::GetCapturedVariables() const
                 envs.emplace_back(op);
             }
         }
-        if (e.IsLambda()) {
+        if (Is<Lambda>(e)) {
             return VisitResult::SKIP;
         }
         return VisitResult::CONTINUE;

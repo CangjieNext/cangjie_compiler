@@ -164,21 +164,12 @@ void GenerateVTable::UpdateFuncCall()
     auto preVisit = [this](Expression& e) {
         if (auto dyExpr = DynamicCast<DynamicDispatch*>(&e)) {
             e.Set<VirMethodOffset>(dyExpr->GetVirtualMethodOffset(&builder));
-        } else if (auto dyExprE = DynamicCast<DynamicDispatchWithException*>(&e)) {
-            e.Set<VirMethodOffset>(dyExprE->GetVirtualMethodOffset(&builder));
-        } else if (auto apply = DynamicCast<Apply*>(&e)) {
+        } else if (auto apply = DynamicCast<ApplyBase*>(&e)) {
             auto callee = DynamicCast<Function*>(apply->GetCallee());
             if (CalleeIsMutFuncFromParent(apply->GetThisType(), callee, *e.GetTopLevelFunc())) {
                 auto wrapperFunc = GetMutFuncWrapper(*apply->GetThisType(), apply->GetArgs(),
                     apply->GetInstantiatedTypeArgs(), *apply->GetResult()->GetType(), *callee);
                 apply->ReplaceOperand(callee, wrapperFunc);
-            }
-        } else if (auto applyE = DynamicCast<ApplyWithException*>(&e)) {
-            auto callee = DynamicCast<Function*>(applyE->GetCallee());
-            if (CalleeIsMutFuncFromParent(applyE->GetThisType(), callee, *e.GetTopLevelFunc())) {
-                auto wrapperFunc = GetMutFuncWrapper(*applyE->GetThisType(), applyE->GetArgs(),
-                    applyE->GetInstantiatedTypeArgs(), *applyE->GetResult()->GetType(), *callee);
-                applyE->ReplaceOperand(callee, wrapperFunc);
             }
         }
         return VisitResult::CONTINUE;

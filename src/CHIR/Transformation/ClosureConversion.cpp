@@ -56,14 +56,10 @@ bool IsArkInteropLambdaSignature(const Function& srcFunc)
 
 bool IsCalleeOfApply(const Expression& user, const Value& op)
 {
-    if (auto apply = DynamicCast<const Apply*>(&user)) {
+    if (auto apply = DynamicCast<const ApplyBase*>(&user)) {
         return apply->GetCallee() == &op;
-    } else if (auto applyWithException = DynamicCast<const ApplyWithException*>(&user)) {
-        return applyWithException->GetCallee() == &op;
     } else if (auto invoke = DynamicCast<const DynamicDispatch*>(&user)) {
         return invoke->GetCallee() == &op;
-    } else if (auto invokeWithException = DynamicCast<const DynamicDispatchWithException*>(&user)) {
-        return invokeWithException->GetCallee() == &op;
     }
     return false;
 }
@@ -559,11 +555,8 @@ void PrintGlobalFuncInfo(const CHIR::Position& pos)
     std::cout << msg << std::endl;
 }
 
-bool ApplyNeedConvertToInvoke(Expression& e)
+bool ApplyNeedConvertToInvoke(const ApplyBase& apply)
 {
-    if (e.GetExprKind() != CHIR::ExprKind::APPLY) {
-        return false;
-    }
     /*
         if callee is local var or parameter, not a function, we need to replace Apply expr with Invoke expr
         func foo(a: ()->Unit) {
@@ -571,17 +564,7 @@ bool ApplyNeedConvertToInvoke(Expression& e)
                 // note: except for CFunc type
         }
     */
-    auto apply = StaticCast<Apply*>(&e);
-    return !apply->GetCallee()->IsFunc() && apply->GetCallee()->GetType()->IsCJFunc();
-}
-
-bool ApplyWithExceptionNeedConvertToInvokeWithException(Expression& e)
-{
-    if (e.GetExprKind() != CHIR::ExprKind::APPLY_WITH_EXCEPTION) {
-        return false;
-    }
-    auto apply = StaticCast<ApplyWithException*>(&e);
-    return !apply->GetCallee()->IsFunc() && apply->GetCallee()->GetType()->IsCJFunc();
+    return !apply.GetCallee()->IsFunc() && apply.GetCallee()->GetType()->IsCJFunc();
 }
 
 bool TypeCastNeedConvertToBox(Expression& e)
@@ -894,12 +877,8 @@ ClassType* InstantiateAutoEnvGenericBaseType(ClassType& closureType, const Expre
         return &closureType;
     }
     std::vector<Type*> funcTypeArgs;
-    if (auto apply = Cangjie::DynamicCast<const Apply*>(&e)) {
+    if (auto apply = Cangjie::DynamicCast<const ApplyBase*>(&e)) {
         for (auto arg : apply->GetArgs()) {
-            funcTypeArgs.emplace_back(arg->GetType());
-        }
-    } else if (auto applyE = Cangjie::DynamicCast<const ApplyWithException*>(&e)) {
-        for (auto arg : applyE->GetArgs()) {
             funcTypeArgs.emplace_back(arg->GetType());
         }
     } else {
@@ -1031,15 +1010,8 @@ ClassType* ClosureConversion::GenerateInstantiatedClassType(
         for (size_t i = 0; i < instTypeParams.size(); ++i) {
             autoEnvInstTypeArgs[i] = instTypeParams[i];
         }
-    } else if (auto apply = DynamicCast<const Apply*>(&user); apply && apply->GetCallee() == &srcFunc) {
+    } else if (auto apply = DynamicCast<const ApplyBase*>(&user); apply && apply->GetCallee() == &srcFunc) {
         auto& partInstTys = apply->GetInstantiatedTypeArgs();
-        CJC_ASSERT(autoEnvInstTypeArgs.size() >= partInstTys.size());
-        size_t offset = autoEnvInstTypeArgs.size() - partInstTys.size();
-        for (size_t i = offset, j = 0; i < autoEnvInstTypeArgs.size(); ++i, ++j) {
-            autoEnvInstTypeArgs[i] = partInstTys[j];
-        }
-    } else if (auto awe = DynamicCast<const ApplyWithException*>(&user); awe && awe->GetCallee() == &srcFunc) {
-        auto& partInstTys = awe->GetInstantiatedTypeArgs();
         CJC_ASSERT(autoEnvInstTypeArgs.size() >= partInstTys.size());
         size_t offset = autoEnvInstTypeArgs.size() - partInstTys.size();
         for (size_t i = offset, j = 0; i < autoEnvInstTypeArgs.size(); ++i, ++j) {
@@ -1241,11 +1213,7 @@ bool ClosureConversion::LambdaCanBeInlined(const Expression& user, const Functio
 
     bool isRecursive = false;
     auto preVisit = [&callee, &isRecursive](Expression& e) {
-        if (e.GetExprKind() == CHIR::ExprKind::APPLY && StaticCast<Apply&>(e).GetCallee() == callee) {
-            isRecursive = true;
-            return VisitResult::STOP;
-        } else if (e.GetExprKind() == CHIR::ExprKind::APPLY_WITH_EXCEPTION &&
-            StaticCast<ApplyWithException&>(e).GetCallee() == callee) {
+        if (auto apply = DynamicCast<ApplyBase*>(&e); apply && apply->GetCallee() == callee) {
             isRecursive = true;
             return VisitResult::STOP;
         }
@@ -2126,30 +2094,26 @@ void ClosureConversion::ReplaceUserPoint(
         autoEnvObj = CreateAutoEnvImplObject(*curBlock, *autoEnvImplType, envs, user, *srcFunc.GetResult());
         thisTy = autoEnvObj->GetType();
     }
-    if (auto apply = DynamicCast<Apply*>(&user); apply && apply->GetCallee() == srcFunc.GetResult()) {
+    if (auto apply = DynamicCast<ApplyBase*>(&user); apply && apply->GetCallee() == srcFunc.GetResult()) {
         auto methods = autoEnvImplDef.GetMethods();
         auto newCallee = methods.back();
         auto newArgs = apply->GetArgs();
         newArgs.insert(newArgs.begin(), autoEnvObj);
         auto retType = apply->GetResult()->GetType();
         auto loc = apply->GetDebugLocation();
-
-        auto newApply = builder.CreateExpression<Apply>(loc, retType, newCallee, FuncCallContext{
+        auto callCtx = FuncCallContext{
             .args = newArgs,
-            .thisType = thisTy}, user.GetParentBlock());
+            .thisType = thisTy};
+
+        Expression* newApply = nullptr;
+        if (apply->IsTerminator()) {
+            auto& awe = StaticCast<ApplyWithException&>(*apply);
+            newApply = builder.CreateExpression<ApplyWithException>(
+                loc, retType, newCallee, callCtx, awe.GetSuccessBlock(), awe.GetErrorBlock(), user.GetParentBlock());
+        } else {
+            newApply = builder.CreateExpression<Apply>(loc, retType, newCallee, callCtx, user.GetParentBlock());
+        }
         apply->ReplaceWith(*newApply);
-    } else if (auto awe = DynamicCast<ApplyWithException*>(&user); awe && awe->GetCallee() == srcFunc.GetResult()) {
-        auto methods = autoEnvImplDef.GetMethods();
-        auto newCallee = methods.back();
-        auto newArgs = awe->GetArgs();
-        newArgs.insert(newArgs.begin(), autoEnvObj);
-        auto retType = awe->GetResult()->GetType();
-        auto loc = awe->GetDebugLocation();
-
-        auto newApply = builder.CreateExpression<ApplyWithException>(loc, retType, newCallee, FuncCallContext{
-            .args = newArgs,
-            .thisType = thisTy}, awe->GetSuccessBlock(), awe->GetErrorBlock(), user.GetParentBlock());
-        awe->ReplaceWith(*newApply);
     } else {
         auto res = CastTypeFromAutoEnvRefToFuncType(*StaticCast<FuncType*>(srcFunc.GetResult()->GetType()),
             *autoEnvObj, user, GetOutDefDeclaredTypes(*srcFunc.GetResult()), builder);
@@ -2217,7 +2181,7 @@ void ClosureConversion::ConvertGlobalFunctions()
     }
 }
 
-void ClosureConversion::ConvertApplyToInvoke(Apply& apply)
+void ClosureConversion::ConvertApplyToInvoke(ApplyBase& apply)
 {
     auto callee = apply.GetCallee();
     ClassDef* autoEnvBaseDef = nullptr;
@@ -2243,41 +2207,16 @@ void ClosureConversion::ConvertApplyToInvoke(Apply& apply)
             .thisType = instParentType
         }
     };
-    auto invoke = builder.CreateExpression<Invoke>(
-        apply.GetDebugLocation(), apply.GetResult()->GetType(), invokeInfo, apply.GetParentBlock());
-    invoke->Set<VirMethodOffset>(0);
-    apply.ReplaceWith(*invoke);
-}
-
-void ClosureConversion::ConvertApplyWithExceptionToInvokeWithException(ApplyWithException& apply)
-{
-    auto callee = apply.GetCallee();
-    ClassDef* autoEnvBaseDef = nullptr;
-    ClassType* instParentType = nullptr;
-    if (auto funcType = DynamicCast<FuncType*>(callee->GetType())) {
-        // callee is still func type
-        autoEnvBaseDef = GetOrCreateAutoEnvBaseDef(*funcType);
-        instParentType = InstantiateAutoEnvBaseType(*autoEnvBaseDef, *funcType, builder);
-        instParentType = InstantiateAutoEnvGenericBaseType(*instParentType, apply, builder);
+    Expression* invoke = nullptr;
+    if (apply.IsTerminator()) {
+        auto& applyE = StaticCast<ApplyWithException&>(apply);
+        invoke = builder.CreateExpression<InvokeWithException>(
+            applyE.GetDebugLocation(), applyE.GetResult()->GetType(), invokeInfo,
+            applyE.GetSuccessBlock(), applyE.GetErrorBlock(), applyE.GetParentBlock());
     } else {
-        // callee has been replaced in closure conversion, then apply must be converted to invoke
-        instParentType = StaticCast<ClassType*>(StaticCast<RefType*>(callee->GetType())->GetBaseType());
-        autoEnvBaseDef = instParentType->GetClassDef();
+        invoke = builder.CreateExpression<Invoke>(
+            apply.GetDebugLocation(), apply.GetResult()->GetType(), invokeInfo, apply.GetParentBlock());
     }
-    auto [methodName, originalFuncType] = GetFuncTypeFromAutoEnvBaseDef(*autoEnvBaseDef);
-    auto methods = autoEnvBaseDef->GetMethods();
-    CJC_ASSERT(methods.size() == 1);
-    auto invokeInfo = InvokeCallContext {
-        .method = methods[0],
-        .caller = callee,
-        .funcCallCtx = FuncCallContext {
-            .args = apply.GetArgs(),
-            .thisType = instParentType
-        }
-    };
-    auto invoke = builder.CreateExpression<InvokeWithException>(
-        apply.GetDebugLocation(), apply.GetResult()->GetType(), invokeInfo,
-        apply.GetSuccessBlock(), apply.GetErrorBlock(), apply.GetParentBlock());
     invoke->Set<VirMethodOffset>(0);
     apply.ReplaceWith(*invoke);
 }
@@ -2286,10 +2225,8 @@ void ClosureConversion::ConvertExpressions()
 {
     Utils::ProfileRecorder recorder("ClosureConversion", "ConvertExpressions");
     auto preVisit = [this](Expression& e) {
-        if (ApplyNeedConvertToInvoke(e)) {
-            ConvertApplyToInvoke(StaticCast<Apply&>(e));
-        } else if (ApplyWithExceptionNeedConvertToInvokeWithException(e)) {
-            ConvertApplyWithExceptionToInvokeWithException(StaticCast<ApplyWithException&>(e));
+        if (auto apply = DynamicCast<ApplyBase*>(&e); apply && ApplyNeedConvertToInvoke(*apply)) {
+            ConvertApplyToInvoke(*apply);
         } else if (TypeCastNeedConvertToBox(e)) {
             auto& cast = StaticCast<TypeCast&>(e);
             auto box = builder.CreateExpression<Box>(
@@ -2520,7 +2457,7 @@ ClassDef* ClosureConversion::GetOrCreateAutoEnvWrapper(ClassType& instAutoEnvBas
     return wrapperClassDef;
 }
 
-void ClosureConversion::CastApplyArgAndRetIfNeed(Apply& e)
+void ClosureConversion::CastApplyArgAndRetIfNeed(ApplyBase& e)
 {
     auto calleeType = StaticCast<FuncType*>(e.GetCallee()->GetType());
     if (!calleeType->IsCJFunc()) {
@@ -2564,9 +2501,11 @@ void ClosureConversion::CastApplyArgAndRetIfNeed(Apply& e)
     }
 }
 
-void ClosureConversion::WrapApplyRetVal(Apply& apply)
+void ClosureConversion::WrapApplyRetVal(ApplyBase& apply)
 {
-    /** convert from:
+    /**
+     *  Apply:
+     *  convert from:
      *  %0: $AutoEnvInstBase& = Apply(xxx)
      *  %1: xxx = Expression(%0)
      *
@@ -2576,66 +2515,9 @@ void ClosureConversion::WrapApplyRetVal(Apply& apply)
      *  %3: Unit = StoreElementRef(%0, %2, 0)
      *  %4: $AutoEnvInstBase& = TypeCast(%2)
      *  %1: xxx = Expression(%4)
-     */
-    // 1. create $Auto_Env_wrapper
-    auto applyRetVal = apply.GetResult();
-    auto applyRetType = applyRetVal->GetType();
-    auto applyRetTypeNoRef = StaticCast<ClassType*>(applyRetType->StripAllRefs());
-    auto autoEnvWrapperDef = GetOrCreateAutoEnvWrapper(*applyRetTypeNoRef);
-
-    // 2. convert return type
-    auto newApplyRetType = builder.GetType<RefType>(autoEnvWrapperDef->GetSuperClassDef()->GetSuperClassTy());
-    ConvertTypeFunc convertRetType = [&applyRetType, &newApplyRetType](const Type& type) {
-        CJC_ASSERT(&type == applyRetType);
-        return newApplyRetType;
-    };
-    PrivateTypeConverter converter(convertRetType, builder);
-    converter.VisitValue(*applyRetVal);
-
-    // 3. create $Auto_Env_wrapper object
-    auto parentBlock = apply.GetParentBlock();
-    auto autoEnvWrapperType = autoEnvWrapperDef->GetType();
-    auto autoEnvWrapperRefType = builder.GetType<RefType>(autoEnvWrapperType);
-    auto allocate = builder.CreateExpression<Allocate>(autoEnvWrapperRefType, autoEnvWrapperType, parentBlock);
-    allocate->MoveAfter(&apply);
-
-    auto memberVar = applyRetVal;
-    auto storeMemberVar = builder.CreateExpression<StoreElementRef>(
-        builder.GetUnitTy(), memberVar, allocate->GetResult(), std::vector<uint64_t>{0}, parentBlock);
-    storeMemberVar->MoveAfter(allocate);
-
-    // typecast from $Auto_Env_xxx_wrapper to $Auto_Env_InstBase
-    auto typecast = builder.CreateExpression<ClassStaticCast>(applyRetType, allocate->GetResult(), parentBlock);
-    typecast->MoveAfter(storeMemberVar);
-
-    // 4. replace user
-    ReplaceOperandWithAutoEnvWrapperClass(*apply.GetResult(), *typecast->GetResult(), {storeMemberVar});
-}
-
-void ClosureConversion::CastApplyWithExceptionArgAndRetIfNeed(ApplyWithException& e)
-{
-    auto calleeType = StaticCast<FuncType*>(e.GetCallee()->GetType());
-    if (!calleeType->IsCJFunc()) {
-        return;
-    }
-    // 1. cast args, the same with Apply
-    auto args = e.GetArgs();
-    auto paramTypes = calleeType->GetParamTypes();
-    auto index = OperandNeedTypeCast(args, paramTypes, 1);
-    if (!index.empty()) {
-        AddTypeCastForOperand({&e, index}, builder);
-    }
-     // 2. cast ret, the same with Apply
-    auto declaredRetType = calleeType->GetReturnType()->StripAllRefs();
-    auto applyRetType = e.GetResult()->GetType()->StripAllRefs();
-    if (!declaredRetType->IsAutoEnvInstBase() && applyRetType->IsAutoEnvInstBase()) {
-        WrapApplyWithExceptionRetVal(e);
-    }
-}
-
-void ClosureConversion::WrapApplyWithExceptionRetVal(ApplyWithException& apply)
-{
-    /** convert from:
+     *
+     *  ApplyWithException:
+     *  convert from:
      *  Block #0:
      *  %0: $AutoEnvInstBase& = ApplyWithException(xxx, #1, #2)
      *  Block #1:
@@ -2674,26 +2556,46 @@ void ClosureConversion::WrapApplyWithExceptionRetVal(ApplyWithException& apply)
 
     auto autoEnvWrapperType = autoEnvWrapperDef->GetType();
     auto autoEnvWrapperRefType = builder.GetType<RefType>(autoEnvWrapperType);
-    for (auto user : applyRetVal->GetUsers()) {
-        if (user->GetExprKind() == ExprKind::INSTANCEOF) {
-            continue;
-        }
-        // 3. create $Auto_Env_wrapper object
-        auto userParentBlock = user->GetParentBlock();
-        auto allocate = builder.CreateExpression<Allocate>(autoEnvWrapperRefType, autoEnvWrapperType, userParentBlock);
-        allocate->MoveBefore(user);
+    if (apply.IsTerminator()) {
+        // ApplyWithException is a terminator, insert wrapper before each user
+        for (auto user : applyRetVal->GetUsers()) {
+            if (user->GetExprKind() == ExprKind::INSTANCEOF) {
+                continue;
+            }
+            // 3. create $Auto_Env_wrapper object
+            auto userParentBlock = user->GetParentBlock();
+            auto allocate =
+                builder.CreateExpression<Allocate>(autoEnvWrapperRefType, autoEnvWrapperType, userParentBlock);
+            allocate->MoveBefore(user);
 
-        auto memberVar = applyRetVal;
+            auto storeMemberVar = builder.CreateExpression<StoreElementRef>(
+                builder.GetUnitTy(), applyRetVal, allocate->GetResult(), std::vector<uint64_t>{0}, userParentBlock);
+            storeMemberVar->MoveAfter(allocate);
+
+            // typecast from $Auto_Env_xxx_wrapper to $Auto_Env_InstBase
+            auto typecast =
+                builder.CreateExpression<ClassStaticCast>(applyRetType, allocate->GetResult(), userParentBlock);
+            typecast->MoveAfter(storeMemberVar);
+
+            // 4. replace user
+            user->ReplaceOperand(applyRetVal, typecast->GetResult());
+        }
+    } else {
+        // 3. create $Auto_Env_wrapper object
+        auto parentBlock = apply.GetParentBlock();
+        auto allocate = builder.CreateExpression<Allocate>(autoEnvWrapperRefType, autoEnvWrapperType, parentBlock);
+        allocate->MoveAfter(&apply);
+
         auto storeMemberVar = builder.CreateExpression<StoreElementRef>(
-            builder.GetUnitTy(), memberVar, allocate->GetResult(), std::vector<uint64_t>{0}, userParentBlock);
+            builder.GetUnitTy(), applyRetVal, allocate->GetResult(), std::vector<uint64_t>{0}, parentBlock);
         storeMemberVar->MoveAfter(allocate);
 
         // typecast from $Auto_Env_xxx_wrapper to $Auto_Env_InstBase
-        auto typecast = builder.CreateExpression<ClassStaticCast>(applyRetType, allocate->GetResult(), userParentBlock);
+        auto typecast = builder.CreateExpression<ClassStaticCast>(applyRetType, allocate->GetResult(), parentBlock);
         typecast->MoveAfter(storeMemberVar);
 
         // 4. replace user
-        user->ReplaceOperand(applyRetVal, typecast->GetResult());
+        ReplaceOperandWithAutoEnvWrapperClass(*applyRetVal, *typecast->GetResult(), {storeMemberVar});
     }
 }
 
@@ -2709,7 +2611,9 @@ void ClosureConversion::CastInvokeRetIfNeed(DynamicDispatch& e)
 
 void ClosureConversion::WrapInvokeRetVal(DynamicDispatch& e)
 {
-    /** convert from:
+    /**
+     *  Invoke:
+     *  convert from:
      *  %0: $AutoEnvInstBase& = Invoke(xxx)
      *  %1: xxx = Expression(%0)
      *
@@ -2719,56 +2623,9 @@ void ClosureConversion::WrapInvokeRetVal(DynamicDispatch& e)
      *  %3: Unit = StoreElementRef(%0, %2, 0)
      *  %4: $AutoEnvInstBase& = TypeCast(%2)
      *  %1: xxx = Expression(%4)
-     */
-    // 1. create $Auto_Env_wrapper
-    auto invokeRetVal = e.GetResult();
-    auto invokeRetType = invokeRetVal->GetType();
-    auto invokeRetTypeNoRef = StaticCast<ClassType*>(invokeRetType->StripAllRefs());
-    auto autoEnvWrapperDef = GetOrCreateAutoEnvWrapper(*invokeRetTypeNoRef);
-
-    // 2. convert return type
-    CJC_NULLPTR_CHECK(autoEnvWrapperDef->GetSuperClassDef());
-    auto newInvokeRetType = builder.GetType<RefType>(autoEnvWrapperDef->GetSuperClassDef()->GetSuperClassTy());
-    ConvertTypeFunc convertRetType = [&invokeRetType, &newInvokeRetType](const Type& type) {
-        CJC_ASSERT(&type == invokeRetType);
-        return newInvokeRetType;
-    };
-    PrivateTypeConverter converter(convertRetType, builder);
-    converter.VisitValue(*invokeRetVal);
-
-    // 3. create $Auto_Env_wrapper object
-    auto parentBlock = e.GetParentBlock();
-    auto autoEnvWrapperType = autoEnvWrapperDef->GetType();
-    auto autoEnvWrapperRefType = builder.GetType<RefType>(autoEnvWrapperType);
-    auto allocate = builder.CreateExpression<Allocate>(autoEnvWrapperRefType, autoEnvWrapperType, parentBlock);
-    allocate->MoveAfter(&e);
-
-    auto memberVar = invokeRetVal;
-    auto storeMemberVar = builder.CreateExpression<StoreElementRef>(
-        builder.GetUnitTy(), memberVar, allocate->GetResult(), std::vector<uint64_t>{0}, parentBlock);
-    storeMemberVar->MoveAfter(allocate);
-
-    // typecast from $Auto_Env_xxx_wrapper to $Auto_Env_InstBase
-    auto typecast = builder.CreateExpression<ClassStaticCast>(invokeRetType, allocate->GetResult(), parentBlock);
-    typecast->MoveAfter(storeMemberVar);
-
-    // 4. replace user
-    ReplaceOperandWithAutoEnvWrapperClass(*e.GetResult(), *typecast->GetResult(), {storeMemberVar});
-}
-
-void ClosureConversion::CastInvokeWithExceptionRetIfNeed(DynamicDispatchWithException& e)
-{
-    // same reason with Invoke
-    auto declaredRetType = e.GetMethodType()->GetReturnType()->StripAllRefs();
-    auto invokeRetType = e.GetResult()->GetType()->StripAllRefs();
-    if (!declaredRetType->IsAutoEnvInstBase() && invokeRetType->IsAutoEnvInstBase()) {
-        WrapInvokeWithExceptionRetVal(e);
-    }
-}
-
-void ClosureConversion::WrapInvokeWithExceptionRetVal(DynamicDispatchWithException& e)
-{
-    /** convert from:
+     *
+     *  InvokeWithException:
+     *  convert from:
      *  Block #0:
      *  %0: $AutoEnvInstBase& = InvokeWithException(xxx, #1, #2)
      *  Block #1:
@@ -2797,6 +2654,7 @@ void ClosureConversion::WrapInvokeWithExceptionRetVal(DynamicDispatchWithExcepti
     auto autoEnvWrapperDef = GetOrCreateAutoEnvWrapper(*invokeRetTypeNoRef);
 
     // 2. convert return type
+    CJC_NULLPTR_CHECK(autoEnvWrapperDef->GetSuperClassDef());
     auto newInvokeRetType = builder.GetType<RefType>(autoEnvWrapperDef->GetSuperClassDef()->GetSuperClassTy());
     ConvertTypeFunc convertRetType = [&invokeRetType, &newInvokeRetType](const Type& type) {
         CJC_ASSERT(&type == invokeRetType);
@@ -2807,27 +2665,46 @@ void ClosureConversion::WrapInvokeWithExceptionRetVal(DynamicDispatchWithExcepti
 
     auto autoEnvWrapperType = autoEnvWrapperDef->GetType();
     auto autoEnvWrapperRefType = builder.GetType<RefType>(autoEnvWrapperType);
-    for (auto user : invokeRetVal->GetUsers()) {
-        if (user->GetExprKind() == ExprKind::INSTANCEOF) {
-            continue;
-        }
-        // 3. create $Auto_Env_wrapper object
-        auto userParentBlock = user->GetParentBlock();
-        auto allocate = builder.CreateExpression<Allocate>(autoEnvWrapperRefType, autoEnvWrapperType, userParentBlock);
-        allocate->MoveBefore(user);
+    if (e.IsTerminator()) {
+        // InvokeWithException is a terminator, insert wrapper before each user
+        for (auto user : invokeRetVal->GetUsers()) {
+            if (user->GetExprKind() == ExprKind::INSTANCEOF) {
+                continue;
+            }
+            // 3. create $Auto_Env_wrapper object
+            auto userParentBlock = user->GetParentBlock();
+            auto allocate =
+                builder.CreateExpression<Allocate>(autoEnvWrapperRefType, autoEnvWrapperType, userParentBlock);
+            allocate->MoveBefore(user);
 
-        auto memberVar = invokeRetVal;
+            auto storeMemberVar = builder.CreateExpression<StoreElementRef>(
+                builder.GetUnitTy(), invokeRetVal, allocate->GetResult(), std::vector<uint64_t>{0}, userParentBlock);
+            storeMemberVar->MoveAfter(allocate);
+
+            // typecast from $Auto_Env_xxx_wrapper to $Auto_Env_InstBase
+            auto typecast =
+                builder.CreateExpression<ClassStaticCast>(invokeRetType, allocate->GetResult(), userParentBlock);
+            typecast->MoveAfter(storeMemberVar);
+
+            // 4. replace user
+            user->ReplaceOperand(invokeRetVal, typecast->GetResult());
+        }
+    } else {
+        // 3. create $Auto_Env_wrapper object
+        auto parentBlock = e.GetParentBlock();
+        auto allocate = builder.CreateExpression<Allocate>(autoEnvWrapperRefType, autoEnvWrapperType, parentBlock);
+        allocate->MoveAfter(&e);
+
         auto storeMemberVar = builder.CreateExpression<StoreElementRef>(
-            builder.GetUnitTy(), memberVar, allocate->GetResult(), std::vector<uint64_t>{0}, userParentBlock);
+            builder.GetUnitTy(), invokeRetVal, allocate->GetResult(), std::vector<uint64_t>{0}, parentBlock);
         storeMemberVar->MoveAfter(allocate);
 
         // typecast from $Auto_Env_xxx_wrapper to $Auto_Env_InstBase
-        auto typecast =
-            builder.CreateExpression<ClassStaticCast>(invokeRetType, allocate->GetResult(), userParentBlock);
+        auto typecast = builder.CreateExpression<ClassStaticCast>(invokeRetType, allocate->GetResult(), parentBlock);
         typecast->MoveAfter(storeMemberVar);
 
         // 4. replace user
-        user->ReplaceOperand(invokeRetVal, typecast->GetResult());
+        ReplaceOperandWithAutoEnvWrapperClass(*invokeRetVal, *typecast->GetResult(), {storeMemberVar});
     }
 }
 
@@ -3069,30 +2946,26 @@ void ClosureConversion::ModifyTypeMismatchInExpr()
 {
     Utils::ProfileRecorder recorder("ClosureConversion", "ModifyTypeMismatchInExpr");
     auto preVisit = [this](Expression& e) {
-        if (Is<Apply>(e)) {
-            CastApplyArgAndRetIfNeed(StaticCast<Apply&>(e));
-        } else if (Is<ApplyWithException>(e)) {
-            CastApplyWithExceptionArgAndRetIfNeed(StaticCast<ApplyWithException&>(e));
-        } else if (Is<DynamicDispatch>(e)) {
-            CastInvokeRetIfNeed(StaticCast<DynamicDispatch&>(e));
-        } else if (Is<DynamicDispatchWithException>(e)) {
-            CastInvokeWithExceptionRetIfNeed(StaticCast<DynamicDispatchWithException&>(e));
+        if (auto apply = DynamicCast<ApplyBase*>(&e)) {
+            CastApplyArgAndRetIfNeed(*apply);
+        } else if (auto dy = DynamicCast<DynamicDispatch*>(&e)) {
+            CastInvokeRetIfNeed(*dy);
         } else if (auto enumRes = EnumConstructorNeedTypeCast(e); enumRes.first) {
             AddTypeCastForOperand({&e, enumRes.second}, builder);
         } else if (auto tupleRes = TupleNeedTypeCast(e); tupleRes.first) {
             AddTypeCastForOperand({&e, tupleRes.second}, builder);
-        } else if (Is<GetElementRef>(e)) {
-            CastGetElementRefRetIfNeed(StaticCast<GetElementRef&>(e));
-        } else if (Is<Field>(e)) {
-            if (FieldRetValNeedWrapper(StaticCast<Field&>(e), builder)) {
-                WrapFieldRetVal(StaticCast<Field&>(e));
+        } else if (auto getEleRef = DynamicCast<GetElementRef*>(&e)) {
+            CastGetElementRefRetIfNeed(*getEleRef);
+        } else if (auto field = DynamicCast<Field*>(&e)) {
+            if (FieldRetValNeedWrapper(*field, builder)) {
+                WrapFieldRetVal(*field);
             }
-        } else if (Is<RawArrayInitByValue>(e)) {
-            CastRawArrayInitByValueArgIfNeed(StaticCast<RawArrayInitByValue&>(e));
-        } else if (Is<ClassStaticCast>(e)) {
-            CastTypeCastArgIfNeed(StaticCast<ClassStaticCast&>(e));
-        } else if (Is<SpawnBase>(e)) {
-            CastSpawnArgIfNeed(StaticCast<SpawnBase&>(e));
+        } else if (auto rawArr = DynamicCast<RawArrayInitByValue*>(&e)) {
+            CastRawArrayInitByValueArgIfNeed(*rawArr);
+        } else if (auto cast = DynamicCast<ClassStaticCast*>(&e)) {
+            CastTypeCastArgIfNeed(*cast);
+        } else if (auto spawn = DynamicCast<SpawnBase*>(&e)) {
+            CastSpawnArgIfNeed(*spawn);
         }
         return VisitResult::CONTINUE;
     };

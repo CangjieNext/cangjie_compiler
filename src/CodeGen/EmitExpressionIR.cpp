@@ -12,6 +12,7 @@
 #include "IRBuilder.h"
 #include "IRGenerator.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 
 using namespace Cangjie::CHIR;
 
@@ -85,8 +86,8 @@ void ExpressionGeneratorImpl::EmitIR()
                 rawRet = HandleMemoryExpression(irBuilder, *chirExpr);
                 break;
             case ExprMajorKind::OTHERS:
-                if (chirExpr->IsConstant()) {
-                    rawRet = HandleConstantExpression(irBuilder, *StaticCast<const CHIR::Constant*>(chirExpr));
+                if (auto constant = DynamicCast<const CHIR::Constant*>(chirExpr)) {
+                    rawRet = HandleConstantExpression(irBuilder, *constant);
                 } else {
                     rawRet = HandleOthersExpression(irBuilder, *chirExpr);
                 }
