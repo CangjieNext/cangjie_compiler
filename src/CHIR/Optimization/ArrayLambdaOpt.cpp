@@ -100,7 +100,7 @@ Ptr<Constant> ArrayLambdaOpt::CheckIfLambdaReturnConst(const Lambda& lambda) con
                 return nullptr;
             }
             for (auto e : blocksInLambda[0]->GetExpressions()) {
-                if (e->IsDebug() || e->IsTerminator()) {
+                if (Is<Debug>(e) || e->IsTerminator()) {
                     continue;
                 }
                 if (validExprs.find(e) == validExprs.end()) {

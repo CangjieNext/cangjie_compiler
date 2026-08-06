@@ -164,29 +164,11 @@ public:
     std::string GetExprKindName() const;
     ExprMajorKind GetExprMajorKind() const;
 
-    bool IsApply() const;
-    bool IsApplyWithException() const;
-    bool IsBinaryExpr() const;
-    bool IsConstant() const;
     bool IsConstantNull() const;
     bool IsConstantBool() const;
     bool IsConstantInt() const;
-    bool IsConstantFloat() const;
     bool IsConstantString() const;
-    bool IsDebug() const;
-    bool IsDynamicDispatch() const;
-    bool IsField() const;
-    bool IsFuncCall() const;
-    bool IsUnaryExpressionWithException() const;
-    bool IsBinaryExpressionWithException() const;
-    bool IsInvoke() const;
-    bool IsInvokeStaticBase() const;
-    bool IsLambda() const;
-    bool IsLoad() const;
-    bool IsNumericCast() const;
     bool IsTerminator() const;
-    bool IsTypeCast() const;
-    bool IsUnaryExpr() const;
 
     bool HasExceptionBranch() const;
 
@@ -895,9 +877,11 @@ struct InvokeCallContext {
 
 /**
  * @brief An expression for function call, including Apply, Invoke and InvokeStatic
+ * (and their WithException forms).
  */
 class FuncCall : public Expression {
     friend class ExprTypeConverter;
+    friend class PrivateTypeConverterNoInvokeOriginal;
     friend class CHIRSerializer;
 public:
     // ===--------------------------------------------------------------------===//
@@ -933,6 +917,7 @@ public:
 
 protected:
     explicit FuncCall(ExprKind kind, const FuncCallContext& funcCallCtx, Block* parent);
+    ~FuncCall() override = default;
 
     /**
      * @brief Record instantiated type args.
@@ -956,17 +941,15 @@ protected:
 };
 
 /**
- * @brief A non-virtual function call
+ * @brief Common base for Apply and ApplyWithException.
  *
  * Cangjie Code:
  *      func foo() {}
  *      foo()  // `foo` is global function, not virtual function
  */
-class Apply : public FuncCall {
+class ApplyBase : public FuncCall {
     friend class ExprTypeConverter;
     friend class CHIRSerializer;
-    friend class CHIRContext;
-    friend class CHIRBuilder;
 public:
     // ===--------------------------------------------------------------------===//
     // Base Information
@@ -985,6 +968,33 @@ public:
      */
     std::vector<Value*> GetArgs() const override;
 
+    // ===--------------------------------------------------------------------===//
+    // Instantiated Types
+    // ===--------------------------------------------------------------------===//
+    /**
+     * @brief Retrieves the instantiated parent custom type of the callee.
+     *
+     * @return The instantiated parent custom type of the callee.
+     */
+    Type* GetInstParentCustomTyOfCallee(CHIRBuilder& builder) const;
+
+protected:
+    explicit ApplyBase(ExprKind kind, Value* callee, const FuncCallContext& callContext,
+        const std::vector<Block*>& successors, Block* parent);
+    ~ApplyBase() override = default;
+
+    std::string OperandsToString() const override;
+};
+
+/**
+ * @brief A non-virtual function call
+ */
+class Apply : public ApplyBase {
+    friend class ExprTypeConverter;
+    friend class CHIRSerializer;
+    friend class CHIRContext;
+    friend class CHIRBuilder;
+public:
     /**
      * @brief Checks if the call is a super call.
      *
@@ -997,18 +1007,7 @@ public:
      */
     void SetSuperCall();
 
-    // ===--------------------------------------------------------------------===//
-    // Instantiated Types
-    // ===--------------------------------------------------------------------===//
-    /**
-     * @brief Retrieves the instantiated parent custom type of the callee.
-     *
-     * @return The instantiated parent custom type of the callee.
-     */
-    Type* GetInstParentCustomTyOfCallee(CHIRBuilder& builder) const;
-
 protected:
-    std::string OperandsToString() const override;
     std::string AddExtraComment() const override;
     ~Apply() override = default;
 
@@ -1025,6 +1024,7 @@ private:
 
 /**
  * @brief An expression for virtual function call, including Invoke and InvokeStatic
+ * (and their WithException forms).
  */
 class DynamicDispatch : public FuncCall {
     friend class ExprTypeConverter;
@@ -1088,6 +1088,7 @@ protected:
     std::string OperandsToString() const override;
     std::string AddExtraComment() const override;
     explicit DynamicDispatch(ExprKind kind, const InvokeCallContext& callContext, Block* parent);
+    ~DynamicDispatch() override = default;
 
     Cangjie::OverflowStrategy overflowStrategy{Cangjie::OverflowStrategy::NA};
 
@@ -1096,7 +1097,7 @@ private:
 };
 
 /**
- * @brief An expression for virtual instance member method call
+ * @brief Common base for Invoke and InvokeWithException.
  *
  * Cangjie Code:
  *      interface I { func foo() {} }
@@ -1104,33 +1105,14 @@ private:
  *      var x: I = A()
  *      x.foo() // `foo` is a virtual instance member method, which means `foo` can be overrided by class A
  */
-class Invoke : public DynamicDispatch {
+class InvokeBase : public DynamicDispatch {
     friend class ExprTypeConverter;
     friend class PrivateTypeConverterNoInvokeOriginal;
     friend class CHIRSerializer;
-    friend class CHIRContext;
-    friend class CHIRBuilder;
 public:
     // ===--------------------------------------------------------------------===//
     // Base Information
     // ===--------------------------------------------------------------------===//
-    /**
-     * @brief Replace old operand in specified position.
-     *
-     * @param idx The sepcified position.
-     * @param newOperand The destination value.
-     */
-    void ReplaceOperand(size_t idx, Value* newOperand) final;
-
-    /**
-     * @brief Replace old operand with the new one, if there are many old operands in same expression,
-     * then replace them all
-     *
-     * @param oldOperand The source value.
-     * @param newOperand The destination value.
-     */
-    void ReplaceOperand(Value* oldOperand, Value* newOperand) final;
-    
     /**
      * @brief Retrieves the object of this Invoke operation.
      * Object's type doesn't always equal to ThisType, maybe we use an object from sub type to call
@@ -1149,14 +1131,27 @@ public:
     std::vector<Value*> GetArgs() const override;
 
 protected:
+    explicit InvokeBase(
+        ExprKind kind, const InvokeCallContext& callContext, const std::vector<Block*>& successors, Block* parent);
+    ~InvokeBase() override = default;
+};
+
+/**
+ * @brief An expression for virtual instance member method call
+ */
+class Invoke : public InvokeBase {
+    friend class ExprTypeConverter;
+    friend class PrivateTypeConverterNoInvokeOriginal;
+    friend class CHIRSerializer;
+    friend class CHIRContext;
+    friend class CHIRBuilder;
+protected:
     ~Invoke() override = default;
 
 private:
     explicit Invoke(const InvokeCallContext& callContext, Block* parent);
 
     Invoke* Clone(CHIRBuilder& builder, Block& parent) const override;
-
-    void UpdateThisType();
 };
 
 /**
@@ -1219,7 +1214,7 @@ private:
 };
 
 /**
- * @brief If a static member method calling can trigger dynamic dispatch, we will use `InvokeStatic` to describe
+ * @brief Common base for InvokeStatic and InvokeStaticWithException.
  *
  * Cangjie Code:
  *      interface I { static func goo() {} }
@@ -1228,12 +1223,10 @@ private:
  *          T.goo()  // we don't know which `goo` is called in runtime, I.goo or A.goo
  *      }
  */
-class InvokeStatic : public DynamicDispatch {
+class InvokeStaticBase : public DynamicDispatch {
     friend class ExprTypeConverter;
     friend class PrivateTypeConverterNoInvokeOriginal;
     friend class CHIRSerializer;
-    friend class CHIRContext;
-    friend class CHIRBuilder;
 public:
     // ===--------------------------------------------------------------------===//
     // Base Information
@@ -1252,6 +1245,21 @@ public:
      */
     Value* GetRTTIValue() const;
 
+protected:
+    explicit InvokeStaticBase(
+        ExprKind kind, const InvokeCallContext& callContext, const std::vector<Block*>& successors, Block* parent);
+    ~InvokeStaticBase() override = default;
+};
+
+/**
+ * @brief If a static member method calling can trigger dynamic dispatch, we will use `InvokeStatic` to describe
+ */
+class InvokeStatic : public InvokeStaticBase {
+    friend class ExprTypeConverter;
+    friend class PrivateTypeConverterNoInvokeOriginal;
+    friend class CHIRSerializer;
+    friend class CHIRContext;
+    friend class CHIRBuilder;
 protected:
     ~InvokeStatic() override = default;
 
