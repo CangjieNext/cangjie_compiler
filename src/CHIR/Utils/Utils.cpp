@@ -668,17 +668,9 @@ void ReplaceUsesWithWrapper(Value& curFunc, const Apply* apply, Value& wrapperFu
         if (user == apply) {
             continue;
         }
-        if (user->GetExprKind() == ExprKind::APPLY) {
-            auto applyNode = StaticCast<Apply*>(user);
-            if (!isForeign && applyNode->GetCallee() == &curFunc) {
-                continue;
-            }
-        }
-        if (user->GetExprKind() == ExprKind::APPLY_WITH_EXCEPTION) {
-            auto applyNode = StaticCast<ApplyWithException*>(user);
-            if (!isForeign && applyNode->GetCallee() == &curFunc) {
-                continue;
-            }
+        if (auto applyNode = DynamicCast<ApplyBase*>(user);
+            applyNode && !isForeign && applyNode->GetCallee() == &curFunc) {
+            continue;
         }
         user->ReplaceOperand(&curFunc, &wrapperFunc);
     }
@@ -1413,12 +1405,7 @@ Type* GetInstParentCustomTyOfCallee(
     }
 }
 
-Type* GetInstParentCustomTypeForApplyCallee(const Apply& expr, CHIRBuilder& builder)
-{
-    return GetInstParentCustomTyOfCallee(*expr.GetCallee(), expr.GetArgs(), expr.GetThisType(), builder);
-}
-
-Type* GetInstParentCustomTypeForAweCallee(const ApplyWithException& expr, CHIRBuilder& builder)
+Type* GetInstParentCustomTypeForApplyCallee(const ApplyBase& expr, CHIRBuilder& builder)
 {
     return GetInstParentCustomTyOfCallee(*expr.GetCallee(), expr.GetArgs(), expr.GetThisType(), builder);
 }

@@ -7,6 +7,7 @@
 #include "cangjie/CHIR/Optimization/RangePropagation.h"
 #include "cangjie/CHIR/Analysis/ConstAnalysis.h"
 #include "cangjie/CHIR/Analysis/Engine.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 
 #include <optional>
 
@@ -68,16 +69,16 @@ void RangePropagation::RunOnFunc(const Ptr<const Function>& func, bool isDebug)
     const auto actionAfterVisitExpr = [this, &toBeRewrited, func](
                                           const RangeDomain& state, Expression* expr, size_t index) {
         auto exprType = expr->GetResult()->GetType();
-        if (expr->IsBinaryExpr()) {
+        if (Is<BinaryExpression>(expr)) {
             if (auto absVal = state.CheckAbstractValue(expr->GetResult()); absVal) {
                 return (void)toBeRewrited.emplace_back(expr, index, GenerateConstExpr(exprType, absVal));
             }
-        } else if (expr->IsUnaryExpr()) {
+        } else if (Is<UnaryExpression>(expr)) {
             if (auto absVal = state.CheckAbstractValue(expr->GetResult()); absVal) {
                 return (void)toBeRewrited.emplace_back(expr, index, GenerateConstExpr(exprType, absVal));
             }
         } else if ((exprType->IsInteger() || exprType->IsBoolean()) &&
-            (expr->IsLoad() || expr->IsNumericCast() || expr->IsField())) {
+            (Is<Load>(expr) || Is<NumericCast>(expr) || Is<Field>(expr))) {
             if (auto absVal = state.CheckAbstractValue(expr->GetResult()); absVal && !exprType->IsString()) {
                 toBeRewrited.emplace_back(expr, index, GenerateConstExpr(exprType, absVal));
                 RecordEffectMap(expr, func);

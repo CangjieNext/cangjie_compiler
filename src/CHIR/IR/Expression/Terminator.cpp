@@ -123,238 +123,54 @@ Block* ExpressionWithException::GetErrorBlock() const
     return GetSuccessor(1);
 }
 
-FuncCallWithException::FuncCallWithException(ExprKind kind, const FuncCallContext& funcCallCtx, Block* parent)
-    : ExpressionWithException(kind, parent),
-      instantiatedTypeArgs(funcCallCtx.instTypeArgs),
-      thisType(funcCallCtx.thisType)
-{
-}
-
-Type* FuncCallWithException::GetThisType() const
-{
-    return thisType;
-}
-
-void FuncCallWithException::SetThisType(Type* type)
-{
-    thisType = type;
-}
-
-const std::vector<Type*>& FuncCallWithException::GetInstantiatedTypeArgs() const
-{
-    return instantiatedTypeArgs;
-}
-
 ApplyWithException::ApplyWithException(
     Value* callee, const FuncCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent)
-    : FuncCallWithException(ExprKind::APPLY_WITH_EXCEPTION, callContext, parent)
-{
-    CJC_NULLPTR_CHECK(callee);
-    CJC_NULLPTR_CHECK(sucBlock);
-    CJC_NULLPTR_CHECK(errBlock);
-    CJC_NULLPTR_CHECK(parent);
-    AppendOperand(*callee);
-    for (auto op : callContext.args) {
-        AppendOperand(*op);
-    }
-
-    AppendOperand(*sucBlock);
-    AppendOperand(*errBlock);
-}
-
-Value* ApplyWithException::GetCallee() const
-{
-    return operands[0];
-}
-
-/** @brief Get a list of the ApplyWithException operation argument nodes */
-std::vector<Value*> ApplyWithException::GetArgs() const
-{
-    if (GetSuccessorIndex(0) <= 1) {
-        return {};
-    } else {
-        return {operands.begin() + 1, operands.begin() + static_cast<long>(GetSuccessorIndex(0))};
-    }
-}
-
-Type* ApplyWithException::GetInstParentCustomTyOfCallee(CHIRBuilder& builder) const
-{
-    return GetInstParentCustomTypeForAweCallee(*this, builder);
-}
-
-std::string ApplyWithException::OperandsToString() const
-{
-    std::vector<std::string> res;
-    std::string func;
-    if (thisType != nullptr) {
-        func += thisType->ToString() + "->";
-    }
-    func += GetCallee()->GetIdentifier();
-    func += TypeVecToString("<", instantiatedTypeArgs, ">");
-    res.emplace_back(func);
-    auto ops = std::vector<Value*>(operands.begin() + 1, operands.end());
-    res.emplace_back(ValueIdVecToString("", ops, "", true));
-    return StringJoin(res, ", ");
-}
-
-inline static void CheckVirFuncInvokeInfo(const InvokeCallContext& callContext)
-{
-    CJC_NULLPTR_CHECK(callContext.method);
-    CJC_NULLPTR_CHECK(callContext.caller);
-    CJC_NULLPTR_CHECK(callContext.funcCallCtx.thisType);
-}
-
-DynamicDispatchWithException::DynamicDispatchWithException(
-    ExprKind kind, const InvokeCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent)
-    : FuncCallWithException(kind, callContext.funcCallCtx, parent), overflowStrategy(callContext.overflowStrategy)
+    : ApplyBase(ExprKind::APPLY_WITH_EXCEPTION, callee, callContext, {sucBlock, errBlock}, parent)
 {
     CJC_NULLPTR_CHECK(sucBlock);
     CJC_NULLPTR_CHECK(errBlock);
-    CJC_NULLPTR_CHECK(parent);
-    CJC_ASSERT(callContext.overflowStrategy != Cangjie::OverflowStrategy::CHECKED);
-    CheckVirFuncInvokeInfo(callContext);
-    AppendOperand(*callContext.method);
-    AppendOperand(*callContext.caller);
-    for (auto op : callContext.funcCallCtx.args) {
-        AppendOperand(*op);
-    }
-
-    AppendOperand(*sucBlock);
-    AppendOperand(*errBlock);
 }
 
-Function* DynamicDispatchWithException::GetCallee() const
+Block* ApplyWithException::GetSuccessBlock() const
 {
-    return StaticCast<Function*>(operands[0]);
+    return GetSuccessor(0);
 }
 
-std::string DynamicDispatchWithException::GetMethodName() const
+Block* ApplyWithException::GetErrorBlock() const
 {
-    auto name = GetCallee()->GetSrcCodeIdentifier();
-    if (overflowStrategy != Cangjie::OverflowStrategy::NA) {
-        return OverflowStrategyPrefix(overflowStrategy) + name;
-    }
-    return name;
-}
-
-FuncType* DynamicDispatchWithException::GetMethodType() const
-{
-    return GetCallee()->GetFuncType();
-}
-
-const std::vector<GenericType*>& DynamicDispatchWithException::GetGenericTypeParams() const
-{
-    return GetCallee()->GetGenericTypeParams();
-}
-
-std::vector<VTableSearchRes> DynamicDispatchWithException::GetVirtualMethodInfo(CHIRBuilder& builder) const
-{
-    auto thisTypeDeref = thisType->StripAllRefs();
-    if (thisTypeDeref->IsThis()) {
-        thisTypeDeref = GetTopLevelFunc()->GetParentCustomTypeDef()->GetType();
-    }
-    std::vector<Type*> instParamTypes;
-    for (auto arg : GetArgs()) {
-        instParamTypes.emplace_back(arg->GetType());
-    }
-    if (!IsInvokeStaticBase()) {
-        instParamTypes.erase(instParamTypes.begin());
-    }
-    auto instFuncType = builder.GetType<FuncType>(instParamTypes, builder.GetUnitTy());
-    FuncCallType funcCallType{GetMethodName(), instFuncType, instantiatedTypeArgs};
-    auto res = GetFuncIndexInVTable(*thisTypeDeref, funcCallType, builder);
-    CJC_ASSERT(!res.empty());
-    return res;
-}
-
-size_t DynamicDispatchWithException::GetVirtualMethodOffset(CHIRBuilder* builder) const
-{
-    auto offset = Get<VirMethodOffset>();
-    if (offset.has_value()) {
-        return offset.value();
-    } else {
-        CJC_NULLPTR_CHECK(builder);
-        return GetVirtualMethodInfo(*builder)[0].offset;
-    }
-}
-
-ClassType* DynamicDispatchWithException::GetInstSrcParentCustomTypeOfMethod(CHIRBuilder& builder) const
-{
-    ClassType* result = nullptr;
-    for (auto& r : GetVirtualMethodInfo(builder)) {
-        if (r.offset == GetVirtualMethodOffset()) {
-            auto def = r.instSrcParentType->GetClassDef();
-            const auto& parentFuncInfo = def->GetDefVTable().GetExpectedTypeVTable(*def->GetType());
-            auto originalType = parentFuncInfo.GetVirtualMethods()[r.offset].GetOriginalFuncType();
-            if (VirMethodTypeIsMatched(*originalType, *GetMethodType())) {
-                CJC_NULLPTR_CHECK(r.instSrcParentType);
-                return r.instSrcParentType;
-            }
-        }
-    }
-    CJC_NULLPTR_CHECK(result);
-    return result;
-}
-
-AttributeInfo DynamicDispatchWithException::GetVirtualMethodAttr() const
-{
-    return GetCallee()->GetAttributeInfo();
-}
-
-std::string DynamicDispatchWithException::AddExtraComment() const
-{
-    if (overflowStrategy != Cangjie::OverflowStrategy::NA) {
-        return "methodName: " + GetMethodName();
-    }
-    return "";
+    return GetSuccessor(1);
 }
 
 InvokeWithException::InvokeWithException(
     const InvokeCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent)
-    : DynamicDispatchWithException(ExprKind::INVOKE_WITH_EXCEPTION, callContext, sucBlock, errBlock, parent)
+    : InvokeBase(ExprKind::INVOKE_WITH_EXCEPTION, callContext, {sucBlock, errBlock}, parent)
 {
 }
 
-Value* InvokeWithException::GetObject() const
+Block* InvokeWithException::GetSuccessBlock() const
 {
-    return operands[1];
+    return GetSuccessor(0);
 }
 
-/** @brief Get the call args of this InvokeWithException operation */
-std::vector<Value*> InvokeWithException::GetArgs() const
+Block* InvokeWithException::GetErrorBlock() const
 {
-    return {operands.begin() + 1, operands.begin() + static_cast<long>(GetSuccessorIndex(0))};
-}
-
-std::string DynamicDispatchWithException::OperandsToString() const
-{
-    std::vector<std::string> res;
-    std::string func;
-    if (thisType != nullptr) {
-        func += thisType->ToString() + "->";
-    }
-    func += GetCallee()->GetIdentifier();
-    func += TypeVecToString("<", instantiatedTypeArgs, ">");
-    res.emplace_back(func);
-    auto ops = std::vector<Value*>(operands.begin() + 1, operands.end());
-    res.emplace_back(ValueIdVecToString("", ops, "", true));
-    return StringJoin(res, ", ");
+    return GetSuccessor(1);
 }
 
 InvokeStaticWithException::InvokeStaticWithException(
     const InvokeCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent)
-    : DynamicDispatchWithException(ExprKind::INVOKESTATIC_WITH_EXCEPTION, callContext, sucBlock, errBlock, parent)
+    : InvokeStaticBase(ExprKind::INVOKESTATIC_WITH_EXCEPTION, callContext, {sucBlock, errBlock}, parent)
 {
 }
 
-Value* InvokeStaticWithException::GetRTTIValue() const
+Block* InvokeStaticWithException::GetSuccessBlock() const
 {
-    return operands[1];
+    return GetSuccessor(0);
 }
 
-std::vector<Value*> InvokeStaticWithException::GetArgs() const
+Block* InvokeStaticWithException::GetErrorBlock() const
 {
-    return {operands.begin() + 2, operands.begin() + static_cast<long>(GetSuccessorIndex(0))};
+    return GetSuccessor(1);
 }
 
 // UnaryExpressionWithException
