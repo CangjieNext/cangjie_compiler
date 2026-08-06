@@ -14,6 +14,7 @@
 #include "cangjie/CHIR/IR/Type/StructDef.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/SafePointer.h"
@@ -229,7 +230,7 @@ void SanitizerCoverage::RunOnFunc(const Ptr<Function>& func, bool isDebug)
                 auto mb = StaticCast<MultiBranch*>(&expr);
                 InjectTraceForSwitch(*mb, isDebug);
             }
-            if (expr.IsBinaryExpr()) {
+            if (Is<BinaryExpression>(expr)) {
                 auto binary = StaticCast<BinaryExpression*>(&expr);
                 InjectTraceForCmp(*binary, isDebug);
             }

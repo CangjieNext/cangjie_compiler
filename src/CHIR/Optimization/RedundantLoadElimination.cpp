@@ -37,12 +37,7 @@ static void ModifyApplyCalleeInfo(const LocalVar& loadResult, Value& storeValue)
     Type* thisType = funcBase->GetParentCustomTypeOrExtendedType();
     std::vector<Expression*> oldUsers = loadResult.GetUsers();
     for (auto user : oldUsers) {
-        if (user->GetExprKind() == ExprKind::APPLY) {
-            auto apply = StaticCast<Apply*>(user);
-            apply->SetThisType(thisType);
-        }
-        if (user->GetExprKind() == ExprKind::APPLY_WITH_EXCEPTION) {
-            auto apply = StaticCast<ApplyWithException*>(user);
+        if (auto apply = DynamicCast<ApplyBase*>(user)) {
             apply->SetThisType(thisType);
         }
     }
