@@ -873,10 +873,10 @@ public:
     {
         switch (terminator->GetExprKind()) {
             case ExprKind::APPLY_WITH_EXCEPTION: {
-                return PreHandleApplyExpr(state, StaticCast<const ApplyWithException*>(terminator));
+                return PreHandleApplyExpr(state, StaticCast<const ApplyBase*>(terminator));
             }
             case ExprKind::INVOKE_WITH_EXCEPTION: {
-                return PreHandleInvokeExpr(state, StaticCast<const InvokeWithException*>(terminator));
+                return PreHandleInvokeExpr(state, StaticCast<const InvokeBase*>(terminator));
             }
             case ExprKind::ALLOCATE_WITH_EXCEPTION: {
                 auto allocate = StaticCast<const AllocateWithException*>(terminator);
@@ -1003,11 +1003,11 @@ private:
                 return true;
             }
             case ExprKind::APPLY: {
-                PreHandleApplyExpr(state, StaticCast<const Apply*>(expression));
+                PreHandleApplyExpr(state, StaticCast<const ApplyBase*>(expression));
                 return true;
             }
             case ExprKind::INVOKE: {
-                PreHandleInvokeExpr(state, StaticCast<const Invoke*>(expression));
+                PreHandleInvokeExpr(state, StaticCast<const InvokeBase*>(expression));
                 return true;
             }
             case ExprKind::NUMERIC_CAST:
@@ -1381,8 +1381,7 @@ private:
         }
     }
 
-    template <typename TApply> std::optional<Block*>
-    PreHandleApplyExpr(State<ValueDomain, ValueStatePool>& state, const TApply* apply)
+    std::optional<Block*> PreHandleApplyExpr(State<ValueDomain, ValueStatePool>& state, const ApplyBase* apply)
     {
         // check if this apply is a call to a mut func of a struct
         if (auto callee = apply->GetCallee(); callee->TestAttr(Attribute::MUT)) {
@@ -1400,29 +1399,26 @@ private:
         }
 
         auto refObj = PreHandleFuncCall(state, apply);
-        if constexpr (std::is_same_v<Apply, TApply>) {
-            HandleApplyExpr(state, apply, refObj);
-            return std::nullopt;
-        } else {
-            return HandleApplyWithExceptionTerminator(state, apply, refObj);
+        if (apply->IsTerminator()) {
+            return HandleApplyWithExceptionTerminator(
+                state, StaticCast<const ApplyWithException*>(apply), refObj);
         }
+        HandleApplyExpr(state, StaticCast<const Apply*>(apply), refObj);
+        return std::nullopt;
     }
 
-    template <typename TInvoke>
-    std::optional<Block*> PreHandleInvokeExpr(State<ValueDomain, ValueStatePool>& state, const TInvoke* invoke)
+    std::optional<Block*> PreHandleInvokeExpr(State<ValueDomain, ValueStatePool>& state, const InvokeBase* invoke)
     {
         auto refObj = PreHandleFuncCall(state, invoke);
-
-        if constexpr (std::is_same_v<Invoke, TInvoke>) {
-            HandleInvokeExpr(state, invoke, refObj);
-            return std::nullopt;
-        } else {
-            return HandleInvokeWithExceptionTerminator(state, invoke, refObj);
+        if (invoke->IsTerminator()) {
+            return HandleInvokeWithExceptionTerminator(
+                state, StaticCast<const InvokeWithException*>(invoke), refObj);
         }
+        HandleInvokeExpr(state, StaticCast<const Invoke*>(invoke), refObj);
+        return std::nullopt;
     }
 
-    template <typename T>
-    Value* PreHandleFuncCall(State<ValueDomain, ValueStatePool>& state, const T* apply)
+    Value* PreHandleFuncCall(State<ValueDomain, ValueStatePool>& state, const Expression* apply)
     {
         auto dest = apply->GetResult();
         auto ty = dest->GetType();
@@ -1546,9 +1542,8 @@ private:
         return std::nullopt;
     }
 
-    template <typename TIntrinsic>
     std::optional<Block*> PreHandleInoutIntrinsic(
-        State<ValueDomain, ValueStatePool>& state, const TIntrinsic* intrinsic)
+        State<ValueDomain, ValueStatePool>& state, const Expression* intrinsic)
     {
         auto param = intrinsic->GetOperand(0);
         if (!param->IsLocalVar()) {

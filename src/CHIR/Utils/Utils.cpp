@@ -1413,12 +1413,7 @@ Type* GetInstParentCustomTyOfCallee(
     }
 }
 
-Type* GetInstParentCustomTypeForApplyCallee(const Apply& expr, CHIRBuilder& builder)
-{
-    return GetInstParentCustomTyOfCallee(*expr.GetCallee(), expr.GetArgs(), expr.GetThisType(), builder);
-}
-
-Type* GetInstParentCustomTypeForAweCallee(const ApplyWithException& expr, CHIRBuilder& builder)
+Type* GetInstParentCustomTypeForApplyCallee(const ApplyBase& expr, CHIRBuilder& builder)
 {
     return GetInstParentCustomTyOfCallee(*expr.GetCallee(), expr.GetArgs(), expr.GetThisType(), builder);
 }

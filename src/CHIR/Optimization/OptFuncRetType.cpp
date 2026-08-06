@@ -46,7 +46,7 @@ void RemoveOldRetValue(LocalVar& oldRet)
 
                 there may be other safety cases that you can remove the store's operand, you can add them here.
             */
-            if (unitVal->GetExpr()->IsConstant()) {
+            if (Cangjie::Is<Constant>(unitVal->GetExpr())) {
                 unitVal->GetExpr()->RemoveSelfFromBlock();
             }
         }

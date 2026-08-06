@@ -8,6 +8,7 @@
 
 #include "IRBuilder.h"
 #include "cangjie/CHIR/IR/Expression/Expression.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 
 using namespace Cangjie;
 using namespace CodeGen;
@@ -46,7 +47,7 @@ llvm::Value* CodeGen::GenerateRawArrayAllocate(IRBuilder2& irBuilder, const CHIR
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     // If we already know the length of rawArray is greater than or equal to 0, we can remove the throw branch.
     if (rawArray.GetSize()->IsLocalVar() &&
-        StaticCast<CHIR::LocalVar*>(rawArray.GetSize())->GetExpr()->IsConstant()) {
+        Is<CHIR::Constant>(StaticCast<CHIR::LocalVar*>(rawArray.GetSize())->GetExpr())) {
         auto constExpr = StaticCast<CHIR::Constant*>(StaticCast<CHIR::LocalVar*>(rawArray.GetSize())->GetExpr());
         if (constExpr->GetSignedIntLitVal() >= 0) {
             return irBuilder.AllocateArray(*arrTy, length);
