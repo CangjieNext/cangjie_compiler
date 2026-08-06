@@ -426,8 +426,8 @@ OwnedPtr<RefType> CreateRefType(InheritableDecl& typeDecl, Ptr<Ty> instantTy)
 OwnedPtr<ArrayLit> CreateArrayLit(std::vector<OwnedPtr<Expr>> elements, Ptr<Ty> ty)
 {
     auto ret = MakeOwned<ArrayLit>();
-    auto arrayType = DynamicCast<StructTy*>(ty);
-    CJC_ASSERT(arrayType);
+    // Array literal could be either Array or VArray.
+    CJC_ASSERT(ty->IsStructArray() || ty->kind == TypeKind::TYPE_VARRAY);
     ret->SetTy(ty);
     ret->children = std::move(elements);
     return ret;
