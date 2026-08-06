@@ -51,7 +51,7 @@ void ExprTypeConverter::VisitSubExpression(RawArrayAllocateBase& o)
     o.elementType = ConvertType(*o.elementType);
 }
 
-void ExprTypeConverter::VisitSubExpression(Apply& o)
+void ExprTypeConverter::VisitSubExpression(FuncCall& o)
 {
     VisitExprDefaultImpl(o);
     for (auto& ty : o.instantiatedTypeArgs) {
@@ -59,53 +59,6 @@ void ExprTypeConverter::VisitSubExpression(Apply& o)
     }
     if (o.thisType != nullptr) {
         o.thisType = ConvertType(*o.thisType);
-    }
-}
-
-void ExprTypeConverter::VisitSubExpression(ApplyWithException& o)
-{
-    VisitExprDefaultImpl(o);
-    for (auto& ty : o.instantiatedTypeArgs) {
-        ty = converter(*ty);
-    }
-    if (o.thisType != nullptr) {
-        o.thisType = ConvertType(*o.thisType);
-    }
-}
-
-void ExprTypeConverter::VisitSubExpression(Invoke& o)
-{
-    VisitExprDefaultImpl(o);
-    o.thisType = ConvertType(*o.thisType);
-    for (auto& ty : o.instantiatedTypeArgs) {
-        ty = converter(*ty);
-    }
-}
-
-void ExprTypeConverter::VisitSubExpression(InvokeWithException& o)
-{
-    VisitExprDefaultImpl(o);
-    o.thisType = ConvertType(*o.thisType);
-    for (auto& ty : o.instantiatedTypeArgs) {
-        ty = converter(*ty);
-    }
-}
-
-void ExprTypeConverter::VisitSubExpression(InvokeStatic& o)
-{
-    VisitExprDefaultImpl(o);
-    o.thisType = ConvertType(*o.thisType);
-    for (auto& ty : o.instantiatedTypeArgs) {
-        ty = converter(*ty);
-    }
-}
-
-void ExprTypeConverter::VisitSubExpression(InvokeStaticWithException& o)
-{
-    VisitExprDefaultImpl(o);
-    o.thisType = ConvertType(*o.thisType);
-    for (auto& ty : o.instantiatedTypeArgs) {
-        ty = converter(*ty);
     }
 }
 
@@ -234,39 +187,14 @@ void CustomDefTypeConverter::VisitSubDef(ExtendDef& o)
     }
 }
 
-void PrivateTypeConverterNoInvokeOriginal::VisitSubExpression(Invoke& o)
+void PrivateTypeConverterNoInvokeOriginal::VisitSubExpression(FuncCall& o)
 {
     VisitExprDefaultImpl(o);
-    o.thisType = ConvertType(*o.thisType);
     for (auto& ty : o.instantiatedTypeArgs) {
-        ty = ConvertType(*ty);
+        ty = converter(*ty);
     }
-}
-
-void PrivateTypeConverterNoInvokeOriginal::VisitSubExpression(InvokeWithException& o)
-{
-    VisitExprDefaultImpl(o);
-    o.thisType = ConvertType(*o.thisType);
-    for (auto& ty : o.instantiatedTypeArgs) {
-        ty = ConvertType(*ty);
-    }
-}
-
-void PrivateTypeConverterNoInvokeOriginal::VisitSubExpression(InvokeStatic& o)
-{
-    VisitExprDefaultImpl(o);
-    o.thisType = ConvertType(*o.thisType);
-    for (auto& ty : o.instantiatedTypeArgs) {
-        ty = ConvertType(*ty);
-    }
-}
-
-void PrivateTypeConverterNoInvokeOriginal::VisitSubExpression(InvokeStaticWithException& o)
-{
-    VisitExprDefaultImpl(o);
-    o.thisType = ConvertType(*o.thisType);
-    for (auto& ty : o.instantiatedTypeArgs) {
-        ty = ConvertType(*ty);
+    if (o.thisType != nullptr) {
+        o.thisType = ConvertType(*o.thisType);
     }
 }
 

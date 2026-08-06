@@ -1011,7 +1011,7 @@ void DeadCodeElimination::PrintUnreachableBlockWarning(
                     return;
                 }
             }
-            if (!isNormal && (unreableExpr->IsBinaryExpr() || unreableExpr->IsUnaryExpr())) {
+            if (!isNormal && (Is<BinaryExpression>(unreableExpr) || Is<UnaryExpression>(unreableExpr))) {
                 auto diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable, range, "operator");
                 diagBuilder.AddMainHintArguments("operator");
                 diagBuilder.AddHint(terminalNodeRange);
@@ -1034,7 +1034,7 @@ bool DeadCodeElimination::CheckUselessExpr(const Expression& expr, bool isReport
     if (expr.GetResult() && !expr.GetResult()->GetUsers().empty()) {
         return false;
     }
-    if ((expr.IsUnaryExpressionWithException() || expr.IsBinaryExpressionWithException()) &&
+    if ((Is<UnaryExpressionWithException>(expr) || Is<BinaryExpressionWithException>(expr)) &&
         expr.Get<NeverOverflowInfo>() && isReportWarning) {
         return true;
     }

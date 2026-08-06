@@ -801,7 +801,7 @@ private:
         if (isShiftOp) {
             auto lhsValBit = StaticCast<NumericType*>(lhsOperandType)->GetBitness();
             if (static_cast<uint64_t>(rightVal) >= lhsValBit) {
-                RaiseOvershiftError(binaryExpr, rightVal, lhsValBit);
+                RaiseOvershiftError(binaryExpr, static_cast<uint64_t>(rightVal), lhsValBit);
                 state.SetToBound(dest, /* isTop = */ true);
                 return ExceptionKind::FAIL;
             }
@@ -943,9 +943,8 @@ private:
         }
     }
 
-    template <typename T, typename U>
     void RaiseArithmeticOverflowError(
-        const BinaryExpressionBase* expr, BinaryExprKind kind, const T* leftVal, const U* rightVal)
+        const BinaryExpressionBase* expr, BinaryExprKind kind, const ConstValue* leftVal, const ConstValue* rightVal)
     {
         if (this->isStable) {
             auto& loc = expr->GetDebugLocation();
@@ -960,7 +959,7 @@ private:
         }
     }
 
-    template <typename T> void RaiseNegativeShiftError(const BinaryExpressionBase* expr, T rightVal)
+    void RaiseNegativeShiftError(const BinaryExpressionBase* expr, int64_t rightVal)
     {
         if (this->isStable) {
             auto& loc = expr->GetDebugLocation();
@@ -970,8 +969,7 @@ private:
         }
     }
 
-    template <typename T>
-    void RaiseOvershiftError(const BinaryExpressionBase* expr, T rightVal, uint64_t leftValBit)
+    void RaiseOvershiftError(const BinaryExpressionBase* expr, uint64_t rightVal, uint64_t leftValBit)
     {
         if (this->isStable) {
             auto& loc = expr->GetDebugLocation();
@@ -1120,7 +1118,7 @@ private:
         TargetTy res = 0;
         bool isOverflow = OverflowChecker::IsTypecastOverflowForInt<SrcTy, TargetTy>(val, &res, os);
         if (isOverflow && os == OverflowStrategy::THROWING) {
-            RaiseTypeCastOverflowError(cast, val);
+            RaiseTypeCastOverflowError(cast, std::to_string(val));
             state.SetToBound(cast->GetResult(), /* isTop = */ true);
             return ExceptionKind::FAIL;
         } else {
@@ -1130,12 +1128,12 @@ private:
         }
     }
 
-    template <typename T> void RaiseTypeCastOverflowError(const NumericCastBase* cast, T srcVal)
+    void RaiseTypeCastOverflowError(const NumericCastBase* cast, const std::string& srcVal)
     {
         if (this->isStable) {
             auto& loc = cast->GetDebugLocation();
             auto builder = diag.DiagnoseRefactor(DiagKindRefactor::chir_typecast_overflow, ToRange(loc));
-            std::string srcValStr = cast->GetSourceType()->ToString() + "(" + std::to_string(srcVal) + ")";
+            std::string srcValStr = cast->GetSourceType()->ToString() + "(" + srcVal + ")";
             builder.AddMainHintArguments(srcValStr, cast->GetTargetType()->ToString());
             builder.AddNote(GenerateTypeRangePrompt(cast->GetTargetType()));
         }
@@ -1171,7 +1169,7 @@ private:
         }
     }
 
-    template <typename TApply> ExceptionKind HandleApply(TConstDomain& state, const TApply* apply, Value* /* refObj */)
+    ExceptionKind HandleApply(TConstDomain& state, const ApplyBase* apply, Value* /* refObj */)
     {
         auto calleeFunc = DynamicCast<Function*>(apply->GetCallee());
         if (!calleeFunc) {
@@ -1202,7 +1200,7 @@ private:
      * }
      * The index of the field `len` is 2.
      */
-    template <typename TApply> void HandleArrayInit(TConstDomain& state, const TApply* apply)
+    void HandleArrayInit(TConstDomain& state, const ApplyBase* apply)
     {
         auto args = apply->GetArgs();
         CJC_ASSERT(args.size() > 0);
@@ -1257,7 +1255,7 @@ private:
         }
     }
 
-    template <typename TApply> void HandleArraySlice(TConstDomain& state, const TApply* apply)
+    void HandleArraySlice(TConstDomain& state, const ApplyBase* apply)
     {
         /**
          *  func slice(start: Int64, len: Int64): Array<T>
@@ -1270,7 +1268,7 @@ private:
         state.Propagate(args[lenParameterIndex], lenChild);
     }
 
-    template <typename TApply> void HandleArraySizeGet(TConstDomain& state, const TApply* apply)
+    void HandleArraySizeGet(TConstDomain& state, const ApplyBase* apply)
     {
         /**
          *  $sizeget: (Class-$BOX_RNat5ArrayIlE) -> Int64
@@ -1282,7 +1280,7 @@ private:
         }
     }
 
-    template <typename TApply> ExceptionKind HandleArrayAccess(TConstDomain& state, const TApply* apply)
+    ExceptionKind HandleArrayAccess(TConstDomain& state, const ApplyBase* apply)
     {
         /**
          * This function handles the following four approaches to accessing an array.
@@ -1314,7 +1312,7 @@ private:
         return RaiseOutOfBoundError(apply, static_cast<uint64_t>(len), index);
     }
 
-    template <typename TApply> ExceptionKind HandleRangeInit(TConstDomain& state, const TApply* apply)
+    ExceptionKind HandleRangeInit(TConstDomain& state, const ApplyBase* apply)
     {
         /**
          * This function handles the following four approaches to accessing an array.
@@ -1408,7 +1406,7 @@ private:
         return res;
     }
 
-    template <typename TExpr> ExceptionKind RaiseOutOfBoundError(const TExpr* expr, size_t len, int64_t index)
+    ExceptionKind RaiseOutOfBoundError(const Expression* expr, size_t len, int64_t index)
     {
         if (index < 0) {
             if (this->isStable) {

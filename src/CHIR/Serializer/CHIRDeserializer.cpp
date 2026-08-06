@@ -602,7 +602,7 @@ template <> BlockGroup* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
         auto ownedExpression = GetExpression<Expression>(obj->ownedExpression());
         CJC_NULLPTR_CHECK(ownedExpression);
         blockGroup = builder.CreateBlockGroup(*ownedExpression->GetTopLevelFunc());
-        if (ownedExpression->IsLambda()) {
+        if (Is<Lambda>(ownedExpression)) {
             StaticCast<Lambda*>(ownedExpression)->InitBody(*blockGroup);
         }
     }
