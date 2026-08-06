@@ -233,6 +233,13 @@ main() {
     let b: sameWord = sameWord(a)
     let c: ratio = ratio(1.5)
     let d: codepoint = codepoint(97)
+    let e: word = word(20.05)
+    let floatValue: Float32 = 20.05
+    let f: word = word(floatValue)
+    let intValue: Int64 = 20
+    let g: ratio = ratio(intValue)
+    let runeValue: Int16 = 97
+    let h: codepoint = codepoint(runeValue)
 }
     )";
 
