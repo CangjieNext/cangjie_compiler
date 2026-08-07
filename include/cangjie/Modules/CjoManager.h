@@ -40,7 +40,6 @@ public:
     void AddSourcePackage(AST::Package& pkg) const;
     void AddImportedPackageFromASTNode(OwnedPtr<AST::Package>&& pkg) const;
     bool LoadPackageHeader(const std::string& fullPackageName, const std::string& cjoPath) const;
-    void LoadAllDeclsAndRefs() const;
     bool NeedCollectDependency(const std::string& curName, bool isCurMacro, const std::string& depName) const;
     /**
      * Loads the declaration of each package in packages on demand.
@@ -82,7 +81,6 @@ public:
         const std::string& fullPackageName, const std::string& name) const;
     Ptr<AST::Decl> GetImplicitPackageMembersByName(const std::string& fullPackageName, const std::string& name) const;
 
-    std::string GetPackageCjoPath(const std::string& fullPackageName) const;
     /** return {fullPackageName, cjoPath} */
     std::pair<std::string, std::string> GetPackageCjo(const AST::ImportSpec& importSpec) const;
     std::vector<std::string> GetFullPackageNames(const AST::ImportSpec& import) const;

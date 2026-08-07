@@ -418,7 +418,7 @@ void DiagCJMPCannotAssignToImmutableCommonInCtor(DiagnosticEngine& diag, const E
         auto builder = diag.DiagnoseRefactor(
             DiagKindRefactor::sema_common_assign_to_common_immutable_in_ctor, ae, target->identifier);
         auto mod = std::find_if(target->modifiers.begin(), target->modifiers.end(),
-            [&](const auto& m) { return m.modifier == TokenKind::COMMON; });
+            [](const auto& m) { return m.modifier == TokenKind::COMMON; });
         builder.AddNote(*target, MakeRange((*mod).begin, (*mod).end),
             "'common' let field '" + target->identifier + "' cannot be assigned in constructor");
     } else {
