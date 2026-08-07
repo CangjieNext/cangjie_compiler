@@ -139,25 +139,45 @@ private:
     void InsertArrayJavaEntitySet(ClassDecl& decl);
 
     /**
-     * Generates and inserts constructor in java mirror:
-     *
-     * public init($ref: Java_CFFI_JavaEntity) {
-     *     this.javaref = ref // for JObject
-     *     // super($ref) // for other mirrors
-     * }
-     */
+    * Generates and inserts constructor in java mirror.
+    *
+    * JNI interaction must execute on a stable carrier OS thread because
+    * JNIEnv*, stack pointer, and JVM thread attachment are thread-bound.
+    * Because of this, all JNI work is wrapped into exclusiveScope.
+    *
+    * public init($ref: Java_CFFI_JavaEntity) {
+    *     // for JObject
+    *     Java_CFFI_ensureNotNull($ref)
+    *     this.$javaref = exclusiveScope {
+    *         let env = Java_CFFI_get_env()
+    *         return Java_CFFI_newGlobalReference(env, $ref, weak: false)
+    *     }
+    *
+    *     // for other mirrors
+    *     // super($ref)
+    * }
+    */
     void InsertJavaMirrorCtor(ClassDecl& decl, bool doStub);
 
     /**
-     * var $hasInited: Bool = false
+     * Inserts internal field used to track whether mirror object was initialized
+     * 
+     *     var $hasInited: Bool = false
      */
     void InsertJavaMirrorHasInited(ClassDecl& mirror);
 
     /**
-     * ~init() {
-     *     Java_CFFI_deleteGlobalReference($jnienv, this.javaref)
-     * }
-     */
+    * Generates mirror finalizer:
+    *
+    * ~init() {
+    *     let env = Java_CFFI_get_env()
+    *     Java_CFFI_deleteGlobalReference(env, this.javaref)
+    * }
+    *
+    * Finalizers also perform JNI interaction and ideally should execute inside
+    * exclusiveScope. However, finalizers currently use a separate runtime path,
+    * and exclusiveScope support for them is not implemented yet.
+    */
     void InsertJavaMirrorFinalizer(ClassDecl& mirror);
 
     /**
@@ -176,9 +196,12 @@ private:
      */
     void InsertJavaRefGetterWithBody(ClassDecl& decl);
 
-     /**
+    /**
      * Rewrites a Java mirror constructor to initialize the generated wrapper
      * with a Java object created via JNI.
+     *
+     * JNI object creation is wrapped in exclusiveScope so that the whole
+     * JNI sequence executes on a single carrier OS thread.
      *
      * before:
      *   init(a1: A, ..., an: N) {
@@ -186,12 +209,12 @@ private:
      *
      * after:
      *   init(a1: A, ..., an: N) {
-     *       this({
+     *       this(exclusiveScope {
      *           // Create Java object via JNI.
      *           ...
      *       })
      *   }
-    */
+     */
     void DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& generatedCtor);
 
     OwnedPtr<CallExpr> GetFwdClassInstance(OwnedPtr<RefExpr> paramRef, Decl& fwdClassDecl);
@@ -263,23 +286,60 @@ private:
     OwnedPtr<Decl> GenerateNativeInitCjObjectFunc(const Ptr<TupleTy>& tuple, Package& pkg);
 
     /**
-     * for func [fun]:
-     *     func foo(args): Ret
-     *
-     * the following will be generated:
-     *     func foo(args): Ret {
-     *         *UnwrapJavaEntity*(
-     *             Java_CFFI_callMethod_raw(
-     *                 Java_CFFI_get_env(),
-     *                 this.javaref, // or getJavaref if mirror is an interface
-     *                 typeSignature, "foo", "(<argsSignature>)Ret",
-     *                 [Java_CFFI_JavaEntity(args[0]), ... Java_CFFI_JavaEntity(args[n])]
-     *         )
-     *     }
-     *
-     * where *UnwrapJavaEntity* - generated unwrapper for Ret type value.
-     */
+    * Desugars a @JavaMirror method body into a JNI call.
+    *
+    * The whole generated JNI sequence is wrapped into exclusiveScope to keep
+    * JVM attachment, JNIEnv*, and stack state bound to a single carrier thread.
+    *
+    * for func [fun]:
+    *     func foo(args): Ret
+    *
+    * the following will be generated:
+    *     func foo(args): Ret {
+    *         return exclusiveScope {
+    *             *UnwrapJavaEntity*(
+    *                 Java_CFFI_callMethod_raw(
+    *                     Java_CFFI_get_env(),
+    *                     this.javaref, // or getJavaRef() for interfaces
+    *                     typeSignature,
+    *                     "foo",
+    *                     "(<argsSignature>)Ret",
+    *                     [Java_CFFI_JavaEntity(args[0]), ... Java_CFFI_JavaEntity(args[n])]
+    *                 )
+    *             )
+    *         }
+    *     }
+    *
+    * where *UnwrapJavaEntity* is generated unwrapping logic for the return type.
+    */
     void DesugarJavaMirrorMethod(FuncDecl& fun, ClassLikeDecl& mirror, GenericConfigInfo *config = nullptr);
+
+    /**
+    * Wraps generated JNI-related body nodes into an exclusiveScope call:
+    *
+    *     exclusiveScope {
+    *         ...body...
+    *     }
+    *
+    * exclusiveScope guarantees that the whole JNI call chain executes on a
+    * single carrier OS thread without lightweight thread migration.
+    *
+    * This helper only creates the exclusiveScope expression itself.
+    * The caller may later use the returned expression in different contexts,
+    * for example:
+    *     return exclusiveScope {
+    *         ...body...
+    *     }
+    *
+    *     this(exclusiveScope {
+    *         ...body...
+    *     })
+    *
+    *     this.$javaref = exclusiveScope {
+    *         ...body...
+    *     }
+    */
+    OwnedPtr<Expr> WrapWithExclusiveScope(std::vector<OwnedPtr<Node>>&& bodyNodes, Ptr<Ty> retTy);
 
     /**
      * used in DesugarJavaMirrorMethod for method's body generation
@@ -291,25 +351,44 @@ private:
         GenericConfigInfo *config = nullptr);
 
     /**
-     * for prop [prop]:
-     *   mut prop p: Ret
-     *
-     * the following will be generated:
-     *     mut prop p: Ret {
-     *         get() {
-     *             *UnwrapJavaEntity*(
-     *                 Java_CFFI_getField_raw(
-     *                     Java_CFFI_get_env(), this.javaref, typeSignature, "p", "Ret"
-     *             ))
-     *         }
-     *         set(v) {
-     *             Java_CFFI_setField_raw(
-     *                 Java_CFFI_get_env(),
-     *                 this.javaref, typeSignature, "p", "Ret", Java_CFFI_JavaEntity(v)
-     *             )
-     *         }
-     *     }
-     */
+    * Desugars mirror property accessors into JNI field operations.
+    *
+    * Getter and setter bodies are wrapped into exclusiveScope because field
+    * access uses JNIEnv* and must execute on a single carrier OS thread.
+    *
+    * for prop [prop]:
+    *   mut prop p: Ret
+    *
+    * the following will be generated:
+    *     mut prop p: Ret {
+    *         get() {
+    *             return exclusiveScope {
+    *                 *UnwrapJavaEntity*(
+    *                     Java_CFFI_getField_raw(
+    *                         Java_CFFI_get_env(),
+    *                         this.javaref,
+    *                         typeSignature,
+    *                         "p",
+    *                         "Ret"
+    *                     )
+    *                 )
+    *             }
+    *         }
+    *
+    *         set(v) {
+    *             exclusiveScope {
+    *                 Java_CFFI_setField_raw(
+    *                     Java_CFFI_get_env(),
+    *                     this.javaref,
+    *                     typeSignature,
+    *                     "p",
+    *                     "Ret",
+    *                     Java_CFFI_JavaEntity(v)
+    *                 )
+    *             }
+    *         }
+    *     }
+    */
     void DesugarJavaMirrorProp(PropDecl& prop);
 
     void InsertJavaMirrorPropGetter(PropDecl& prop);
