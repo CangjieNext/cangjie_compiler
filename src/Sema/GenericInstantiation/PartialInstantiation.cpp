@@ -42,11 +42,6 @@ void SetOptLevel(const Cangjie::GlobalOptions& opts)
     g_outputMode = opts.outputMode;
 }
 
-GlobalOptions::OptimizationLevel GetOptLevel()
-{
-    return g_optLevel;
-}
-
 bool IsOpenDecl(const Decl& decl)
 {
     if (!decl.IsClassLikeDecl()) {
@@ -130,26 +125,6 @@ OwnedPtr<Generic> InstantiateGeneric(const Generic& generic, const VisitFunc& vi
     ret->leftAnglePos = generic.leftAnglePos;
     ret->rightAnglePos = generic.rightAnglePos;
     return ret;
-}
-
-MacroInvocation InstantiateMacroInvocation(const MacroInvocation& me)
-{
-    MacroInvocation mi;
-    mi.macroCallDiagInfo.fullName = me.macroCallDiagInfo.fullName;
-    mi.fullNameDotPos = me.fullNameDotPos;
-    mi.macroCallDiagInfo.identifier = me.macroCallDiagInfo.identifier;
-    mi.macroCallDiagInfo.identifierPos = me.macroCallDiagInfo.identifierPos;
-    mi.leftSquarePos = me.leftSquarePos;
-    mi.attrs = me.attrs;
-    mi.rightSquarePos = me.rightSquarePos;
-    mi.leftParenPos = me.leftParenPos;
-    mi.args = me.args;
-    mi.rightParenPos = me.rightParenPos;
-    mi.newTokens = me.newTokens;
-    mi.newTokensStr = me.newTokensStr;
-    mi.parent = me.parent;
-    mi.scope = me.scope;
-    return mi;
 }
 
 namespace {
@@ -254,18 +229,6 @@ OwnedPtr<Decl> PartialInstantiation::InstantiateFuncDecl(const FuncDecl& fd, con
     return ret;
 }
 
-OwnedPtr<Decl> PartialInstantiation::InstantiatePrimaryCtorDecl(const PrimaryCtorDecl& pcd, const VisitFunc& visitor)
-{
-    auto ret = MakeOwned<PrimaryCtorDecl>();
-    CJC_NULLPTR_CHECK(pcd.funcBody);
-    ret->funcBody = InstantiateNode(pcd.funcBody.get(), visitor);
-    ret->overflowStrategy = pcd.overflowStrategy;
-    ret->isFastNative = pcd.isFastNative;
-    ret->isConst = pcd.isConst;
-    ret->EnableAttr(Attribute::COMPILER_ADD);
-    return ret;
-}
-
 OwnedPtr<Decl> PartialInstantiation::InstantiatePropDecl(const PropDecl& pd, const VisitFunc& visitor)
 {
     auto ret = MakeOwned<PropDecl>();
@@ -330,14 +293,6 @@ OwnedPtr<Decl> PartialInstantiation::InstantiateExtendDecl(const ExtendDecl& ed,
         ret->bodyScope = MakeOwned<DummyBody>();
         CopyNodeScopeInfo(ret->bodyScope.get(), ed.bodyScope.get());
     }
-    ret->EnableAttr(Attribute::COMPILER_ADD);
-    return ret;
-}
-
-OwnedPtr<Decl> PartialInstantiation::InstantiateMacroExpandDecl(const MacroExpandDecl& med)
-{
-    auto ret = MakeOwned<MacroExpandDecl>();
-    ret->invocation = InstantiateMacroInvocation(med.invocation);
     ret->EnableAttr(Attribute::COMPILER_ADD);
     return ret;
 }
@@ -546,19 +501,6 @@ OwnedPtr<Type> PartialInstantiation::InstantiateType(Ptr<Type> type, const Visit
     visitor(*type, *ret);
     ret->EnableAttr(Attribute::COMPILER_ADD);
     return ret;
-}
-
-OwnedPtr<MacroExpandExpr> PartialInstantiation::InstantiateMacroExpandExpr(
-    const MacroExpandExpr& mee, const VisitFunc& visitor)
-{
-    auto expr = MakeOwned<MacroExpandExpr>();
-    expr->identifier = mee.identifier;
-    expr->invocation = InstantiateMacroInvocation(mee.invocation);
-    for (auto& anno : mee.annotations) {
-        expr->annotations.emplace_back(InstantiateNode(anno.get(), visitor));
-    }
-    expr->modifiers.insert(mee.modifiers.begin(), mee.modifiers.end());
-    return expr;
 }
 
 OwnedPtr<TokenPart> PartialInstantiation::InstantiateTokenPart(const TokenPart& tp, const VisitFunc& /* visitor */)
@@ -1031,14 +973,6 @@ OwnedPtr<AsExpr> PartialInstantiation::InstantiateAsExpr(const AsExpr& ae, const
     return expr;
 }
 
-OwnedPtr<OptionalExpr> PartialInstantiation::InstantiateOptionalExpr(const OptionalExpr& oe, const VisitFunc& visitor)
-{
-    auto expr = MakeOwned<OptionalExpr>();
-    expr->baseExpr = InstantiateExpr(oe.baseExpr.get(), visitor);
-    expr->questPos = oe.questPos;
-    return expr;
-}
-
 OwnedPtr<OptionalChainExpr> PartialInstantiation::InstantiateOptionalChainExpr(
     const OptionalChainExpr& oce, const VisitFunc& visitor)
 {
@@ -1073,8 +1007,6 @@ OwnedPtr<ExprT> PartialInstantiation::InstantiateExpr(Ptr<ExprT> expr, const Vis
         // PrimitiveExpr, AdjointExpr are ignored.
         [&visitor](const IfExpr& ie) { return OwnedPtr<Expr>(InstantiateIfExpr(ie, visitor)); },
         [](const PrimitiveTypeExpr& pte) { return OwnedPtr<Expr>(MakeOwned<PrimitiveTypeExpr>(pte.typeKind)); },
-        [&visitor](const MacroExpandExpr& mee) { return OwnedPtr<Expr>(InstantiateMacroExpandExpr(mee, visitor)); },
-        [&visitor](const TokenPart& tp) { return OwnedPtr<Expr>(InstantiateTokenPart(tp, visitor)); },
         [&visitor](const QuoteExpr& qe) { return OwnedPtr<Expr>(InstantiateQuoteExpr(qe, visitor)); },
         [&visitor](const TryExpr& te) { return OwnedPtr<Expr>(InstantiateTryExpr(te, visitor)); },
         [&visitor](const ThrowExpr& te) { return OwnedPtr<Expr>(InstantiateThrowExpr(te, visitor)); },
@@ -1112,7 +1044,6 @@ OwnedPtr<ExprT> PartialInstantiation::InstantiateExpr(Ptr<ExprT> expr, const Vis
             const TrailingClosureExpr& tc) { return OwnedPtr<Expr>(InstantiateTrailingClosureExpr(tc, visitor)); },
         [&visitor](const IsExpr& ie) { return OwnedPtr<Expr>(InstantiateIsExpr(ie, visitor)); },
         [&visitor](const AsExpr& ae) { return OwnedPtr<Expr>(InstantiateAsExpr(ae, visitor)); },
-        [&visitor](const OptionalExpr& oe) { return OwnedPtr<Expr>(InstantiateOptionalExpr(oe, visitor)); },
         [&visitor](const OptionalChainExpr& oe) { return OwnedPtr<Expr>(InstantiateOptionalChainExpr(oe, visitor)); },
         [](const WildcardExpr& /* we */) { return OwnedPtr<Expr>(MakeOwned<WildcardExpr>()); },
         [&visitor](
@@ -1161,9 +1092,7 @@ OwnedPtr<Decl> PartialInstantiation::InstantiateDecl(Ptr<Decl> decl, const Visit
         [&visitor](const ClassDecl& e) { return InstantiateClassDecl(e, visitor); },
         [&visitor](const InterfaceDecl& e) { return InstantiateInterfaceDecl(e, visitor); },
         [&visitor](const EnumDecl& e) { return InstantiateEnumDecl(e, visitor); },
-        [&visitor](const PrimaryCtorDecl& e) { return InstantiatePrimaryCtorDecl(e, visitor); },
         [&visitor](const ExtendDecl& e) { return InstantiateExtendDecl(e, visitor); },
-        [](const MacroExpandDecl& e) { return InstantiateMacroExpandDecl(e); },
         [&visitor](const VarWithPatternDecl& e) { return InstantiateVarWithPatternDecl(e, visitor); },
         [&visitor](const TypeAliasDecl& e) { return InstantiateTypeAliasDecl(e, visitor); },
         // MainDecl and MacroDecl are ignored. Since they will be desugared before semantic typecheck.
@@ -1492,43 +1421,6 @@ OwnedPtr<Annotation> PartialInstantiation::InstantiateAnnotation(const Annotatio
     return ret;
 }
 
-OwnedPtr<ImportSpec> PartialInstantiation::InstantiateImportSpec(const ImportSpec& is, const VisitFunc& visitor)
-{
-    auto ret = MakeOwned<ImportSpec>();
-    CopyNodeField(ret.get(), is);
-    if (is.modifier) {
-        // Instantiate Modifier
-        ret->modifier = MakeOwned<Modifier>(is.modifier->modifier, is.modifier->begin);
-        CopyNodeField(ret->modifier.get(), *is.modifier);
-        ret->modifier->isExplicit = is.modifier->isExplicit;
-    }
-    std::function<void(const ImportContent&, ImportContent&)> cloneContent
-        = [&cloneContent](const ImportContent& src, ImportContent& dst) {
-        CopyNodeField(&dst, src);
-        dst.kind = src.kind;
-        dst.prefixPaths = src.prefixPaths;
-        dst.prefixPoses = src.prefixPoses;
-        dst.prefixDotPoses = src.prefixDotPoses;
-        dst.identifier = src.identifier;
-        dst.asPos = src.asPos;
-        dst.aliasName = src.aliasName;
-        dst.leftCurlPos = src.leftCurlPos;
-        if (!src.items.empty()) {
-            dst.items.resize(src.items.size());
-            for (size_t i = 0; i < src.items.size(); ++i) {
-                cloneContent(src.items[i], dst.items[i]);
-            }
-        }
-        dst.commaPoses = src.commaPoses;
-        dst.rightCurlPos = src.rightCurlPos;
-    };
-    cloneContent(is.content, ret->content);
-    for (auto& it : is.annotations) {
-        ret->annotations.emplace_back(InstantiateNode(it.get(), visitor));
-    }
-    return ret;
-}
-
 OwnedPtr<MatchCase> PartialInstantiation::InstantiateMatchCase(const MatchCase& mc, const VisitFunc& visitor)
 {
     auto ret = MakeOwned<MatchCase>();
@@ -1584,7 +1476,6 @@ OwnedPtr<NodeT> PartialInstantiation::InstantiateNode(Ptr<NodeT> node, const Vis
         [&visitor](const MatchCaseOther& mco) { return OwnedPtr<Node>(InstantiateMatchCaseOther(mco, visitor)); },
         [&visitor](const Annotation& ann) { return OwnedPtr<Node>(InstantiateAnnotation(ann, visitor)); },
         [](const DummyBody&) { return OwnedPtr<Node>(OwnedPtr<DummyBody>()); },
-        [&visitor](const ImportSpec& is) { return OwnedPtr<Node>(InstantiateImportSpec(is, visitor)); },
         []() {
             // Invalid cases.
             return OwnedPtr<Node>(MakeOwned<InvalidExpr>());

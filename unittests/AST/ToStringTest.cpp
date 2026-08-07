@@ -749,3 +749,110 @@ TEST(ToStringTest, PR6FileHeaderRestore)
     VerifyMainDeclToString();
     VerifyStrInterpolationToString();
 }
+
+// ---------------------------------------------------------------------------
+// Directly-constructed nodes: cover the ToString() overloads the Parser cannot
+// reach (it never synthesises LambdaExpr / SpawnExpr / SynchronizedExpr / macro
+// nodes / Package / MatchCaseOther etc. from these fixtures). Each node is built
+// with MakeOwned, its required children are populated to avoid CJC_NULLPTR_CHECK
+// aborts, and ToString() is asserted on a characteristic fragment.
+// ---------------------------------------------------------------------------
+
+TEST(ToStringTest, ConstructedExprToString)
+{
+    // LambdaExpr needs a FuncBody (CJC_NULLPTR_CHECK(funcBody)).
+    auto lambda = MakeOwned<LambdaExpr>(MakeOwned<FuncBody>());
+    EXPECT_NE(lambda->ToString().find("{"), std::string::npos);
+
+    // TrailingClosureExpr needs an expr (CJC_NULLPTR_CHECK(expr)); lambda is
+    // optional. Give the inner expr a name so ToString() is non-empty.
+    auto trailing = MakeOwned<TrailingClosureExpr>();
+    auto trailingBase = MakeOwned<RefExpr>();
+    trailingBase->ref = Reference("base");
+    trailing->expr = std::move(trailingBase);
+    EXPECT_EQ("base", trailing->ToString());
+
+    // ArrayExpr with no type and no args prints "()" (empty-collection branch
+    // plus the closing paren).
+    EXPECT_EQ("()", MakeOwned<ArrayExpr>()->ToString());
+
+    // PointerExpr with no resolved type and no arg prints "CPointer<>(".
+    EXPECT_EQ("CPointer<>()", MakeOwned<PointerExpr>()->ToString());
+
+    // QuoteExpr with no sub-exprs prints "quote()".
+    EXPECT_EQ("quote()", MakeOwned<QuoteExpr>()->ToString());
+
+    // TokenPart with no tokens ToString()s to "" (empty concatenation).
+    EXPECT_TRUE(MakeOwned<TokenPart>()->ToString().empty());
+
+    // InterpolationExpr / StrInterpolationExpr just echo rawString.
+    auto interp = MakeOwned<InterpolationExpr>();
+    interp->rawString = "${a}";
+    EXPECT_EQ("${a}", interp->ToString());
+    auto strInterp = MakeOwned<StrInterpolationExpr>();
+    strInterp->rawString = "a ${b}";
+    EXPECT_EQ("a ${b}", strInterp->ToString());
+
+    // MacroExpandExpr / MacroExpandDecl prepend "@" to the macro name.
+    auto macroExpr = MakeOwned<MacroExpandExpr>();
+    macroExpr->identifier = "Moo";
+    EXPECT_EQ("@Moo", macroExpr->ToString());
+    auto macroDecl = MakeOwned<MacroExpandDecl>();
+    macroDecl->identifier = "Moo";
+    EXPECT_EQ("@Moo", macroDecl->ToString());
+
+    // PerformExpr needs an inner expr (CJC_NULLPTR_CHECK(expr)).
+    auto perform = MakeOwned<PerformExpr>();
+    perform->expr = MakeOwned<RefExpr>();
+    EXPECT_NE(perform->ToString().find("perform"), std::string::npos);
+
+    // ResumeExpr: with/throwing are optional, so a bare node prints "resume".
+    EXPECT_EQ("resume", MakeOwned<ResumeExpr>()->ToString());
+    // Exercise the "with" branch by populating withExpr.
+    auto resumeWith = MakeOwned<ResumeExpr>();
+    resumeWith->withExpr = MakeOwned<RefExpr>();
+    EXPECT_NE(resumeWith->ToString().find("resume"), std::string::npos);
+
+    // SpawnExpr needs a task (CJC_NULLPTR_CHECK(task)).
+    auto spawn = MakeOwned<SpawnExpr>();
+    spawn->task = MakeOwned<RefExpr>();
+    EXPECT_NE(spawn->ToString().find("spawn"), std::string::npos);
+
+    // SynchronizedExpr needs mutex and body (both CJC_NULLPTR_CHECK).
+    auto sync = MakeOwned<SynchronizedExpr>();
+    sync->mutex = MakeOwned<RefExpr>();
+    sync->body = MakeOwned<Block>();
+    EXPECT_NE(sync->ToString().find("synchronized"), std::string::npos);
+
+    // MatchCaseOther needs matchExpr and exprOrDecls (both CJC_NULLPTR_CHECK).
+    auto caseOther = MakeOwned<MatchCaseOther>();
+    caseOther->matchExpr = MakeOwned<RefExpr>();
+    caseOther->exprOrDecls = MakeOwned<Block>();
+    EXPECT_NE(caseOther->ToString().find("case"), std::string::npos);
+}
+
+TEST(ToStringTest, ConstructedDeclAndTypeToString)
+{
+    // MacroDecl prefixes "macro " to the name; funcBody is optional.
+    auto macroDecl = MakeOwned<MacroDecl>();
+    macroDecl->identifier = "dm";
+    EXPECT_EQ("macro dm", macroDecl->ToString());
+
+    // Package with an empty file list ToString()s to "" but runs the loop.
+    auto pkg = MakeOwned<Package>("my_pkg");
+    EXPECT_TRUE(pkg->ToString().empty());
+
+    // PackageDecl takes a Package&; ToString() returns the package name.
+    Package rawPkg("p1");
+    auto pkgDecl = MakeOwned<PackageDecl>(rawPkg);
+    EXPECT_EQ("p1", pkgDecl->ToString());
+
+    // GenericConstraint needs a type (CJC_NULLPTR_CHECK(type)); empty
+    // upperBounds skips the "<: ..." part. Give the type a name so ToString()
+    // is non-empty.
+    auto constraint = MakeOwned<GenericConstraint>();
+    auto constraintTy = MakeOwned<RefType>();
+    constraintTy->ref = Reference("T");
+    constraint->type = std::move(constraintTy);
+    EXPECT_EQ("T", constraint->ToString());
+}
