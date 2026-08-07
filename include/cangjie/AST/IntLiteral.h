@@ -26,20 +26,6 @@ public:
         InitIntLiteral(stringVal, kind);
     }
 
-    IntLiteral(const uint64_t val, const TypeKind kind, bool overflow, bool max = false)
-        : int64Val(static_cast<int64_t>(val)), uint64Val(val), outOfRange(overflow), outOfMax(max), type(kind)
-    {
-        // Calc wrapping value and saturating value.
-        CalcWrappingAndSaturatingVal();
-    }
-
-    IntLiteral(const int64_t val, const TypeKind kind, bool overflow, bool max = false)
-        : int64Val(val), uint64Val(static_cast<uint64_t>(val)), outOfRange(overflow), outOfMax(max), type(kind)
-    {
-        sign = (IsUnsigned() || int64Val >= 0) ? 1 : -1;
-        CalcWrappingAndSaturatingVal();
-    }
-
     ~IntLiteral() = default;
 
     void Assign(const IntLiteral& other)

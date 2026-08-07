@@ -22,7 +22,6 @@
 
 namespace Cangjie {
 void SetOptLevel(const GlobalOptions& opts);
-GlobalOptions::OptimizationLevel GetOptLevel();
 /**
  * Check whether the location where the instantiation is triggered is in the context with Open semantics.
  * Return true if expr is in a member of an open class or interface.
@@ -31,7 +30,6 @@ bool RequireInstantiation(const AST::Decl& decl);
 
 using VisitFunc = std::function<void(AST::Node&, AST::Node&)>;
 void DefaultVisitFunc(const AST::Node& source, const AST::Node& target);
-AST::MacroInvocation InstantiateMacroInvocation(const AST::MacroInvocation& me);
 OwnedPtr<AST::Generic> InstantiateGeneric(const AST::Generic& generic, const VisitFunc& visitor);
 class PartialInstantiation {
 public:
@@ -96,9 +94,6 @@ private:
     static OwnedPtr<AST::ConstantType> InstantiateConstantType(const AST::ConstantType& node, const VisitFunc& visitor);
     static OwnedPtr<AST::VArrayType> InstantiateVArrayType(const AST::VArrayType& node, const VisitFunc& visitor);
     static OwnedPtr<AST::RefType> InstantiateRefType(const AST::RefType& type, const VisitFunc& visitor);
-    static OwnedPtr<AST::MacroExpandExpr> InstantiateMacroExpandExpr(
-        const AST::MacroExpandExpr& mee, const VisitFunc& visitor);
-    static OwnedPtr<AST::TokenPart> InstantiateTokenPart(const AST::TokenPart& tp, const VisitFunc& visitor);
     static OwnedPtr<AST::QuoteExpr> InstantiateQuoteExpr(const AST::QuoteExpr& qe, const VisitFunc& visitor);
     static OwnedPtr<AST::IfExpr> InstantiateIfExpr(const AST::IfExpr& ie, const VisitFunc& visitor);
     static OwnedPtr<AST::TryExpr> InstantiateTryExpr(const AST::TryExpr& te, const VisitFunc& visitor);
@@ -139,9 +134,6 @@ private:
         const AST::TrailingClosureExpr& tc, const VisitFunc& visitor);
     static OwnedPtr<AST::IsExpr> InstantiateIsExpr(const AST::IsExpr& ie, const VisitFunc& visitor);
     static OwnedPtr<AST::AsExpr> InstantiateAsExpr(const AST::AsExpr& ae, const VisitFunc& visitor);
-    static OwnedPtr<AST::OptionalExpr> InstantiateOptionalExpr(const AST::OptionalExpr& oe, const VisitFunc& visitor);
-    static OwnedPtr<AST::OptionalChainExpr> InstantiateOptionalChainExpr(
-        const AST::OptionalChainExpr& oce, const VisitFunc& visitor);
     static OwnedPtr<AST::LetPatternDestructor> InstantiateLetPatternDestructor(
         const AST::LetPatternDestructor& ldp, const VisitFunc& visitor);
     static OwnedPtr<AST::ConstPattern> InstantiateConstPattern(const AST::ConstPattern& cp, const VisitFunc& visitor);
@@ -166,7 +158,6 @@ private:
         const AST::FuncParamList& fpl, const VisitFunc& visitor);
     static OwnedPtr<AST::FuncArg> InstantiateFuncArg(const AST::FuncArg& fa, const VisitFunc& visitor);
     static OwnedPtr<AST::Annotation> InstantiateAnnotation(const AST::Annotation& annotation, const VisitFunc& visitor);
-    static OwnedPtr<AST::ImportSpec> InstantiateImportSpec(const AST::ImportSpec& is, const VisitFunc& visitor);
     static OwnedPtr<AST::MatchCase> InstantiateMatchCase(const AST::MatchCase& mc, const VisitFunc& visitor);
     static OwnedPtr<AST::MatchCaseOther> InstantiateMatchCaseOther(
         const AST::MatchCaseOther& mco, const VisitFunc& visitor);
@@ -175,10 +166,8 @@ private:
         const AST::VarWithPatternDecl& vwpd, const VisitFunc& visitor);
     static OwnedPtr<AST::Decl> InstantiateVarDecl(const AST::VarDecl& vd, const VisitFunc& visitor);
     static OwnedPtr<AST::Decl> InstantiateFuncDecl(const AST::FuncDecl& fd, const VisitFunc& visitor);
-    static OwnedPtr<AST::Decl> InstantiatePrimaryCtorDecl(const AST::PrimaryCtorDecl& pcd, const VisitFunc& visitor);
     static OwnedPtr<AST::Decl> InstantiatePropDecl(const AST::PropDecl& pd, const VisitFunc& visitor);
     static OwnedPtr<AST::Decl> InstantiateExtendDecl(const AST::ExtendDecl& ed, const VisitFunc& visitor);
-    static OwnedPtr<AST::Decl> InstantiateMacroExpandDecl(const AST::MacroExpandDecl& med);
     static OwnedPtr<AST::Decl> InstantiateStructDecl(const AST::StructDecl& sd, const VisitFunc& visitor);
     static OwnedPtr<AST::Decl> InstantiateClassDecl(const AST::ClassDecl& cd, const VisitFunc& visitor);
     static OwnedPtr<AST::Decl> InstantiateInterfaceDecl(const AST::InterfaceDecl& id, const VisitFunc& visitor);

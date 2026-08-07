@@ -153,27 +153,6 @@ public:
     {
         return globalOptions;
     }
-    /**
-     * @brief Get the Cjo Path From Cache
-     *
-     * @param cjoName
-     * @param cjoPath
-     * @return true if found
-     * @return false if not found
-     */
-    bool GetCjoPathFromFindCache(const std::string& cjoName, std::string& cjoPath) const
-    {
-        auto found = cjoPathFindCache.find(cjoName);
-        if (found == cjoPathFindCache.end()) {
-            return false;
-        }
-        cjoPath = found->second;
-        return true;
-    }
-    void CacheCjoPathForFind(const std::string& cjoName, const std::string& cjoPath)
-    {
-        cjoPathFindCache[cjoName] = cjoPath;
-    }
 
     /**
      * @brief Substitute imported TypeAliasTy in all loaded packages.
