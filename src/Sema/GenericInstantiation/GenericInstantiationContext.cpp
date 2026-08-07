@@ -61,37 +61,6 @@ void GIM::GenericInstantiationManagerImpl::WalkImportedInstantiations(
     }
 }
 
-void GIM::GenericInstantiationManagerImpl::RebuildGenericInstantiationManager()
-{
-    WalkImportedInstantiations(
-        [this](Decl& decl) {
-            // Do not building cache for extend decl when current is not incremental compilation.
-            auto genericDecl = decl.genericDecl;
-            if (!genericDecl || decl.astKind == ASTKind::EXTEND_DECL) {
-                return;
-            }
-            GenericInfo genericInfo(genericDecl, BuildTypeMapping(decl));
-            declInstantiationByTypeMap.emplace(genericInfo, &decl);
-            instantiatedDeclsMap[genericDecl].emplace(&decl);
-        },
-        [this](auto& pkg) {
-            // 1. When backend is llvm, do not rebuild cache.
-            // 2. For other backend, filter out macro-related package.
-            //    Ensure that macro-related packages are used only in macro expansion.
-            // NOTE: the incremental compilation does not support macro package.
-            return backend == Triple::BackendType::CJNATIVE ||
-                importManager.IsMacroRelatedPackageName(pkg.fullPackageName);
-        });
-}
-
-void GIM::GenericInstantiationManagerImpl::RestoreInstantiatedDeclTy() const
-{
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    WalkImportedInstantiations([this](Decl& decl) { RestoreInstantiatedDeclTy(decl); },
-        [this](auto& pkg) { return importManager.IsMacroRelatedPackageName(pkg.fullPackageName); });
-#endif
-}
-
 /**
  * All sema types created in sema stage are only point to generic decls.
  * So after generic instantiation, we need to update sema ty's decl from generic decl to instantiated decl.

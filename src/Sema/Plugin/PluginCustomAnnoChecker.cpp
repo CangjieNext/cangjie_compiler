@@ -80,39 +80,6 @@ std::optional<APILevelVersion> ParseIfAvailableArgVersion(const Expr& e)
     return ParseStrictLevelLiteral(*lce);
 }
 
-/// Parse the `level:` integer argument of `@IfAvailable`. Reads an INTEGER
-/// literal from `e` (direct `LitConstExpr` or the right-hand side of a
-/// `BinaryExpr`), validates it via `ParseStrictLevelLiteral`, and writes the
-/// result into `apilevel.since` — keeping the minimum when called multiple
-/// times. Emits `sema_only_literal_support` (ERROR) when the argument is not
-/// an integer literal, and `sema_apilevel_invalid_version_format` (ERROR) when
-/// the integer is outside the valid major-version range [1,99].
-void ParseLevel(const Expr& e, PluginCustomAnnoInfo& apilevel, DiagnosticEngine& diag)
-{
-    Ptr<const LitConstExpr> lce = nullptr;
-    if (e.astKind == ASTKind::BINARY_EXPR) {
-        auto be = StaticCast<BinaryExpr>(&e);
-        CJC_NULLPTR_CHECK(be->rightExpr);
-        lce = DynamicCast<LitConstExpr>(be->rightExpr.get());
-    } else if (e.astKind == ASTKind::LIT_CONST_EXPR) {
-        lce = StaticCast<LitConstExpr>(&e);
-    }
-    if (!lce || lce->kind != LitConstKind::INTEGER) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_only_literal_support, e, "integer");
-        return;
-    }
-    auto newLevel = ParseStrictLevelLiteral(*lce);
-    if (!newLevel.has_value()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_apilevel_invalid_version_format, e, lce->stringValue.c_str());
-        return;
-    }
-    if (apilevel.since.IsZero()) {
-        apilevel.since = *newLevel;
-    } else if (*newLevel < apilevel.since) {
-        apilevel.since = *newLevel;
-    }
-}
-
 /// Parse the `since:` string argument of `@!APILevel`. Reads a STRING literal
 /// from `e` (direct `LitConstExpr` or the right-hand side of a `BinaryExpr`),
 /// validates it via `APILevelVersion::ParseChecked` under MAJOR_OR_TRIPLE rule
@@ -191,7 +158,6 @@ void ParseCheckingHide(const Expr& e, PluginCustomAnnoInfo& apilevel, Diagnostic
 using ParseNameParamFunc = std::function<void(const Expr&, PluginCustomAnnoInfo&, DiagnosticEngine&)>;
 std::unordered_map<std::string_view, ParseNameParamFunc> parseNameParam = {
     {SINCE_IDENTIFIER, ParseSince},
-    {LEVEL_IDENTIFIER, ParseLevel},
     {SYSCAP_IDENTIFIER, ParseSysCap},
     {HIDE_ARG_NAME, ParseCheckingHide},
 };

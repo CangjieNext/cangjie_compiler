@@ -22,7 +22,6 @@
 
 namespace Cangjie {
 void SetOptLevel(const GlobalOptions& opts);
-GlobalOptions::OptimizationLevel GetOptLevel();
 /**
  * Check whether the location where the instantiation is triggered is in the context with Open semantics.
  * Return true if expr is in a member of an open class or interface.
@@ -166,7 +165,6 @@ private:
         const AST::FuncParamList& fpl, const VisitFunc& visitor);
     static OwnedPtr<AST::FuncArg> InstantiateFuncArg(const AST::FuncArg& fa, const VisitFunc& visitor);
     static OwnedPtr<AST::Annotation> InstantiateAnnotation(const AST::Annotation& annotation, const VisitFunc& visitor);
-    static OwnedPtr<AST::ImportSpec> InstantiateImportSpec(const AST::ImportSpec& is, const VisitFunc& visitor);
     static OwnedPtr<AST::MatchCase> InstantiateMatchCase(const AST::MatchCase& mc, const VisitFunc& visitor);
     static OwnedPtr<AST::MatchCaseOther> InstantiateMatchCaseOther(
         const AST::MatchCaseOther& mco, const VisitFunc& visitor);

@@ -98,8 +98,6 @@ public:
     void ResetGenericInstantiationStage()
     {
         ClearCache();
-        // Build generic instantiateManager to rebuild instantiated cache and genericNodeToInstantiatedNodeMap.
-        RebuildGenericInstantiationManager();
         Utils::ProfileRecorder recorder("ResetGenericInstantiationStage", "BuildAbstractFuncMap");
         // Build abstract function map for all type which inherited interface.
         BuildAbstractFuncMap();
@@ -168,9 +166,7 @@ private:
     void InstantiateForIncrementalPackage();
 
     /** Rebuild type stored decl pointer for imported instantiated decls. */
-    void RestoreInstantiatedDeclTy() const;
     void RestoreInstantiatedDeclTy(AST::Decl& decl) const;
-    void RebuildGenericInstantiationManager();
     void WalkImportedInstantiations(const std::function<void(AST::Decl&)>& processFunc,
         const std::function<bool(AST::Package&)>& skipChecker) const;
     void UpdateInstantiatedExtendMap();
@@ -309,19 +305,6 @@ private:
         }
         intersectionTyStatus.emplace(&ty, false);
         return false;
-    }
-    void RemoveFromCache(AST::Decl& decl)
-    {
-        auto genericDecl = decl.genericDecl;
-        instantiatedDeclsMap[genericDecl].erase(&decl);
-        GenericInfo genericInfo(genericDecl, BuildTypeMapping(decl));
-        auto decls = declInstantiationByTypeMap.equal_range(genericInfo);
-        for (auto it = decls.first; it != decls.second; ++it) {
-            if (it->second == &decl) {
-                declInstantiationByTypeMap.erase(it);
-                break;
-            }
-        }
     }
     size_t CountSkippedMembersBefore(const AST::Decl& decl, size_t offset);
     Ptr<AST::Decl> GetMemberByOffset(const AST::Decl& decl, size_t offset);
