@@ -98,8 +98,6 @@ public:
     void ResetGenericInstantiationStage()
     {
         ClearCache();
-        // Build generic instantiateManager to rebuild instantiated cache and genericNodeToInstantiatedNodeMap.
-        RebuildGenericInstantiationManager();
         Utils::ProfileRecorder recorder("ResetGenericInstantiationStage", "BuildAbstractFuncMap");
         // Build abstract function map for all type which inherited interface.
         BuildAbstractFuncMap();
@@ -157,9 +155,7 @@ private:
     void InstantiateForIncrementalPackage();
 
     /** Rebuild type stored decl pointer for imported instantiated decls. */
-    void RestoreInstantiatedDeclTy() const;
     void RestoreInstantiatedDeclTy(AST::Decl& decl) const;
-    void RebuildGenericInstantiationManager();
     void WalkImportedInstantiations(const std::function<void(AST::Decl&)>& processFunc,
         const std::function<bool(AST::Package&)>& skipChecker) const;
     void UpdateInstantiatedExtendMap();
