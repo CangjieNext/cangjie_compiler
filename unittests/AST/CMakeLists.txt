@@ -74,3 +74,13 @@ target_link_libraries(
     GTest::gtest
     GTest::gtest_main)
 add_test(NAME ToStringTest COMMAND ToStringTest)
+
+add_executable(IntLiteralTest IntLiteralTest.cpp)
+target_link_libraries(
+    IntLiteralTest
+    ${CMAKE_DL_LIBS}
+    $<TARGET_OBJECTS:CangjieASTExtra>
+    cangjie-lsp
+    GTest::gtest
+    GTest::gtest_main)
+add_test(NAME IntLiteralTest COMMAND IntLiteralTest)

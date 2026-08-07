@@ -388,23 +388,6 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
     }
 }
 
-void CjoManager::LoadAllDeclsAndRefs() const
-{
-    // 'packageNameMap' also contains source package, we only need to load for imported package.
-    for (auto& p : impl->GetPackageNameMap()) {
-        auto& pkgInfo = p.second;
-        CJC_NULLPTR_CHECK(pkgInfo);
-        if (pkgInfo->loader) {
-            pkgInfo->loader->LoadPackageDecls();
-        }
-    }
-    for (auto& p : impl->GetPackageNameMap()) {
-        if (p.second->loader) {
-            p.second->loader->LoadRefs();
-        }
-    }
-}
-
 void CjoManagerImpl::ReplaceTypeAliasInNode(Ptr<Node> node)
 {
     auto replaceAliasUseTy = [this](Ptr<Node> node) {
@@ -594,20 +577,6 @@ void CjoManager::AddGeneratedDeclToDeclMap(AST::Decl& decl) const
     }
 
     AddDeclToMap(decl, pkgInfo->declMap);
-}
-
-std::string CjoManager::GetPackageCjoPath(const std::string& fullPackageName) const
-{
-    if (auto found = impl->GetCjoFileCacheMap().find(fullPackageName); found != impl->GetCjoFileCacheMap().end()) {
-        return fullPackageName; // Set dummy path for cached cjo data.
-    }
-    std::string cjoPath = "";
-    if (impl->GetCjoPathFromFindCache(fullPackageName, cjoPath)) {
-        return cjoPath;
-    }
-    cjoPath = FileUtil::FindSerializationFile(fullPackageName, SERIALIZED_FILE_EXTENSION, GetSearchPath());
-    impl->CacheCjoPathForFind(fullPackageName, cjoPath);
-    return cjoPath;
 }
 
 std::pair<std::string, std::string> CjoManager::GetPackageCjo(const AST::ImportSpec& importSpec) const
