@@ -56,3 +56,14 @@ target_link_libraries(
     GTest::gtest_main
     TestCompilerInstanceObject)
 add_test(NAME APILevelVersionTest COMMAND APILevelVersionTest)
+
+add_executable(OverrideFunctionResolverTest OverrideFunctionResolverTest.cpp)
+target_link_libraries(
+    OverrideFunctionResolverTest
+    cangjie-lsp
+    ${LINK_LIBS}
+    boundscheck-static
+    GTest::gtest
+    GTest::gtest_main
+    TestCompilerInstanceObject)
+add_test(NAME OverrideFunctionResolverTest COMMAND OverrideFunctionResolverTest)
