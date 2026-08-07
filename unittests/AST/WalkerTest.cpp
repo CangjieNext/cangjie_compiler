@@ -163,3 +163,193 @@ TEST_F(WalkerTest, GetCallExprs)
         EXPECT_EQ(expectedCallExprNames[i], callExprNames[i]);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Rich-source coverage: parse a file exercising many declaration & expression
+// kinds and walk it, asserting that the walker visits each node kind at least
+// once. Each visited kind drives a matching case in Walker::Walk's switch.
+// ---------------------------------------------------------------------------
+
+namespace {
+// A file that spans class/interface/enum/struct/extend decls plus a func body
+// using match/try/throw/for/while/do-while/array/tuple/lambda expressions.
+const char *RICH_SRC = R"(
+interface I {
+    func foo(x: Int32) {
+        print(x)
+    }
+}
+enum Color { Red, Green, Blue }
+enum TimeUnit { Year(Int32) }
+struct Point { var x: Int32; var y: Int32 }
+class C<T> <: I where T <: I {
+    var p: Point = Point(x: 1, y: 2)
+    var arr: Array<Int32> = [1, 2, 3]
+    var t: (Int32, Int64) = (1, 2)
+    override func foo(x: Int32) {
+        var time = TimeUnit.Year(2020)
+        var n = match (time) {
+            case Year(v) => v
+            case 1 => 1
+            case _ => 0
+        }
+        for (i in 0..3) {
+            print(i)
+        }
+        var j = 0
+        while (j < 3) {
+            j = j + 1
+        }
+        do {
+            print(x)
+        } while (x > 0)
+        try {
+            if (x > 0) { throw x }
+        } catch (e: Int32) {
+            print(e)
+        }
+    }
+}
+extend C {
+    func g(): Int64 { return 7 }
+}
+typealias T = Int32
+func lambdaExample(fn: (Int64) -> Int64): Int64 {
+    var f = { a: Int64 => a + 1 }
+    return fn(1)
+}
+main(): Int64 { return 0 }
+)";
+} // namespace
+
+class WalkerRichTest : public ::testing::Test {
+protected:
+    void SetUp() override
+    {
+        // Match the construction pattern used by WalkerTest above and ASTToSourceTest:
+        // do NOT call sm.AddSource before parsing. AddSource would register a real
+        // Source under a hashed fileID, while the Lexer reads via the default
+        // fileID (0). That fileID/position mismatch makes the parser emit hundreds
+        // of bogus position diagnostics and drop the top-level decls, leaving an
+        // empty File. Passing `sm` directly keeps Lexer and SourceManager on the
+        // same (default) fileID, so positions are self-consistent.
+        Parser parser(RICH_SRC, diag, sm);
+        file = parser.ParseTopLevel();
+        ASSERT_NE(file, nullptr);
+    }
+    DiagnosticEngine diag;
+    SourceManager sm;
+    OwnedPtr<File> file;
+};
+
+// Collect every ASTKind visited during a full walk.
+TEST_F(WalkerRichTest, WalksAllDeclarationKinds)
+{
+    std::set<ASTKind> seen;
+    Walker walker(file.get(), [&seen](Ptr<Node> node) -> VisitAction {
+        seen.insert(node->astKind);
+        return VisitAction::WALK_CHILDREN;
+    });
+    walker.Walk();
+
+    // Declaration-kind cases in Walker::Walk that the rich source must reach.
+    EXPECT_EQ(seen.count(ASTKind::CLASS_DECL), 1u);
+    EXPECT_EQ(seen.count(ASTKind::ENUM_DECL), 1u);
+    EXPECT_EQ(seen.count(ASTKind::STRUCT_DECL), 1u);
+    EXPECT_EQ(seen.count(ASTKind::EXTEND_DECL), 1u);
+    EXPECT_EQ(seen.count(ASTKind::FUNC_DECL), 1u);
+    EXPECT_EQ(seen.count(ASTKind::VAR_DECL), 1u);
+    EXPECT_EQ(seen.count(ASTKind::MAIN_DECL), 1u);
+}
+
+TEST_F(WalkerRichTest, WalksAllExpressionKinds)
+{
+    std::set<ASTKind> seen;
+    Walker walker(file.get(), [&seen](Ptr<Node> node) -> VisitAction {
+        seen.insert(node->astKind);
+        return VisitAction::WALK_CHILDREN;
+    });
+    walker.Walk();
+
+    // Expression-kind cases in Walker::Walk.
+    EXPECT_GE(seen.count(ASTKind::MATCH_EXPR), 1u);
+    EXPECT_GE(seen.count(ASTKind::MATCH_CASE), 1u);
+    EXPECT_GE(seen.count(ASTKind::TRY_EXPR), 1u);
+    EXPECT_GE(seen.count(ASTKind::THROW_EXPR), 1u);
+    EXPECT_GE(seen.count(ASTKind::FOR_IN_EXPR), 1u);
+    EXPECT_GE(seen.count(ASTKind::WHILE_EXPR), 1u);
+    EXPECT_GE(seen.count(ASTKind::DO_WHILE_EXPR), 1u);
+    EXPECT_GE(seen.count(ASTKind::ARRAY_LIT), 1u);
+    EXPECT_GE(seen.count(ASTKind::TUPLE_LIT), 1u);
+    EXPECT_GE(seen.count(ASTKind::IF_EXPR), 1u);
+    EXPECT_GE(seen.count(ASTKind::ASSIGN_EXPR), 1u);
+    EXPECT_GE(seen.count(ASTKind::BINARY_EXPR), 1u);
+    EXPECT_GE(seen.count(ASTKind::CALL_EXPR), 1u);
+    EXPECT_GE(seen.count(ASTKind::RANGE_EXPR), 1u);
+    EXPECT_GE(seen.count(ASTKind::LAMBDA_EXPR), 1u);
+}
+
+TEST_F(WalkerRichTest, WalksAllTypeKinds)
+{
+    std::set<ASTKind> seen;
+    Walker walker(file.get(), [&seen](Ptr<Node> node) -> VisitAction {
+        seen.insert(node->astKind);
+        return VisitAction::WALK_CHILDREN;
+    });
+    walker.Walk();
+
+    // Type-kind cases in Walker::Walk reachable from the rich source.
+    EXPECT_GE(seen.count(ASTKind::REF_TYPE), 1u);
+    EXPECT_GE(seen.count(ASTKind::GENERIC_CONSTRAINT), 1u);
+    EXPECT_GE(seen.count(ASTKind::FUNC_TYPE), 1u);
+    EXPECT_GE(seen.count(ASTKind::TUPLE_TYPE), 1u);
+}
+
+TEST_F(WalkerRichTest, WalksPatternKinds)
+{
+    std::set<ASTKind> seen;
+    Walker walker(file.get(), [&seen](Ptr<Node> node) -> VisitAction {
+        seen.insert(node->astKind);
+        return VisitAction::WALK_CHILDREN;
+    });
+    walker.Walk();
+
+    // Pattern-kind cases (enum patterns, var patterns, except-type patterns).
+    EXPECT_GE(seen.count(ASTKind::CONST_PATTERN), 1u);
+    EXPECT_GE(seen.count(ASTKind::VAR_PATTERN), 1u);
+    EXPECT_GE(seen.count(ASTKind::ENUM_PATTERN), 1u);
+}
+
+// The ConstWalker (template instantiated over const Node) shares the same Walk
+// dispatch; exercising it covers the ConstWalker::Walk instantiation path.
+TEST_F(WalkerRichTest, ConstWalkerVisitsSameKinds)
+{
+    std::set<ASTKind> seen;
+    ConstWalker walker(file.get(), [&seen](Ptr<const Node> node) -> VisitAction {
+        seen.insert(node->astKind);
+        return VisitAction::WALK_CHILDREN;
+    });
+    walker.Walk();
+
+    EXPECT_GE(seen.count(ASTKind::CLASS_DECL), 1u);
+    EXPECT_GE(seen.count(ASTKind::MATCH_EXPR), 1u);
+}
+
+// SKIP_CHILDREN must prune the whole subtree of a decl whose children include
+// many kinds -- none of those child kinds should appear.
+TEST_F(WalkerRichTest, SkipChildrenPrunesSubtree)
+{
+    std::set<ASTKind> seen;
+    Walker walker(file.get(), [&seen](Ptr<Node> node) -> VisitAction {
+        seen.insert(node->astKind);
+        // Skip the first class body encountered so its descendants are not walked.
+        if (node->astKind == ASTKind::CLASS_BODY) {
+            return VisitAction::SKIP_CHILDREN;
+        }
+        return VisitAction::WALK_CHILDREN;
+    });
+    walker.Walk();
+
+    // The throw expression lives only inside the skipped class body.
+    EXPECT_EQ(seen.count(ASTKind::THROW_EXPR), 0u);
+}

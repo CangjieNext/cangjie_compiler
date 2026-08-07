@@ -328,6 +328,7 @@ public:
      */
     ValueDomain& At(Value* value)
     {
+        CJC_NULLPTR_CHECK(value);
         if (data.count(value) == 0) {
             return GetTopState(*value);
         }
