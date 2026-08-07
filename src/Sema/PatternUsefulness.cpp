@@ -52,6 +52,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -140,6 +141,44 @@ Ptr<ClassLikeTy> AsSealedLikeClassLikeTy(Ty& ty)
         return &clt;
     }
     return nullptr;
+}
+
+bool MayHaveInhabitant(Ty& ty)
+{
+    auto sealedClassLike = AsSealedLikeClassLikeTy(ty);
+    if (!sealedClassLike || IsSuperTypeForFFI(ty)) {
+        return true;
+    }
+    if (!sealedClassLike->IsClass()) {
+        return false;
+    }
+    auto& classTy = StaticCast<ClassTy&>(*sealedClassLike);
+    CJC_NULLPTR_CHECK(classTy.declPtr);
+    return !classTy.declPtr->TestAttr(Attribute::ABSTRACT);
+}
+
+bool HasCommonSubtype(TypeManager& typeManager, Ty& first, Ty& second)
+{
+    auto firstClassLike = DynamicCast<ClassLikeTy*>(&first);
+    if (!firstClassLike) {
+        return false;
+    }
+    std::vector<Ptr<Ty>> unchecked(firstClassLike->directSubtypes.cbegin(), firstClassLike->directSubtypes.cend());
+    std::unordered_set<Ptr<Ty>> checked;
+    while (!unchecked.empty()) {
+        Ptr<Ty> subtype = unchecked.back();
+        unchecked.pop_back();
+        if (!Ty::IsTyCorrect(subtype) || !checked.emplace(subtype).second) {
+            continue;
+        }
+        if (typeManager.IsSubtype(subtype, &second, true, false) && MayHaveInhabitant(*subtype)) {
+            return true;
+        }
+        if (auto classLike = DynamicCast<ClassLikeTy*>(subtype)) {
+            unchecked.insert(unchecked.end(), classLike->directSubtypes.cbegin(), classLike->directSubtypes.cend());
+        }
+    }
+    return false;
 }
 
 bool LitConstExprEq(const LitConstExpr& left, const LitConstExpr& right)
@@ -507,12 +546,23 @@ public:
         //                case _: I => ...
         //            }
         //        }
+        // 3. Sealed-like types may share a known subtype
+        //        sealed abstract class A {}
+        //        sealed interface I {}
+        //        class B <: A & I {}
+        //
+        //        func f(x: I) {
+        //            match (x) {
+        //                case _: A => ... // reachable through B
+        //                case _: I => ...
+        //            }
+        //        }
         if (goalTy_.HasGeneric() || patternTy.HasGeneric() || !IsSealedLike(goalTy_) || !IsSealedLike(patternTy)) {
             return false;
         }
         bool goalIsSubtype = typeManager.IsSubtype(&goalTy_, &patternTy, true, false);
         bool patternIsSubtype = typeManager.IsSubtype(&patternTy, &goalTy_, true, false);
-        return !goalIsSubtype && !patternIsSubtype;
+        return !goalIsSubtype && !patternIsSubtype && !HasCommonSubtype(typeManager, goalTy_, patternTy);
     }
 
     bool AllWildcard() const
