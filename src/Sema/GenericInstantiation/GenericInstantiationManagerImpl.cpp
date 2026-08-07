@@ -219,55 +219,6 @@ void BuildGenericsTyMap(const FuncDecl& fd, TypeSubst& g2gMap)
 }
 } // namespace
 
-size_t GIM::GenericInstantiationManagerImpl::CountSkippedMembersBefore(const Decl& decl, size_t offset)
-{
-    auto found = skippedMemberOffsets.find(&decl);
-    if (found == skippedMemberOffsets.end()) {
-        std::vector<size_t> offsets;
-        auto members = GetRealIndexingMembers(decl.GetMemberDecls(), decl.TestAttr(Attribute::GENERIC));
-        for (auto it = members.begin(); it != members.end(); ++it) {
-            auto member = *it;
-            size_t off = static_cast<size_t>(std::distance(members.begin(), it));
-            if ((member->astKind != ASTKind::VAR_DECL && !RequireInstantiation(*member)) || IsStaticVar(*member) ||
-                IsStaticInitializer(*member)) {
-                continue;
-            }
-            offsets.emplace_back(off);
-        }
-        found = skippedMemberOffsets.emplace(&decl, std::move(offsets)).first;
-    }
-    for (size_t i = 0; i < found->second.size(); ++i) {
-        if (found->second[i] == offset) {
-            return offset - i;
-        }
-    }
-    return std::numeric_limits<size_t>::max();
-}
-
-Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetMemberByOffset(const Decl& decl, size_t offset)
-{
-    auto members = GetRealIndexingMembers(decl.GetMemberDecls(), decl.TestAttr(Attribute::GENERIC));
-    auto implMemberIt = members.begin();
-    if (!decl.TestAttr(Attribute::GENERIC_INSTANTIATED)) {
-        CJC_ASSERT(offset < members.size());
-        std::advance(implMemberIt, offset);
-    } else {
-        CJC_NULLPTR_CHECK(decl.genericDecl);
-        size_t count = CountSkippedMembersBefore(*decl.genericDecl, offset);
-        if (count == std::numeric_limits<size_t>::max()) {
-            members = GetRealIndexingMembers(
-                decl.genericDecl->GetMemberDecls(), decl.genericDecl->TestAttr(Attribute::GENERIC));
-            implMemberIt = members.begin();
-            CJC_ASSERT(offset < members.size());
-            std::advance(implMemberIt, offset);
-            return implMemberIt->get();
-        }
-        CJC_ASSERT(count <= offset && offset - count < members.size());
-        std::advance(implMemberIt, offset - count);
-    }
-    return implMemberIt->get();
-}
-
 void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pkg)
 {
     this->curPkg = &pkg;
@@ -610,30 +561,6 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::FindInCache(const GenericInfo& i
         return instantiatedDecl;
     }
     return nullptr;
-}
-
-void GIM::GenericInstantiationManagerImpl::WalkNonGenericExtendedType()
-{
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    auto extends = typeManager.GetBoxUsedExtends();
-    for (auto extend : extends) {
-        // Should have same ignore condition with 'CollectExtendedInterfaceHelper'.
-        // UG fix here do not box decls any more.
-        bool ignore = extend->TestAttr(Attribute::GENERIC) || extend->fullPackageName != curPkg->fullPackageName;
-        if (ignore) {
-            continue;
-        }
-        for (auto& type : extend->inheritedTypes) {
-            Walker(type.get(), instantiationWalkerID, instantiator, contextReset).Walk();
-        }
-    }
-    auto decls = typeManager.GetBoxedNonGenericDecls();
-    for (auto id : decls) {
-        for (auto& type : id->inheritedTypes) {
-            Walker(type.get(), instantiationWalkerID, instantiator, contextReset).Walk();
-        }
-    }
-#endif
 }
 
 void GIM::GenericInstantiationManagerImpl::InstantiateGenericDeclWithInstTys(

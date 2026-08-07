@@ -376,9 +376,6 @@ public:
 private:
     friend class TyVarScope;
     friend class InstCtxScope;
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    friend class TyGeneralizer;
-#endif
     void ReleaseTyVar(Ptr<AST::GenericsTy> genTy);
 
 public:
