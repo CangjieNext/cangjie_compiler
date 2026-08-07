@@ -178,6 +178,9 @@ SourceExpr DeSerialize(const PackageFormat::SourceExpr& kind)
         case SourceExpr_OTHER:
             ret = SourceExpr::OTHER;
             break;
+        case SourceExpr_MATCH_CASE:
+            ret = SourceExpr::MATCH_CASE;
+            break;
     }
     return ret;
 }

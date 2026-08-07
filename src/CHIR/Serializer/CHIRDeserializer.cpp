@@ -1321,6 +1321,15 @@ template <> GetRTTIStatic* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(c
 
 // =========================== Configuration ==============================
 
+namespace {
+template <typename T> void SetOptionalSizeAnnotation(Base& obj, int64_t value)
+{
+    if (value != -1) {
+        obj.Set<T>(static_cast<size_t>(value));
+    }
+}
+} // namespace
+
 void CHIRDeserializer::CHIRDeserializerImpl::ConfigBase(const PackageFormat::Base* buffer, Base& obj)
 {
     CJC_NULLPTR_CHECK(buffer);
@@ -1362,27 +1371,18 @@ void CHIRDeserializer::CHIRDeserializerImpl::ConfigBase(const PackageFormat::Bas
                 obj.Set<CHIR::IsCapturedClassInCC>(
                     static_cast<const PackageFormat::IsCapturedClassInCC*>(anno)->value());
                 break;
-            case PackageFormat::Annotation::Annotation_enumCaseIndex: {
-                int64_t index = static_cast<const PackageFormat::EnumCaseIndex*>(anno)->index();
-                if (index != -1) {
-                    obj.Set<CHIR::EnumCaseIndex>(static_cast<size_t>(index));
-                }
+            case PackageFormat::Annotation::Annotation_enumCaseIndex:
+                SetOptionalSizeAnnotation<CHIR::EnumCaseIndex>(
+                    obj, static_cast<const PackageFormat::EnumCaseIndex*>(anno)->index());
                 break;
-            }
-            case PackageFormat::Annotation::Annotation_matchCaseId: {
-                int64_t id = static_cast<const PackageFormat::MatchCaseId*>(anno)->id();
-                if (id != -1) {
-                    obj.Set<CHIR::MatchCaseId>(static_cast<size_t>(id));
-                }
+            case PackageFormat::Annotation::Annotation_matchCaseId:
+                SetOptionalSizeAnnotation<CHIR::MatchCaseId>(
+                    obj, static_cast<const PackageFormat::MatchCaseId*>(anno)->id());
                 break;
-            }
-            case PackageFormat::Annotation::Annotation_virMethodOffset: {
-                int64_t offset = static_cast<const PackageFormat::VirMethodOffset*>(anno)->offset();
-                if (offset != -1) {
-                    obj.Set<CHIR::VirMethodOffset>(static_cast<size_t>(offset));
-                }
+            case PackageFormat::Annotation::Annotation_virMethodOffset:
+                SetOptionalSizeAnnotation<CHIR::VirMethodOffset>(
+                    obj, static_cast<const PackageFormat::VirMethodOffset*>(anno)->offset());
                 break;
-            }
             case PackageFormat::Annotation::Annotation_wrappedRawMethod:
                 obj.Set<CHIR::WrappedRawMethod>(
                     GetValue<Function>(static_cast<const PackageFormat::WrappedRawMethod*>(anno)->rawMethod()));
