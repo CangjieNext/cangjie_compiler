@@ -182,6 +182,9 @@ PackageFormat::SourceExpr Serialize(const SourceExpr& kind)
         case SourceExpr::OTHER:
             ret = SourceExpr_OTHER;
             break;
+        case SourceExpr::MATCH_CASE:
+            ret = SourceExpr_MATCH_CASE;
+            break;
     }
     return ret;
 }

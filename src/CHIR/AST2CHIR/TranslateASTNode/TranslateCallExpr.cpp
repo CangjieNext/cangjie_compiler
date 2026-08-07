@@ -414,6 +414,35 @@ Value* Translator::TranslateTrivialArgWithNoSugar(const AST::FuncArg& arg, const
     return argVal;
 }
 
+void Translator::TranslateNonEnumConstructorThisArg(
+    const AST::CallExpr& expr, const DebugLocation& loc, Type* expectedThisObjTy, std::vector<Value*>& args)
+{
+    auto callee = expr.resolvedFunction;
+    auto isNonEnumNonStaticConstructor =
+        callee && callee->IsMemberDecl() && !callee->TestAttr(AST::Attribute::STATIC) &&
+        callee->TestAttr(AST::Attribute::CONSTRUCTOR) && !callee->TestAttr(AST::Attribute::ENUM_CONSTRUCTOR);
+    if (!isNonEnumNonStaticConstructor || HasNothingTypeArg(args)) {
+        return;
+    }
+
+    Value* thisObj = nullptr;
+    if (IsSuperOrThisCall(expr)) {
+        // For super constructor call site, the `this` arg of current constructor should be passed into super
+        // constructor.
+        thisObj = GetCurrentFunc()->GetParam(0);
+    } else {
+        // Object allocation is lifted out so the generated `this` argument can precede source arguments.
+        auto thisTy = chirTy.TranslateType(*expr.GetTy())->StripAllRefs();
+        auto allocateThis = TryCreate<Allocate>(currentBlock, loc, builder.GetType<RefType>(thisTy), thisTy);
+        allocateThis->Set<DebugLocationInfoForWarning>(loc);
+        thisObj = allocateThis->GetResult();
+    }
+    if (expectedThisObjTy != nullptr) {
+        thisObj = TypeCastOrBoxIfNeeded(*thisObj, *expectedThisObjTy);
+    }
+    args.insert(args.begin(), thisObj);
+}
+
 std::vector<Value*> Translator::TranslateFuncArgs(
     const AST::CallExpr& expr, Type* expectedThisObjTy, const std::vector<Type*>* expectedParamTys)
 {
@@ -459,34 +488,9 @@ std::vector<Value*> Translator::TranslateFuncArgs(
         }
     }
 
-    // class or struct constructor, but not static constructor
-    auto isNonEnumNonStaticConstructor =
-        callee && callee->IsMemberDecl() && !callee->TestAttr(AST::Attribute::STATIC) &&
-        callee->TestAttr(AST::Attribute::CONSTRUCTOR) && !callee->TestAttr(AST::Attribute::ENUM_CONSTRUCTOR);
     // call constructor of class or struct, we need to generate the `this` argument at last.
     // because it can't be used in default-value-func.
-    if (isNonEnumNonStaticConstructor) {
-        if (HasNothingTypeArg(args)) {
-            return args;
-        }
-        Value* thisObj = nullptr;
-        if (IsSuperOrThisCall(expr)) {
-            // For super constructor call site, the `this` arg of current constructor should be passed into super
-            // constructor
-            thisObj = GetCurrentFunc()->GetParam(0);
-        } else {
-            // For trivial constructor call site, the object allocation is lifted out and then pass into constructor as
-            // `this` arg
-            auto thisTy = chirTy.TranslateType(*expr.GetTy())->StripAllRefs();
-            auto allocateThis = TryCreate<Allocate>(currentBlock, loc, builder.GetType<RefType>(thisTy), thisTy);
-            allocateThis->Set<DebugLocationInfoForWarning>(loc);
-            thisObj = allocateThis->GetResult();
-        }
-        if (expectedThisObjTy != nullptr) {
-            thisObj = TypeCastOrBoxIfNeeded(*thisObj, *expectedThisObjTy);
-        }
-        args.insert(args.begin(), thisObj);
-    }
+    TranslateNonEnumConstructorThisArg(expr, loc, expectedThisObjTy, args);
     return args;
 }
 

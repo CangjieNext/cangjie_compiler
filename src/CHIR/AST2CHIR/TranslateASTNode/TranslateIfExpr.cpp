@@ -334,8 +334,7 @@ protected:
         }
         auto castedVal = tr.TypeCastOrBoxIfNeeded(val, *targetType, {});
         auto loc = tr.TranslateLocation(let);
-        auto multib =
-            tr.CreateWrappedMultiBranch(GetSourceExpr(), castedVal, defaultBlock, indices, blocks, baseBlock);
+        auto multib = tr.CreateWrappedMultiBranch(GetSourceExpr(), castedVal, defaultBlock, indices, blocks, baseBlock);
         multib->SetDebugLocation(loc);
         tr.currentBlock = endBlock;
         return {tb, isStillReachable ? defaultBlock : nullptr};
