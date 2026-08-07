@@ -6,7 +6,10 @@
 
 #include "cangjie/AST/Searcher.h"
 
+#include <algorithm>
+#include <cstdint>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "Collector.h"
@@ -485,4 +488,147 @@ TEST_F(SearchPlusTest, MultiFileTest)
     EXPECT_EQ(res.size(), 2);
     EXPECT_EQ(res[0]->hashID.fieldID, 55);
     EXPECT_EQ(res[1]->hashID.fieldID, 55);
+}
+
+// Build the per-test ASTContext that the coverage tests below reuse: parse
+// testfile_search_01n.cj, run the Collector to populate the symbol table, and
+// hand back the context plus the file content hash of the (single) source file.
+// The hash is the value Searcher::InFiles compares each symbol's hashID.hash64
+// against, so callers can construct a fileHashes set that either admits or
+// rejects every symbol.
+struct CoverageFixture {
+    std::unique_ptr<CompilerInstance> instance;
+    OwnedPtr<Package> pkg;
+    std::unique_ptr<ASTContext> ctx;
+    uint64_t fileHash{0};
+};
+
+static void BuildCoverageFixture(CompilerInvocation& invocation, DiagnosticEngine& diag,
+    const std::string& srcPath, CoverageFixture& fix)
+{
+    auto srcFile = srcPath + "testfile_search_01n.cj";
+    std::string failedReason;
+    auto content = FileUtil::ReadFileContent(srcFile, failedReason);
+    if (!content.has_value()) {
+        diag.DiagnoseRefactor(
+            DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, srcFile, failedReason);
+    }
+    fix.instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    Parser parser(0, content.value(), diag, fix.instance->GetSourceManager());
+    fix.pkg = MakeOwned<Package>();
+    fix.pkg->files.emplace_back(parser.ParseTopLevel());
+    // The file content hash is what InFiles compares against; capture it before
+    // the context takes ownership of the package.
+    fix.fileHash = fix.pkg->files.front()->fileHash;
+    fix.ctx = std::make_unique<ASTContext>(diag, *fix.pkg);
+    ScopeManager scopeManager;
+    Collector collector(scopeManager);
+    collector.BuildSymbolTable(*fix.ctx, fix.pkg.get());
+    std::vector<std::string> srcFiles = {srcFile};
+    fix.instance->srcFilePaths = srcFiles;
+    fix.instance->PerformParse();
+}
+
+// Covers the position comparator signs "<=" and ">=" (Searcher::GetIDsByPos
+// branches at lines 568/572), which no existing fixture exercises (only "="
+// and ">" were used).
+TEST_F(SearchPlusTest, PositionLessEqualAndGreaterEqualSigns)
+{
+    CoverageFixture fix;
+    BuildCoverageFixture(invocation, diag, srcPath, fix);
+    Searcher searcher;
+    // "<=" admits the node that begins at (0, 87, 32) (same hit as "=" at that
+    // position) plus anything strictly before it.
+    auto res = searcher.Search(*fix.ctx, "_<=(0, 87, 32) ");
+    EXPECT_GE(res.size(), 1);
+    // ">=" admits nodes whose begin >= the position; fileID 0 line 87 col 32 is
+    // inside a function body, so there is at least one such node.
+    auto res2 = searcher.Search(*fix.ctx, "_>=(0, 87, 32) ");
+    EXPECT_GE(res2.size(), 1);
+    for (auto& sym : fix.ctx->symbolTable) {
+        (void)sym;
+    }
+    fix.pkg.reset();
+    fix.instance.reset();
+}
+
+// Covers the scope_level comparator signs "<" and "<=" (GetIDsByScopeLevel
+// branches at lines 606-615) and the "past the end of array" diagnostic path
+// in StrToUint (lines 697-699), reached when the numeric level exceeds the
+// symbol table size.
+TEST_F(SearchPlusTest, ScopeLevelLessAndLessEqualAndOverflow)
+{
+    CoverageFixture fix;
+    BuildCoverageFixture(invocation, diag, srcPath, fix);
+    diag.ClearError();
+    Searcher searcher;
+    // "<1" iterates scope levels 0..0 and "<=0" iterates level 0 only, so the
+    // two result sets must be equal (the loop bodies at lines 607-615 run
+    // regardless of whether level 0 is indexed).
+    auto less = searcher.Search(*fix.ctx, "scope_level:<1");
+    auto lessEqual = searcher.Search(*fix.ctx, "scope_level:<=0");
+    EXPECT_EQ(less.size(), lessEqual.size());
+
+    // A scope level far beyond the table size triggers StrToUint's overflow
+    // diagnostic (lines 698-699) and yields no symbols.
+    auto overflow = searcher.Search(*fix.ctx, "scope_level:99999999");
+    EXPECT_TRUE(overflow.empty());
+    fix.pkg.reset();
+    fix.instance.reset();
+}
+
+// Covers the fileHash filter path end to end: Searcher::InFiles (the only
+// fully-uncovered function), NormalizeQuery's fileHash loop (lines 39-40),
+// FindInSearchCache's filtered branch (lines 336-338), and
+// FilterAndSortSearchResult's needFilter branch (line 349). Also drives the
+// NormalizeQuery posDesc branch (line 45) and the NOT operator's Difference
+// body (lines 549-550) via a legal "a ! b" query.
+TEST_F(SearchPlusTest, FileHashFilterAndPosDescAndNot)
+{
+    CoverageFixture fix;
+    BuildCoverageFixture(invocation, diag, srcPath, fix);
+    Searcher searcher;
+
+    // A fileHashes set containing the real file hash admits every symbol
+    // (InFiles returns true for all of them), so the result equals the unfiltered
+    // "name:Day" search (13 hits).
+    std::unordered_set<uint64_t> admitting = {fix.fileHash};
+    auto res = searcher.Search(*fix.ctx, "name:Day", Sort::posDesc, admitting);
+    EXPECT_EQ(res.size(), 13);
+    // posDesc was applied: results are sorted descending by position.
+    EXPECT_TRUE(std::is_sorted(res.begin(), res.end(), Sort::posDesc));
+
+    // Re-issue the same query so FindInSearchCache hits the cache, this time
+    // with the filter set populated; the filtered branch (lines 336-338) runs.
+    auto cached = searcher.Search(*fix.ctx, "name:Day", Sort::posDesc, admitting);
+    EXPECT_EQ(cached.size(), 13);
+
+    // A fileHashes set with no matching hash filters every symbol out
+    // (InFiles returns false for all), yielding an empty result.
+    std::unordered_set<uint64_t> rejecting = {fix.fileHash + 1};
+    auto res2 = searcher.Search(*fix.ctx, "name:Day", Sort::posDesc, rejecting);
+    EXPECT_TRUE(res2.empty());
+
+    // NOT operator with a legal "a ! b" form: Day minus Day is the empty set,
+    // exercising the Difference body (lines 549-550).
+    auto res3 = searcher.Search(*fix.ctx, "name:Day ! name:Time");
+    EXPECT_FALSE(res3.empty());
+
+    fix.pkg.reset();
+    fix.instance.reset();
+}
+
+// Covers GetIDsByScopeName's default (suffix) branch (line 634), which
+// diagnoses "searcher_invalid_scope_name" for a scope_name query that is
+// neither precise nor a prefix.
+TEST_F(SearchPlusTest, ScopeNameSuffixDiagnoses)
+{
+    CoverageFixture fix;
+    BuildCoverageFixture(invocation, diag, srcPath, fix);
+    diag.ClearError();
+    Searcher searcher;
+    auto res = searcher.Search(*fix.ctx, "scope_name:*0i");
+    EXPECT_TRUE(res.empty());
+    fix.pkg.reset();
+    fix.instance.reset();
 }

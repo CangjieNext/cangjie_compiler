@@ -74,3 +74,42 @@ target_link_libraries(
     GTest::gtest
     GTest::gtest_main)
 add_test(NAME ToStringTest COMMAND ToStringTest)
+
+add_executable(PrintNodeTest PrintNodeTest.cpp)
+target_link_libraries(
+    PrintNodeTest
+    ${CMAKE_DL_LIBS}
+    $<TARGET_OBJECTS:CangjieASTExtra>
+    cangjie-lsp
+    GTest::gtest
+    GTest::gtest_main)
+add_test(NAME PrintNodeTest COMMAND PrintNodeTest)
+
+add_executable(CommentTest CommentTest.cpp)
+target_link_libraries(
+    CommentTest
+    ${CMAKE_DL_LIBS}
+    cangjie-lsp
+    GTest::gtest
+    GTest::gtest_main)
+add_test(NAME CommentTest COMMAND CommentTest)
+
+add_executable(QueryTest QueryTest.cpp)
+target_link_libraries(
+    QueryTest
+    ${CMAKE_DL_LIBS}
+    $<TARGET_OBJECTS:CangjieASTExtra>
+    cangjie-lsp
+    GTest::gtest
+    GTest::gtest_main)
+add_test(NAME QueryTest COMMAND QueryTest)
+
+add_executable(IntLiteralTest IntLiteralTest.cpp)
+target_link_libraries(
+    IntLiteralTest
+    ${CMAKE_DL_LIBS}
+    $<TARGET_OBJECTS:CangjieASTExtra>
+    cangjie-lsp
+    GTest::gtest
+    GTest::gtest_main)
+add_test(NAME IntLiteralTest COMMAND IntLiteralTest)
