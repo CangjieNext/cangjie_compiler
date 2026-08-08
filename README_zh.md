@@ -109,7 +109,7 @@ llvm 其他工具链以及更详细的后端工具说明，可以参考[llvm 命
 下载源码：
 
 ```shell
-git clone https://gitcode.com/Cangjie/cangjie_compiler.git -b main;
+git clone https://gitcode.com/Cangjie/cangjie_compiler.git -b main
 ```
 
 ### 构建步骤
