@@ -456,7 +456,7 @@ struct Node {
      * @return begin Position in macrocall file if the Node is expanded from macrocall,
      *  begin position in curfile otherwise.
      */
-    Position GetBegin() const;
+    virtual Position GetEnd() const = 0;
 
     /**
      * Get the end Position of the Node.
