@@ -96,7 +96,7 @@ Currently, building Cangjie compiler artifacts directly in the Windows environme
 
 - Compiler Runtime Platform Evolution: Planned support for running the compiler on the OHOS(PC) platform in 2026 Q2.
 
-- Cangjie Application Runtime Platform Evolution: Planned support for OHOS-ARM32 core features on 2025.10.20, reflection and dynamic loading、some compiler Optimization features will support on 2025 Q4.
+- Cangjie Application Runtime Platform Evolution: Planned support for OHOS-ARM32 core features on 2025.10.20, reflection and dynamic loading;some compiler Optimization features will support on 2025 Q4.
 
 ## Building from Source
 
