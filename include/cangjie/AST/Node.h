@@ -431,11 +431,11 @@ Ptr<Node> curMacroCall{nullptr};
     /**
      * Get node's targets decl.
      */
-    std::vector<Ptr<Decl>> GetTargets() const;
+    virtual std::vector<Ptr<Decl>> GetTargets() const = 0;
     /**
      * Get node's target decl.
      */
-    Ptr<Decl> GetTarget() const;
+    virtual Ptr<Decl> GetTarget() const = 0;
     /**
      * Set node's target decl.
      */
