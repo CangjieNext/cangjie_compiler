@@ -3135,11 +3135,11 @@ public:
         return false;
     }
 
-    void AddDependentStdPkg(const std::string& pkgName)
+    virtual void AddDependentStdPkg(const std::string& pkgName) = 0;
     {
         allDependentStdPkgs.emplace_back(pkgName);
     }
-    void ClearAllDependentStdPkgs()
+    virtual void ClearAllDependentStdPkgs() = 0;
     {
         allDependentStdPkgs.clear();
     }
