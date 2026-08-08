@@ -82,7 +82,7 @@ OwnedPtr<Decl> ParserImpl::ParseDecl(ScopeKind scopeKind, std::set<Modifier> mod
     ffiParser->CheckAnnotations(annos, scopeKind);
     CheckAnnotationAnno(annos, modifiers);
 
-    // Enum construtor.
+    // Enum constructor.
     if (SeeingEnumConstructor(scopeKind)) {
         return ParseEnumConstructor(modifiers, std::move(annos));
     }
@@ -160,7 +160,7 @@ OwnedPtr<Pattern> ParserImpl::ParseIrrefutablePattern(const std::set<Attribute>&
         auto identifier = ParseIdentifierFromToken(lookahead);
         return ParseVarPattern(attributes, std::move(identifier), begin, isVar);
     }
-    // It is internal bug if reach here.
+    // It is an internal bug if reach here.
     CJC_ABORT();
     return MakeOwned<InvalidPattern>(lookahead.Begin());
 }
@@ -597,7 +597,7 @@ void ParserImpl::CheckObjCInteropMember(Decl& member)
                 fd.outerDecl->EnableAttr(Attribute::IS_BROKEN);
                 fd.EnableAttr(Attribute::IS_BROKEN);
                 ffiParser->ObjC().DiagObjCMirrorCannotHaveFinalizer(fd);
-            }  else {
+            } else {
                 // method branch
                 CheckMemberFuncObjCMirror(fd);
                 ffiParser->CheckForeignNameAnnotation(fd);
@@ -841,7 +841,7 @@ void ParserImpl::CheckCJMappingAttr(Decl& decl) const
         Attribute::OBJ_C_MIRROR_SUBTYPE)) {
         return;
     }
-    // currently only support struct decl, enum decl, class decl interface decl, extend decl.
+    // currently only support struct decl, enum decl, class decl, interface decl, extend decl.
     bool isCJMappingClass = decl.astKind == ASTKind::CLASS_DECL && !decl.TestAttr(Attribute::ABSTRACT);
     // support java type
     if (decl.astKind == ASTKind::STRUCT_DECL || decl.astKind == ASTKind::ENUM_DECL || isCJMappingClass ||
@@ -934,7 +934,7 @@ std::string ParserImpl::ExpectOperatorIdentifier(FuncDecl& fd)
         Next();
         return INVALID_IDENTIFIER;
     }
-    // operator function do not support generic, but we do error check in sema.
+    // operator function do not support generics, but we do error check in sema.
     if (!Seeing(TokenKind::LPAREN) && !Seeing(TokenKind::LT)) {
         DiagExpectCharacter("'('");
         Next();
@@ -951,7 +951,7 @@ OwnedPtr<FuncDecl> ParserImpl::ParseFinalizer(
     Next(); // skip ~
     auto tildeBegin{lastToken.Begin()};
     OwnedPtr<FuncDecl> funcDecl = MakeOwned<FuncDecl>();
-    [[maybe_unused]]ChainScope cs(*this, funcDecl.get());
+    [[maybe_unused]] ChainScope cs(*this, funcDecl.get());
     funcDecl->begin = tildeBegin;
     Skip(TokenKind::INIT); // skip init
     funcDecl->identifier = SrcIdentifier{"~init", tildeBegin, lastToken.End(), false};
@@ -1139,8 +1139,6 @@ OwnedPtr<ClassBody> ParserImpl::ParseClassBody(ClassDecl& cd)
             }
             CheckInitCtorDeclBody(*ctor);
         }
-
-
         if (auto fd = As<ASTKind::FUNC_DECL>(decl.get())) {
             CheckClassLikeFuncBodyAbstractness(*fd);
         } else if (auto pd = As<ASTKind::PROP_DECL>(decl.get())) {
@@ -1381,7 +1379,7 @@ void ParserImpl::SetDefaultFunc(ScopeKind scopeKind, AST::Decl& decl) const
 
 void ParserImpl::CheckDeclarationInScope(ScopeKind sk, DefKind dk)
 {
-    // Unknown scope is with parser called by macro mostly.
+    // Unknown scope is used when the parser is called by macro mostly.
     if (sk == ScopeKind::UNKNOWN_SCOPE) {
         return;
     }
@@ -1461,7 +1459,7 @@ void ParserImpl::ParseCaseBody(EnumDecl& enumDecl)
         ParseDiagnoseRefactor(DiagKindRefactor::parse_unknown_enum_constructor, *caseBody);
     }
     SetMemberParentInheritableDecl(enumDecl, caseBody);
-    // common/specific enum attributes propagate to it's constructors to be used in further resolve
+    // common/specific enum attributes propagate to its constructors to be used in further resolution
     if (enumDecl.TestAttr(Attribute::SPECIFIC)) {
         caseBody->EnableAttr(Attribute::SPECIFIC);
     } else if (enumDecl.TestAttr(Attribute::COMMON)) {
@@ -1499,7 +1497,7 @@ void ParserImpl::ParseEnumBody(EnumDecl& enumDecl)
                 }
                 enumDecl.hasEllipsis = true;
                 enumDecl.ellipsisPos = lastToken.Begin();
-                // ellipse must be the last constructor
+                // ellipsis must be the last constructor
                 break;
             }
             ParseCaseBody(enumDecl);
@@ -1957,7 +1955,7 @@ OwnedPtr<MainDecl> ParserImpl::ParseMainDecl(
     ret->funcBody = ParseFuncBody(ScopeKind::MAIN_BODY);
     if (ret->funcBody) {
         ret->end = ret->funcBody->end;
-        // The Curring function is not supported in spec 0.22.
+        // The Currying function is not supported in spec 0.22.
         if (ret->funcBody->paramLists.size() > 1) {
             ParseDiagnoseRefactor(
                 DiagKindRefactor::parse_expected_left_brace, ret->funcBody->paramLists[1]->begin, std::string("("));
@@ -1995,7 +1993,7 @@ OwnedPtr<FuncDecl> ParserImpl::ParseFuncDecl(
     ret->begin = lookahead.Begin();
     Next();
     if (forImport && scopeKind == ScopeKind::CLASS_BODY && HasModifier(modifiers, TokenKind::MUT)) {
-        // For import: funcdecl with Mut modifier only allow in interface.
+        // For import: funcdecl with Mut modifier only allowed in interface.
         scopeKind = ScopeKind::INTERFACE_BODY;
     }
     auto attrs = CheckDeclModifiers(modifiers, scopeKind, DefKind::FUNC);
@@ -2028,7 +2026,7 @@ OwnedPtr<FuncDecl> ParserImpl::ParseFuncDecl(
     CheckFuncBody(scopeKind, *ret);
     if (ret->funcBody) {
         ret->end = ret->funcBody->end;
-        // The Curring function is not supported in spec 0.22.
+        // The Currying function is not supported in spec 0.22.
         if (ret->funcBody->paramLists.size() > 1) {
             ParseDiagnoseRefactor(
                 DiagKindRefactor::parse_expected_left_brace, ret->funcBody->paramLists[1]->begin, std::string("("));
@@ -2307,7 +2305,7 @@ OwnedPtr<FuncBody> ParserImpl::ParseFuncBody(ScopeKind scopeKind)
     ParseFuncParameters(scopeKind, *ret);
     // To deal with the endPos of the FuncDecl without return type and funcBody.
     // ex: foreign func test(a: Int64)
-    // The end pos of the FuncDecl above should be next to ).
+    // The end pos of the FuncDecl above should be next to ')'.
     auto paramsEndToken = lastToken;
     if (scopeKind == ScopeKind::PROP_MEMBER_SETTER_BODY || scopeKind == ScopeKind::PROP_MEMBER_GETTER_BODY) {
         ParsePropMemberBody(scopeKind, *ret);
