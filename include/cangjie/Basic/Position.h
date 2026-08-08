@@ -59,7 +59,7 @@ struct Position {
     /**
      * Whether line and column are both zero.
      */
-    bool IsZero() const;
+    bool IsZero() const{return line == 0 && column == 0;}
     void Mark(PositionStatus newStatus);
     PositionStatus GetStatus() const;
 
