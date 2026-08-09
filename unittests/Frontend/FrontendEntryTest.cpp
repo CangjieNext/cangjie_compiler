@@ -129,14 +129,24 @@ TEST_F(FrontendEntryTest, CjdCompilerInstanceSkipsBackendStages)
 
 TEST_F(FrontendEntryTest, CjdCompilerInstanceSavesResultsOnlyForChirOutput)
 {
+    // Both calls report success, so the observable difference is the profile entry: the saving
+    // stage only opens its ProfileRecorder scope once it gets past the output-mode check.
+    Utils::ProfileRecorder::Enable(true, Utils::ProfileRecorder::Type::TIMER);
+
     invocation.globalOptions.outputMode = GlobalOptions::OutputMode::STATIC_LIB;
     CjdCompilerInstance ci(invocation, diag);
     // Anything other than a CHIR output returns before touching the packages.
     EXPECT_TRUE(ci.PerformResultsSaving());
+    EXPECT_EQ(Utils::ProfileRecorder::GetResult(Utils::ProfileRecorder::Type::TIMER).find("Save results"),
+        std::string::npos);
 
     invocation.globalOptions.outputMode = GlobalOptions::OutputMode::CHIR;
     // Nothing has been parsed, so the cjo loop runs zero times and still reports success.
     EXPECT_TRUE(ci.PerformResultsSaving());
+    EXPECT_NE(Utils::ProfileRecorder::GetResult(Utils::ProfileRecorder::Type::TIMER).find("Save results"),
+        std::string::npos);
+
+    Utils::ProfileRecorder::Enable(false, Utils::ProfileRecorder::Type::ALL);
 }
 
 TEST_F(FrontendEntryTest, DumpTokensPrintsEveryTokenOfEverySourceFile)
@@ -367,17 +377,30 @@ protected:
         invocation.globalOptions.ReadPathsFromEnvironmentVars(GetEnvironmentVars());
         Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
         instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+        // Extension lookup needs a semantically analysed package, which needs the core package.
+        // Skip rather than fail where the standard library has not been built yet.
+        stdlibAvailable = FileUtil::FileExist(FileUtil::JoinPath(cangjiePath, "std.cjo"));
     }
 
     void TearDown() override
     {
         instance.reset();
+        // A variable that was not set before must be removed again, not set to "" - other tests
+        // in this binary derive paths from it and the two are not the same thing.
 #ifdef _WIN32
         _putenv_s("CANGJIE_HOME", savedHome.c_str());
         _putenv_s("CANGJIE_PATH", savedPath.c_str());
 #else
-        setenv("CANGJIE_HOME", savedHome.c_str(), 1);
-        setenv("CANGJIE_PATH", savedPath.c_str(), 1);
+        if (savedHome.empty()) {
+            unsetenv("CANGJIE_HOME");
+        } else {
+            setenv("CANGJIE_HOME", savedHome.c_str(), 1);
+        }
+        if (savedPath.empty()) {
+            unsetenv("CANGJIE_PATH");
+        } else {
+            setenv("CANGJIE_PATH", savedPath.c_str(), 1);
+        }
 #endif
     }
 
@@ -386,10 +409,14 @@ protected:
     std::unique_ptr<TestCompilerInstance> instance;
     std::string savedHome;
     std::string savedPath;
+    bool stdlibAvailable = false;
 };
 
 TEST_F(ExtendMemberTest, VisibleExtendMembersComeFromExtensionsAndTheirInterfaces)
 {
+    if (!stdlibAvailable) {
+        GTEST_SKIP() << "standard library not built under " << ProjectPath() << "/output/modules";
+    }
     instance->code = R"(
         package pkg1
         interface Eqq {
