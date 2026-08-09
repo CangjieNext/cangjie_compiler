@@ -4,7 +4,7 @@
 #
 # See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-add_executable(UnicodeTest UnicodeTest.cpp)
+add_executable(UnicodeTest UnicodeTest.cpp UnicodeConversionTest.cpp)
 target_link_libraries(
     UnicodeTest
     ${CMAKE_DL_LIBS}
