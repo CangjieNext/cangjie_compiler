@@ -105,7 +105,7 @@ std::string GetTrimmedPath(AST::File* file)
     if (!file) {
         return "";
     }
-    // remove begining package name and the following '/'
+    // remove beginning package name and the following '/'
     auto path = file->filePath;
     if (file->curPackage) {
         auto pkgName = file->curPackage->fullPackageName;
@@ -867,9 +867,9 @@ struct ASTHasherImpl {
         auto overflowAnnotationIndex = std::numeric_limits<size_t>::max();
         for (size_t i{0}; i < annos.size(); ++i) {
             const auto& anno{annos[i]};
-            // Annotation not considered by body hash are either @C or @CallingConv, they should not have arugments
+            // Annotation not considered by body hash are either @C or @CallingConv, they should not have arguments
             // In the case they do have, the arguments are not considered in the mangle name, only their kinds. Add
-            // them to the body hash so their change are noticed and further diangostics are possible
+            // them to the body hash so their change are noticed and further diagnostics are possible
             if (!IsConsideredInBodyHash(*anno)) {
                 continue;
             }
