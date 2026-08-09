@@ -8,7 +8,7 @@ ERROR(parse_query_diag_begin, "")
 // Query parser diagnostic info.
 ERROR(parse_query_expected_position_compare_operator, "expected '= or < or <='")
 ERROR(parse_query_expected_hash_id_compare_operator, "expected '='")
-ERROR(parse_query_invalid_query_value, "should be identifer, positive integer, 'foo*' or '*foo'")
+ERROR(parse_query_invalid_query_value, "should be identifier, positive integer, 'foo*' or '*foo'")
 ERROR(parse_query_expected_query_symbol, "expected identifier or '( # _'")
 ERROR(parse_query_expected_logic_symbol, "expected '&&' or '||', but got '%s' here")
 ERROR(parse_query_position_illegal_file_id, "the first element of position tuple should be file id")
