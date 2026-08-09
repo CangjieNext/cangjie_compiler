@@ -101,13 +101,24 @@ TEST(TaskQueueTest, RunInBackgroundThenWaitCompletesAllTasks)
 
 TEST(TaskQueueTest, EmptyQueueSpawnsNoThreads)
 {
+    // Both entry points return before creating threads, so the queue is still in its
+    // "not started" state and accepting tasks - which is what makes the run below legal
+    // (AddTask asserts on !isStarted).
     TaskQueue background(4);
     background.RunInBackground();
     background.WaitForAllTasksCompleted();
 
     TaskQueue blocking(4);
     blocking.RunAndWaitForAllTasksCompleted();
-    SUCCEED();
+
+    std::atomic<int> executed{0};
+    auto result = blocking.AddTask<int>([&executed]() {
+        ++executed;
+        return 7;
+    });
+    blocking.RunAndWaitForAllTasksCompleted();
+    EXPECT_EQ(result.get(), 7);
+    EXPECT_EQ(executed.load(), 1);
 }
 
 TEST(TaskQueueTest, HigherPriorityTaskRunsFirst)
@@ -131,10 +142,26 @@ TEST(TaskQueueTest, HigherPriorityTaskRunsFirst)
     EXPECT_EQ(order.back(), 0);
 }
 
-TEST(SemaphoreTest, SetAndGetCountRoundTrip)
+/**
+ * `Semaphore::Get()` is a process-wide singleton, so its count has to be restored from TearDown -
+ * a failing EXPECT_* must not leave the rest of the binary running against a mangled count.
+ */
+class SemaphoreTest : public testing::Test {
+protected:
+    void SetUp() override
+    {
+        original = Semaphore::Get().GetCount();
+    }
+    void TearDown() override
+    {
+        Semaphore::Get().SetCount(original);
+    }
+    std::size_t original = 0;
+};
+
+TEST_F(SemaphoreTest, SetAndGetCountRoundTrip)
 {
     Semaphore& sem = Semaphore::Get();
-    const std::size_t original = sem.GetCount();
     EXPECT_GE(original, 1U);
 
     sem.SetCount(3);
@@ -144,15 +171,11 @@ TEST(SemaphoreTest, SetAndGetCountRoundTrip)
     EXPECT_EQ(sem.GetCount(), 2U);
     sem.Release();
     EXPECT_EQ(sem.GetCount(), 3U);
-
-    sem.SetCount(original);
-    EXPECT_EQ(sem.GetCount(), original);
 }
 
-TEST(SemaphoreTest, AcquireBlocksUntilAnotherThreadReleases)
+TEST_F(SemaphoreTest, AcquireBlocksUntilAnotherThreadReleases)
 {
     Semaphore& sem = Semaphore::Get();
-    const std::size_t original = sem.GetCount();
 
     sem.SetCount(1);
     sem.Acquire();
@@ -171,8 +194,6 @@ TEST(SemaphoreTest, AcquireBlocksUntilAnotherThreadReleases)
     sem.Release();
     waiter.join();
     EXPECT_TRUE(acquired.load());
-
-    sem.SetCount(original);
 }
 
 TEST(SafePointerTest, OwnedPtrOwnsAndReleases)

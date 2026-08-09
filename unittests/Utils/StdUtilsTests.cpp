@@ -47,13 +47,22 @@ TEST(StdUtilsTest, StouiRejectsValuesAboveUintMax)
     EXPECT_EQ(Stoui("42").value(), 42U);
     EXPECT_EQ(Stoui("ff", HEX_BASE).value(), 255U);
     EXPECT_EQ(Stoui(std::to_string(UINT_MAX)).value(), UINT_MAX);
-    // Fits in `unsigned long` on LP64 but overflows `unsigned int`, so Stoui must reject it
-    // instead of silently truncating.
-    EXPECT_FALSE(Stoui(std::to_string(static_cast<unsigned long>(UINT_MAX) + 1UL)).has_value());
-    // std::stoul wraps a negative literal around to a huge value, which is also above UINT_MAX.
-    EXPECT_FALSE(Stoui("-1").has_value());
     EXPECT_FALSE(Stoui("abc").has_value());
     EXPECT_FALSE(Stoui(OUT_OF_RANGE_DIGITS).has_value());
+
+    // The `result > UINT_MAX` guard only has anything to reject where `unsigned long` is wider
+    // than `unsigned int` (LP64). On LLP64 both are 32 bits, std::stoul itself throws
+    // out_of_range and the value never reaches the comparison.
+    if constexpr (sizeof(unsigned long) > sizeof(unsigned int)) {
+        // Fits in `unsigned long` but overflows `unsigned int`, so Stoui must reject it instead
+        // of silently truncating.
+        EXPECT_FALSE(Stoui(std::to_string(static_cast<unsigned long>(UINT_MAX) + 1UL)).has_value());
+        // std::stoul wraps a negative literal around to ULONG_MAX, which is also above UINT_MAX.
+        EXPECT_FALSE(Stoui("-1").has_value());
+    } else {
+        // ULONG_MAX == UINT_MAX here, so a wrapped "-1" is a legal unsigned int.
+        EXPECT_EQ(Stoui("-1").value(), UINT_MAX);
+    }
 }
 
 TEST(StdUtilsTest, StolAcceptsValidAndRejectsInvalid)
