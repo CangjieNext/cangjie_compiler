@@ -147,6 +147,34 @@ TEST(UnicodeWidthTests, TextPresentation)
     EXPECT_EQ(StrWidth("𘀀\uFE0E", true), 2);
 }
 
+// The presentation-sequence tables are a two-level trie keyed on `cp >> 10`. The cases above only
+// reach some of the leaves; these exercise the remaining ones plus the "no leaf at all" fallback.
+TEST(UnicodeWidthTests, PresentationSequenceTableLeaves)
+{
+    // Emoji presentation, leaf for cp >> 10 == 10 (U+2800..U+2BFF).
+    EXPECT_EQ(StrWidth("⭐️"), 2);
+    // Emoji presentation, leaf for cp >> 10 == 124 (U+1F000..U+1F3FF).
+    EXPECT_EQ(StrWidth("\U0001F004️"), 2);
+    // No leaf covers a CJK ideograph, so the lookup falls through to "not an emoji sequence"
+    // and the character keeps its own width.
+    EXPECT_EQ(StrWidth("一️"), 2);
+    EXPECT_EQ(StrWidth("́️"), 0);
+
+    // Text presentation, leaf for cp >> 10 == 8 (U+2000..U+23FF).
+    EXPECT_EQ(StrWidth("ℹ︎"), 1);
+    // In CJK context the text-presentation lookup is skipped entirely and the character keeps
+    // its own width.
+    EXPECT_EQ(StrWidth("ℹ︎", true), 1);
+    // Text presentation, leaf for cp >> 10 == 10 (U+2800..U+2BFF): U+2B50 defaults to emoji
+    // presentation and is narrowed to width 1 by the text presentation selector.
+    EXPECT_EQ(StrWidth("⭐︎"), 1);
+    EXPECT_EQ(StrWidth("⭐︎", true), 2);
+    // Text presentation, leaf for cp >> 10 == 125 (U+1F400..U+1F7FF).
+    EXPECT_EQ(StrWidth("\U0001F600︎"), 2);
+    // And the fallback path of the text table.
+    EXPECT_EQ(StrWidth("一︎"), 2);
+}
+
 TEST(UnicodeWidthTests, ControlLineBreak)
 {
     EXPECT_EQ(SingleCharWidth(0x2028), 1);
