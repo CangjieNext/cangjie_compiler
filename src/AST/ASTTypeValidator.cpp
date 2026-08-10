@@ -38,7 +38,7 @@ public:
             needCheck = false;
         }
         (void)checkStatus.emplace(&node, needCheck);
-        // Dot not check the children of type node (may be typealias substitution result).
+        // Do not check the children of type node (may be typealias substitution result).
         return Is<Type>(node) ? VisitAction::SKIP_CHILDREN : action;
     }
 
@@ -125,14 +125,14 @@ private:
     std::stack<std::pair<Ptr<const Node>, Range>> validRanges;
     std::unordered_map<Ptr<const Node>, bool> checkStatus;
 
-    // Node kinds who's type and children can be ignored.
+    // Node kinds whose type and children can be ignored.
     inline const static std::unordered_set<ASTKind> ignoreKinds {
         ASTKind::GENERIC_PARAM_DECL, ASTKind::GENERIC_CONSTRAINT,
         ASTKind::PRIMARY_CTOR_DECL, ASTKind::TYPE_ALIAS_DECL, ASTKind::BUILTIN_DECL, ASTKind::MODIFIER,
         ASTKind::ANNOTATION, ASTKind::PACKAGE_SPEC, ASTKind::IMPORT_SPEC, ASTKind::WILDCARD_PATTERN, ASTKind::GENERIC,
         ASTKind::MACRO_EXPAND_DECL, ASTKind::MACRO_EXPAND_EXPR, ASTKind::MACRO_EXPAND_PARAM};
 
-    // Node kinds who's sema type can be ignored.
+    // Node kinds whose sema type can be ignored.
     inline const static std::unordered_set<ASTKind> noneTyKinds{
         ASTKind::PACKAGE,
         ASTKind::FILE,
