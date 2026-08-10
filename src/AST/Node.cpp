@@ -1271,7 +1271,7 @@ bool PropDecl::IsExportedDecl() const
     }
     auto extend = StaticCast<ExtendDecl>(outerDecl);
     auto extendedDecl = Ty::GetDeclPtrOfTy(extend->GetTy());
-    // If extend and extended decleration in same package, all member of extend will be exported.
+    // If extend and extended declaration in same package, all member of extend will be exported.
     if (!extendedDecl || extendedDecl->fullPackageName == extend->fullPackageName) {
         return Decl::IsExportedDecl();
     }
@@ -1289,7 +1289,7 @@ bool FuncDecl::IsExportedDecl() const
     }
     auto extend = StaticCast<ExtendDecl>(outerDecl);
     auto extendedDecl = Ty::GetDeclPtrOfTy(extend->GetTy());
-    // If extend and extended decleration in same package, all member of extend will be exported.
+    // If extend and extended declaration in same package, all member of extend will be exported.
     if (!extendedDecl || extendedDecl->fullPackageName == extend->fullPackageName) {
         return Decl::IsExportedDecl();
     }
