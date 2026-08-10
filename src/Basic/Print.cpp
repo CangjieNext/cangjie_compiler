@@ -39,7 +39,7 @@ void ErrorWithColor(const DiagColor& color, const std::string& content, bool isB
 
 #ifdef _WIN32
 
-// Enables OS earlier than Windos10 1511 to compile normally
+// Enables OS earlier than Windows10 1511 to compile normally
 #ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
 #define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
 #endif
