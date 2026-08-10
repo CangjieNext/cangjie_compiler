@@ -21,7 +21,7 @@ void CHIR2BCHIR::TranslateMemoryExpression(Context& ctx, const Expression& expr)
     switch (expr.GetExprKind()) {
         case ExprKind::ALLOCATE: {
             CJC_ASSERT(expr.GetNumOfOperands() == 0U);
-            TranslateAllocate(ctx, expr);
+            TranslateAllocate(ctx, StaticCast<const Allocate&>(expr));
             break;
         }
         case ExprKind::LOAD: {

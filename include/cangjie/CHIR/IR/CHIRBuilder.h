@@ -215,7 +215,7 @@ public:
     /** @brief Return a Terminator.*/
     template <typename TExpr, typename... Args> TExpr* CreateTerminator(Args&&... args)
     {
-        static_assert(std::is_base_of_v<Terminator, TExpr>);
+        static_assert(std::is_base_of_v<Expression, TExpr>);
         TExpr* expr = new TExpr(std::forward<Args>(args)...);
         auto bg = expr->GetFuncOrLambdaBody();
         StoreAllocatedPtrInFuncOrLambda(*bg, expr);

@@ -68,22 +68,6 @@ void ExprTypeConverter::VisitSubExpression(Constant& o)
     VisitValue(*o.GetValue());
 }
 
-void ExprTypeConverter::VisitSubExpression(Intrinsic& o)
-{
-    VisitExprDefaultImpl(o);
-    for (auto& ty : o.instantiatedTypeArgs) {
-        ty = converter(*ty);
-    }
-}
-
-void ExprTypeConverter::VisitSubExpression(IntrinsicWithException& o)
-{
-    VisitExprDefaultImpl(o);
-    for (auto& ty : o.instantiatedTypeArgs) {
-        ty = converter(*ty);
-    }
-}
-
 void ExprTypeConverter::VisitSubExpression(GetInstantiateValue& o)
 {
     VisitExprDefaultImpl(o);

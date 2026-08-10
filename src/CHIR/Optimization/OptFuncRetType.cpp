@@ -90,8 +90,8 @@ void OptFuncRetType::Unit2Void()
             };
             Expression* newApply = nullptr;
             if (apply->IsTerminator()) {
-                auto& awe = StaticCast<ApplyWithException&>(*apply);
-                newApply = builder.CreateExpression<ApplyWithException>(awe.GetDebugLocation(),
+                auto& awe = StaticCast<TryApply&>(*apply);
+                newApply = builder.CreateExpression<TryApply>(awe.GetDebugLocation(),
                     func->GetReturnType(), awe.GetCallee(), funcCallContext, awe.GetSuccessBlock(),
                     awe.GetErrorBlock(), awe.GetParentBlock());
             } else {

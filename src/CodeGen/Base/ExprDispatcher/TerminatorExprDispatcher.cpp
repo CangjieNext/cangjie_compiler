@@ -155,100 +155,100 @@ llvm::Value* HandleTerminatorExpression(IRBuilder2& irBuilder, const CHIR::Expre
             (void)irBuilder.CreateUnreachable();
             return nullptr;
         }
-        case CHIR::ExprKind::APPLY_WITH_EXCEPTION: {
-            auto& applyWithException = StaticCast<const CHIR::ApplyWithException&>(chirExpr);
-            auto normalDest = applyWithException.GetSuccessor(0);
-            auto unwindDest = applyWithException.GetSuccessor(1);
+        case CHIR::ExprKind::TRY_APPLY: {
+            auto& tryApply = StaticCast<const CHIR::TryApply&>(chirExpr);
+            auto normalDest = tryApply.GetSuccessor(0);
+            auto unwindDest = tryApply.GetSuccessor(1);
             CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
-            auto resultVal = GenerateApply(irBuilder, CHIRApplyWrapper(applyWithException));
+            auto resultVal = GenerateApply(irBuilder, CHIRApplyWrapper(tryApply));
             irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
             return resultVal;
         }
-        case CHIR::ExprKind::INVOKE_WITH_EXCEPTION: {
-            auto& invokeWithException = StaticCast<const CHIR::InvokeWithException&>(chirExpr);
-            auto normalDest = invokeWithException.GetSuccessor(0);
-            auto unwindDest = invokeWithException.GetSuccessor(1);
+        case CHIR::ExprKind::TRY_INVOKE: {
+            auto& tryInvoke = StaticCast<const CHIR::TryInvoke&>(chirExpr);
+            auto normalDest = tryInvoke.GetSuccessor(0);
+            auto unwindDest = tryInvoke.GetSuccessor(1);
             CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
-            auto resultVal = GenerateInvoke(irBuilder, CHIRInvokeWrapper(invokeWithException));
+            auto resultVal = GenerateInvoke(irBuilder, CHIRInvokeWrapper(tryInvoke));
             irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
             return resultVal;
         }
-        case CHIR::ExprKind::INVOKESTATIC_WITH_EXCEPTION: {
-            auto& invokeStaticWithException = StaticCast<const CHIR::InvokeStaticWithException&>(chirExpr);
-            auto normalDest = invokeStaticWithException.GetSuccessor(0);
-            auto unwindDest = invokeStaticWithException.GetSuccessor(1);
+        case CHIR::ExprKind::TRY_INVOKESTATIC: {
+            auto& tryInvokeStatic = StaticCast<const CHIR::TryInvokeStatic&>(chirExpr);
+            auto normalDest = tryInvokeStatic.GetSuccessor(0);
+            auto unwindDest = tryInvokeStatic.GetSuccessor(1);
             CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
-            auto resultVal = GenerateInvokeStatic(irBuilder, CHIRInvokeStaticWrapper(invokeStaticWithException));
+            auto resultVal = GenerateInvokeStatic(irBuilder, CHIRInvokeStaticWrapper(tryInvokeStatic));
             irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
             return resultVal;
         }
-        case CHIR::ExprKind::NEG_WITH_EXCEPTION: {
-            auto& unaryWithException = StaticCast<const CHIR::UnaryExpressionWithException&>(chirExpr);
-            auto normalDest = unaryWithException.GetSuccessor(0);
-            auto unwindDest = unaryWithException.GetSuccessor(1);
+        case CHIR::ExprKind::TRY_NEG: {
+            auto& tryUnary = StaticCast<const CHIR::TryUnaryExpression&>(chirExpr);
+            auto normalDest = tryUnary.GetSuccessor(0);
+            auto unwindDest = tryUnary.GetSuccessor(1);
             CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
-            auto resultVal = HandleUnaryExpression(irBuilder, unaryWithException);
+            auto resultVal = HandleUnaryExpression(irBuilder, tryUnary);
             irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
             return resultVal;
         }
-        case CHIR::ExprKind::ADD_WITH_EXCEPTION:
-        case CHIR::ExprKind::SUB_WITH_EXCEPTION:
-        case CHIR::ExprKind::MUL_WITH_EXCEPTION:
-        case CHIR::ExprKind::DIV_WITH_EXCEPTION:
-        case CHIR::ExprKind::MOD_WITH_EXCEPTION:
-        case CHIR::ExprKind::EXP_WITH_EXCEPTION:
-        case CHIR::ExprKind::LSHIFT_WITH_EXCEPTION:
-        case CHIR::ExprKind::RSHIFT_WITH_EXCEPTION: {
-            auto& binaryWithException = StaticCast<const CHIR::BinaryExpressionWithException&>(chirExpr);
-            auto normalDest = binaryWithException.GetSuccessor(0);
-            auto unwindDest = binaryWithException.GetSuccessor(1);
+        case CHIR::ExprKind::TRY_ADD:
+        case CHIR::ExprKind::TRY_SUB:
+        case CHIR::ExprKind::TRY_MUL:
+        case CHIR::ExprKind::TRY_DIV:
+        case CHIR::ExprKind::TRY_MOD:
+        case CHIR::ExprKind::TRY_EXP:
+        case CHIR::ExprKind::TRY_LSHIFT:
+        case CHIR::ExprKind::TRY_RSHIFT: {
+            auto& tryBinary = StaticCast<const CHIR::TryBinaryExpression&>(chirExpr);
+            auto normalDest = tryBinary.GetSuccessor(0);
+            auto unwindDest = tryBinary.GetSuccessor(1);
             CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
-            auto resultVal = HandleBinaryExpression(irBuilder, binaryWithException);
+            auto resultVal = HandleBinaryExpression(irBuilder, tryBinary);
             irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
             return resultVal;
         }
-        case CHIR::ExprKind::SPAWN_WITH_EXCEPTION: {
-            auto& spawnWithException = StaticCast<const CHIR::SpawnWithException&>(chirExpr);
-            auto normalDest = spawnWithException.GetSuccessor(0);
-            auto unwindDest = spawnWithException.GetSuccessor(1);
+        case CHIR::ExprKind::TRY_SPAWN: {
+            auto& trySpawn = StaticCast<const CHIR::TrySpawn&>(chirExpr);
+            auto normalDest = trySpawn.GetSuccessor(0);
+            auto unwindDest = trySpawn.GetSuccessor(1);
             CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
-            auto resultVal = GenerateSpawn(irBuilder, spawnWithException);
+            auto resultVal = GenerateSpawn(irBuilder, trySpawn);
             irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
             return resultVal;
         }
-        case CHIR::ExprKind::NUMERIC_CAST_WITH_EXCEPTION: {
-            auto& typeCastWithException = StaticCast<const CHIR::NumericCastWithException&>(chirExpr);
-            auto normalDest = typeCastWithException.GetSuccessor(0);
-            auto unwindDest = typeCastWithException.GetSuccessor(1);
+        case CHIR::ExprKind::TRY_NUMERIC_CAST: {
+            auto& tryNumericCast = StaticCast<const CHIR::TryNumericCast&>(chirExpr);
+            auto normalDest = tryNumericCast.GetSuccessor(0);
+            auto unwindDest = tryNumericCast.GetSuccessor(1);
             CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
-            auto resultVal = GenerateTypeCast(irBuilder, typeCastWithException);
+            auto resultVal = GenerateTypeCast(irBuilder, tryNumericCast);
             irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
             return resultVal;
         }
-        case CHIR::ExprKind::INTRINSIC_WITH_EXCEPTION: {
-            auto& intrinsicWithException = StaticCast<const CHIR::IntrinsicWithException&>(chirExpr);
-            auto normalDest = intrinsicWithException.GetSuccessor(0);
-            auto unwindDest = intrinsicWithException.GetSuccessor(1);
+        case CHIR::ExprKind::TRY_INTRINSIC: {
+            auto& tryIntrinsic = StaticCast<const CHIR::TryIntrinsic&>(chirExpr);
+            auto normalDest = tryIntrinsic.GetSuccessor(0);
+            auto unwindDest = tryIntrinsic.GetSuccessor(1);
             CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
-            auto resultVal = GenerateIntrinsic(irBuilder, CHIRIntrinsicWrapper(intrinsicWithException));
+            auto resultVal = GenerateIntrinsic(irBuilder, tryIntrinsic);
             irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
             return resultVal;
         }
-        case CHIR::ExprKind::ALLOCATE_WITH_EXCEPTION: {
-            auto& allocateWithException = StaticCast<const CHIR::AllocateWithException&>(chirExpr);
-            auto normalDest = allocateWithException.GetSuccessor(0);
-            auto unwindDest = allocateWithException.GetSuccessor(1);
+        case CHIR::ExprKind::TRY_ALLOCATE: {
+            auto& tryAllocate = StaticCast<const CHIR::TryAllocate&>(chirExpr);
+            auto normalDest = tryAllocate.GetSuccessor(0);
+            auto unwindDest = tryAllocate.GetSuccessor(1);
             CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
-            auto resultVal = GenerateAllocate(irBuilder, allocateWithException);
+            auto resultVal = GenerateAllocate(irBuilder, tryAllocate);
             irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
             return resultVal;
         }
-        case CHIR::ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION: {
-            auto& rawArrayWithException = StaticCast<const CHIR::RawArrayAllocateWithException&>(chirExpr);
-            auto normalDest = rawArrayWithException.GetSuccessor(0);
-            auto unwindDest = rawArrayWithException.GetSuccessor(1);
+        case CHIR::ExprKind::TRY_RAW_ARRAY_ALLOCATE: {
+            auto& tryRawArrayAllocate = StaticCast<const CHIR::TryRawArrayAllocate&>(chirExpr);
+            auto normalDest = tryRawArrayAllocate.GetSuccessor(0);
+            auto unwindDest = tryRawArrayAllocate.GetSuccessor(1);
             CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
-            auto resultVal = GenerateRawArrayAllocate(irBuilder, rawArrayWithException);
+            auto resultVal = GenerateRawArrayAllocate(irBuilder, tryRawArrayAllocate);
             irBuilder.CreateBr(cgMod.GetMappedBB(normalDest));
             return resultVal;
         }

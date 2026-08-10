@@ -7,7 +7,7 @@
 // Tips:
 // 1. EXPRKIND(expression kind, exression name for human reading, Expression class)
 // 2. Remember to modify CHIRCasting.h and PackageFormat.fbs after adding a new expression
-// 3. When adding a new unary/binary expression (including *_WITH_EXCEPTION), also update
+// 3. When adding a new unary/binary expression (including TRY_*), also update
 //    UNARY_EXPR_KIND_TABLE / BINARY_EXPR_KIND_TABLE in Expression.cpp, and the matching
 //    UnaryExprKind / BinaryExprKind enumerators if needed
 
@@ -18,24 +18,24 @@ EXPRKIND(GOTO, "GoTo", GoTo)
 EXPRKIND(BRANCH, "Branch", Branch)
 EXPRKIND(MULTIBRANCH, "MultiBranch", MultiBranch)
 EXPRKIND(EXIT, "Exit", Exit)
-EXPRKIND(APPLY_WITH_EXCEPTION, "ApplyWithException", ApplyWithException)
-EXPRKIND(INVOKE_WITH_EXCEPTION, "InvokeWithException", InvokeWithException)
-EXPRKIND(INVOKESTATIC_WITH_EXCEPTION, "InvokeStaticWithException", InvokeStaticWithException)
+EXPRKIND(TRY_APPLY, "TryApply", TryApply)
+EXPRKIND(TRY_INVOKE, "TryInvoke", TryInvoke)
+EXPRKIND(TRY_INVOKESTATIC, "TryInvokeStatic", TryInvokeStatic)
 EXPRKIND(RAISE_EXCEPTION, "RaiseException", RaiseException)
-EXPRKIND(NEG_WITH_EXCEPTION, "NegWithException", UnaryExpressionWithException)
-EXPRKIND(ADD_WITH_EXCEPTION, "AddWithException", BinaryExpressionWithException)
-EXPRKIND(SUB_WITH_EXCEPTION, "SubWithException", BinaryExpressionWithException)
-EXPRKIND(MUL_WITH_EXCEPTION, "MulWithException", BinaryExpressionWithException)
-EXPRKIND(DIV_WITH_EXCEPTION, "DivWithException", BinaryExpressionWithException)
-EXPRKIND(MOD_WITH_EXCEPTION, "ModWithException", BinaryExpressionWithException)
-EXPRKIND(EXP_WITH_EXCEPTION, "ExpWithException", BinaryExpressionWithException)
-EXPRKIND(LSHIFT_WITH_EXCEPTION, "LShiftWithException", BinaryExpressionWithException)
-EXPRKIND(RSHIFT_WITH_EXCEPTION, "RShiftWithException", BinaryExpressionWithException)
-EXPRKIND(SPAWN_WITH_EXCEPTION, "SpawnWithException", SpawnWithException)
-EXPRKIND(NUMERIC_CAST_WITH_EXCEPTION, "NumericCastWithException", NumericCastWithException)
-EXPRKIND(INTRINSIC_WITH_EXCEPTION, "IntrinsicWithException", IntrinsicWithException)
-EXPRKIND(ALLOCATE_WITH_EXCEPTION, "AllocateWithException", AllocateWithException)
-EXPRKIND(RAW_ARRAY_ALLOCATE_WITH_EXCEPTION, "RawArrayAllocateWithException", RawArrayAllocateWithException)
+EXPRKIND(TRY_NEG, "TryNeg", TryUnaryExpression)
+EXPRKIND(TRY_ADD, "TryAdd", TryBinaryExpression)
+EXPRKIND(TRY_SUB, "TrySub", TryBinaryExpression)
+EXPRKIND(TRY_MUL, "TryMul", TryBinaryExpression)
+EXPRKIND(TRY_DIV, "TryDiv", TryBinaryExpression)
+EXPRKIND(TRY_MOD, "TryMod", TryBinaryExpression)
+EXPRKIND(TRY_EXP, "TryExp", TryBinaryExpression)
+EXPRKIND(TRY_LSHIFT, "TryLShift", TryBinaryExpression)
+EXPRKIND(TRY_RSHIFT, "TryRShift", TryBinaryExpression)
+EXPRKIND(TRY_SPAWN, "TrySpawn", TrySpawn)
+EXPRKIND(TRY_NUMERIC_CAST, "TryNumericCast", TryNumericCast)
+EXPRKIND(TRY_INTRINSIC, "TryIntrinsic", TryIntrinsic)
+EXPRKIND(TRY_ALLOCATE, "TryAllocate", TryAllocate)
+EXPRKIND(TRY_RAW_ARRAY_ALLOCATE, "TryRawArrayAllocate", TryRawArrayAllocate)
 )
 
 MAJORKIND(UNARY_EXPR,

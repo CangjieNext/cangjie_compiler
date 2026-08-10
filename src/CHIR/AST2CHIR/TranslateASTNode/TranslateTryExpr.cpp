@@ -46,7 +46,7 @@ Ptr<Value> Translator::Visit(const AST::TryExpr& tryExpr)
         if (tryExpr.TestAttr(AST::Attribute::MACRO_INVOKE_BODY)) {
             auto pkgInit = builder.GetCurPackage()->GetPackageInitFunc();
             CJC_NULLPTR_CHECK(pkgInit);
-            // ApplyWithException will create and update current block.
+            // TryApply will create and update current block.
             CreateAndAppendGVInitFuncCall(*pkgInit);
         }
         auto baseBlock = currentBlock;

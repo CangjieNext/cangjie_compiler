@@ -216,8 +216,8 @@ void VarInitCheck::UseBeforeInitCheck(
             if (auto uninitedMembers = state.GetMaybeUninitedLocalMembers(); !uninitedMembers.empty()) {
                 RaiseUninitedDefMemberError(state, func, members, uninitedMembers);
             }
-        } else if (terminator->GetExprKind() == ExprKind::APPLY_WITH_EXCEPTION) {
-            CheckMemberFuncCall(state, *func, *StaticCast<ApplyWithException*>(terminator));
+        } else if (auto tryApply = DynamicCast<const TryApply*>(terminator)) {
+            CheckMemberFuncCall(state, *func, *tryApply);
         }
     };
 

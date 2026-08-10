@@ -414,7 +414,7 @@ void CHIR2BCHIR::TranslateBlock(Context& ctx, const Block& bb)
 
 void CHIR2BCHIR::TranslateExpression(Context& ctx, const Expression& expr)
 {
-    if (expr.GetExprKind() == ExprKind::INVOKE || expr.GetExprKind() == ExprKind::INVOKE_WITH_EXCEPTION) {
+    if (Is<InvokeBase>(expr)) {
         // Create a dummy value on the arg stack, to be dropped when entering the function implementing the method
         // Functions in BCHIR have the strict form LVAR_SET :: ID1 :: ... :: LVAR_SET :: IDn :: DROP :: body, where
         // - LVAR_SET :: ID1 :: ... :: LVAR_SET :: IDn initializes the function arguments by popping args from the stack
@@ -427,9 +427,9 @@ void CHIR2BCHIR::TranslateExpression(Context& ctx, const Expression& expr)
     // GetMethodName()/GetMethodType() and does not push the method Function onto the arg stack.
     switch (expr.GetExprKind()) {
         case ExprKind::INVOKE:
-        case ExprKind::INVOKE_WITH_EXCEPTION:
+        case ExprKind::TRY_INVOKE:
         case ExprKind::INVOKESTATIC:
-        case ExprKind::INVOKESTATIC_WITH_EXCEPTION:
+        case ExprKind::TRY_INVOKESTATIC:
             for (size_t i = 1; i < expr.GetNumOfNonSuccessorOperands(); ++i) {
                 TranslateValue(ctx, *expr.GetOperand(i));
             }
@@ -524,19 +524,11 @@ Bchir::ByteCodeContent CHIR2BCHIR::LVarId(Context& ctx, const Value& value)
 }
 
 
-void CHIR2BCHIR::TranslateAllocate(Context& ctx, const Expression& expr)
+void CHIR2BCHIR::TranslateAllocate(Context& ctx, const AllocateBase& expr)
 {
     CHIR::Type* ty;
-    bool withException = false;
-    if (expr.GetExprKind() == ExprKind::ALLOCATE) {
-        auto allocate = StaticCast<const Allocate*>(&expr);
-        ty = allocate->GetType();
-    } else {
-        CJC_ASSERT(expr.GetExprKind() == ExprKind::ALLOCATE_WITH_EXCEPTION);
-        auto allocate = StaticCast<const AllocateWithException*>(&expr);
-        ty = allocate->GetType();
-        withException = true;
-    }
+    bool withException = expr.IsTerminator();
+    ty = expr.GetType();
     if (ty->IsClass()) {
         auto classTy = StaticCast<const ClassType*>(ty);
         auto numberOfFields = classTy->GetClassDef()->GetAllInstanceVarNum();

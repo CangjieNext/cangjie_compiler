@@ -135,7 +135,7 @@ static bool OnlyCalledOnce(const Function& func)
 {
     bool alreadyHasUser = false;
     for (auto user : func.GetUsers()) {
-        if (user->GetExprKind() == ExprKind::APPLY || user->GetExprKind() == ExprKind::APPLY_WITH_EXCEPTION) {
+        if (Cangjie::Is<ApplyBase>(user)) {
             if (alreadyHasUser) {
                 return false;
             }

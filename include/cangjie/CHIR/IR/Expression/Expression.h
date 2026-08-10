@@ -576,7 +576,7 @@ private:
 };
 
 /**
- * @brief Common base for `Allocate` and `AllocateWithException`.
+ * @brief Common base for `Allocate` and `TryAllocate`.
  *
  * Cangjie Code:
  *      var x = 1 // allocate 8 Bytes memory
@@ -941,7 +941,7 @@ protected:
 };
 
 /**
- * @brief Common base for Apply and ApplyWithException.
+ * @brief Common base for Apply and TryApply.
  *
  * Cangjie Code:
  *      func foo() {}
@@ -1097,7 +1097,7 @@ private:
 };
 
 /**
- * @brief Common base for Invoke and InvokeWithException.
+ * @brief Common base for Invoke and TryInvoke.
  *
  * Cangjie Code:
  *      interface I { func foo() {} }
@@ -1214,7 +1214,7 @@ private:
 };
 
 /**
- * @brief Common base for InvokeStatic and InvokeStaticWithException.
+ * @brief Common base for InvokeStatic and TryInvokeStatic.
  *
  * Cangjie Code:
  *      interface I { static func goo() {} }
@@ -1574,7 +1574,7 @@ private:
 // So CHIR need to use specific expressions to describe
 // ===--------------------------------------------------------------------===//
 /**
- * @brief Common base for `RawArrayAllocate` and `RawArrayAllocateWithException`.
+ * @brief Common base for `RawArrayAllocate` and `TryRawArrayAllocate`.
  *
  *  Cangjie Code:
  *      var x: Array<Int32> = [1, 2, 3]  // use `RawArrayAllocate` to get a memory to store `1, 2, 3`
@@ -1805,13 +1805,13 @@ struct IntrisicCallContext {
 };
 
 /**
- * @brief Generate intrinsic function calling.
- * All intrinsic kinds are listd in cangjie/CHIR/IR/IntrinsicKind.h
+ * @brief Common base for Intrinsic and TryIntrinsic.
+ *
+ * All intrinsic kinds are listed in cangjie/CHIR/IR/IntrinsicKind.h
  */
-class Intrinsic : public Expression {
+class IntrinsicBase : public FuncCall {
     friend class ExprTypeConverter;
-    friend class CHIRContext;
-    friend class CHIRBuilder;
+    friend class CHIRSerializer;
 public:
     // ===--------------------------------------------------------------------===//
     // Base Information
@@ -1822,31 +1822,35 @@ public:
     CHIR::IntrinsicKind GetIntrinsicKind() const;
 
     /**
-     * @brief Retrieves the generic type information.
-     *
-     * @return A vector of pointers to the generic types.
-     */
-    const std::vector<Type*>& GetInstantiatedTypeArgs() const;
-
-    /**
      * @brief Retrieves the arguments of the intrinsic operation.
      *
      * @return A vector of pointers to the arguments.
      */
-    const std::vector<Value*>& GetArgs() const;
+    std::vector<Value*> GetArgs() const override;
 
 protected:
+    explicit IntrinsicBase(ExprKind kind, const IntrisicCallContext& callContext,
+        const std::vector<Block*>& successors, Block* parent);
+    ~IntrinsicBase() override = default;
+
     std::string OperandsToString() const override;
 
+private:
+    CHIR::IntrinsicKind intrinsicKind;
+};
+
+/**
+ * @brief Generate intrinsic function calling.
+ */
+class Intrinsic : public IntrinsicBase {
+    friend class ExprTypeConverter;
+    friend class CHIRContext;
+    friend class CHIRBuilder;
 private:
     explicit Intrinsic(const IntrisicCallContext& callContext, Block* parent);
     ~Intrinsic() override = default;
 
     Intrinsic* Clone(CHIRBuilder& builder, Block& parent) const override;
-
-private:
-    CHIR::IntrinsicKind intrinsicKind;
-    std::vector<Type*> instantiatedTypeArgs;
 };
 
 /**
@@ -2213,7 +2217,7 @@ private:
 };
 
 /**
- * @brief Common base for `Spawn` and `SpawnWithException`.
+ * @brief Common base for `Spawn` and `TrySpawn`.
  *
  * Cangjie Code:
  *      let x = spawn(arg) {

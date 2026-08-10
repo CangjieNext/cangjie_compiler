@@ -662,11 +662,10 @@ private:
         if (tryCatchContext.empty() || !mayThrowE) {
             return CreateAndAppendExpression<CHIRNodeNormalT<TExpr>>(std::forward<Args>(args)..., ofs, parent);
         }
-        // UnaryExpressionWithException always uses THROWING; do not forward OverflowStrategy.
-        if constexpr (std::is_same_v<CHIRNodeExceptionT<TExpr>, UnaryExpressionWithException>) {
+        // TryUnaryExpression always uses THROWING; do not forward OverflowStrategy.
+        if constexpr (std::is_same_v<CHIRNodeExceptionT<TExpr>, TryUnaryExpression>) {
             CJC_ASSERT(ofs == OverflowStrategy::THROWING);
-            return TryCreateExceptionTerminator<UnaryExpressionWithException>(
-                *parent, std::forward<Args>(args)...);
+            return TryCreateExceptionTerminator<TryUnaryExpression>(*parent, std::forward<Args>(args)...);
         } else {
             return TryCreateExceptionTerminator<CHIRNodeExceptionT<TExpr>>(
                 *parent, std::forward<Args>(args)..., ofs);
@@ -680,7 +679,7 @@ private:
         if (tryCatchContext.empty() || !mayThrowE) {
             return CreateAndAppendExpression<NumericCast>(std::forward<Args>(args)..., ofs, parent);
         }
-        return TryCreateExceptionTerminator<NumericCastWithException>(*parent, std::forward<Args>(args)...);
+        return TryCreateExceptionTerminator<TryNumericCast>(*parent, std::forward<Args>(args)...);
     }
 
     template <typename TEx, typename... Args>

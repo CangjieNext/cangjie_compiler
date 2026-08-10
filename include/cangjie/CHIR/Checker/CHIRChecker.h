@@ -11,7 +11,7 @@
 
 #include "cangjie/CHIR/CHIR.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
-#include "cangjie/CHIR/IR/Expression/ExpressionWrapper.h"
+#include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Package.h"
 #include "cangjie/Option/Option.h"
 
@@ -150,24 +150,24 @@ private:
     void CheckRaiseException(const RaiseException& expr, const Function& topLevelFunc);
     void CheckBranch(const Branch& expr, const Function& topLevelFunc);
     void CheckMultiBranch(const MultiBranch& expr, const Function& topLevelFunc);
-    void CheckApplyWithException(const ApplyWithException& expr, const Function& topLevelFunc);
+    void CheckTryApply(const TryApply& expr, const Function& topLevelFunc);
     void CheckApplyBase(const ApplyBase& expr, const Function& topLevelFunc);
-    void CheckInvokeWithException(const InvokeWithException& expr, const Function& topLevelFunc);
+    void CheckTryInvoke(const TryInvoke& expr, const Function& topLevelFunc);
     void CheckInvokeBase(const InvokeBase& expr, const Function& topLevelFunc);
-    void CheckInvokeStaticWithException(const InvokeStaticWithException& expr, const Function& topLevelFunc);
+    void CheckTryInvokeStatic(const TryInvokeStatic& expr, const Function& topLevelFunc);
     void CheckInvokeStaticBase(const InvokeStaticBase& expr, const Function& topLevelFunc);
-    void CheckUnaryExpressionWithException(const UnaryExpressionWithException& expr, const Function& topLevelFunc);
-    void CheckBinaryExpressionWithException(const BinaryExpressionWithException& expr, const Function& topLevelFunc);
+    void CheckTryUnaryExpression(const TryUnaryExpression& expr, const Function& topLevelFunc);
+    void CheckTryBinaryExpression(const TryBinaryExpression& expr, const Function& topLevelFunc);
     void CheckUnaryExprBase(const UnaryExpressionBase& expr, const Function& topLevelFunc);
     void CheckBinaryExprBase(const BinaryExpressionBase& expr, const Function& topLevelFunc);
-    void CheckSpawnWithException(const SpawnWithException& expr, const Function& topLevelFunc);
+    void CheckTrySpawn(const TrySpawn& expr, const Function& topLevelFunc);
     void CheckSpawnBase(const SpawnBase& expr, const Function& topLevelFunc);
-    void CheckNumericCastWithException(const NumericCastWithException& expr, const Function& topLevelFunc);
-    void CheckIntrinsicWithException(const IntrinsicWithException& expr, const Function& topLevelFunc);
+    void CheckTryNumericCast(const TryNumericCast& expr, const Function& topLevelFunc);
+    void CheckTryIntrinsic(const TryIntrinsic& expr, const Function& topLevelFunc);
     void CheckIntrinsicBase(const IntrinsicBase& expr, const Function& topLevelFunc);
-    void CheckAllocateWithException(const AllocateWithException& expr, const Function& topLevelFunc);
+    void CheckTryAllocate(const TryAllocate& expr, const Function& topLevelFunc);
     void CheckAllocateBase(const AllocateBase& expr, const Function& topLevelFunc);
-    void CheckRawArrayAllocateWithException(const RawArrayAllocateWithException& expr, const Function& topLevelFunc);
+    void CheckTryRawArrayAllocate(const TryRawArrayAllocate& expr, const Function& topLevelFunc);
     void CheckRawArrayAllocateBase(const RawArrayAllocateBase& expr, const Function& topLevelFunc);
     // ===--------------------------------------------------------------------===//
     // Check Unary Expression

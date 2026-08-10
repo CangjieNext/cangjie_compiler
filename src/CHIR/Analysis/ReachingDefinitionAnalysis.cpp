@@ -80,10 +80,9 @@ ReachingDefinitionAnalysis::ReachingDefinitionAnalysis(const Function* func) : A
         auto bb = worklist[worklistIdx];
         for (auto expr : bb->GetExpressions()) {
             Type* allocatedTy = nullptr;
-            auto kind = expr->GetExprKind();
-            if (kind == ExprKind::ALLOCATE || kind == ExprKind::ALLOCATE_WITH_EXCEPTION) {
+            if (Is<AllocateBase>(expr)) {
                 allocatedTy = StaticCast<AllocateBase*>(expr)->GetType();
-            } else if (kind == ExprKind::LAMBDA) {
+            } else if (Is<Lambda>(expr)) {
                 auto blocks = StaticCast<const Lambda*>(expr)->GetBody()->GetBlocks();
                 worklist.insert(worklist.end(), blocks.begin(), blocks.end());
             }
@@ -164,10 +163,10 @@ void ReachingDefinitionAnalysis::PropagateExpressionEffect(
 std::optional<Block*> ReachingDefinitionAnalysis::PropagateTerminatorEffect(
     ReachingDefinitionDomain& state, const Expression* terminator)
 {
-    if (terminator->GetExprKind() == ExprKind::APPLY_WITH_EXCEPTION) {
-        HandleApplyExpr(state, StaticCast<const ApplyWithException*>(terminator));
-    } else if (terminator->GetExprKind() == ExprKind::INTRINSIC_WITH_EXCEPTION) {
-        HandleIntrinsicExpr(state, StaticCast<const IntrinsicWithException*>(terminator));
+    if (Is<TryApply>(terminator)) {
+        HandleApplyExpr(state, StaticCast<const TryApply*>(terminator));
+    } else if (Is<TryIntrinsic>(terminator)) {
+        HandleIntrinsicExpr(state, StaticCast<const TryIntrinsic*>(terminator));
     }
     return std::nullopt;
 }

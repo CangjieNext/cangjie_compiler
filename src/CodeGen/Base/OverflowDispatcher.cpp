@@ -98,7 +98,7 @@ llvm::Value* GenerateOverflowWrappingArithmeticOp(
         irBuilder, CHIR::ExprKindMgr::ToBinaryExprKind(kind), ty, argGenValues[0], argGenValues[1]);
 }
 
-llvm::Value* GenerateOverflowApply(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic)
+llvm::Value* GenerateOverflowApply(IRBuilder2& irBuilder, const CHIR::IntrinsicBase& intrinsic)
 {
     const CHIR::IntrinsicKind intrinsicKind = intrinsic.GetIntrinsicKind();
     std::vector<CHIR::Value*> args = intrinsic.GetArgs();

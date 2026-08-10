@@ -117,8 +117,6 @@ protected:
     virtual R VisitSubExpression(RawArrayAllocateBase& o, Args... args) = 0;
     virtual R VisitSubExpression(FuncCall& o, Args... args) = 0;
     virtual R VisitSubExpression(Constant& o, Args... args) = 0;
-    virtual R VisitSubExpression(Intrinsic& o, Args... args) = 0;
-    virtual R VisitSubExpression(IntrinsicWithException& o, Args... args) = 0;
     virtual R VisitSubExpression(GetInstantiateValue& o, Args... args) = 0;
     virtual R VisitSubExpression(Lambda& o, Args... args) = 0;
     virtual R VisitSubExpression(GetRTTIStatic& o, Args... args) = 0;
@@ -128,19 +126,19 @@ private:
     {
         Dispatcher dispatcher = {
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::ALLOCATE, AllocateBase),
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::ALLOCATE_WITH_EXCEPTION, AllocateBase),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::TRY_ALLOCATE, AllocateBase),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::INSTANCEOF, InstanceOf),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::RAW_ARRAY_ALLOCATE, RawArrayAllocateBase),
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION, RawArrayAllocateBase),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::TRY_RAW_ARRAY_ALLOCATE, RawArrayAllocateBase),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::APPLY, FuncCall),
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::APPLY_WITH_EXCEPTION, FuncCall),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::TRY_APPLY, FuncCall),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::INVOKE, FuncCall),
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::INVOKE_WITH_EXCEPTION, FuncCall),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::TRY_INVOKE, FuncCall),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::INVOKESTATIC, FuncCall),
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::INVOKESTATIC_WITH_EXCEPTION, FuncCall),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::TRY_INVOKESTATIC, FuncCall),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::CONSTANT, Constant),
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::INTRINSIC, Intrinsic),
-            VISIT_IMPL_DISPATCH_EXPR(ExprKind::INTRINSIC_WITH_EXCEPTION, IntrinsicWithException),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::INTRINSIC, FuncCall),
+            VISIT_IMPL_DISPATCH_EXPR(ExprKind::TRY_INTRINSIC, FuncCall),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::GET_INSTANTIATE_VALUE, GetInstantiateValue),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::LAMBDA, Lambda),
             VISIT_IMPL_DISPATCH_EXPR(ExprKind::GET_RTTI_STATIC, GetRTTIStatic),
@@ -221,8 +219,6 @@ protected:
     void VisitSubExpression(RawArrayAllocateBase& o) override;
     void VisitSubExpression(FuncCall& o) override;
     void VisitSubExpression(Constant& o) override;
-    void VisitSubExpression(Intrinsic& o) override;
-    void VisitSubExpression(IntrinsicWithException& o) override;
     void VisitSubExpression(GetInstantiateValue& o) override;
     void VisitSubExpression(Lambda& o) override;
     void VisitSubExpression(GetRTTIStatic& o) override;

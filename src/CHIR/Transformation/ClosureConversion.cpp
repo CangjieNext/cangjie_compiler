@@ -2107,8 +2107,8 @@ void ClosureConversion::ReplaceUserPoint(
 
         Expression* newApply = nullptr;
         if (apply->IsTerminator()) {
-            auto& awe = StaticCast<ApplyWithException&>(*apply);
-            newApply = builder.CreateExpression<ApplyWithException>(
+            auto& awe = StaticCast<TryApply&>(*apply);
+            newApply = builder.CreateExpression<TryApply>(
                 loc, retType, newCallee, callCtx, awe.GetSuccessBlock(), awe.GetErrorBlock(), user.GetParentBlock());
         } else {
             newApply = builder.CreateExpression<Apply>(loc, retType, newCallee, callCtx, user.GetParentBlock());
@@ -2209,8 +2209,8 @@ void ClosureConversion::ConvertApplyToInvoke(ApplyBase& apply)
     };
     Expression* invoke = nullptr;
     if (apply.IsTerminator()) {
-        auto& applyE = StaticCast<ApplyWithException&>(apply);
-        invoke = builder.CreateExpression<InvokeWithException>(
+        auto& applyE = StaticCast<TryApply&>(apply);
+        invoke = builder.CreateExpression<TryInvoke>(
             applyE.GetDebugLocation(), applyE.GetResult()->GetType(), invokeInfo,
             applyE.GetSuccessBlock(), applyE.GetErrorBlock(), applyE.GetParentBlock());
     } else {
@@ -2516,10 +2516,10 @@ void ClosureConversion::WrapApplyRetVal(ApplyBase& apply)
      *  %4: $AutoEnvInstBase& = TypeCast(%2)
      *  %1: xxx = Expression(%4)
      *
-     *  ApplyWithException:
+     *  TryApply:
      *  convert from:
      *  Block #0:
-     *  %0: $AutoEnvInstBase& = ApplyWithException(xxx, #1, #2)
+     *  %0: $AutoEnvInstBase& = TryApply(xxx, #1, #2)
      *  Block #1:
      *  %1: xxx = Expression(%0)
      *  Block #2:
@@ -2527,7 +2527,7 @@ void ClosureConversion::WrapApplyRetVal(ApplyBase& apply)
      *
      *  to:
      *  Block #0:
-     *  %0: $AutoEnvGenericBase& = ApplyWithException(xxx, #1, #2)
+     *  %0: $AutoEnvGenericBase& = TryApply(xxx, #1, #2)
      *  Block #1:
      *  %3: $AutoEnvWrapperClass& = Allocate($AutoEnvWrapperClass)
      *  %4: Unit = StoreElementRef(%0, %3, 0)
@@ -2557,7 +2557,7 @@ void ClosureConversion::WrapApplyRetVal(ApplyBase& apply)
     auto autoEnvWrapperType = autoEnvWrapperDef->GetType();
     auto autoEnvWrapperRefType = builder.GetType<RefType>(autoEnvWrapperType);
     if (apply.IsTerminator()) {
-        // ApplyWithException is a terminator, insert wrapper before each user
+        // TryApply is a terminator, insert wrapper before each user
         for (auto user : applyRetVal->GetUsers()) {
             if (user->GetExprKind() == ExprKind::INSTANCEOF) {
                 continue;
@@ -2624,10 +2624,10 @@ void ClosureConversion::WrapInvokeRetVal(DynamicDispatch& e)
      *  %4: $AutoEnvInstBase& = TypeCast(%2)
      *  %1: xxx = Expression(%4)
      *
-     *  InvokeWithException:
+     *  TryInvoke:
      *  convert from:
      *  Block #0:
-     *  %0: $AutoEnvInstBase& = InvokeWithException(xxx, #1, #2)
+     *  %0: $AutoEnvInstBase& = TryInvoke(xxx, #1, #2)
      *  Block #1:
      *  %1: xxx = Expression(%0)
      *  Block #2:
@@ -2635,7 +2635,7 @@ void ClosureConversion::WrapInvokeRetVal(DynamicDispatch& e)
      *
      *  to:
      *  Block #0:
-     *  %0: $AutoEnvGenericBase& = InvokeWithException(xxx, #1, #2)
+     *  %0: $AutoEnvGenericBase& = TryInvoke(xxx, #1, #2)
      *  Block #1:
      *  %3: $AutoEnvWrapperClass& = Allocate($AutoEnvWrapperClass)
      *  %4: Unit = StoreElementRef(%0, %3, 0)
@@ -2666,7 +2666,7 @@ void ClosureConversion::WrapInvokeRetVal(DynamicDispatch& e)
     auto autoEnvWrapperType = autoEnvWrapperDef->GetType();
     auto autoEnvWrapperRefType = builder.GetType<RefType>(autoEnvWrapperType);
     if (e.IsTerminator()) {
-        // InvokeWithException is a terminator, insert wrapper before each user
+        // TryInvoke is a terminator, insert wrapper before each user
         for (auto user : invokeRetVal->GetUsers()) {
             if (user->GetExprKind() == ExprKind::INSTANCEOF) {
                 continue;
