@@ -577,7 +577,7 @@ bool HandleFuncWithNothingParamter(CHIRBuilder& builder, const BlockGroup& funcB
 template <typename TApply> void HandleNothingTerminator(CHIRBuilder& builder, TApply* expr, BlockGroup& funcBody)
 {
     CJC_ASSERT(Cangjie::Utils::In(expr->GetExprKind(),
-        {ExprKind::APPLY_WITH_EXCEPTION, ExprKind::INVOKE_WITH_EXCEPTION, ExprKind::INVOKESTATIC_WITH_EXCEPTION}));
+        {ExprKind::TRY_APPLY, ExprKind::TRY_INVOKE, ExprKind::TRY_INVOKESTATIC}));
     auto newSuccessBlock = builder.CreateBlock(&funcBody);
     CreateNullReturnValue(builder, newSuccessBlock, funcBody);
     newSuccessBlock->AppendExpression(builder.CreateTerminator<Exit>(newSuccessBlock));
@@ -604,14 +604,14 @@ void DeadCodeElimination::NothingTypeExprEliminationForFunc(BlockGroup& funcBody
                     continue;
                 } else {
                     switch (expr->GetExprKind()) {
-                        case ExprKind::APPLY_WITH_EXCEPTION:
-                            HandleNothingTerminator(builder, StaticCast<ApplyWithException*>(expr), funcBody);
+                        case ExprKind::TRY_APPLY:
+                            HandleNothingTerminator(builder, StaticCast<TryApply*>(expr), funcBody);
                             break;
-                        case ExprKind::INVOKE_WITH_EXCEPTION:
-                            HandleNothingTerminator(builder, StaticCast<InvokeWithException*>(expr), funcBody);
+                        case ExprKind::TRY_INVOKE:
+                            HandleNothingTerminator(builder, StaticCast<TryInvoke*>(expr), funcBody);
                             break;
-                        case ExprKind::INVOKESTATIC_WITH_EXCEPTION:
-                            HandleNothingTerminator(builder, StaticCast<InvokeStaticWithException*>(expr), funcBody);
+                        case ExprKind::TRY_INVOKESTATIC:
+                            HandleNothingTerminator(builder, StaticCast<TryInvokeStatic*>(expr), funcBody);
                             break;
                         default:
 #ifndef NDEBUG
@@ -944,7 +944,7 @@ Ptr<Expression> DeadCodeElimination::GetUnreachableExpression(const CHIR::Block&
             // when report deadcode in BinaryExpr, it has 4 situations in tests/LLT/CHIR/DCE/testUnusedOp03.cj
             // if operand in binaryExpr is nothing, use warninglocation as report position
             // if all operand in binaryExpr is normal, use binaryExpr location as report position
-            if (Is<BinaryExpressionBase>(expression) || Is<UnaryExpressionWithException>(expression)) {
+            if (Is<BinaryExpressionBase>(expression) || Is<TryUnaryExpression>(expression)) {
                 auto args = expression->GetNonSuccessorOperands();
                 auto it =
                     std::find_if(args.begin(), args.end(), [](auto item) { return item->GetType()->IsNothing(); });
@@ -1034,7 +1034,7 @@ bool DeadCodeElimination::CheckUselessExpr(const Expression& expr, bool isReport
     if (expr.GetResult() && !expr.GetResult()->GetUsers().empty()) {
         return false;
     }
-    if ((Is<UnaryExpressionWithException>(expr) || Is<BinaryExpressionWithException>(expr)) &&
+    if ((Is<TryUnaryExpression>(expr) || Is<TryBinaryExpression>(expr)) &&
         expr.Get<NeverOverflowInfo>() && isReportWarning) {
         return true;
     }

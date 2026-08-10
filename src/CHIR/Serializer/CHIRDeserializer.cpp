@@ -638,9 +638,6 @@ template <> LocalVar* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const 
 {
     auto associatedExpr = GetExpression<Expression>(obj->associatedExpr());
     CJC_NULLPTR_CHECK(associatedExpr);
-    if (associatedExpr->GetExprKind() == ExprKind::ALLOCATE_WITH_EXCEPTION) {
-        printf("");
-    }
     auto result = associatedExpr->GetResult();
     result->SetSrcCodeIdentifier(obj->srcCodeIdentifier()->data());
     result->identifier = obj->base()->identifier()->str();
@@ -712,14 +709,14 @@ static std::pair<ExprKind, bool> CHIRExprKindToExprKind(PackageFormat::CHIRExprK
         case FK::CHIRExprKind_Branch:             return {ExprKind::BRANCH, false};
         case FK::CHIRExprKind_MultiBranch:        return {ExprKind::MULTIBRANCH, false};
         case FK::CHIRExprKind_Exit:               return {ExprKind::EXIT, false};
-        case FK::CHIRExprKind_TryApply:           return {ExprKind::APPLY_WITH_EXCEPTION, true};
-        case FK::CHIRExprKind_TryInvoke:          return {ExprKind::INVOKE_WITH_EXCEPTION, true};
-        case FK::CHIRExprKind_TryIntrinsic:       return {ExprKind::INTRINSIC_WITH_EXCEPTION, true};
+        case FK::CHIRExprKind_TryApply:           return {ExprKind::TRY_APPLY, true};
+        case FK::CHIRExprKind_TryInvoke:          return {ExprKind::TRY_INVOKE, true};
+        case FK::CHIRExprKind_TryIntrinsic:       return {ExprKind::TRY_INTRINSIC, true};
         case FK::CHIRExprKind_RaiseException:     return {ExprKind::RAISE_EXCEPTION, false};
-        case FK::CHIRExprKind_TrySpawn:           return {ExprKind::SPAWN_WITH_EXCEPTION, true};
-        case FK::CHIRExprKind_TryNumericCast:     return {ExprKind::NUMERIC_CAST_WITH_EXCEPTION, true};
-        case FK::CHIRExprKind_TryAllocate:        return {ExprKind::ALLOCATE_WITH_EXCEPTION, true};
-        case FK::CHIRExprKind_TryRawArrayAllocate: return {ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION, true};
+        case FK::CHIRExprKind_TrySpawn:           return {ExprKind::TRY_SPAWN, true};
+        case FK::CHIRExprKind_TryNumericCast:     return {ExprKind::TRY_NUMERIC_CAST, true};
+        case FK::CHIRExprKind_TryAllocate:        return {ExprKind::TRY_ALLOCATE, true};
+        case FK::CHIRExprKind_TryRawArrayAllocate: return {ExprKind::TRY_RAW_ARRAY_ALLOCATE, true};
         case FK::CHIRExprKind_TryNeg:             return {ExprKind::NEG, true};
         case FK::CHIRExprKind_TryAdd:             return {ExprKind::ADD, true};
         case FK::CHIRExprKind_TrySub:             return {ExprKind::SUB, true};
@@ -805,7 +802,7 @@ Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const PackageFor
     if (isException) {
         auto normalBlock = StaticCast<Block*>(GetValue<Value>(obj->base()->operands()->Get(1)));
         auto exceptionBlock = StaticCast<Block*>(GetValue<Value>(obj->base()->operands()->Get(2)));
-        return builder.CreateExpression<UnaryExpressionWithException>(
+        return builder.CreateExpression<TryUnaryExpression>(
             resultTy, ExprKindMgr::ToUnaryExprKind(kind), operand, normalBlock, exceptionBlock, parentBlock);
     } else {
         auto ofs = DeserializeOverflowStrategy(obj->overflowStrategy());
@@ -826,7 +823,7 @@ Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const PackageFor
     if (isException) {
         auto normalBlock = StaticCast<Block*>(GetValue<Value>(obj->base()->operands()->Get(2)));
         auto exceptionBlock = StaticCast<Block*>(GetValue<Value>(obj->base()->operands()->Get(3)));
-        return builder.CreateExpression<BinaryExpressionWithException>(
+        return builder.CreateExpression<TryBinaryExpression>(
             resultTy, ExprKindMgr::ToBinaryExprKind(kind), lhs, rhs, ofs, normalBlock, exceptionBlock, parentBlock);
     } else {
         return builder.CreateExpression<BinaryExpression>(
@@ -947,8 +944,7 @@ template <> Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
         auto operands = GetValue<Value>(obj->base()->operands());
         auto normalBlock = StaticCast<Block>(operands[0]);
         auto exceptionBlock = StaticCast<Block>(operands[1]);
-        return builder.CreateExpression<AllocateWithException>(
-            resultTy, targetType, normalBlock, exceptionBlock, parentBlock);
+        return builder.CreateExpression<TryAllocate>(resultTy, targetType, normalBlock, exceptionBlock, parentBlock);
     } else {
         return builder.CreateExpression<Allocate>(resultTy, targetType, parentBlock);
     }
@@ -1029,8 +1025,7 @@ template <> Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
             .instTypeArgs = instantiatedTypeArgs,
             .thisType = objType
         };
-        return builder.CreateExpression<ApplyWithException>(
-            resultTy, callee, callCtx, normalBlock, exceptionBlock, owner);
+        return builder.CreateExpression<TryApply>(resultTy, callee, callCtx, normalBlock, exceptionBlock, owner);
     } else {
         auto callCtx = FuncCallContext {
             .args = operands,
@@ -1091,11 +1086,9 @@ template <> Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
         }
     } else {
         if (isStatic(*caller)) {
-            return builder.CreateExpression<InvokeStaticWithException>(
-                resultTy, invokeInfo, normalBlock, exceptionBlock, owner);
+            return builder.CreateExpression<TryInvokeStatic>(resultTy, invokeInfo, normalBlock, exceptionBlock, owner);
         } else {
-            return builder.CreateExpression<InvokeWithException>(
-                resultTy, invokeInfo, normalBlock, exceptionBlock, owner);
+            return builder.CreateExpression<TryInvoke>(resultTy, invokeInfo, normalBlock, exceptionBlock, owner);
         }
     }
 }
@@ -1120,8 +1113,7 @@ template <> Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
     if (CHIRExprKindToExprKind(base->kind()).second) {
         auto normalBlock = StaticCast<Block*>(GetValue<Value>(base->operands()->Get(1)));
         auto exceptionBlock = StaticCast<Block*>(GetValue<Value>(base->operands()->Get(2)));
-        return builder.CreateExpression<NumericCastWithException>(
-            resultTy, operand, normalBlock, exceptionBlock, owner);
+        return builder.CreateExpression<TryNumericCast>(resultTy, operand, normalBlock, exceptionBlock, owner);
     } else {
         return builder.CreateExpression<NumericCast>(resultTy, operand, ofs, owner);
     }
@@ -1236,8 +1228,7 @@ Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const PackageFor
             .args = operands,
             .instTypeArgs = GetType<Type>(funcCallBase->instantiatedTypeArgs())
         };
-        return builder.CreateExpression<IntrinsicWithException>(
-            resultTy, callContext, normalBlock, exceptionBranch, owner);
+        return builder.CreateExpression<TryIntrinsic>(resultTy, callContext, normalBlock, exceptionBranch, owner);
     } else {
         auto callContext = IntrisicCallContext {
             .kind = kind,
@@ -1263,7 +1254,7 @@ Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(
         operands.pop_back();
         auto normalBlock = StaticCast<Block*>(operands.back());
         operands.pop_back();
-        return builder.CreateExpression<RawArrayAllocateWithException>(
+        return builder.CreateExpression<TryRawArrayAllocate>(
             resultTy, elementType, size, normalBlock, exceptionBranch, owner);
     } else {
         return builder.CreateExpression<RawArrayAllocate>(resultTy, elementType, size, owner);
@@ -1284,13 +1275,11 @@ Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const PackageFor
         operands.pop_back();
         auto normalBlock = StaticCast<Block*>(operands.back());
         operands.pop_back();
-        SpawnWithException* expr = nullptr;
+        TrySpawn* expr = nullptr;
         if (operands.empty()) {
-            expr = builder.CreateExpression<SpawnWithException>(
-                resultTy, val, normalBlock, exceptionBranch, owner);
+            expr = builder.CreateExpression<TrySpawn>(resultTy, val, normalBlock, exceptionBranch, owner);
         } else {
-            expr = builder.CreateExpression<SpawnWithException>(
-                resultTy, val, operands[0], normalBlock, exceptionBranch, owner);
+            expr = builder.CreateExpression<TrySpawn>(resultTy, val, operands[0], normalBlock, exceptionBranch, owner);
         }
         if (func) {
             expr->SetExecuteClosure(*func);

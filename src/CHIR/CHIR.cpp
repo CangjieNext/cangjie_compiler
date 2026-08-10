@@ -1014,7 +1014,7 @@ template <typename T> bool ToCHIR::IsAllApply(const T* curFunc)
     auto users = curFunc->GetUsers();
     for (size_t index = 0; index < users.size(); index++) {
         if (users[index]->GetExprKind() != ExprKind::APPLY &&
-            users[index]->GetExprKind() != ExprKind::APPLY_WITH_EXCEPTION) {
+            users[index]->GetExprKind() != ExprKind::TRY_APPLY) {
             return false;
         }
         if (users[index]->GetExprKind() == ExprKind::APPLY) {
@@ -1023,8 +1023,8 @@ template <typename T> bool ToCHIR::IsAllApply(const T* curFunc)
                 return false;
             }
         }
-        if (users[index]->GetExprKind() == ExprKind::APPLY_WITH_EXCEPTION) {
-            auto applyNode = StaticCast<ApplyWithException*>(users[index]);
+        if (users[index]->GetExprKind() == ExprKind::TRY_APPLY) {
+            auto applyNode = StaticCast<TryApply*>(users[index]);
             if (applyNode->GetCallee() != curFunc) {
                 return false;
             }

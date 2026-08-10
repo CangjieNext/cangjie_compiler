@@ -22,19 +22,9 @@
 
 using namespace Cangjie::CHIR;
 
-// Terminator
-Terminator::Terminator(
-    ExprKind kind, const std::vector<Value*>& operands, const std::vector<Block*>& successors, Block* parent)
-    : Expression(kind, operands, parent)
+GoTo::GoTo(Block* destBlock, Block* parent) : Expression(ExprKind::GOTO, {}, parent)
 {
-    CJC_NULLPTR_CHECK(parent);
-    for (auto succ : successors) {
-        AppendOperand(*succ);
-    }
-}
-
-GoTo::GoTo(Block* destBlock, Block* parent) : Terminator(ExprKind::GOTO, {}, {destBlock}, parent)
-{
+    AppendOperand(*destBlock);
 }
 
 Block* GoTo::GetDestination() const
@@ -46,11 +36,10 @@ Block* GoTo::GetDestination() const
 
 MultiBranch::MultiBranch(Value* cond, Block* defaultBlock, const std::vector<uint64_t>& vals,
     const std::vector<Block*>& succs, Block* parent)
-    : Terminator(ExprKind::MULTIBRANCH, {cond}, {}, parent), caseVals(vals)
+    : Expression(ExprKind::MULTIBRANCH, {cond}, parent), caseVals(vals)
 {
     CJC_NULLPTR_CHECK(cond);
     CJC_NULLPTR_CHECK(defaultBlock);
-    CJC_NULLPTR_CHECK(parent);
     /* Note that successors[0] is used to store the default basic block */
     AppendOperand(*defaultBlock);
     for (auto b : succs) {
@@ -102,96 +91,72 @@ std::string MultiBranch::OperandsToString() const
     return StringJoin(res, ", ");
 }
 
-ExpressionWithException::ExpressionWithException(ExprKind kind, Block* parent)
-    : Terminator(kind, {}, {}, parent)
-{
-}
-
-ExpressionWithException::ExpressionWithException(
-    ExprKind kind, const std::vector<Value*>& operands, const std::vector<Block*>& successors, Block* parent)
-    : Terminator(kind, operands, successors, parent)
-{
-}
-
-Block* ExpressionWithException::GetSuccessBlock() const
-{
-    return GetSuccessor(0);
-}
-
-Block* ExpressionWithException::GetErrorBlock() const
-{
-    return GetSuccessor(1);
-}
-
-ApplyWithException::ApplyWithException(
-    Value* callee, const FuncCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent)
-    : ApplyBase(ExprKind::APPLY_WITH_EXCEPTION, callee, callContext, {sucBlock, errBlock}, parent)
+TryApply::TryApply(Value* callee, const FuncCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent)
+    : ApplyBase(ExprKind::TRY_APPLY, callee, callContext, {sucBlock, errBlock}, parent)
 {
     CJC_NULLPTR_CHECK(sucBlock);
     CJC_NULLPTR_CHECK(errBlock);
 }
 
-Block* ApplyWithException::GetSuccessBlock() const
+Block* TryApply::GetSuccessBlock() const
 {
     return GetSuccessor(0);
 }
 
-Block* ApplyWithException::GetErrorBlock() const
+Block* TryApply::GetErrorBlock() const
 {
     return GetSuccessor(1);
 }
 
-InvokeWithException::InvokeWithException(
-    const InvokeCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent)
-    : InvokeBase(ExprKind::INVOKE_WITH_EXCEPTION, callContext, {sucBlock, errBlock}, parent)
+TryInvoke::TryInvoke(const InvokeCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent)
+    : InvokeBase(ExprKind::TRY_INVOKE, callContext, {sucBlock, errBlock}, parent)
 {
 }
 
-Block* InvokeWithException::GetSuccessBlock() const
+Block* TryInvoke::GetSuccessBlock() const
 {
     return GetSuccessor(0);
 }
 
-Block* InvokeWithException::GetErrorBlock() const
+Block* TryInvoke::GetErrorBlock() const
 {
     return GetSuccessor(1);
 }
 
-InvokeStaticWithException::InvokeStaticWithException(
-    const InvokeCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent)
-    : InvokeStaticBase(ExprKind::INVOKESTATIC_WITH_EXCEPTION, callContext, {sucBlock, errBlock}, parent)
+TryInvokeStatic::TryInvokeStatic(const InvokeCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent)
+    : InvokeStaticBase(ExprKind::TRY_INVOKESTATIC, callContext, {sucBlock, errBlock}, parent)
 {
 }
 
-Block* InvokeStaticWithException::GetSuccessBlock() const
+Block* TryInvokeStatic::GetSuccessBlock() const
 {
     return GetSuccessor(0);
 }
 
-Block* InvokeStaticWithException::GetErrorBlock() const
+Block* TryInvokeStatic::GetErrorBlock() const
 {
     return GetSuccessor(1);
 }
 
-// UnaryExpressionWithException
-UnaryExpressionWithException::UnaryExpressionWithException(
+// TryUnaryExpression
+TryUnaryExpression::TryUnaryExpression(
     UnaryExprKind unaryKind, Value* operand, Block* normal, Block* exception, Block* parent)
     : UnaryExpressionBase(unaryKind, operand, Cangjie::OverflowStrategy::THROWING, true, {normal, exception}, parent)
 {
 }
 
-Block* UnaryExpressionWithException::GetSuccessBlock() const
+Block* TryUnaryExpression::GetSuccessBlock() const
 {
     return GetSuccessor(0);
 }
 
-Block* UnaryExpressionWithException::GetErrorBlock() const
+Block* TryUnaryExpression::GetErrorBlock() const
 {
     return GetSuccessor(1);
 }
 
-// BinaryExpressionWithException
-BinaryExpressionWithException::BinaryExpressionWithException(BinaryExprKind binaryKind, Value* lhs, Value* rhs,
+// TryBinaryExpression
+TryBinaryExpression::TryBinaryExpression(BinaryExprKind binaryKind, Value* lhs, Value* rhs,
     OverflowStrategy ofs, Block* normal, Block* exception, Block* parent)
     : BinaryExpressionBase(binaryKind, lhs, rhs, ofs, true, {normal, exception}, parent)
 {
@@ -202,131 +167,113 @@ BinaryExpressionWithException::BinaryExpressionWithException(BinaryExprKind bina
     }
 }
 
-Block* BinaryExpressionWithException::GetSuccessBlock() const
+Block* TryBinaryExpression::GetSuccessBlock() const
 {
     return GetSuccessor(0);
 }
 
-Block* BinaryExpressionWithException::GetErrorBlock() const
+Block* TryBinaryExpression::GetErrorBlock() const
 {
     return GetSuccessor(1);
 }
 
-// NumericCastWithException
-NumericCastWithException::NumericCastWithException(Value* operand, Block* normal, Block* exception, Block* parent)
+// TryNumericCast
+TryNumericCast::TryNumericCast(Value* operand, Block* normal, Block* exception, Block* parent)
     : NumericCastBase(
-          ExprKind::NUMERIC_CAST_WITH_EXCEPTION, operand, Cangjie::OverflowStrategy::THROWING, {normal, exception},
+          ExprKind::TRY_NUMERIC_CAST, operand, Cangjie::OverflowStrategy::THROWING, {normal, exception},
           parent)
 {
 }
 
-Block* NumericCastWithException::GetSuccessBlock() const
+Block* TryNumericCast::GetSuccessBlock() const
 {
     return GetSuccessor(0);
 }
 
-Block* NumericCastWithException::GetErrorBlock() const
+Block* TryNumericCast::GetErrorBlock() const
 {
     return GetSuccessor(1);
 }
 
-// IntrinsicWithException
-IntrinsicWithException::IntrinsicWithException(
-    const IntrisicCallContext& callContext, Block* normal, Block* exception, Block* parent)
-    : ExpressionWithException(ExprKind::INTRINSIC_WITH_EXCEPTION, callContext.args, {normal, exception}, parent),
-    intrinsicKind(callContext.kind),
-    instantiatedTypeArgs(callContext.instTypeArgs)
+// TryIntrinsic
+TryIntrinsic::TryIntrinsic(const IntrisicCallContext& callContext, Block* normal, Block* exception, Block* parent)
+    : IntrinsicBase(ExprKind::TRY_INTRINSIC, callContext, {normal, exception}, parent)
 {
+    CJC_NULLPTR_CHECK(normal);
+    CJC_NULLPTR_CHECK(exception);
 }
 
-IntrinsicKind IntrinsicWithException::GetIntrinsicKind() const
-{
-    return intrinsicKind;
-}
-
-const std::vector<Type*>& IntrinsicWithException::GetInstantiatedTypeArgs() const
-{
-    return instantiatedTypeArgs;
-}
-
-const std::vector<Value*> IntrinsicWithException::GetArgs() const
-{
-    return GetNonSuccessorOperands();
-}
-
-std::string IntrinsicWithException::OperandsToString() const
-{
-    std::stringstream ss;
-    ss << IntrinsicKindToString(intrinsicKind);
-    ss << TypeVecToString("<", instantiatedTypeArgs, ">");
-    ss << ", " << ValueIdVecToString("", operands, "");
-    return ss.str();
-}
-
-// AllocateWithException
-AllocateWithException::AllocateWithException(Type* ty, Block* normal, Block* exception, Block* parent)
-    : AllocateBase(ExprKind::ALLOCATE_WITH_EXCEPTION, ty, {normal, exception}, parent)
-{
-}
-
-Block* AllocateWithException::GetSuccessBlock() const
+Block* TryIntrinsic::GetSuccessBlock() const
 {
     return GetSuccessor(0);
 }
 
-Block* AllocateWithException::GetErrorBlock() const
+Block* TryIntrinsic::GetErrorBlock() const
 {
     return GetSuccessor(1);
 }
 
-// RawArrayAllocateWithException
-RawArrayAllocateWithException::RawArrayAllocateWithException(
-    Type* eleTy, Value* size, Block* normal, Block* exception, Block* parent)
-    : RawArrayAllocateBase(ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION, eleTy, size, {normal, exception}, parent)
+// TryAllocate
+TryAllocate::TryAllocate(Type* ty, Block* normal, Block* exception, Block* parent)
+    : AllocateBase(ExprKind::TRY_ALLOCATE, ty, {normal, exception}, parent)
 {
 }
 
-Block* RawArrayAllocateWithException::GetSuccessBlock() const
+Block* TryAllocate::GetSuccessBlock() const
 {
     return GetSuccessor(0);
 }
 
-Block* RawArrayAllocateWithException::GetErrorBlock() const
+Block* TryAllocate::GetErrorBlock() const
 {
     return GetSuccessor(1);
 }
 
-SpawnWithException::SpawnWithException(
-    Value* val, Value* arg, Block* normal, Block* exception, Block* parent)
-    : SpawnBase(ExprKind::SPAWN_WITH_EXCEPTION, {val, arg}, {normal, exception}, parent)
+// TryRawArrayAllocate
+TryRawArrayAllocate::TryRawArrayAllocate(Type* eleTy, Value* size, Block* normal, Block* exception, Block* parent)
+    : RawArrayAllocateBase(ExprKind::TRY_RAW_ARRAY_ALLOCATE, eleTy, size, {normal, exception}, parent)
 {
 }
 
-SpawnWithException::SpawnWithException(
-    Value* val, Block* normal, Block* exception, Block* parent)
-    : SpawnBase(ExprKind::SPAWN_WITH_EXCEPTION, {val}, {normal, exception}, parent)
-{
-}
-
-Block* SpawnWithException::GetSuccessBlock() const
+Block* TryRawArrayAllocate::GetSuccessBlock() const
 {
     return GetSuccessor(0);
 }
 
-Block* SpawnWithException::GetErrorBlock() const
+Block* TryRawArrayAllocate::GetErrorBlock() const
 {
     return GetSuccessor(1);
 }
 
-SpawnWithException* SpawnWithException::Clone(CHIRBuilder& builder, Block& parent) const
+TrySpawn::TrySpawn(Value* val, Value* arg, Block* normal, Block* exception, Block* parent)
+    : SpawnBase(ExprKind::TRY_SPAWN, {val, arg}, {normal, exception}, parent)
 {
-    SpawnWithException* newNode = nullptr;
+}
+
+TrySpawn::TrySpawn(Value* val, Block* normal, Block* exception, Block* parent)
+    : SpawnBase(ExprKind::TRY_SPAWN, {val}, {normal, exception}, parent)
+{
+}
+
+Block* TrySpawn::GetSuccessBlock() const
+{
+    return GetSuccessor(0);
+}
+
+Block* TrySpawn::GetErrorBlock() const
+{
+    return GetSuccessor(1);
+}
+
+TrySpawn* TrySpawn::Clone(CHIRBuilder& builder, Block& parent) const
+{
+    TrySpawn* newNode = nullptr;
     auto arg = GetSpawnArg();
     if (arg != nullptr) {
-        newNode = builder.CreateExpression<SpawnWithException>(
+        newNode = builder.CreateExpression<TrySpawn>(
             result->GetType(), GetObject(), arg, GetSuccessBlock(), GetErrorBlock(), &parent);
     } else {
-        newNode = builder.CreateExpression<SpawnWithException>(
+        newNode = builder.CreateExpression<TrySpawn>(
             result->GetType(), GetObject(), GetSuccessBlock(), GetErrorBlock(), &parent);
     }
     if (executeClosure) {
@@ -346,8 +293,10 @@ GoTo* GoTo::Clone(CHIRBuilder& builder, Block& parent) const
 }
 
 Branch::Branch(Value* cond, Block* trueBlock, Block* falseBlock, Block* parent)
-    : Terminator(ExprKind::BRANCH, {cond}, {trueBlock, falseBlock}, parent)
+    : Expression(ExprKind::BRANCH, {cond}, parent)
 {
+    AppendOperand(*trueBlock);
+    AppendOperand(*falseBlock);
 }
 
 Value* Branch::GetCondition() const
@@ -391,18 +340,19 @@ std::string Branch::AddExtraComment() const
     return "sourceExpr: " + SOURCE_EXPR_MAP.at(sourceExpr);
 }
 
-Exit::Exit(Block* parent) : Terminator(ExprKind::EXIT, {}, {}, parent)
+Exit::Exit(Block* parent) : Expression(ExprKind::EXIT, {}, parent)
 {
 }
 
 RaiseException::RaiseException(Value* value, Block* parent)
-    : Terminator(ExprKind::RAISE_EXCEPTION, {value}, {}, parent)
+    : Expression(ExprKind::RAISE_EXCEPTION, {value}, parent)
 {
 }
 
 RaiseException::RaiseException(Value* value, Block* successor, Block* parent)
-    : Terminator(ExprKind::RAISE_EXCEPTION, {value}, {successor}, parent)
+    : Expression(ExprKind::RAISE_EXCEPTION, {value}, parent)
 {
+    AppendOperand(*successor);
 }
 
 Value* RaiseException::GetExceptionValue() const
@@ -444,10 +394,10 @@ Exit* Exit::Clone(CHIRBuilder& builder, Block& parent) const
     return newNode;
 }
 
-ApplyWithException* ApplyWithException::Clone(CHIRBuilder& builder, Block& parent) const
+TryApply* TryApply::Clone(CHIRBuilder& builder, Block& parent) const
 {
     CJC_NULLPTR_CHECK(result);
-    ApplyWithException* newNode = builder.CreateExpression<ApplyWithException>(
+    TryApply* newNode = builder.CreateExpression<TryApply>(
         result->GetType(), GetCallee(), FuncCallContext{
         .args = GetArgs(),
         .instTypeArgs = GetInstantiatedTypeArgs(),
@@ -457,7 +407,7 @@ ApplyWithException* ApplyWithException::Clone(CHIRBuilder& builder, Block& paren
     return newNode;
 }
 
-InvokeWithException* InvokeWithException::Clone(CHIRBuilder& builder, Block& parent) const
+TryInvoke* TryInvoke::Clone(CHIRBuilder& builder, Block& parent) const
 {
     CJC_NULLPTR_CHECK(result);
     auto args = GetArgs();
@@ -472,14 +422,14 @@ InvokeWithException* InvokeWithException::Clone(CHIRBuilder& builder, Block& par
         },
         .overflowStrategy = overflowStrategy
     };
-    InvokeWithException* newNode = builder.CreateExpression<InvokeWithException>(
+    TryInvoke* newNode = builder.CreateExpression<TryInvoke>(
         result->GetType(), invokeInfo, GetSuccessBlock(), GetErrorBlock(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;
 }
 
-InvokeStaticWithException* InvokeStaticWithException::Clone(CHIRBuilder& builder, Block& parent) const
+TryInvokeStatic* TryInvokeStatic::Clone(CHIRBuilder& builder, Block& parent) const
 {
     CJC_NULLPTR_CHECK(result);
     auto invokeInfo = InvokeCallContext {
@@ -492,44 +442,44 @@ InvokeStaticWithException* InvokeStaticWithException::Clone(CHIRBuilder& builder
         },
         .overflowStrategy = overflowStrategy
     };
-    InvokeStaticWithException* newNode = builder.CreateExpression<InvokeStaticWithException>(
+    TryInvokeStatic* newNode = builder.CreateExpression<TryInvokeStatic>(
         result->GetType(), invokeInfo, GetSuccessBlock(), GetErrorBlock(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;
 }
 
-UnaryExpressionWithException* UnaryExpressionWithException::Clone(CHIRBuilder& builder, Block& parent) const
+TryUnaryExpression* TryUnaryExpression::Clone(CHIRBuilder& builder, Block& parent) const
 {
     CJC_NULLPTR_CHECK(result);
-    auto newNode = builder.CreateExpression<UnaryExpressionWithException>(result->GetType(), GetOpKind(), GetOperand(),
+    auto newNode = builder.CreateExpression<TryUnaryExpression>(result->GetType(), GetOpKind(), GetOperand(),
         GetSuccessBlock(), GetErrorBlock(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;
 }
 
-BinaryExpressionWithException* BinaryExpressionWithException::Clone(CHIRBuilder& builder, Block& parent) const
+TryBinaryExpression* TryBinaryExpression::Clone(CHIRBuilder& builder, Block& parent) const
 {
     CJC_NULLPTR_CHECK(result);
-    auto newNode = builder.CreateExpression<BinaryExpressionWithException>(result->GetType(), GetOpKind(),
+    auto newNode = builder.CreateExpression<TryBinaryExpression>(result->GetType(), GetOpKind(),
         GetLHSOperand(), GetRHSOperand(), overflowStrategy, GetSuccessBlock(), GetErrorBlock(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;
 }
 
-NumericCastWithException* NumericCastWithException::Clone(CHIRBuilder& builder, Block& parent) const
+TryNumericCast* TryNumericCast::Clone(CHIRBuilder& builder, Block& parent) const
 {
     CJC_NULLPTR_CHECK(result);
-    auto newNode = builder.CreateExpression<NumericCastWithException>(
+    auto newNode = builder.CreateExpression<TryNumericCast>(
         result->GetType(), GetSourceValue(), GetSuccessBlock(), GetErrorBlock(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;
 }
 
-IntrinsicWithException* IntrinsicWithException::Clone(CHIRBuilder& builder, Block& parent) const
+TryIntrinsic* TryIntrinsic::Clone(CHIRBuilder& builder, Block& parent) const
 {
     CJC_NULLPTR_CHECK(result);
     auto callContext = IntrisicCallContext {
@@ -537,27 +487,27 @@ IntrinsicWithException* IntrinsicWithException::Clone(CHIRBuilder& builder, Bloc
         .args = GetArgs(),
         .instTypeArgs = GetInstantiatedTypeArgs()
     };
-    auto newNode = builder.CreateExpression<IntrinsicWithException>(
+    auto newNode = builder.CreateExpression<TryIntrinsic>(
         result->GetType(), callContext, GetSuccessBlock(), GetErrorBlock(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;
 }
 
-AllocateWithException* AllocateWithException::Clone(CHIRBuilder& builder, Block& parent) const
+TryAllocate* TryAllocate::Clone(CHIRBuilder& builder, Block& parent) const
 {
     CJC_NULLPTR_CHECK(result);
-    auto newNode = builder.CreateExpression<AllocateWithException>(
+    auto newNode = builder.CreateExpression<TryAllocate>(
         result->GetType(), GetType(), GetSuccessBlock(), GetErrorBlock(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;
 }
 
-RawArrayAllocateWithException* RawArrayAllocateWithException::Clone(CHIRBuilder& builder, Block& parent) const
+TryRawArrayAllocate* TryRawArrayAllocate::Clone(CHIRBuilder& builder, Block& parent) const
 {
     CJC_NULLPTR_CHECK(result);
-    auto newNode = builder.CreateExpression<RawArrayAllocateWithException>(
+    auto newNode = builder.CreateExpression<TryRawArrayAllocate>(
         result->GetType(), GetElementType(), GetSize(), GetSuccessBlock(), GetErrorBlock(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());

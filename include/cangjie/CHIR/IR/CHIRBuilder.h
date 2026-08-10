@@ -215,8 +215,10 @@ public:
     /** @brief Return a Terminator.*/
     template <typename TExpr, typename... Args> TExpr* CreateTerminator(Args&&... args)
     {
-        static_assert(std::is_base_of_v<Terminator, TExpr>);
         TExpr* expr = new TExpr(std::forward<Args>(args)...);
+        // Terminator class is gone; keep a runtime check so CreateTerminator is not
+        // accidentally used for non-terminator expressions (which would leave result empty).
+        CJC_ASSERT(expr->IsTerminator() && "CreateTerminator must be used with terminator kinds");
         auto bg = expr->GetFuncOrLambdaBody();
         StoreAllocatedPtrInFuncOrLambda(*bg, expr);
         return expr;

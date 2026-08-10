@@ -30,7 +30,7 @@ public:
      *
      * The optimization performs the following steps for each affected function:
      * 1. Replaces the function's return value with nullptr (changing return type to Void).
-     * 2. Updates all call sites (Apply and ApplyWithException expressions) to use the
+     * 2. Updates all call sites (Apply and TryApply expressions) to use the
      *    new return type, ensuring type consistency throughout the IR.
      *
      * This pass only processes functions that should return Void according to

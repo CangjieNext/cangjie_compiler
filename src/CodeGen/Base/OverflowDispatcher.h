@@ -32,7 +32,7 @@ llvm::Value* GenerateOverflowWrappingArithmeticOp(IRBuilder2& irBuilder, const C
 llvm::Value* GenerateOverflow(IRBuilder2& irBuilder, const OverflowStrategy& strategy, const CHIR::ExprKind& kind,
     const std::pair<const CHIR::IntType*, const CHIR::Type*>& tys, const std::vector<CGValue*>& argGenValues);
 
-llvm::Value* GenerateOverflowApply(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic);
+llvm::Value* GenerateOverflowApply(IRBuilder2& irBuilder, const CHIR::IntrinsicBase& intrinsic);
 } // namespace CodeGen
 } // namespace Cangjie
 #endif // CANGJIE_OVDERFLOW_DISPATCHER_H

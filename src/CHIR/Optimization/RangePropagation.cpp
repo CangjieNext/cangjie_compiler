@@ -248,7 +248,7 @@ void RangePropagation::CheckVarrayIndex(const Ptr<Intrinsic>& intrin, const Rang
 {
     CJC_ASSERT(intrin->GetIntrinsicKind() == CHIR::IntrinsicKind::VARRAY_GET ||
         intrin->GetIntrinsicKind() == CHIR::IntrinsicKind::VARRAY_SET);
-    auto& args = intrin->GetArgs();
+    auto args = intrin->GetArgs();
     CJC_ASSERT(args.size() >= 2U);
     size_t begin = intrin->GetIntrinsicKind() == CHIR::IntrinsicKind::VARRAY_GET ? 1U : 2U;
     auto sizes = GetVArraySizeList(args[0]->GetType());

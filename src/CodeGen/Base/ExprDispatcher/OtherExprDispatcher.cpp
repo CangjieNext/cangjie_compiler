@@ -142,7 +142,7 @@ llvm::Value* HandleVArrayBuilderExpr(IRBuilder2& irBuilder, const CHIR::Expressi
 llvm::Value* HandleIntrinsicExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)
 {
     irBuilder.EmitLocation(CHIRExprWrapper(chirExpr));
-    return GenerateIntrinsic(irBuilder, CHIRIntrinsicWrapper(StaticCast<const CHIR::Intrinsic&>(chirExpr)));
+    return GenerateIntrinsic(irBuilder, StaticCast<const CHIR::IntrinsicBase&>(chirExpr));
 }
 
 llvm::Value* HandleRawArrayLiteralInitExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)

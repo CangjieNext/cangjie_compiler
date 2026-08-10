@@ -443,9 +443,7 @@ void DIBuilder::CreateParameter(const CHIR::Debug& debugNode, llvm::BasicBlock& 
 llvm::DILocation* DIBuilder::HandleDefaultParamLocation(const CHIRExprWrapper& chirNode, llvm::DIScope* scope)
 {
     auto& position = chirNode.GetDebugLocation();
-    bool isApply = chirNode.GetExprKind() == CHIR::ExprKind::APPLY ||
-        chirNode.GetExprKind() == CHIR::ExprKind::APPLY_WITH_EXCEPTION;
-    if (!position.GetBeginPos().IsZero() && isApply) {
+    if (!position.GetBeginPos().IsZero() && Is<CHIR::ApplyBase>(chirNode.GetChirExpr())) {
         curLocation = Position(position.GetBeginPos().line, position.GetBeginPos().column);
     }
     return llvm::DILocation::get(cgMod.GetLLVMContext(), static_cast<unsigned>(curLocation.line),

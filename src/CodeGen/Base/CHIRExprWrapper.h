@@ -432,46 +432,6 @@ private:
     }
 };
 
-class CHIRIntrinsicWrapper : public CHIRExprWrapper {
-public:
-    explicit CHIRIntrinsicWrapper(const CHIR::Intrinsic& intrinsic) : CHIRExprWrapper(intrinsic)
-    {
-    }
-
-    explicit CHIRIntrinsicWrapper(const CHIR::IntrinsicWithException& intrinsicWithException)
-        : CHIRExprWrapper(intrinsicWithException)
-    {
-    }
-
-    ~CHIRIntrinsicWrapper() override = default;
-
-    CHIR::IntrinsicKind GetIntrinsicKind() const
-    {
-        if (GetExprKind() == CHIR::ExprKind::INTRINSIC) {
-            return StaticCast<const CHIR::Intrinsic&>(chirExpr).GetIntrinsicKind();
-        } else {
-            return StaticCast<const CHIR::IntrinsicWithException&>(chirExpr).GetIntrinsicKind();
-        }
-    }
-
-    std::vector<CHIR::Type*> GetInstantiatedTypeArgs() const
-    {
-        if (GetExprKind() == CHIR::ExprKind::INTRINSIC) {
-            return StaticCast<const CHIR::Intrinsic&>(chirExpr).GetInstantiatedTypeArgs();
-        } else {
-            return StaticCast<const CHIR::IntrinsicWithException&>(chirExpr).GetInstantiatedTypeArgs();
-        }
-    }
-
-    std::vector<CHIR::Value*> GetArgs() const
-    {
-        if (GetExprKind() == CHIR::ExprKind::INTRINSIC) {
-            return StaticCast<const CHIR::Intrinsic&>(chirExpr).GetArgs();
-        } else {
-            return StaticCast<const CHIR::IntrinsicWithException&>(chirExpr).GetArgs();
-        }
-    }
-};
 } // namespace CodeGen
 } // namespace Cangjie
 #endif // CANGJIE_CHIREXPRWRAPPER_H

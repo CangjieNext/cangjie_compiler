@@ -872,22 +872,22 @@ public:
         State<ValueDomain, ValueStatePool>& state, const Expression* terminator) override
     {
         switch (terminator->GetExprKind()) {
-            case ExprKind::APPLY_WITH_EXCEPTION: {
+            case ExprKind::TRY_APPLY: {
                 return PreHandleApplyExpr(state, StaticCast<const ApplyBase*>(terminator));
             }
-            case ExprKind::INVOKE_WITH_EXCEPTION: {
+            case ExprKind::TRY_INVOKE: {
                 return PreHandleInvokeExpr(state, StaticCast<const InvokeBase*>(terminator));
             }
-            case ExprKind::ALLOCATE_WITH_EXCEPTION: {
-                auto allocate = StaticCast<const AllocateWithException*>(terminator);
+            case ExprKind::TRY_ALLOCATE: {
+                auto allocate = StaticCast<const TryAllocate*>(terminator);
                 auto refObj = PreHandleAllocateExpr(state, allocate);
-                return HandleAllocateWithExceptionTerminator(state, allocate, refObj);
+                return HandleTryAllocateTerminator(state, allocate, refObj);
             }
-            case ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION: {
-                return PreHandleRawArrayAllocate(state, StaticCast<const RawArrayAllocateWithException*>(terminator));
+            case ExprKind::TRY_RAW_ARRAY_ALLOCATE: {
+                return PreHandleRawArrayAllocate(state, StaticCast<const TryRawArrayAllocate*>(terminator));
             }
-            case ExprKind::INTRINSIC_WITH_EXCEPTION: {
-                auto intrinsic = StaticCast<const IntrinsicWithException*>(terminator);
+            case ExprKind::TRY_INTRINSIC: {
+                auto intrinsic = StaticCast<const TryIntrinsic*>(terminator);
                 if (intrinsic->GetIntrinsicKind() == CHIR::IntrinsicKind::INOUT_PARAM) {
                     return PreHandleInoutIntrinsic(state, intrinsic);
                 } else {
@@ -1400,8 +1400,7 @@ private:
 
         auto refObj = PreHandleFuncCall(state, apply);
         if (apply->IsTerminator()) {
-            return HandleApplyWithExceptionTerminator(
-                state, StaticCast<const ApplyWithException*>(apply), refObj);
+            return HandleTryApplyTerminator(state, StaticCast<const TryApply*>(apply), refObj);
         }
         HandleApplyExpr(state, StaticCast<const Apply*>(apply), refObj);
         return std::nullopt;
@@ -1411,8 +1410,7 @@ private:
     {
         auto refObj = PreHandleFuncCall(state, invoke);
         if (invoke->IsTerminator()) {
-            return HandleInvokeWithExceptionTerminator(
-                state, StaticCast<const InvokeWithException*>(invoke), refObj);
+            return HandleTryInvokeTerminator(state, StaticCast<const TryInvoke*>(invoke), refObj);
         }
         HandleInvokeExpr(state, StaticCast<const Invoke*>(invoke), refObj);
         return std::nullopt;
@@ -1569,8 +1567,8 @@ private:
         (void)refObj;
     }
 
-    virtual std::optional<Block*> HandleAllocateWithExceptionTerminator(
-        State<ValueDomain, ValueStatePool>& state, const AllocateWithException* allocate, Value* refObj)
+    virtual std::optional<Block*> HandleTryAllocateTerminator(
+        State<ValueDomain, ValueStatePool>& state, const TryAllocate* allocate, Value* refObj)
     {
         (void)state;
         (void)allocate;
@@ -1585,8 +1583,8 @@ private:
         (void)refObj;
     }
 
-    virtual std::optional<Block*> HandleApplyWithExceptionTerminator(
-        State<ValueDomain, ValueStatePool>& state, const ApplyWithException* apply, Value* refObj)
+    virtual std::optional<Block*> HandleTryApplyTerminator(
+        State<ValueDomain, ValueStatePool>& state, const TryApply* apply, Value* refObj)
     {
         (void)state;
         (void)apply;
@@ -1601,8 +1599,8 @@ private:
         (void)refObj;
     }
 
-    virtual std::optional<Block*> HandleInvokeWithExceptionTerminator(
-        State<ValueDomain, ValueStatePool>& state, const InvokeWithException* invoke, Value* refObj)
+    virtual std::optional<Block*> HandleTryInvokeTerminator(
+        State<ValueDomain, ValueStatePool>& state, const TryInvoke* invoke, Value* refObj)
     {
         (void)state;
         (void)invoke;

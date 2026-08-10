@@ -20,13 +20,12 @@
 
 namespace Cangjie {
 namespace CHIR {
-class Intrinsic;
+class IntrinsicBase;
 } // namespace CHIR
 namespace CodeGen {
 class IRBuilder2;
-class CHIRIntrinsicWrapper;
 
-llvm::Value* GenerateIntrinsic(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic);
+llvm::Value* GenerateIntrinsic(IRBuilder2& irBuilder, const CHIR::IntrinsicBase& intrinsic);
 
 // `CGIntrinsicKind` is used to classify the syscall CHIR node (see GetCGIntrinsicKind())
 // and map to specific generate function (see GenerateIntrinsic())

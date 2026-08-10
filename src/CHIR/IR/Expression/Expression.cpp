@@ -435,16 +435,16 @@ std::string Expression::ToString(size_t indent) const
 
 bool Expression::HasExceptionBranch() const
 {
-    return kind == ExprKind::APPLY_WITH_EXCEPTION ||
-        kind == ExprKind::INVOKE_WITH_EXCEPTION ||
-        kind == ExprKind::INVOKESTATIC_WITH_EXCEPTION ||
-        Is<UnaryExpressionWithException>(*this) ||
-        Is<BinaryExpressionWithException>(*this) ||
-        kind == ExprKind::SPAWN_WITH_EXCEPTION ||
-        kind == ExprKind::NUMERIC_CAST_WITH_EXCEPTION ||
-        kind == ExprKind::INTRINSIC_WITH_EXCEPTION ||
-        kind == ExprKind::ALLOCATE_WITH_EXCEPTION ||
-        kind == ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION;
+    return kind == ExprKind::TRY_APPLY ||
+        kind == ExprKind::TRY_INVOKE ||
+        kind == ExprKind::TRY_INVOKESTATIC ||
+        Is<TryUnaryExpression>(*this) ||
+        Is<TryBinaryExpression>(*this) ||
+        kind == ExprKind::TRY_SPAWN ||
+        kind == ExprKind::TRY_NUMERIC_CAST ||
+        kind == ExprKind::TRY_INTRINSIC ||
+        kind == ExprKind::TRY_ALLOCATE ||
+        kind == ExprKind::TRY_RAW_ARRAY_ALLOCATE;
 }
 
 std::string Expression::OperandsToString() const
@@ -483,20 +483,20 @@ std::string Expression::AddExtraComment() const
 namespace {
 // (opKind, ExprKind, try ExprKind). ExprKind::INVALID means no try form.
 constexpr std::tuple<UnaryExprKind, ExprKind, ExprKind> UNARY_EXPR_KIND_TABLE[] = {
-    {UnaryExprKind::NEG, ExprKind::NEG, ExprKind::NEG_WITH_EXCEPTION},
+    {UnaryExprKind::NEG, ExprKind::NEG, ExprKind::TRY_NEG},
     {UnaryExprKind::NOT, ExprKind::NOT, ExprKind::INVALID},
     {UnaryExprKind::BITNOT, ExprKind::BITNOT, ExprKind::INVALID},
 };
 
 constexpr std::tuple<BinaryExprKind, ExprKind, ExprKind> BINARY_EXPR_KIND_TABLE[] = {
-    {BinaryExprKind::ADD, ExprKind::ADD, ExprKind::ADD_WITH_EXCEPTION},
-    {BinaryExprKind::SUB, ExprKind::SUB, ExprKind::SUB_WITH_EXCEPTION},
-    {BinaryExprKind::MUL, ExprKind::MUL, ExprKind::MUL_WITH_EXCEPTION},
-    {BinaryExprKind::DIV, ExprKind::DIV, ExprKind::DIV_WITH_EXCEPTION},
-    {BinaryExprKind::MOD, ExprKind::MOD, ExprKind::MOD_WITH_EXCEPTION},
-    {BinaryExprKind::EXP, ExprKind::EXP, ExprKind::EXP_WITH_EXCEPTION},
-    {BinaryExprKind::LSHIFT, ExprKind::LSHIFT, ExprKind::LSHIFT_WITH_EXCEPTION},
-    {BinaryExprKind::RSHIFT, ExprKind::RSHIFT, ExprKind::RSHIFT_WITH_EXCEPTION},
+    {BinaryExprKind::ADD, ExprKind::ADD, ExprKind::TRY_ADD},
+    {BinaryExprKind::SUB, ExprKind::SUB, ExprKind::TRY_SUB},
+    {BinaryExprKind::MUL, ExprKind::MUL, ExprKind::TRY_MUL},
+    {BinaryExprKind::DIV, ExprKind::DIV, ExprKind::TRY_DIV},
+    {BinaryExprKind::MOD, ExprKind::MOD, ExprKind::TRY_MOD},
+    {BinaryExprKind::EXP, ExprKind::EXP, ExprKind::TRY_EXP},
+    {BinaryExprKind::LSHIFT, ExprKind::LSHIFT, ExprKind::TRY_LSHIFT},
+    {BinaryExprKind::RSHIFT, ExprKind::RSHIFT, ExprKind::TRY_RSHIFT},
     {BinaryExprKind::BITAND, ExprKind::BITAND, ExprKind::INVALID},
     {BinaryExprKind::BITOR, ExprKind::BITOR, ExprKind::INVALID},
     {BinaryExprKind::BITXOR, ExprKind::BITXOR, ExprKind::INVALID},
@@ -938,6 +938,26 @@ const std::vector<Type*>& FuncCall::GetInstantiatedTypeArgs() const
     return instantiatedTypeArgs;
 }
 
+std::string FuncCall::OperandsToString() const
+{
+    std::vector<std::string> res;
+    std::string func;
+    if (thisType != nullptr) {
+        func += thisType->ToString() + "->";
+    }
+    func += GetCalleeIdentifier();
+    func += TypeVecToString("<", instantiatedTypeArgs, ">");
+    res.emplace_back(func);
+    std::vector<Value*> ops;
+    if (auto intrinsic = DynamicCast<const IntrinsicBase*>(this)) {
+        ops = operands;
+    } else {
+        ops = std::vector<Value*>(operands.begin() + 1, operands.end());
+    }
+    res.emplace_back(ValueIdVecToString("", ops, "", IsTerminator()));
+    return StringJoin(res, ", ");
+}
+
 // ApplyBase
 ApplyBase::ApplyBase(ExprKind kind, Value* callee, const FuncCallContext& callContext,
     const std::vector<Block*>& successors, Block* parent)
@@ -973,19 +993,9 @@ Type* ApplyBase::GetInstParentCustomTyOfCallee(CHIRBuilder& builder) const
     return GetInstParentCustomTypeForApplyCallee(*this, builder);
 }
 
-std::string ApplyBase::OperandsToString() const
+std::string ApplyBase::GetCalleeIdentifier() const
 {
-    std::vector<std::string> res;
-    std::string func;
-    if (thisType != nullptr) {
-        func += thisType->ToString() + "->";
-    }
-    func += GetCallee()->GetIdentifier();
-    func += TypeVecToString("<", instantiatedTypeArgs, ">");
-    res.emplace_back(func);
-    auto ops = std::vector<Value*>(operands.begin() + 1, operands.end());
-    res.emplace_back(ValueIdVecToString("", ops, "", IsTerminator()));
-    return StringJoin(res, ", ");
+    return GetCallee()->GetIdentifier();
 }
 
 // Apply
@@ -1098,19 +1108,9 @@ AttributeInfo DynamicDispatch::GetVirtualMethodAttr() const
     return GetCallee()->GetAttributeInfo();
 }
 
-std::string DynamicDispatch::OperandsToString() const
+std::string DynamicDispatch::GetCalleeIdentifier() const
 {
-    std::vector<std::string> res;
-    std::string func;
-    if (thisType != nullptr) {
-        func += thisType->ToString() + "->";
-    }
-    func += GetCallee()->GetIdentifier();
-    func += TypeVecToString("<", instantiatedTypeArgs, ">");
-    res.emplace_back(func);
-    auto ops = std::vector<Value*>(operands.begin() + 1, operands.end());
-    res.emplace_back(ValueIdVecToString("", ops, "", IsTerminator()));
-    return StringJoin(res, ", ");
+    return GetCallee()->GetIdentifier();
 }
 
 std::string DynamicDispatch::AddExtraComment() const
@@ -1519,36 +1519,43 @@ std::vector<Value*> RawArrayLiteralInit::GetElementValues() const
     return {operands.begin() + 1, operands.end()};
 }
 
-// Intrinsic
-Intrinsic::Intrinsic(const IntrisicCallContext& callContext, Block* parent)
-    : Expression(ExprKind::INTRINSIC, callContext.args, {}, parent),
-    intrinsicKind(callContext.kind),
-    instantiatedTypeArgs(callContext.instTypeArgs)
+// IntrinsicBase
+IntrinsicBase::IntrinsicBase(ExprKind kind, const IntrisicCallContext& callContext,
+    const std::vector<Block*>& successors, Block* parent)
+    : FuncCall(kind,
+          FuncCallContext{.args = callContext.args, .instTypeArgs = callContext.instTypeArgs, .thisType = nullptr},
+          parent),
+      intrinsicKind(callContext.kind)
 {
+    CJC_NULLPTR_CHECK(parent);
+    for (auto op : callContext.args) {
+        AppendOperand(*op);
+    }
+    for (auto succ : successors) {
+        AppendOperand(*succ);
+    }
 }
 
-IntrinsicKind Intrinsic::GetIntrinsicKind() const
+IntrinsicKind IntrinsicBase::GetIntrinsicKind() const
 {
     return intrinsicKind;
 }
 
-const std::vector<Type*>& Intrinsic::GetInstantiatedTypeArgs() const
+std::vector<Value*> IntrinsicBase::GetArgs() const
 {
-    return instantiatedTypeArgs;
+    auto end = GetSuccessorIndex(0);
+    return {operands.begin(), operands.begin() + static_cast<long>(end)};
 }
 
-const std::vector<Value*>& Intrinsic::GetArgs() const
+std::string IntrinsicBase::GetCalleeIdentifier() const
 {
-    return operands;
+    return IntrinsicKindToString(intrinsicKind);
 }
 
-std::string Intrinsic::OperandsToString() const
+// Intrinsic
+Intrinsic::Intrinsic(const IntrisicCallContext& callContext, Block* parent)
+    : IntrinsicBase(ExprKind::INTRINSIC, callContext, {}, parent)
 {
-    std::stringstream ss;
-    ss << IntrinsicKindToString(intrinsicKind);
-    ss << TypeVecToString("<", instantiatedTypeArgs, ">");
-    ss << ", " << ValueIdVecToString("", operands, "");
-    return ss.str();
 }
 
 // ForIn

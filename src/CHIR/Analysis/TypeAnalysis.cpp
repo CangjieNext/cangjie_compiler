@@ -211,28 +211,28 @@ std::optional<Block*> TypeAnalysis::HandleTerminatorEffect(TypeDomain& state, co
 {
     switch (terminator->GetExprKind()) {
         // already handled by the framework
-        // case ExprKind::ALLOCATE_WITH_EXCEPTION:
-        // case ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION:
-        // case ExprKind::RAW_ARRAY_LITERAL_ALLOCATE_WITH_EXCEPTION:
-        // case ExprKind::APPLY_WITH_EXCEPTION:
-        // case ExprKind::INVOKE_WITH_EXCEPTION:
-        case ExprKind::NUMERIC_CAST_WITH_EXCEPTION:
-            HandleTypeCastExpr(state, StaticCast<const NumericCastWithException*>(terminator));
+        // case ExprKind::TRY_ALLOCATE:
+        // case ExprKind::TRY_RAW_ARRAY_ALLOCATE:
+        // case ExprKind::TRY_RAW_ARRAY_LITERAL_ALLOCATE:
+        // case ExprKind::TRY_APPLY:
+        // case ExprKind::TRY_INVOKE:
+        case ExprKind::TRY_NUMERIC_CAST:
+            HandleTypeCastExpr(state, StaticCast<const TryNumericCast*>(terminator));
             break;
         case ExprKind::GOTO:
         case ExprKind::EXIT:
         case ExprKind::BRANCH:
         case ExprKind::MULTIBRANCH:
-        case ExprKind::NEG_WITH_EXCEPTION:
-        case ExprKind::ADD_WITH_EXCEPTION:
-        case ExprKind::SUB_WITH_EXCEPTION:
-        case ExprKind::MUL_WITH_EXCEPTION:
-        case ExprKind::DIV_WITH_EXCEPTION:
-        case ExprKind::MOD_WITH_EXCEPTION:
-        case ExprKind::EXP_WITH_EXCEPTION:
-        case ExprKind::LSHIFT_WITH_EXCEPTION:
-        case ExprKind::RSHIFT_WITH_EXCEPTION:
-        case ExprKind::INTRINSIC_WITH_EXCEPTION:
+        case ExprKind::TRY_NEG:
+        case ExprKind::TRY_ADD:
+        case ExprKind::TRY_SUB:
+        case ExprKind::TRY_MUL:
+        case ExprKind::TRY_DIV:
+        case ExprKind::TRY_MOD:
+        case ExprKind::TRY_EXP:
+        case ExprKind::TRY_LSHIFT:
+        case ExprKind::TRY_RSHIFT:
+        case ExprKind::TRY_INTRINSIC:
         default: {
             auto dest = terminator->GetResult();
             if (dest) {

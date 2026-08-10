@@ -93,7 +93,7 @@ template <typename T> void CHIR2BCHIR::TranslateIntrinsicExpression(Context& ctx
     auto opCode =
         auxInfo.size() == 0 ? OpCode::INTRINSIC0 : (auxInfo.size() == 1 ? OpCode::INTRINSIC1 : OpCode::INTRINSIC2);
     if (intrinsic.GetExprKind() != ExprKind::INTRINSIC) {
-        CJC_ASSERT(intrinsic.GetExprKind() == ExprKind::INTRINSIC_WITH_EXCEPTION);
+        CJC_ASSERT(intrinsic.GetExprKind() == ExprKind::TRY_INTRINSIC);
         opCode = static_cast<OpCode>(static_cast<size_t>(opCode) + Bchir::FLAG_THREE);
     }
     PushOpCodeWithAnnotations<false, true>(ctx, opCode, intrinsic, intrinsicKind);
@@ -105,5 +105,5 @@ template <typename T> void CHIR2BCHIR::TranslateIntrinsicExpression(Context& ctx
     }
 }
 
-// force instantiation of TranslateIntrinsicExpression with Intrinsic and IntrinsicWithException
+// force instantiation of TranslateIntrinsicExpression with Intrinsic and TryIntrinsic
 template void CHIR2BCHIR::TranslateIntrinsicExpression(Context& ctx, const Intrinsic& intrinsic);
