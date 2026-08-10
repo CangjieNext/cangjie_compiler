@@ -589,7 +589,7 @@ bool IsVirtualMember(const Decl& decl)
             return false;
         }
     } else if (decl.TestAttr(AST::Attribute::STATIC, AST::Attribute::PRIVATE)) {
-        // rule 4: for static function or static propraty decleration, private is not virtual, otherwise it will
+        // rule 4: for static function or static property declaration, private is not virtual, otherwise it will
         // be a virtual function when it is in the open class.
         return false;
     }
