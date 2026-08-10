@@ -13,6 +13,7 @@
 #ifndef CANGJIE_UTILS_SIGNAL_H
 #define CANGJIE_UTILS_SIGNAL_H
 
+#if (defined RELEASE)
 #include "cangjie/Utils/ICEUtil.h"
 #include "cangjie/Utils/FileUtil.h"
 
@@ -63,6 +64,7 @@ void ExecuteSignalTestCallbackFunc(TriggerPointer executionPoint);
 #endif
 
 } // namespace Cangjie
+#endif
 namespace Cangjie {
 /* Register signal handler for Crtl C signal. */
 void RegisterCrtlCSignalHandler();
