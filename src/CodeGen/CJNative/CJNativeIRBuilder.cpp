@@ -263,8 +263,7 @@ llvm::Value* IRBuilder2::CreateOuterTypeInfo(const CHIRCallExpr& callExprWrapper
     llvm::PointerType* typeInfoPtrType = CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext());
 
     // Apply
-    if (chirExpr->GetExprKind() == CHIR::ExprKind::APPLY ||
-        chirExpr->GetExprKind() == CHIR::ExprKind::APPLY_WITH_EXCEPTION) {
+    if (Is<CHIR::ApplyBase>(chirExpr->GetChirExpr())) {
         return CreateBitCast(CreateTypeInfo(outerCHIRType), typeInfoPtrType);
     }
 
@@ -776,8 +775,7 @@ bool IsLoadExprForAllocatedGenericRef(const CHIR::Expression& chirExpr)
 
     auto locationExpr = StaticCast<CHIR::LocalVar*>(location)->GetExpr();
     CJC_NULLPTR_CHECK(locationExpr);
-    auto locationExprKind = locationExpr->GetExprKind();
-    if (locationExprKind != CHIR::ExprKind::ALLOCATE && locationExprKind != CHIR::ExprKind::ALLOCATE_WITH_EXCEPTION) {
+    if (!Is<CHIR::AllocateBase>(locationExpr)) {
         return false;
     }
 

@@ -58,21 +58,21 @@ DEFINE_NODE_TYPE_KIND(CHIR::Invoke, CHIR::ExprKind::INVOKE);
 DEFINE_NODE_TYPE_KIND(CHIR::InvokeStatic, CHIR::ExprKind::INVOKESTATIC);
 DEFINE_NODE_TYPE_KIND(CHIR::ClassStaticCast, CHIR::ExprKind::CLASS_STATIC_CAST);
 DEFINE_NODE_TYPE_KIND(CHIR::NumericCast, CHIR::ExprKind::NUMERIC_CAST);
-DEFINE_NODE_TYPE_KIND(CHIR::NumericCastWithException, CHIR::ExprKind::NUMERIC_CAST_WITH_EXCEPTION);
+DEFINE_NODE_TYPE_KIND(CHIR::TryNumericCast, CHIR::ExprKind::TRY_NUMERIC_CAST);
 DEFINE_NODE_TYPE_KIND(CHIR::InstanceOf, CHIR::ExprKind::INSTANCEOF);
 DEFINE_NODE_TYPE_KIND(CHIR::GoTo, CHIR::ExprKind::GOTO);
 DEFINE_NODE_TYPE_KIND(CHIR::Branch, CHIR::ExprKind::BRANCH);
 DEFINE_NODE_TYPE_KIND(CHIR::MultiBranch, CHIR::ExprKind::MULTIBRANCH);
 DEFINE_NODE_TYPE_KIND(CHIR::Exit, CHIR::ExprKind::EXIT);
 DEFINE_NODE_TYPE_KIND(CHIR::RaiseException, CHIR::ExprKind::RAISE_EXCEPTION);
-DEFINE_NODE_TYPE_KIND(CHIR::ApplyWithException, CHIR::ExprKind::APPLY_WITH_EXCEPTION);
-DEFINE_NODE_TYPE_KIND(CHIR::InvokeWithException, CHIR::ExprKind::INVOKE_WITH_EXCEPTION);
-DEFINE_NODE_TYPE_KIND(CHIR::InvokeStaticWithException, CHIR::ExprKind::INVOKESTATIC_WITH_EXCEPTION);
-DEFINE_NODE_TYPE_KIND(CHIR::UnaryExpressionWithException, CHIR::ExprKind::NEG_WITH_EXCEPTION);
-DEFINE_NODE_TYPE_KIND(CHIR::IntrinsicWithException, CHIR::ExprKind::INTRINSIC_WITH_EXCEPTION);
-DEFINE_NODE_TYPE_KIND(CHIR::AllocateWithException, CHIR::ExprKind::ALLOCATE_WITH_EXCEPTION);
-DEFINE_NODE_TYPE_KIND(CHIR::RawArrayAllocateWithException, CHIR::ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION);
-DEFINE_NODE_TYPE_KIND(CHIR::SpawnWithException, CHIR::ExprKind::SPAWN_WITH_EXCEPTION);
+DEFINE_NODE_TYPE_KIND(CHIR::TryApply, CHIR::ExprKind::TRY_APPLY);
+DEFINE_NODE_TYPE_KIND(CHIR::TryInvoke, CHIR::ExprKind::TRY_INVOKE);
+DEFINE_NODE_TYPE_KIND(CHIR::TryInvokeStatic, CHIR::ExprKind::TRY_INVOKESTATIC);
+DEFINE_NODE_TYPE_KIND(CHIR::TryUnaryExpression, CHIR::ExprKind::TRY_NEG);
+DEFINE_NODE_TYPE_KIND(CHIR::TryIntrinsic, CHIR::ExprKind::TRY_INTRINSIC);
+DEFINE_NODE_TYPE_KIND(CHIR::TryAllocate, CHIR::ExprKind::TRY_ALLOCATE);
+DEFINE_NODE_TYPE_KIND(CHIR::TryRawArrayAllocate, CHIR::ExprKind::TRY_RAW_ARRAY_ALLOCATE);
+DEFINE_NODE_TYPE_KIND(CHIR::TrySpawn, CHIR::ExprKind::TRY_SPAWN);
 DEFINE_NODE_TYPE_KIND(CHIR::Tuple, CHIR::ExprKind::TUPLE);
 DEFINE_NODE_TYPE_KIND(CHIR::Field, CHIR::ExprKind::FIELD);
 DEFINE_NODE_TYPE_KIND(CHIR::FieldByName, CHIR::ExprKind::FIELD_BY_NAME);
@@ -249,11 +249,11 @@ template <> struct TypeAs<CHIR::IntType> {
 
 template <typename To>
 using ExprImplSeparately = std::enable_if_t<std::is_base_of_v<CHIR::Expression, To> &&
-    ShouldInstantiate<To, CHIR::UnaryExpression, CHIR::BinaryExpression, CHIR::Terminator, CHIR::SpawnBase,
+    ShouldInstantiate<To, CHIR::UnaryExpression, CHIR::BinaryExpression, CHIR::SpawnBase,
         CHIR::AllocateBase, CHIR::RawArrayAllocateBase, CHIR::TypeCast, CHIR::NumericCastBase,
-        CHIR::UnaryExpressionBase, CHIR::BinaryExpressionBase, CHIR::BinaryExpressionWithException,
+        CHIR::UnaryExpressionBase, CHIR::BinaryExpressionBase, CHIR::TryBinaryExpression,
         CHIR::FuncCall, CHIR::ApplyBase, CHIR::DynamicDispatch, CHIR::InvokeBase,
-        CHIR::InvokeStaticBase>::value>;
+        CHIR::InvokeStaticBase, CHIR::IntrinsicBase>::value>;
 
 template <typename To> struct TypeAs<To, ExprImplSeparately<To>> {
     static inline bool IsInstanceOf(const CHIR::Expression& node)
@@ -268,7 +268,7 @@ template <> struct TypeAs<CHIR::TypeCast> {
         auto kind = node.GetExprKind();
         return kind == CHIR::ExprKind::BOX || kind == CHIR::ExprKind::UNBOX_TO_VALUE ||
             kind == CHIR::ExprKind::UNBOX_TO_REF || kind == CHIR::ExprKind::CLASS_STATIC_CAST ||
-            kind == CHIR::ExprKind::NUMERIC_CAST || kind == CHIR::ExprKind::NUMERIC_CAST_WITH_EXCEPTION ||
+            kind == CHIR::ExprKind::NUMERIC_CAST || kind == CHIR::ExprKind::TRY_NUMERIC_CAST ||
             kind == CHIR::ExprKind::CAST_TO_CONCRETE || kind == CHIR::ExprKind::CAST_TO_GENERIC;
     }
 };
@@ -277,7 +277,7 @@ template <> struct TypeAs<CHIR::NumericCastBase> {
     static inline bool IsInstanceOf(const CHIR::Expression& node)
     {
         return node.GetExprKind() == CHIR::ExprKind::NUMERIC_CAST ||
-            node.GetExprKind() == CHIR::ExprKind::NUMERIC_CAST_WITH_EXCEPTION;
+            node.GetExprKind() == CHIR::ExprKind::TRY_NUMERIC_CAST;
     }
 };
 
@@ -285,7 +285,7 @@ template <> struct TypeAs<CHIR::ApplyBase> {
     static inline bool IsInstanceOf(const CHIR::Expression& node)
     {
         return node.GetExprKind() == CHIR::ExprKind::APPLY ||
-            node.GetExprKind() == CHIR::ExprKind::APPLY_WITH_EXCEPTION;
+            node.GetExprKind() == CHIR::ExprKind::TRY_APPLY;
     }
 };
 
@@ -293,7 +293,7 @@ template <> struct TypeAs<CHIR::InvokeBase> {
     static inline bool IsInstanceOf(const CHIR::Expression& node)
     {
         return node.GetExprKind() == CHIR::ExprKind::INVOKE ||
-            node.GetExprKind() == CHIR::ExprKind::INVOKE_WITH_EXCEPTION;
+            node.GetExprKind() == CHIR::ExprKind::TRY_INVOKE;
     }
 };
 
@@ -301,7 +301,7 @@ template <> struct TypeAs<CHIR::InvokeStaticBase> {
     static inline bool IsInstanceOf(const CHIR::Expression& node)
     {
         return node.GetExprKind() == CHIR::ExprKind::INVOKESTATIC ||
-            node.GetExprKind() == CHIR::ExprKind::INVOKESTATIC_WITH_EXCEPTION;
+            node.GetExprKind() == CHIR::ExprKind::TRY_INVOKESTATIC;
     }
 };
 
@@ -313,11 +313,20 @@ template <> struct TypeAs<CHIR::DynamicDispatch> {
     }
 };
 
+template <> struct TypeAs<CHIR::IntrinsicBase> {
+    static inline bool IsInstanceOf(const CHIR::Expression& node)
+    {
+        return node.GetExprKind() == CHIR::ExprKind::INTRINSIC ||
+            node.GetExprKind() == CHIR::ExprKind::TRY_INTRINSIC;
+    }
+};
+
 template <> struct TypeAs<CHIR::FuncCall> {
     static inline bool IsInstanceOf(const CHIR::Expression& node)
     {
         return TypeAs<CHIR::ApplyBase>::IsInstanceOf(node) ||
-            TypeAs<CHIR::DynamicDispatch>::IsInstanceOf(node);
+            TypeAs<CHIR::DynamicDispatch>::IsInstanceOf(node) ||
+            TypeAs<CHIR::IntrinsicBase>::IsInstanceOf(node);
     }
 };
 
@@ -325,7 +334,7 @@ template <> struct TypeAs<CHIR::SpawnBase> {
     static inline bool IsInstanceOf(const CHIR::Expression& node)
     {
         return node.GetExprKind() == CHIR::ExprKind::SPAWN ||
-            node.GetExprKind() == CHIR::ExprKind::SPAWN_WITH_EXCEPTION;
+            node.GetExprKind() == CHIR::ExprKind::TRY_SPAWN;
     }
 };
 
@@ -333,7 +342,7 @@ template <> struct TypeAs<CHIR::AllocateBase> {
     static inline bool IsInstanceOf(const CHIR::Expression& node)
     {
         return node.GetExprKind() == CHIR::ExprKind::ALLOCATE ||
-            node.GetExprKind() == CHIR::ExprKind::ALLOCATE_WITH_EXCEPTION;
+            node.GetExprKind() == CHIR::ExprKind::TRY_ALLOCATE;
     }
 };
 
@@ -341,7 +350,7 @@ template <> struct TypeAs<CHIR::RawArrayAllocateBase> {
     static inline bool IsInstanceOf(const CHIR::Expression& node)
     {
         return node.GetExprKind() == CHIR::ExprKind::RAW_ARRAY_ALLOCATE ||
-            node.GetExprKind() == CHIR::ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION;
+            node.GetExprKind() == CHIR::ExprKind::TRY_RAW_ARRAY_ALLOCATE;
     }
 };
 
@@ -361,11 +370,11 @@ template <> struct TypeAs<CHIR::BinaryExpression> {
     }
 };
 
-template <> struct TypeAs<CHIR::BinaryExpressionWithException> {
+template <> struct TypeAs<CHIR::TryBinaryExpression> {
     static inline bool IsInstanceOf(const CHIR::Expression& node)
     {
         auto kind = node.GetExprKind();
-        return kind >= CHIR::ExprKind::ADD_WITH_EXCEPTION && kind <= CHIR::ExprKind::RSHIFT_WITH_EXCEPTION;
+        return kind >= CHIR::ExprKind::TRY_ADD && kind <= CHIR::ExprKind::TRY_RSHIFT;
     }
 };
 
@@ -373,7 +382,7 @@ template <> struct TypeAs<CHIR::UnaryExpressionBase> {
     static inline bool IsInstanceOf(const CHIR::Expression& node)
     {
         return TypeAs<CHIR::UnaryExpression>::IsInstanceOf(node) ||
-            node.GetExprKind() == CHIR::ExprKind::NEG_WITH_EXCEPTION;
+            node.GetExprKind() == CHIR::ExprKind::TRY_NEG;
     }
 };
 
@@ -381,7 +390,7 @@ template <> struct TypeAs<CHIR::BinaryExpressionBase> {
     static inline bool IsInstanceOf(const CHIR::Expression& node)
     {
         return TypeAs<CHIR::BinaryExpression>::IsInstanceOf(node) ||
-            TypeAs<CHIR::BinaryExpressionWithException>::IsInstanceOf(node);
+            TypeAs<CHIR::TryBinaryExpression>::IsInstanceOf(node);
     }
 };
 

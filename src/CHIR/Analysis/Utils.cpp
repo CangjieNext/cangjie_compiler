@@ -100,7 +100,7 @@ std::optional<size_t> IsInitialisingMemberVar(const Function& func, const StoreE
 const Lambda* IsApplyToLambda(const Expression* expr)
 {
     CJC_NULLPTR_CHECK(expr);
-    if (expr->GetExprKind() != ExprKind::APPLY && expr->GetExprKind() != ExprKind::APPLY_WITH_EXCEPTION) {
+    if (!Is<ApplyBase>(expr)) {
         return nullptr;
     }
     CJC_ASSERT(expr->GetNumOfNonSuccessorOperands() > 0);
@@ -108,7 +108,7 @@ const Lambda* IsApplyToLambda(const Expression* expr)
         return nullptr;
     }
     auto callee = StaticCast<const LocalVar*>(expr->GetOperand(0))->GetExpr();
-    if (callee->GetExprKind() != ExprKind::LAMBDA) {
+    if (!Is<Lambda>(callee)) {
         return nullptr;
     }
     return StaticCast<const Lambda*>(callee);

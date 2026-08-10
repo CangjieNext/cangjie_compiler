@@ -32,7 +32,6 @@ class Expression;
 class Constant;
 class Function;
 class BlockGroup;
-class Terminator;
 class CustomTypeDef;
 class FuncType;
 class Debug;
@@ -45,7 +44,6 @@ class Value : public Base {
     friend class CHIRContext;
     friend class CHIRBuilder;
     friend class Expression;
-    friend class Terminator;
     friend class ValueTypeConverter;
     template <typename> friend class ValueTypeFunctor;
     friend class TypeConverterForCC;
@@ -285,7 +283,6 @@ class Block : public Value {
     friend class CHIRContext;
     friend class CHIRBuilder;
     friend class Expression;
-    friend class Terminator;
     friend class BlockGroup;
     friend class CHIRDeserializer;
 

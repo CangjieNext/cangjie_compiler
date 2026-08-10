@@ -386,11 +386,11 @@ private:
         ConstAnalysis::ExceptionKind res = ExceptionKind::NA;
         switch (terminator->GetExprKind()) {
             // already handled by the framework
-            // case ExprKind::ALLOCATE_WITH_EXCEPTION:
-            // case ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION:
-            // case ExprKind::RAW_ARRAY_LITERAL_ALLOCATE_WITH_EXCEPTION:
-            // case ExprKind::APPLY_WITH_EXCEPTION:
-            // case ExprKind::INVOKE_WITH_EXCEPTION:
+            // case ExprKind::TRY_ALLOCATE:
+            // case ExprKind::TRY_RAW_ARRAY_ALLOCATE:
+            // case ExprKind::TRY_RAW_ARRAY_LITERAL_ALLOCATE:
+            // case ExprKind::TRY_APPLY:
+            // case ExprKind::TRY_INVOKE:
             case ExprKind::GOTO:
             case ExprKind::EXIT:
                 break;
@@ -398,24 +398,24 @@ private:
                 return HandleBranchTerminator(state, StaticCast<const Branch*>(terminator));
             case ExprKind::MULTIBRANCH:
                 return HandleMultiBranchTerminator(state, StaticCast<const MultiBranch*>(terminator));
-            case ExprKind::NUMERIC_CAST_WITH_EXCEPTION:
-                res = HandleNumericCast(state, StaticCast<const NumericCastWithException*>(terminator));
+            case ExprKind::TRY_NUMERIC_CAST:
+                res = HandleNumericCast(state, StaticCast<const TryNumericCast*>(terminator));
                 break;
-            case ExprKind::NEG_WITH_EXCEPTION:
+            case ExprKind::TRY_NEG:
                 HandleUnaryExpr(state, StaticCast<const UnaryExpressionBase*>(terminator), res);
                 break;
-            case ExprKind::ADD_WITH_EXCEPTION:
-            case ExprKind::SUB_WITH_EXCEPTION:
-            case ExprKind::MUL_WITH_EXCEPTION:
-            case ExprKind::DIV_WITH_EXCEPTION:
-            case ExprKind::MOD_WITH_EXCEPTION:
-            case ExprKind::EXP_WITH_EXCEPTION:
-            case ExprKind::LSHIFT_WITH_EXCEPTION:
-            case ExprKind::RSHIFT_WITH_EXCEPTION:
+            case ExprKind::TRY_ADD:
+            case ExprKind::TRY_SUB:
+            case ExprKind::TRY_MUL:
+            case ExprKind::TRY_DIV:
+            case ExprKind::TRY_MOD:
+            case ExprKind::TRY_EXP:
+            case ExprKind::TRY_LSHIFT:
+            case ExprKind::TRY_RSHIFT:
                 HandleBinaryExpr(state, StaticCast<const BinaryExpressionBase*>(terminator), res);
                 break;
-            case ExprKind::INTRINSIC_WITH_EXCEPTION:
-                res = HandleIntrinsic(state, StaticCast<const IntrinsicWithException*>(terminator));
+            case ExprKind::TRY_INTRINSIC:
+                res = HandleIntrinsic(state, StaticCast<const TryIntrinsic*>(terminator));
                 break;
             default: {
                 auto dest = terminator->GetResult();
@@ -1156,8 +1156,7 @@ private:
         HandleApply(state, apply, refObj);
     }
 
-    std::optional<Block*> HandleApplyWithExceptionTerminator(
-        TConstDomain& state, const ApplyWithException* apply, Value* refObj) override
+    std::optional<Block*> HandleTryApplyTerminator(TConstDomain& state, const TryApply* apply, Value* refObj) override
     {
         auto res = HandleApply(state, apply, refObj);
         if (res == ExceptionKind::SUCCESS) {

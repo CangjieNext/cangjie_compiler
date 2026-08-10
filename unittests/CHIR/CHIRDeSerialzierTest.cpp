@@ -415,55 +415,55 @@ ExprKind DeSerialize(const PackageFormat::CHIRExprKind& kind)
             ret = ExprKind::EXIT;
             break;
         case CHIRExprKind_TryApply:
-            ret = ExprKind::APPLY_WITH_EXCEPTION;
+            ret = ExprKind::TRY_APPLY;
             break;
         case CHIRExprKind_TryInvoke:
-            ret = ExprKind::INVOKE_WITH_EXCEPTION;
+            ret = ExprKind::TRY_INVOKE;
             break;
         case CHIRExprKind_RaiseException:
             ret = ExprKind::RAISE_EXCEPTION;
             break;
         case CHIRExprKind_TryNeg:
-            ret = ExprKind::NEG_WITH_EXCEPTION;
+            ret = ExprKind::TRY_NEG;
             break;
         case CHIRExprKind_TryAdd:
-            ret = ExprKind::ADD_WITH_EXCEPTION;
+            ret = ExprKind::TRY_ADD;
             break;
         case CHIRExprKind_TrySub:
-            ret = ExprKind::SUB_WITH_EXCEPTION;
+            ret = ExprKind::TRY_SUB;
             break;
         case CHIRExprKind_TryMul:
-            ret = ExprKind::MUL_WITH_EXCEPTION;
+            ret = ExprKind::TRY_MUL;
             break;
         case CHIRExprKind_TryDiv:
-            ret = ExprKind::DIV_WITH_EXCEPTION;
+            ret = ExprKind::TRY_DIV;
             break;
         case CHIRExprKind_TryMod:
-            ret = ExprKind::MOD_WITH_EXCEPTION;
+            ret = ExprKind::TRY_MOD;
             break;
         case CHIRExprKind_TryExp:
-            ret = ExprKind::EXP_WITH_EXCEPTION;
+            ret = ExprKind::TRY_EXP;
             break;
         case CHIRExprKind_TryLShift:
-            ret = ExprKind::LSHIFT_WITH_EXCEPTION;
+            ret = ExprKind::TRY_LSHIFT;
             break;
         case CHIRExprKind_TryRShift:
-            ret = ExprKind::RSHIFT_WITH_EXCEPTION;
+            ret = ExprKind::TRY_RSHIFT;
             break;
         case CHIRExprKind_TrySpawn:
-            ret = ExprKind::SPAWN_WITH_EXCEPTION;
+            ret = ExprKind::TRY_SPAWN;
             break;
         case CHIRExprKind_TryNumericCast:
-            ret = ExprKind::NUMERIC_CAST_WITH_EXCEPTION;
+            ret = ExprKind::TRY_NUMERIC_CAST;
             break;
         case CHIRExprKind_TryIntrinsic:
-            ret = ExprKind::INTRINSIC_WITH_EXCEPTION;
+            ret = ExprKind::TRY_INTRINSIC;
             break;
         case CHIRExprKind_TryAllocate:
-            ret = ExprKind::ALLOCATE_WITH_EXCEPTION;
+            ret = ExprKind::TRY_ALLOCATE;
             break;
         case CHIRExprKind_TryRawArrayAllocate:
-            ret = ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION;
+            ret = ExprKind::TRY_RAW_ARRAY_ALLOCATE;
             break;
             // Unary
         case CHIRExprKind_Neg:

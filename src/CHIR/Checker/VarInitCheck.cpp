@@ -17,7 +17,8 @@ namespace {
 bool HasFuncCallWithNothingRetVal(const Block& block)
 {
     for (auto expr : block.GetNonTerminatorExpressions()) {
-        if (!Cangjie::Is<FuncCall>(expr)) {
+        // Only Apply/Invoke/InvokeStatic (+ Try*) — not Intrinsic, even though IntrinsicBase : FuncCall.
+        if (!Cangjie::Is<ApplyBase>(expr) && !Cangjie::Is<DynamicDispatch>(expr)) {
             continue;
         }
         auto type = expr->GetResultType()->StripAllRefs();
@@ -216,8 +217,8 @@ void VarInitCheck::UseBeforeInitCheck(
             if (auto uninitedMembers = state.GetMaybeUninitedLocalMembers(); !uninitedMembers.empty()) {
                 RaiseUninitedDefMemberError(state, func, members, uninitedMembers);
             }
-        } else if (terminator->GetExprKind() == ExprKind::APPLY_WITH_EXCEPTION) {
-            CheckMemberFuncCall(state, *func, *StaticCast<ApplyWithException*>(terminator));
+        } else if (auto tryApply = DynamicCast<const TryApply*>(terminator)) {
+            CheckMemberFuncCall(state, *func, *tryApply);
         }
     };
 

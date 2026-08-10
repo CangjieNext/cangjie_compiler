@@ -75,17 +75,17 @@ void CHIR2BCHIR::TranslateTerminatorExpression(Context& ctx, const Expression& e
             }
             break;
         }
-        case ExprKind::APPLY_WITH_EXCEPTION: {
+        case ExprKind::TRY_APPLY: {
             // :: APPLY_EXC :: number_of_args :: idx_when_exception :: LVAR_SET :: lvar_id
             // :: JUMP :: idx_when_normal_return
-            auto apply = StaticCast<const ApplyWithException*>(&expr);
-            TranslateApplyWithExceptionExpression(ctx, *apply);
+            auto apply = StaticCast<const TryApply*>(&expr);
+            TranslateTryApplyExpression(ctx, *apply);
             break;
         }
-        case ExprKind::INVOKE_WITH_EXCEPTION: {
+        case ExprKind::TRY_INVOKE: {
             // :: INVOKE_EXC :: number_of_args :: method_name :: idx_when_exception :: LVAR_SET :: lvar_id
             // :: JUMP :: idx_when_normal_return
-            auto invoke = StaticCast<const InvokeWithException*>(&expr);
+            auto invoke = StaticCast<const TryInvoke*>(&expr);
             auto numberArgs = invoke->GetArgs().size();
             CJC_ASSERT(numberArgs > 0);
             CJC_ASSERT(numberArgs <= static_cast<size_t>(Bchir::BYTECODE_CONTENT_MAX));
@@ -98,32 +98,32 @@ void CHIR2BCHIR::TranslateTerminatorExpression(Context& ctx, const Expression& e
             TranslateTryTerminatorJumps(ctx, *invoke);
             break;
         }
-        case ExprKind::INVOKESTATIC_WITH_EXCEPTION: {
+        case ExprKind::TRY_INVOKESTATIC: {
             PushOpCodeWithAnnotations(ctx, OpCode::ABORT, expr);
             break;
         }
-        case ExprKind::NEG_WITH_EXCEPTION: {
-            auto& unaryWithException = StaticCast<const UnaryExpressionWithException&>(expr);
-            TranslateUnaryExpression(ctx, unaryWithException);
-            TranslateTryTerminatorJumps(ctx, unaryWithException);
+        case ExprKind::TRY_NEG: {
+            auto& tryUnary = StaticCast<const TryUnaryExpression&>(expr);
+            TranslateUnaryExpression(ctx, tryUnary);
+            TranslateTryTerminatorJumps(ctx, tryUnary);
             break;
         }
-        case ExprKind::ADD_WITH_EXCEPTION:
-        case ExprKind::SUB_WITH_EXCEPTION:
-        case ExprKind::MUL_WITH_EXCEPTION:
-        case ExprKind::DIV_WITH_EXCEPTION:
-        case ExprKind::MOD_WITH_EXCEPTION:
-        case ExprKind::EXP_WITH_EXCEPTION:
-        case ExprKind::LSHIFT_WITH_EXCEPTION:
-        case ExprKind::RSHIFT_WITH_EXCEPTION: {
-            auto& binaryWithException = StaticCast<const BinaryExpressionWithException&>(expr);
-            TranslateBinaryExpression(ctx, binaryWithException);
-            TranslateTryTerminatorJumps(ctx, binaryWithException);
+        case ExprKind::TRY_ADD:
+        case ExprKind::TRY_SUB:
+        case ExprKind::TRY_MUL:
+        case ExprKind::TRY_DIV:
+        case ExprKind::TRY_MOD:
+        case ExprKind::TRY_EXP:
+        case ExprKind::TRY_LSHIFT:
+        case ExprKind::TRY_RSHIFT: {
+            auto& tryBinary = StaticCast<const TryBinaryExpression&>(expr);
+            TranslateBinaryExpression(ctx, tryBinary);
+            TranslateTryTerminatorJumps(ctx, tryBinary);
             break;
         }
-        case ExprKind::ALLOCATE_WITH_EXCEPTION: {
+        case ExprKind::TRY_ALLOCATE: {
             CJC_ASSERT(expr.GetNumOfNonSuccessorOperands() == 0);
-            TranslateAllocate(ctx, expr);
+            TranslateAllocate(ctx, StaticCast<const TryAllocate&>(expr));
             TranslateTryTerminatorJumps(ctx, expr);
             break;
         }
@@ -136,7 +136,7 @@ void CHIR2BCHIR::TranslateTerminatorExpression(Context& ctx, const Expression& e
     }
 }
 
-void CHIR2BCHIR::TranslateApplyWithExceptionExpression(Context& ctx, const ApplyWithException& apply)
+void CHIR2BCHIR::TranslateTryApplyExpression(Context& ctx, const TryApply& apply)
 {
     PushOpCodeWithAnnotations<false, true>(
         ctx, OpCode::APPLY_EXC, apply, static_cast<unsigned>(apply.GetNumOfNonSuccessorOperands()));

@@ -131,9 +131,9 @@ private:
     template <typename T> void TranslateIntrinsicExpression(Context& ctx, const T& intrinsic);
     void TranslateCApplyExpression(Context& ctx, const Apply& apply, const Cangjie::CHIR::FuncType& funcTy);
     void TranslateApplyExpression(Context& ctx, const Apply& apply);
-    void TranslateApplyWithExceptionExpression(Context& ctx, const ApplyWithException& apply);
+    void TranslateTryApplyExpression(Context& ctx, const TryApply& apply);
     void TranslateMultiBranch(Context& ctx, const MultiBranch& branch);
-    void TranslateAllocate(Context& ctx, const Expression& expr);
+    void TranslateAllocate(Context& ctx, const AllocateBase& expr);
     void TranslateBox(Context& ctx, const Box& expr);
     void TranslateInstanceOf(Context& ctx, const InstanceOf& expr);
 
@@ -147,7 +147,7 @@ private:
     Bchir::ByteCodeContent LVarId(Context& ctx, const Value& value);
 
     /** @brief generate bytecode for setting the result variable and jump indexes for
-     * x_WITH_EXCEPTION operations */
+     * TRY_* operations */
     void TranslateTryTerminatorJumps(Context& ctx, const Expression& expr);
 
     inline void PushArgs(Context&) const

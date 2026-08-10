@@ -94,16 +94,16 @@ void ConstPropagation::VisitFunc(const Function& func, bool isDebug, bool isCJLi
             case ExprKind::BRANCH:
             case ExprKind::MULTIBRANCH:
                 return (void)targetSuccMap.emplace(terminator, std::make_pair(nullptr, targetSucc.value()));
-            case ExprKind::NEG_WITH_EXCEPTION:
-            case ExprKind::ADD_WITH_EXCEPTION:
-            case ExprKind::SUB_WITH_EXCEPTION:
-            case ExprKind::MUL_WITH_EXCEPTION:
-            case ExprKind::DIV_WITH_EXCEPTION:
-            case ExprKind::MOD_WITH_EXCEPTION:
-            case ExprKind::EXP_WITH_EXCEPTION:
-            case ExprKind::LSHIFT_WITH_EXCEPTION:
-            case ExprKind::RSHIFT_WITH_EXCEPTION:
-            case ExprKind::NUMERIC_CAST_WITH_EXCEPTION: {
+            case ExprKind::TRY_NEG:
+            case ExprKind::TRY_ADD:
+            case ExprKind::TRY_SUB:
+            case ExprKind::TRY_MUL:
+            case ExprKind::TRY_DIV:
+            case ExprKind::TRY_MOD:
+            case ExprKind::TRY_EXP:
+            case ExprKind::TRY_LSHIFT:
+            case ExprKind::TRY_RSHIFT:
+            case ExprKind::TRY_NUMERIC_CAST: {
                 auto res = terminator->GetResult();
                 if (auto absVal = state.CheckAbstractValue(res)) {
                     targetSuccMap.emplace(terminator,

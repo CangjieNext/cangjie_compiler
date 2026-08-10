@@ -16,6 +16,7 @@
 namespace Cangjie {
 namespace CHIR {
 class Type;
+class IntrinsicBase;
 }
 namespace CodeGen {
 class CGModule;
@@ -23,7 +24,6 @@ class CGContext;
 class CGValue;
 class CGFunction;
 class CGType;
-class CHIRIntrinsicWrapper;
 using LLVMIRBuilder2 = llvm::IRBuilder<>;
 
 class IRBuilder2 : public LLVMIRBuilder2 {
@@ -286,8 +286,8 @@ public:
     };
 
     llvm::Value* CallIntrinsic(
-        const CHIRIntrinsicWrapper& intrinsic, const std::vector<CGValue*>& parameters, bool isC = false);
-    llvm::Value* CallIntrinsic(const CHIRIntrinsicWrapper& intrinsic, const std::vector<llvm::Value*>& args,
+        const CHIR::IntrinsicBase& intrinsic, const std::vector<CGValue*>& parameters, bool isC = false);
+    llvm::Value* CallIntrinsic(const CHIR::IntrinsicBase& intrinsic, const std::vector<llvm::Value*>& args,
         const std::vector<llvm::Type*>& tys = {});
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     llvm::Value* CallIntrinsicNull() const;
@@ -303,7 +303,7 @@ public:
     llvm::Value* CallSpawnIntrinsic(CGValue& obj, CGFunction& cgFunc, std::optional<CGValue*>& threadCtx,
         bool spawnWithFuture, llvm::Value* futureTI = nullptr);
     ///*----------------- Sync related --------------------//
-    llvm::Value* CallSyncIntrinsics(const CHIRIntrinsicWrapper& intrinsic, const std::vector<CGValue*>& parameters);
+    llvm::Value* CallSyncIntrinsics(const CHIR::IntrinsicBase& intrinsic, const std::vector<CGValue*>& parameters);
     ///*----------------- Overflow related --------------------//
     llvm::Value* GenerateOverflowCheckedFunc(
         CHIR::ExprKind opKind, const CHIR::Type& ty, std::vector<llvm::Value*>& argGenValues);
@@ -323,13 +323,13 @@ public:
     llvm::Value* CallPostThrowExceptionIntrinsic(llvm::Value* exceptionValue);
     ///*----------------- Runtime related --------------------//
     llvm::Value* GenerateCallExpectFunction(CGType* cgType, llvm::Value* val, llvm::Value* expectVal);
-    llvm::Value* CallRuntimeIntrinsics(const CHIRIntrinsicWrapper& syscall, const std::vector<CGValue*>& parameters);
+    llvm::Value* CallRuntimeIntrinsics(const CHIR::IntrinsicBase& syscall, const std::vector<CGValue*>& parameters);
     ///*----------------- Fill Or Get StackTrace related --------------------//
-    llvm::Value* CallStackTraceIntrinsic(const CHIRIntrinsicWrapper& syscall, std::vector<CGValue*>& parameters);
+    llvm::Value* CallStackTraceIntrinsic(const CHIR::IntrinsicBase& syscall, std::vector<CGValue*>& parameters);
     ///*----------------- ThreadInfo related --------------//
-    llvm::Value* CallThreadInfoIntrinsic(const CHIRIntrinsicWrapper& syscall, std::vector<CGValue*>& parameters);
+    llvm::Value* CallThreadInfoIntrinsic(const CHIR::IntrinsicBase& syscall, std::vector<CGValue*>& parameters);
     ///*----------------- Math related --------------------//
-    llvm::Value* CallMathIntrinsics(const CHIRIntrinsicWrapper& intrinsic, std::vector<llvm::Value*>& parameters);
+    llvm::Value* CallMathIntrinsics(const CHIR::IntrinsicBase& intrinsic, std::vector<llvm::Value*>& parameters);
     ///*----------------- zeroValue related --------------------//
     llvm::Value* CallIntrinsicForUninitialized(const CHIR::Type& ty);
     ///*----------------- Array related --------------------//
@@ -350,16 +350,16 @@ public:
     ///*----------------- unit test related --------------------//
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     ///*----------------- FFI OHOS related --------------------//
-    llvm::Value* CallInteropIntrinsics(const CHIRIntrinsicWrapper& intrinsic, const std::vector<CGValue*>& parameters);
+    llvm::Value* CallInteropIntrinsics(const CHIR::IntrinsicBase& intrinsic, const std::vector<CGValue*>& parameters);
     ///*----------------- Func RefEq related --------------------//
     llvm::Value* CallIntrinsicFuncRefEq(std::vector<CGValue*> parameters);
     ///*----------------- VArray related --------------------//
     void CallVArrayIntrinsicIndexCheck(const CGValue* arrayPtr, std::vector<llvm::Value*>& index);
     void CreateVArrayStore(CGValue* cgValue, llvm::Value* place);
     ///*----------------- Atomic related --------------------//
-    llvm::Value* CallAtomicIntrinsics(const CHIRIntrinsicWrapper& intrinsic, const std::vector<CGValue*>& args);
+    llvm::Value* CallAtomicIntrinsics(const CHIR::IntrinsicBase& intrinsic, const std::vector<CGValue*>& args);
     llvm::Value* CallAtomicPrimitiveIntrinsics(
-        const CHIRIntrinsicWrapper& intrinsic, const std::vector<CGValue*>& args, llvm::Value* fieldPtr);
+        const CHIR::IntrinsicBase& intrinsic, const std::vector<CGValue*>& args, llvm::Value* fieldPtr);
 
     ///*----------------- Array related --------------------//
     void CallArrayIntrinsicIndexCheck(llvm::Value* array, llvm::Value* index);
@@ -377,8 +377,8 @@ public:
     llvm::Value* VArrayInitedByLambda(llvm::Value* varrayLen, CGValue& autoEnv, const CHIR::VArrayType& vArrayType);
     llvm::Value* VArrayInitedByItem(llvm::Value* varrayLen, const CGValue& cgVal, const CHIR::Type& vArrayType);
     ///*----------------- RawData related --------------------//
-    llvm::Value* AcquireRawData(const CHIRIntrinsicWrapper& intrinsic);
-    llvm::Value* ReleaseRawData(const CHIRIntrinsicWrapper& intrinsic);
+    llvm::Value* AcquireRawData(const CHIR::IntrinsicBase& intrinsic);
+    llvm::Value* ReleaseRawData(const CHIR::IntrinsicBase& intrinsic);
     ///*----------------- Class related --------------------//
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     llvm::Value* CallClassIntrinsicAlloc(const CHIR::Type& type);

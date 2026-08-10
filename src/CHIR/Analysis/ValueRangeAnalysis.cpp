@@ -448,19 +448,19 @@ std::optional<Block*> RangeAnalysis::HandleTerminatorEffect(RangeDomain& state, 
             return HandleBranchTerminator(state, StaticCast<const Branch*>(terminator));
         case ExprKind::MULTIBRANCH:
             return HandleMultiBranchTerminator(state, StaticCast<const MultiBranch*>(terminator));
-        case ExprKind::NUMERIC_CAST_WITH_EXCEPTION:
-            res = HandleTypeCast(state, StaticCast<const NumericCastWithException*>(terminator));
+        case ExprKind::TRY_NUMERIC_CAST:
+            res = HandleTypeCast(state, StaticCast<const TryNumericCast*>(terminator));
             break;
-        case ExprKind::NEG_WITH_EXCEPTION:
-        case ExprKind::ADD_WITH_EXCEPTION:
-        case ExprKind::SUB_WITH_EXCEPTION:
-        case ExprKind::MUL_WITH_EXCEPTION:
-        case ExprKind::DIV_WITH_EXCEPTION:
-        case ExprKind::MOD_WITH_EXCEPTION:
-        case ExprKind::EXP_WITH_EXCEPTION:
-        case ExprKind::LSHIFT_WITH_EXCEPTION:
-        case ExprKind::RSHIFT_WITH_EXCEPTION:
-        case ExprKind::INTRINSIC_WITH_EXCEPTION:
+        case ExprKind::TRY_NEG:
+        case ExprKind::TRY_ADD:
+        case ExprKind::TRY_SUB:
+        case ExprKind::TRY_MUL:
+        case ExprKind::TRY_DIV:
+        case ExprKind::TRY_MOD:
+        case ExprKind::TRY_EXP:
+        case ExprKind::TRY_LSHIFT:
+        case ExprKind::TRY_RSHIFT:
+        case ExprKind::TRY_INTRINSIC:
         default: {
             auto dest = terminator->GetResult();
             if (dest) {
