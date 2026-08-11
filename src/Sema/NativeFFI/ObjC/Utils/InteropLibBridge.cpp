@@ -28,6 +28,7 @@ constexpr auto INTEROPLIB_NATIVE_OBJ_C_CLASS = "NativeObjCClass";
 constexpr auto INTEROPLIB_REGISTRY_ID = "RegistryId";
 constexpr auto INTEROPLIB_OBJ_C_UNREACHABLE_CODE_EXCEPTION = "ObjCUnreachableCodeException";
 constexpr auto INTEROPLIB_OBJ_C_OPTIONAL_METHOD_UNIMPLEMENTED_EXCEPTION = "ObjCOptionalMethodUnimplementedException";
+constexpr auto INTEROPLIB_OBJ_C_INIT_EXCEPTION = "ObjCInitException";
 constexpr auto INTEROPLIB_OBJ_C_STATIC_METHOD_CALL_ON_INTERFACE_EXCEPTION = "ObjCStaticMethodCallOnInterfaceException";
 constexpr auto INTEROPLIB_NATIVE_BLOCK_ABI = "NativeBlockABI";
 constexpr auto INTEROPLIB_CANGJIE_BLOCK_ABI = "CangjieBlockABI";
@@ -146,6 +147,17 @@ Ptr<ClassDecl> InteropLibBridge::GetObjCOptionalMethodUnimplementedExceptionDecl
 {
     static auto decl = GetObjCLangDecl<ASTKind::CLASS_DECL>(INTEROPLIB_OBJ_C_OPTIONAL_METHOD_UNIMPLEMENTED_EXCEPTION);
     return decl;
+}
+
+Ptr<ClassDecl> InteropLibBridge::GetObjCInitException()
+{
+    static auto decl = GetObjCLangDecl<ASTKind::CLASS_DECL>(INTEROPLIB_OBJ_C_INIT_EXCEPTION);
+    return decl;
+}
+
+OwnedPtr<RefExpr> InteropLibBridge::GetObjCInitExceptionRef()
+{
+    return CreateRefExpr(INTEROPLIB_OBJ_C_INIT_EXCEPTION);
 }
 
 Ptr<ClassDecl> InteropLibBridge::GetObjCStaticMethodCallOnIntefaceExceptionDecl()
