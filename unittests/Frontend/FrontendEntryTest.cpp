@@ -81,13 +81,15 @@ TEST_F(FrontendEntryTest, CompilerInstanceDefaultStagesAreNoOps)
 }
 
 /*
- * Compiling a .cj.d declaration file must stop after sema. `CjdCompilerInstance` implements that
- * by overriding every post-sema stage with a no-op, so the contract under test is exactly
- * "reports success without doing any work" - there is deliberately no input, because any work on
- * an input would be the bug. The assertions therefore pin down both halves of that contract: the
- * stages return true, and running them leaves the instance untouched.
+ * Compiling a .cj.d declaration file must stop after sema, which `CjdCompilerInstance` implements
+ * by overriding every post-sema stage with a no-op. "Returns true" alone does not pin that down -
+ * the inherited DefaultCompilerInstance implementations would also return true on an empty input.
  *
- * DefaultCompilerInstance, from which it inherits, implements all five of these stages for real.
+ * What distinguishes them is that each real implementation opens its own ProfileRecorder scope
+ * (src/FrontendTool/DefaultCompilerInstance.cpp: "Desugar after Sema", "Generic Instantiation",
+ * "Overflow Strategy", "CHIR", "CodeGen") while the .cj.d overrides return before doing anything.
+ * So the test enables the timer and asserts none of those scopes appear: drop any one override and
+ * its stage name shows up, and the test fails.
  */
 TEST_F(FrontendEntryTest, CjdCompilerInstanceSkipsBackendStages)
 {
@@ -96,13 +98,27 @@ TEST_F(FrontendEntryTest, CjdCompilerInstanceSkipsBackendStages)
     // Building the identifier trie is pointless for a declaration-only compile.
     EXPECT_FALSE(ci.IsBuildTrie());
 
+    // The timer is a process-wide singleton with no reset, so compare against a baseline rather
+    // than against the empty string - other tests in this binary may have recorded entries.
+    Utils::ProfileRecorder::Enable(true, Utils::ProfileRecorder::Type::TIMER);
+    const std::string before = Utils::ProfileRecorder::GetResult(Utils::ProfileRecorder::Type::TIMER);
+
     EXPECT_TRUE(ci.PerformDesugarAfterSema());
     EXPECT_TRUE(ci.PerformGenericInstantiation());
     EXPECT_TRUE(ci.PerformOverflowStrategy());
     EXPECT_TRUE(ci.PerformCHIRCompilation());
     EXPECT_TRUE(ci.PerformCodeGen());
 
-    // No stage produced or consumed anything, and none of them reported a diagnostic.
+    const std::string after = Utils::ProfileRecorder::GetResult(Utils::ProfileRecorder::Type::TIMER);
+    Utils::ProfileRecorder::Enable(false, Utils::ProfileRecorder::Type::ALL);
+
+    for (const char* stage : {"Desugar after Sema", "Generic Instantiation", "Overflow Strategy",
+             "CHIR", "CodeGen"}) {
+        EXPECT_EQ(before.find(stage), std::string::npos) << "stale entry for " << stage;
+        EXPECT_EQ(after.find(stage), std::string::npos) << stage << " ran, so the stage was not skipped";
+    }
+
+    // Nothing was produced or consumed, and no stage reported a diagnostic.
     EXPECT_TRUE(ci.GetSourcePackages().empty());
     EXPECT_EQ(diag.GetErrorCount(), 0U);
 }

@@ -105,7 +105,8 @@ private:
 class ProfileRecorderTest : public testing::Test {
 protected:
     /// Temporary directory owned by the fixture, so a failing ASSERT_* still gets it removed.
-    const std::string& TempDir(const std::string& prefix)
+    /// Returns by value: a reference into the vector would dangle on the next call.
+    std::string TempDir(const std::string& prefix)
     {
         tempDirs.push_back(MakeTempDir(prefix));
         return tempDirs.back();
@@ -114,7 +115,9 @@ protected:
     void TearDown() override
     {
         ProfileRecorder::Enable(false, ProfileRecorder::Type::ALL);
-        // The output directory is about to disappear; do not leave the singletons pointing at it.
+        // The output directory is about to disappear. Note SetOutputDir("") does not clear the
+        // field - UserBase falls back to GetDirPath("") == "." - but any path is better than one
+        // we just deleted, and the records are disabled above anyway.
         ProfileRecorder::SetOutputDir("");
         ProfileRecorder::SetPackageName("");
         for (const auto& dir : tempDirs) {

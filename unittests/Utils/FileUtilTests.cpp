@@ -316,9 +316,12 @@ TEST(FileUtilExtraTest, RemoveDirectoryRecursivelyRejectsEmptyPath)
     EXPECT_FALSE(RemoveDirectoryRecursively(""));
 }
 
-// `Remove` refuses anything that is not an ordinary file or directory. What "not ordinary" means
-// is platform specific, so the two halves below check the same contract through the respective
-// platform branch of the implementation.
+// The two platform branches of `Remove` reject different things, so they get one test each.
+// POSIX rejects anything that is not a regular file, directory or symlink (FIFO below).
+// Windows instead rejects by file attribute, which additionally covers read-only *ordinary*
+// files - a file that POSIX would happily delete. The Windows case therefore documents current
+// behaviour rather than a shared contract; see the PR discussion on whether refusing read-only
+// files is intended.
 #ifndef _WIN32
 TEST(FileUtilExtraTest, RemoveRejectsNonRegularNonDirectoryEntries)
 {
