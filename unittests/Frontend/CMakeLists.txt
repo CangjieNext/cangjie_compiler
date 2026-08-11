@@ -4,7 +4,8 @@
 #
 # See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-add_executable(CompilerInstanceTest CompilerInstanceTest.cpp FrontendEntryTest.cpp ${CANGJIE_SRC_OBJECTS})
+add_executable(CompilerInstanceTest CompilerInstanceTest.cpp ExtendMemberTest.cpp FrontendEntryTest.cpp
+    ${CANGJIE_SRC_OBJECTS})
 target_link_libraries(
     CompilerInstanceTest
     ${LINK_LIBS}

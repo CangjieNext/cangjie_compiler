@@ -316,6 +316,9 @@ TEST(FileUtilExtraTest, RemoveDirectoryRecursivelyRejectsEmptyPath)
     EXPECT_FALSE(RemoveDirectoryRecursively(""));
 }
 
+// `Remove` refuses anything that is not an ordinary file or directory. What "not ordinary" means
+// is platform specific, so the two halves below check the same contract through the respective
+// platform branch of the implementation.
 #ifndef _WIN32
 TEST(FileUtilExtraTest, RemoveRejectsNonRegularNonDirectoryEntries)
 {
@@ -326,6 +329,24 @@ TEST(FileUtilExtraTest, RemoveRejectsNonRegularNonDirectoryEntries)
     // Neither a regular file, a directory nor a symlink, so Remove refuses to touch it.
     EXPECT_FALSE(Remove(fifo));
     EXPECT_EQ(::unlink(fifo.c_str()), 0);
+
+    EXPECT_FALSE(Remove(JoinPath(dir.Path(), "missing")));
+}
+#else
+TEST(FileUtilExtraTest, RemoveRejectsReadOnlyFiles)
+{
+    TempDir dir("cj_fileutil_readonly");
+    const std::string file = JoinPath(dir.Path(), "readonly.txt");
+    WriteRaw(file, "x");
+    ASSERT_NE(SetFileAttributesA(file.c_str(), FILE_ATTRIBUTE_READONLY), 0);
+
+    // A read-only file must be left alone rather than deleted.
+    EXPECT_FALSE(Remove(file));
+    EXPECT_TRUE(FileExist(file));
+
+    // Clearing the attribute makes it an ordinary file again.
+    ASSERT_NE(SetFileAttributesA(file.c_str(), FILE_ATTRIBUTE_NORMAL), 0);
+    EXPECT_TRUE(Remove(file));
 
     EXPECT_FALSE(Remove(JoinPath(dir.Path(), "missing")));
 }
