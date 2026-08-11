@@ -84,6 +84,8 @@ public:
 
     Ptr<AST::ClassDecl> GetObjCStaticMethodCallOnIntefaceExceptionDecl();
 
+    Ptr<AST::ClassDecl> GetObjCInitException();
+
     Ptr<AST::FuncDecl> GetGetFromRegistryByNativeHandleDecl();
 
     Ptr<AST::FuncDecl> GetGetFromRegistryByIdDecl();

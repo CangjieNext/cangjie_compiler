@@ -119,6 +119,7 @@ public:
     OwnedPtr<AST::FuncDecl> CreateSetterWrapper(AST::PropDecl& prop);
     OwnedPtr<AST::FuncDecl> CreateGetterWrapper(AST::VarDecl& field);
     OwnedPtr<AST::FuncDecl> CreateSetterWrapper(AST::VarDecl& field);
+    OwnedPtr<AST::ThrowExpr> CreateObjCInitException(AST::File& file, AST::ClassLikeDecl& cls);
     OwnedPtr<AST::ThrowExpr> CreateThrowUnreachableCodeExpr(AST::File& file);
     OwnedPtr<AST::ThrowExpr> CreateThrowOptionalMethodUnimplemented(AST::File& file);
     OwnedPtr<AST::ThrowExpr> CreateThrowStaticMethodCallOnInterfaceExpr(AST::File& file);
