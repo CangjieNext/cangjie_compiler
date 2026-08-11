@@ -11,6 +11,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #ifdef _WIN32
 #include <direct.h>
@@ -103,10 +104,27 @@ private:
  */
 class ProfileRecorderTest : public testing::Test {
 protected:
+    /// Temporary directory owned by the fixture, so a failing ASSERT_* still gets it removed.
+    const std::string& TempDir(const std::string& prefix)
+    {
+        tempDirs.push_back(MakeTempDir(prefix));
+        return tempDirs.back();
+    }
+
     void TearDown() override
     {
         ProfileRecorder::Enable(false, ProfileRecorder::Type::ALL);
+        // The output directory is about to disappear; do not leave the singletons pointing at it.
+        ProfileRecorder::SetOutputDir("");
+        ProfileRecorder::SetPackageName("");
+        for (const auto& dir : tempDirs) {
+            (void)FileUtil::RemoveDirectoryRecursively(dir);
+        }
+        tempDirs.clear();
     }
+
+private:
+    std::vector<std::string> tempDirs;
 };
 } // namespace
 
@@ -207,7 +225,7 @@ TEST_F(ProfileRecorderTest, RecordCodeInfoOnlyEvaluatesClosureWhenEnabled)
 
 TEST_F(ProfileRecorderTest, OutputResultWritesProfFilesAndSanitisesPackageName)
 {
-    const std::string dir = MakeTempDir("cj_profile_out");
+    const std::string dir = TempDir("cj_profile_out");
     ASSERT_TRUE(FileUtil::IsDir(dir));
 
     ProfileRecorder::SetOutputDir(dir);
@@ -235,15 +253,11 @@ TEST_F(ProfileRecorderTest, OutputResultWritesProfFilesAndSanitisesPackageName)
     ProfileRecorder::Enable(false, ProfileRecorder::Type::ALL);
     // A disabled record writes nothing at all.
     UserTimer::Instance().OutputResult();
-
-    EXPECT_TRUE(FileUtil::RemoveDirectoryRecursively(dir));
-    ProfileRecorder::SetOutputDir("");
-    ProfileRecorder::SetPackageName("");
 }
 
 TEST_F(ProfileRecorderTest, SetOutputDirFallsBackToTheParentOfAFilePath)
 {
-    const std::string dir = MakeTempDir("cj_profile_dir");
+    const std::string dir = TempDir("cj_profile_dir");
     ASSERT_TRUE(FileUtil::IsDir(dir));
 
     FakeUserRecord record;
@@ -258,8 +272,6 @@ TEST_F(ProfileRecorderTest, SetOutputDirFallsBackToTheParentOfAFilePath)
     record.SetPackageName("from_file_path");
     record.OutputResult();
     EXPECT_TRUE(FileUtil::FileExist(FileUtil::JoinPath(dir, "from_file_path.fake.prof")));
-
-    EXPECT_TRUE(FileUtil::RemoveDirectoryRecursively(dir));
 }
 
 TEST_F(ProfileRecorderTest, DisabledRecordReturnsEmptyResultAndWritesNothing)
