@@ -17,6 +17,7 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include <iterator>
+#include "TypeCheckUtil.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
@@ -99,7 +100,53 @@ void DesugarMirrors::DesugarCtor(InteropContext& ctx, ClassLikeDecl& mirror, Fun
         "Expected ASTKind::CLASS_DECL instead of " + ASTKIND_TO_STR.at(mirror.astKind));
 
     auto initCall = ctx.factory.CreateAllocInitCall(ctor);
-    thisCall->args.emplace_back(CreateFuncArg(std::move(initCall)));
+
+    auto type = CreateType(initCall->GetTy());          // class type
+    auto tempVar = CreateTmpVarDecl(type, initCall);    // let tmp = objc alloc init
+    auto refExpr = CreateRefExpr(*tempVar);
+    // tmp.isNull()
+    auto checkForNull = ctx.factory.CreateGetObjcEntityOrNullCall(*tempVar, mirror.curFile);
+    // NoneValueException
+    auto exceptionDecl = ctx.bridge.GetObjCInitException();
+    CJC_NULLPTR_CHECK(exceptionDecl);
+    auto exceptionType = exceptionDecl->GetTy();
+    auto excInitDecl = TypeCheckUtil::GetDefaultInitDecl(*exceptionDecl);
+    OwnedPtr<RefExpr> noneValueRef = ctx.bridge.GetObjCInitExceptionRef();
+    noneValueRef->isAlone = false;
+    noneValueRef->ref.target = excInitDecl;
+    noneValueRef->SetTy(excInitDecl->GetTy());
+    // NoneValueException()
+    auto earlyCreation =
+        AST::CreateCallExpr(std::move(noneValueRef), {}, excInitDecl, exceptionType, CallKind::CALL_OBJECT_CREATION);
+    CopyBasicInfo(ctor.outerDecl, earlyCreation);
+    auto throwExpr = MakeOwned<ThrowExpr>(); // throw ObjCInitException()
+    throwExpr->expr = std::move(earlyCreation);
+    CopyBasicInfo(ctor.outerDecl, throwExpr);
+    throwExpr->curFile = mirror.curFile;
+    throwExpr->SetTy(TypeManager::GetNothingTy());
+
+    std::vector<OwnedPtr<Node>> throwBody;
+    throwBody.emplace_back(std::move(throwExpr));
+    auto body = CreateBlock(std::move(throwBody));
+    CopyBasicInfo(ctor.outerDecl, body);
+    body->curFile = mirror.curFile;
+    body->SetTy(TypeManager::GetNothingTy());
+    auto ifExpr = CreateIfExpr(std::move(checkForNull), std::move(body)); // if (tmp.isNull()) { throw ... }
+    CopyBasicInfo(ctor.outerDecl, ifExpr);
+    ifExpr->curFile = mirror.curFile;
+    ifExpr->SetTy(CreateUnitType(mirror.curFile)->GetTy());
+
+    std::vector<OwnedPtr<Node>> nodes;
+    nodes.emplace_back(std::move(tempVar));
+    nodes.emplace_back(std::move(ifExpr));
+    nodes.emplace_back(std::move(std::move(refExpr)));
+    auto labmda = WrapReturningLambdaCall(
+        ctx.typeManager, std::move(nodes)
+    );
+    CopyBasicInfo(ctor.outerDecl, labmda);
+    labmda->curFile = mirror.curFile;
+
+    thisCall->args.emplace_back(CreateFuncArg(std::move(labmda)));
 
     ctor.constructorCall = ConstructorCall::OTHER_INIT;
     ctor.funcBody->body->body.emplace_back(std::move(thisCall));
