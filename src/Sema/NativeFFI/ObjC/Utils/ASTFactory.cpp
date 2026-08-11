@@ -483,7 +483,7 @@ OwnedPtr<Expr> ASTFactory::CreateMirrorConstructorCall(OwnedPtr<Expr> entity, Pt
 // return tmp.isNull()
 OwnedPtr<Expr> ASTFactory::CreateGetObjcEntityOrNullCall(VarDecl &entity, Ptr<File> file)
 {
-    static auto getPointerAddressFunc = importManager.GetCoreDecl<FuncDecl>(
+    auto getPointerAddressFunc = importManager.GetCoreDecl<FuncDecl>(
         GET_POINTER_ADDRESS_INTRINSIC);
     CJC_NULLPTR_CHECK(getPointerAddressFunc);
     auto readPointerRef = WithinFile(CreateRefExpr(*getPointerAddressFunc), file);
