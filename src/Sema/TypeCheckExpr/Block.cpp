@@ -17,7 +17,14 @@ bool TypeChecker::TypeCheckerImpl::SynthesizeAndReplaceIdealTy(const CheckerCont
     // Call `Synthesize` on declares containing invalid types may return valid types.
     // Therefore, we need to know if there are any errors during the inference process.
     auto ds = DiagSuppressor(diag);
-    bool valid = Ty::IsTyCorrect(Synthesize(ctx, &node)) && ReplaceIdealTy(node) && !ds.HasError();
+    bool valid = Ty::IsTyCorrect(Synthesize(ctx, &node)) && !ds.HasError();
+    // Keep ideal literal types pending only for the implicit-return expression of a lambda that is
+    // a direct argument of a generic call, so generic type argument inference can unify it against
+    // the expected contextual type (e.g. `TypeTest({=> 0})` where the expected type is
+    // `TypeTest<() -> Int32>`). Ideal types of all other expressions are replaced as usual.
+    if (valid && !(ctx.SynthPos() == SynPos::IMPLICIT_RETURN && ctx.Ctx().inFuncArgLambdaBody > 0)) {
+        valid = ReplaceIdealTy(node);
+    }
     ds.ReportDiag();
     return valid;
 }
