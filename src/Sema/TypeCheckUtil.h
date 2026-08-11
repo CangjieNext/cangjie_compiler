@@ -346,6 +346,13 @@ template <typename T> T* GetMemberDecl(
 }
 
 /**
+ * Get the declaration of the default initializer of a ClassDecl
+ * @param classDecl the declaration of class to extract default initializer from.
+ * NOTICE: It's assumed there's only one initializer without arguments
+ */
+Ptr<AST::FuncDecl> GetDefaultInitDecl(AST::ClassDecl& classDecl);
+
+/**
  * Filter out the targets without access rights in the searched targets.
  * @param curComposite Represents the position of the referrer.
  * NOTICE: Whether the modifier will be downgraded in spec is not yet determined.
