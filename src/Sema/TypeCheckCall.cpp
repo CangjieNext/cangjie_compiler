@@ -2477,6 +2477,31 @@ bool TypeChecker::TypeCheckerImpl::ChkCurryCallBase(ASTContext& ctx, CallExpr& c
     return Check(ctx, targetForBase, ce.baseFunc.get());
 }
 
+/*
+ * Constrain the return type of an immediately-invoked lambda base (`({=> ...}())`)
+ * with the call's expected return type, so ideal literals in the lambda body can be
+ * unified against the contextual type instead of degrading to Int64/Float64.
+ * Returns true when the lambda is checked this way (caller skips the fallback
+ * Synthesize); returns false when no target is available or the check fails.
+ */
+bool TypeChecker::TypeCheckerImpl::ChkImmediateLamCallBase(
+    ASTContext& ctx, CallExpr& ce, const Ptr<Ty>& targetRet)
+{
+    auto lam = DynamicCast<LambdaExpr>(ce.baseFunc.get());
+    if (lam == nullptr || !targetRet || !Ty::IsTyCorrect(targetRet) || targetRet->IsQuest()) {
+        return false;
+    }
+    auto paramTys = TypeCheckUtil::GetFuncBodyParamTys(*lam->funcBody);
+    auto targetForBase = typeManager.GetFunctionTy(paramTys, targetRet, {false, false, false, true});
+    auto ds = DiagSuppressor(diag);
+    bool isWellTyped = Check(ctx, targetForBase, ce.baseFunc.get());
+    ds.ReportDiag();
+    if (!isWellTyped) {
+        ce.baseFunc->Clear();
+    }
+    return isWellTyped;
+}
+
 bool TypeChecker::TypeCheckerImpl::ChkCallBaseExpr(
     ASTContext& ctx, CallExpr& ce, Ptr<Decl>& targetDecl, Ptr<Ty>& targetRet, std::vector<Ptr<FuncDecl>>& candidates)
 {
@@ -2516,6 +2541,12 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseExpr(
             if (!mayCurry) {
                 PData::Reset(typeManager.constraints);
                 ce.baseFunc->Clear();
+                // An immediately-invoked lambda argument has no contextual function-parameter
+                // type; constrain its return type with the call's expected return type so ideal
+                // literals in the body (e.g. `goo({=> return 0}())` expecting `Int32`) unify.
+                if (ChkImmediateLamCallBase(ctx, ce, targetRet)) {
+                    break;
+                }
                 Synthesize({ctx, SynPos::EXPR_ARG}, ce.baseFunc.get());
             }
             break;
