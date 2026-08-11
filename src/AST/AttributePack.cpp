@@ -107,14 +107,34 @@ const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::OBJ_C_MIRROR_SUBTYPE, "OBJ_C_MIRROR_SUBTYPE"},
     {AST::Attribute::OBJ_C_INIT, "OBJ_C_INIT"},
     {AST::Attribute::OBJ_C_OPTIONAL, "OBJ_C_OPTIONAL"},
-    {AST::Attribute::JAVA_CJ_MAPPING, "JAVA_CJ_MAPPING"},
-    {AST::Attribute::OBJ_C_CJ_MAPPING, "OBJ_C_CJ_MAPPING"},
-    {AST::Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD, "CJ_MIRROR_JAVA_INTERFACE_FWD"},
+    /*
+     * deprecated: reverse-direction interop has been removed.
+     * This attribute exists for compatibility persistance only and could be considered for removal.
+     */
+    {AST::Attribute::JAVA_CJ_MAPPING, "JAVA_CJ_MAPPING(deprecated)"},
+    /*
+     * deprecated: reverse-direction interop has been removed.
+     * This attribute exists for compatibility persistance only and could be considered for removal.
+     */
+    {AST::Attribute::OBJ_C_CJ_MAPPING, "OBJ_C_CJ_MAPPING(deprecated)"},
+    /*
+     * deprecated: reverse-direction interop has been removed.
+     * This attribute exists for compatibility persistance only and could be considered for removal.
+     */
+    {AST::Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD, "CJ_MIRROR_JAVA_INTERFACE_FWD(deprecated)"},
     {AST::Attribute::DESUGARED_MIRROR_FIELD, "DESUGARED_MIRROR_FIELD"},
     {AST::Attribute::HAS_INITED_FIELD, "HAS_INITED_FIELD"},
     {AST::Attribute::OBJ_C_MIRROR_SYNTHETIC_WRAPPER, "OBJ_C_MIRROR_SYNTHETIC_WRAPPER"},
-    {AST::Attribute::CJ_MIRROR_JAVA_INTERFACE_DEFAULT, "CJ_MIRROR_JAVA_INTERFACE_DEFAULT"},
-    {AST::Attribute::CJ_MIRROR_OBJC_INTERFACE_FWD, "CJ_MIRROR_OBJC_INTERFACE_FWD"},
+    /*
+     * deprecated: reverse-direction interop has been removed.
+     * This attribute exists for compatibility persistance only and could be considered for removal.
+     */
+    {AST::Attribute::CJ_MIRROR_JAVA_INTERFACE_DEFAULT, "CJ_MIRROR_JAVA_INTERFACE_DEFAULT(deprecated)"},
+    /*
+     * deprecated: reverse-direction interop has been removed.
+     * This attribute exists for compatibility persistance only and could be considered for removal.
+     */
+    {AST::Attribute::CJ_MIRROR_OBJC_INTERFACE_FWD, "CJ_MIRROR_OBJC_INTERFACE_FWD(deprecated)"},
     {AST::Attribute::ALREADY_LOADED, "ALREADY_LOADED"},
     {AST::Attribute::JAVA_IMPL_REGISTRY_COMPANION, "JAVA_IMPL_REGISTRY_COMPANION"},
     {AST::Attribute::AST_ATTR_END, "AST_ATTR_END"},
