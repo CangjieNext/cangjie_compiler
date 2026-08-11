@@ -201,6 +201,9 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
     auto gvs = TranslateAnnotationsArraySig(*annosArray, *func);
     func->Set<AnnoFactoryInfo>(std::move(gvs));
     // Collect annotations whose parameter values are literal constants.
+    // Register the factory up-front so property getters/setters (same PropDecl) still
+    // share one factory if we return early for non-literal annotation args.
+    annotationFuncMap.emplace(&decl, AnnoInfo(mangledName, {}));
     std::vector<CustomAnnoInstance> annoInstances;
     for (auto& elem : annosArray->children) {
         auto callExpr = StaticCast<AST::CallExpr*>(elem.get().get());
@@ -221,7 +224,7 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
         annoInstances.emplace_back(annoClassDeclName, paramValues, annoLoc);
     }
     auto annoInfo = AnnoInfo(mangledName, std::move(annoInstances));
-    annotationFuncMap.emplace(&decl, annoInfo);
+    annotationFuncMap[&decl] = annoInfo;
     return annoInfo;
 }
 
