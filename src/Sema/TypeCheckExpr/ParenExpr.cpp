@@ -17,7 +17,10 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynParenExpr(const CheckerContext& ctx, Pa
         return TypeManager::GetInvalidTy();
     }
 
-    if (pe.expr->GetTy()->IsIdeal()) {
+    // Keep ideal literal types pending for a parenthesized literal in the body of a generic-call
+    // lambda argument; parentheses must not break contextual type propagation (e.g. `TypeTest({=> (0)})`
+    // expecting `() -> Int32`).
+    if (pe.expr->GetTy()->IsIdeal() && ctx.Ctx().inFuncArgLambdaBody == 0) {
         ReplaceIdealTy(*pe.expr);
     }
     pe.SetTy(pe.expr->GetTy());

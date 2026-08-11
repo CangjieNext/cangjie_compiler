@@ -188,6 +188,15 @@ public:
      *  be propagated, and no new ones will need to be created. */
     std::unordered_set<Ptr<const AST::LambdaExpr>> funcArgReachable;
 
+    /** Nonzero while synthesizing the body of a lambda that is a direct argument of a generic call
+     *  (see `funcArgReachable`). While nonzero, ideal literal types (IDEAL_INT / IDEAL_FLOAT) of
+     *  expressions that carry the lambda's contextual return type are kept pending so generic
+     *  type argument inference can unify them against the expected type. This covers the
+     *  implicit-return expression, explicit `return`, binary-expression operands that are bare
+     *  literals, and if/tuple/paren sub-expressions. A literal whose sibling operand is already
+     *  concrete (e.g. `count():Int64 + 1`) is still unified to that concrete type. */
+    size_t inFuncArgLambdaBody{0};
+
 private:
     /** Mapping from VarDecl to the outer VarWithPatternDecl, helps for finding the initializer. */
     std::unordered_map<Ptr<const AST::VarDecl>, Ptr<AST::VarWithPatternDecl>> varDeclToVarWithPatternDeclMap;

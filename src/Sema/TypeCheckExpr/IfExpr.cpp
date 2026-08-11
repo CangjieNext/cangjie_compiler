@@ -51,8 +51,14 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynIfExpr(const CheckerContext& ctx, IfExp
         return TypeManager::GetInvalidTy();
     }
 
-    ReplaceIdealTy(*ie.thenBody);
-    ReplaceIdealTy(*ie.elseBody);
+    // Keep ideal literal types pending for the then/else branches of an if expression used as
+    // the body of a generic-call lambda argument, so the result stays IDEAL and the generic type
+    // argument can be unified against the expected type (e.g. `TypeTest({ => if (c) { 0 } else { 1 } })`
+    // expecting `() -> Int32`).
+    if (ctx.Ctx().inFuncArgLambdaBody == 0) {
+        ReplaceIdealTy(*ie.thenBody);
+        ReplaceIdealTy(*ie.elseBody);
+    }
     ie.thenBody->SetTy(typeManager.GetThisRealTy(ie.thenBody->GetTy()));
     ie.elseBody->SetTy(typeManager.GetThisRealTy(ie.elseBody->GetTy()));
     // when an if expr is unused, its type is set to unit if possible

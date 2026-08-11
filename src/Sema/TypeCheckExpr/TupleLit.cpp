@@ -68,7 +68,12 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTupleLit(ASTContext& ctx, TupleLit& tl)
         if (!Ty::IsTyCorrect(it->GetTy())) {
             Synthesize({ctx, SynPos::EXPR_ARG}, it.get());
         }
-        ReplaceIdealTy(*it);
+        // Keep ideal literal types pending for tuple elements in the body of a generic-call lambda
+        // argument, so the tuple result stays (IDEAL, ...) and the generic type argument can be
+        // unified against the expected type (e.g. `TypeTest({ => (0, 0) })` expecting `() -> (Int32, Int32)`).
+        if (ctx.inFuncArgLambdaBody == 0) {
+            ReplaceIdealTy(*it);
+        }
         elemTy.push_back(it->GetTy());
     }
     tl.SetTy(typeManager.GetTupleTy(elemTy));

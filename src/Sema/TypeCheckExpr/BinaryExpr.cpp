@@ -673,8 +673,14 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::SynLiteralInBinaryExprFromR
     CJC_NULLPTR_CHECK(be.leftExpr);
     {
         auto ds = DiagSuppressor(diag);
-        bool isWellTyped = SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, be.rightExpr.get()) &&
-            ReplaceIdealTy(*be.rightExpr);
+        bool isWellTyped = SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, be.rightExpr.get());
+        // Keep ideal literal types pending for a bare literal operand while synthesizing the body
+        // of a generic-call lambda argument, so `0 + 0` can later unify against the expected
+        // contextual type (e.g. `TypeTest({=> 0 + 0})` expecting `() -> Int32`). A literal whose
+        // type is already concrete (e.g. `count():Int64 + 1`) is replaced as usual.
+        if (!(ctx.inFuncArgLambdaBody > 0 && be.rightExpr->GetTy()->IsIdeal())) {
+            isWellTyped = isWellTyped && ReplaceIdealTy(*be.rightExpr);
+        }
         if (!isWellTyped) {
             be.SetTy(TypeManager::GetInvalidTy());
             return {};
