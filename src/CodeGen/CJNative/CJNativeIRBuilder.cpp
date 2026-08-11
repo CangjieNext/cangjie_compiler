@@ -600,164 +600,297 @@ llvm::Instruction* IRBuilder2::CreateStore(
     return CreateStore(CGValue(val, valCGType), CGValue(ptr, ptrCGType));
 }
 
-llvm::Instruction* IRBuilder2::CreateStore(const CGValue& cgVal, const CGValue& cgDestAddr, CHIR::Type* boxType)
+namespace {
+// The parameters of the `CreateStore` overload below, together with everything the lowering
+// helpers derive from them.
+struct StoreLowering {
+    StoreLowering(const IRBuilder2& irBuilder, const CGValue& cgVal, const CGValue& cgDestAddr,
+        CHIR::Type* boxType)
+        : cgVal(cgVal),
+          cgDestAddr(cgDestAddr),
+          boxType(boxType),
+          valType(cgVal.GetCGType()), 
+          destDerefType(cgDestAddr.GetCGType()->GetPointerElementType()),
+          val(cgVal.GetRawValue()),
+          destAddr(cgDestAddr.GetRawValue()),
+          fieldOwnerPtr(irBuilder.GetCGContext().GetBasePtrOf(cgDestAddr.GetRawValue()))
+    {
+    }
+
+    // True when the destination is a field reached through some owning aggregate.
+    bool IsMemberWrite() const
+    {
+        return fieldOwnerPtr != nullptr;
+    }
+
+    // True when the owning aggregate lives in the managed heap, so the store needs a GC barrier.
+    bool IsWriteToManagedField() const
+    {
+        return IsMemberWrite() && fieldOwnerPtr->getType()->getPointerAddressSpace() == 1U;
+    }
+
+    // The CHIR type whose type info describes the stored value: the box type when the value is
+    // boxed, otherwise \p fallback's own type.
+    const CHIR::Type& StoredChirTypeOr(const CGType& fallback) const
+    {
+        return boxType != nullptr ? *boxType : fallback.GetOriginal();
+    }
+
+    const CGValue& cgVal;
+    const CGValue& cgDestAddr;
+    CHIR::Type* boxType;
+    const CGType* valType;
+    const CGType* destDerefType;
+    llvm::Value* val;
+    llvm::Value* destAddr;
+    llvm::Value* fieldOwnerPtr;
+};
+
+// True when both sides are generics of statically unknown size, so only the runtime can tell
+// whether the store moves a reference or copies a value.
+bool NeedsRuntimeRefnessDispatch(const StoreLowering& store)
 {
-    bool isMemberWrite = GetCGContext().GetBasePtrOf(cgDestAddr.GetRawValue()) != nullptr;
-    bool isVolatile = false;
-    const CGType* valType = cgVal.GetCGType();
-    const CGType* destDerefType = cgDestAddr.GetCGType()->GetPointerElementType();
-    CJC_ASSERT(destDerefType != nullptr);
-    auto val = cgVal.GetRawValue();
-    auto destAddr = cgDestAddr.GetRawValue();
-    // GetTypeInfoIsReference
-    if (valType && valType->GetOriginal().IsGeneric() && !valType->GetSize() &&
-        destDerefType->GetOriginal().IsGeneric() && !destDerefType->GetSize() && !isMemberWrite) {
-        auto dstTypeInfo = CreateTypeInfo(boxType != nullptr ? *boxType : destDerefType->GetOriginal());
-        // Check whether dstType is a reference.
-        auto [handleRefBB, handleNonRefBB, exitBB] = Vec2Tuple<3>(CreateAndInsertBasicBlocks(
-            {GenNameForBB("handle_store_ref"), GenNameForBB("handle_store_non_ref"), GenNameForBB("store_exit")}));
-        destAddr =
-            CreateBitCast(destAddr, getInt8PtrTy(1U)->getPointerTo(destAddr->getType()->getPointerAddressSpace()));
-        CreateCondBr(CreateTypeInfoIsReferenceCall(boxType != nullptr ? *boxType : destDerefType->GetOriginal()),
-            handleRefBB, handleNonRefBB);
+    auto isUnsizedGeneric = [](const CGType* type) {
+        return type != nullptr && type->GetOriginal().IsGeneric() && !type->GetSize();
+    };
+    return !store.IsMemberWrite() && isUnsizedGeneric(store.valType) && isUnsizedGeneric(store.destDerefType);
+}
 
-        SetInsertPoint(handleRefBB);
-        LLVMIRBuilder2::CreateStore(val, destAddr, isVolatile);
-        CreateBr(exitBB);
-
-        SetInsertPoint(handleNonRefBB);
-        llvm::Value* tmpPtr = nullptr;
-        if (cgDestAddr.IsSRetArg()) {
-            tmpPtr = CreateLoad(cgDestAddr);
-        } else {
-            auto dstTypeSize = GetLayoutSize_32(boxType != nullptr ? *boxType : destDerefType->GetOriginal());
-            tmpPtr = CallIntrinsicAllocaGeneric({dstTypeInfo, dstTypeSize});
-            (void)CreateStore(tmpPtr, destAddr);
-        }
-        std::vector<llvm::Value*> copyGenericParams{tmpPtr, val, dstTypeInfo};
-        CallIntrinsicAssignGeneric(copyGenericParams);
-        CreateBr(exitBB);
-
-        SetInsertPoint(exitBB);
-        return nullptr;
+// Returns the buffer a non-reference value must be copied into: the caller-provided sret
+// buffer, or a freshly allocated one whose address is written back into \p destAddr.
+llvm::Value* AcquireBufferForNonRefValue(IRBuilder2& irBuilder, const StoreLowering& store,
+    const CHIR::Type& destChirType, llvm::Value* destTypeInfo, llvm::Value* destAddr)
+{
+    if (store.cgDestAddr.IsSRetArg()) {
+        return irBuilder.CreateLoad(store.cgDestAddr);
     }
+    auto destTypeSize = irBuilder.GetLayoutSize_32(destChirType);
+    auto buffer = irBuilder.CallIntrinsicAllocaGeneric({destTypeInfo, destTypeSize});
+    (void)irBuilder.CreateStore(buffer, destAddr);
+    return buffer;
+}
 
-    if (!isMemberWrite) {
-        if (destDerefType && !destDerefType->GetOriginal().IsRef() && cgVal.GetCGType() &&
-            cgVal.GetCGType()->GetOriginal().IsRef()) {
-            if (auto valSize = cgVal.GetCGType()->GetPointerElementType()->GetSize()) {
-                if (!destDerefType->GetSize()) {
-                    auto dataPtr = GetPayloadFromObject(destAddr);
-                    auto size = GetLayoutSize_32(cgVal.GetCGType()->GetOriginal());
-                    return CallGCWriteAgg(cgVal.GetCGType()->GetLayoutType(), {destAddr, dataPtr, val, size});
-                }
-            } else {
-                CJC_ASSERT(!destDerefType->GetSize());
-                if (destAddr->getType()->getPointerAddressSpace() == 1U
-                    && val->getType()->getPointerAddressSpace() == 0U) {
-                    auto size = GetSize_32(cgVal.GetCGType()->GetOriginal());
-                    return CallGCWriteGenericPayload({destAddr, val, size});
-                }
-                auto ti = CreateTypeInfo(boxType != nullptr ? *boxType : cgVal.GetCGType()->GetOriginal());
-                return CallIntrinsicAssignGeneric({destAddr, val, ti});
-            }
-        }
+// Emits both a reference store and a value copy, guarded by a runtime check on the
+// destination's type info. Leaves the insert point on the merge block.
+llvm::Instruction* EmitStoreDispatchedOnRefness(IRBuilder2& irBuilder, const StoreLowering& store)
+{
+    const CHIR::Type& destChirType = store.StoredChirTypeOr(*store.destDerefType);
+    auto destTypeInfo = irBuilder.CreateTypeInfo(destChirType);
+    auto [handleRefBB, handleNonRefBB, exitBB] = Vec2Tuple<3>(irBuilder.CreateAndInsertBasicBlocks(
+        {GenNameForBB("handle_store_ref"), GenNameForBB("handle_store_non_ref"), GenNameForBB("store_exit")}));
+    auto destAddr = irBuilder.CreateBitCast(store.destAddr,
+        irBuilder.getInt8PtrTy(1U)->getPointerTo(store.destAddr->getType()->getPointerAddressSpace()));
+    irBuilder.CreateCondBr(irBuilder.CreateTypeInfoIsReferenceCall(destChirType), handleRefBB, handleNonRefBB);
+
+    irBuilder.SetInsertPoint(handleRefBB);
+    irBuilder.CreateStore(store.val, destAddr);
+    irBuilder.CreateBr(exitBB);
+
+    irBuilder.SetInsertPoint(handleNonRefBB);
+    auto buffer = AcquireBufferForNonRefValue(irBuilder, store, destChirType, destTypeInfo, destAddr);
+    irBuilder.CallIntrinsicAssignGeneric({buffer, store.val, destTypeInfo});
+    irBuilder.CreateBr(exitBB);
+
+    irBuilder.SetInsertPoint(exitBB);
+    return nullptr;
+}
+
+// True when a reference value goes into a destination whose layout is statically unknown, so
+// only the runtime can lay it out. A sized value landing in a sized destination is an ordinary
+// store and is deliberately left to the later cases.
+bool IsRefValueStoredIntoOpaqueDest(const StoreLowering& store)
+{
+    if (store.IsMemberWrite() || store.valType == nullptr) {
+        return false;
     }
+    if (store.destDerefType->GetOriginal().IsRef() || !store.valType->GetOriginal().IsRef()) {
+        return false;
+    }
+    return !store.destDerefType->GetSize();
+}
 
+llvm::Instruction* EmitRefValueStoreIntoOpaqueDest(IRBuilder2& irBuilder, const StoreLowering& store)
+{
+    const CGType* valType = store.valType;
+    if (valType->GetPointerElementType()->GetSize()) {
+        auto payloadPtr = irBuilder.GetPayloadFromObject(store.destAddr);
+        auto size = irBuilder.GetLayoutSize_32(valType->GetOriginal());
+        return irBuilder.CallGCWriteAgg(valType->GetLayoutType(), {store.destAddr, payloadPtr, store.val, size});
+    }
+    if (store.destAddr->getType()->getPointerAddressSpace() == 1U &&
+        store.val->getType()->getPointerAddressSpace() == 0U) {
+        auto size = irBuilder.GetSize_32(valType->GetOriginal());
+        return irBuilder.CallGCWriteGenericPayload({store.destAddr, store.val, size});
+    }
+    auto storedTypeInfo = irBuilder.CreateTypeInfo(store.StoredChirTypeOr(*valType));
+    return irBuilder.CallIntrinsicAssignGeneric({store.destAddr, store.val, storedTypeInfo});
+}
+
+// Emits both a reference barrier and a generic value copy for a field whose layout is only
+// known at runtime. Leaves the insert point on the merge block.
+llvm::Instruction* EmitOpaqueFieldWriteBarrier(IRBuilder2& irBuilder, const StoreLowering& store)
+{
+    CJC_ASSERT(store.IsMemberWrite());
+    const CGType* fieldType = store.cgDestAddr.GetCGType()->GetPointerElementType();
+    auto size = irBuilder.GetSize_32(store.valType->GetOriginal());
+    auto [gcwriteRefBB, gcwriteNonRefBB, gcwriteExitBB] = Vec2Tuple<3>(irBuilder.CreateAndInsertBasicBlocks(
+        {GenNameForBB("gcwrite_ref"), GenNameForBB("gcwrite_non_ref"), GenNameForBB("gcwrite_exit")}));
+    irBuilder.CreateCondBr(
+        irBuilder.CreateTypeInfoIsReferenceCall(fieldType->GetOriginal()), gcwriteRefBB, gcwriteNonRefBB);
+
+    irBuilder.SetInsertPoint(gcwriteRefBB);
+    irBuilder.CallGCWrite({store.val, store.fieldOwnerPtr, store.destAddr});
+    irBuilder.CreateBr(gcwriteExitBB);
+
+    irBuilder.SetInsertPoint(gcwriteNonRefBB);
+    irBuilder.CallIntrinsicGCWriteGeneric({store.fieldOwnerPtr, store.destAddr, store.val, size});
+    irBuilder.CreateBr(gcwriteExitBB);
+    irBuilder.SetInsertPoint(gcwriteExitBB);
+    return nullptr;
+}
+
+// Copies a struct that already lives in the managed heap through a stack temporary, because
+// the GC write barrier cannot read directly from another managed location.
+llvm::Instruction* EmitStructFieldCopyViaTemp(
+    IRBuilder2& irBuilder, const StoreLowering& store, llvm::StructType* structType, uint64_t sizeInBytes)
+{
+    auto valOwnerPtr = irBuilder.GetCGContext().GetBasePtrOf(store.val);
+    auto tempVal = irBuilder.CreateEntryAlloca(structType);
+    auto size = irBuilder.getInt64(sizeInBytes);
+    irBuilder.CallGCReadAgg(structType, {tempVal, valOwnerPtr, store.val, size});
+    return irBuilder.CallGCWriteAgg(structType, {store.fieldOwnerPtr, store.destAddr, tempVal, size});
+}
+
+llvm::Instruction* EmitStructFieldWriteBarrier(IRBuilder2& irBuilder, const StoreLowering& store)
+{
+    const CGType* structCGType = store.valType->GetPointerElementType();
+    auto structType = llvm::cast<llvm::StructType>(structCGType->GetLLVMType());
+    auto structLayout = irBuilder.GetLLVMModule()->getDataLayout().getStructLayout(structType);
+    CJC_NULLPTR_CHECK(structLayout);
+    // A struct without references needs no barrier at all, just a plain copy.
+    if (!IsTypeContainsRef(structCGType->GetLLVMType())) {
+        auto align = structLayout->getAlignment();
+        return irBuilder.CreateMemCpy(store.destAddr, align, store.val, align, structLayout->getSizeInBytes());
+    }
+    if (store.val->getType()->getPointerAddressSpace() == 1U) {
+        return EmitStructFieldCopyViaTemp(irBuilder, store, structType, structLayout->getSizeInBytes());
+    }
+    auto size =
+        llvm::ConstantInt::get(llvm::Type::getInt64Ty(irBuilder.GetLLVMContext()), structLayout->getSizeInBytes());
+    return irBuilder.CallGCWriteAgg(structType, {store.fieldOwnerPtr, store.destAddr, store.val, size});
+}
+
+llvm::Instruction* EmitVArrayFieldWriteBarrier(IRBuilder2& irBuilder, const StoreLowering& store)
+{
+    const CGType* elemCGType = store.valType->GetPointerElementType();
+    const auto& dataLayout = irBuilder.GetLLVMModule()->getDataLayout();
+    auto size = irBuilder.getInt64(dataLayout.getTypeAllocSize(elemCGType->GetLLVMType()));
+    if (IsTypeContainsRef(elemCGType->GetLLVMType())) {
+        return irBuilder.CallGCWriteAgg(
+            elemCGType->GetLayoutType(), {store.fieldOwnerPtr, store.destAddr, store.val, size});
+    }
+    auto align = llvm::Align(dataLayout.getABITypeAlignment(elemCGType->GetLLVMType()));
+    return irBuilder.CreateMemCpy(store.destAddr, align, store.val, align, size);
+}
+
+// Emits a store into a field of an object living in the managed heap.
+llvm::Instruction* EmitFieldWriteBarrier(IRBuilder2& irBuilder, const StoreLowering& store)
+{
+    if (!store.cgDestAddr.GetCGType()->GetPointerElementType()->GetSize()) {
+        return EmitOpaqueFieldWriteBarrier(irBuilder, store);
+    }
+    if (store.valType->IsStructPtrType()) {
+        return EmitStructFieldWriteBarrier(irBuilder, store);
+    }
+    if (store.valType->IsVArrayPtrType() && store.cgDestAddr.GetCGType()->IsVArrayPtrType()) {
+        return EmitVArrayFieldWriteBarrier(irBuilder, store);
+    }
+    if (store.valType->IsReference() || store.valType->IsOptionLikeRef()) {
+        return irBuilder.CallGCWrite({store.val, store.fieldOwnerPtr, store.destAddr});
+    }
+    return irBuilder.CreateStore(*store.cgVal, *store.cgDestAddr);
+}
+
+bool IsStructToStructCopy(const StoreLowering& store)
+{
+    return store.valType != nullptr && store.valType->IsStructPtrType() &&
+        store.cgDestAddr.GetCGType() != nullptr && store.cgDestAddr.GetCGType()->IsStructPtrType();
+}
+
+llvm::Instruction* EmitStructCopy(IRBuilder2& irBuilder, const StoreLowering& store)
+{
+    auto structLayout = irBuilder.GetLLVMModule()->getDataLayout().getStructLayout(
+        llvm::cast<llvm::StructType>(store.valType->GetPointerElementType()->GetLLVMType()));
+    CJC_NULLPTR_CHECK(structLayout);
+    auto sizeInBytes = structLayout->getSizeInBytes();
+    if (sizeInBytes == 0) {
+        return nullptr; // An empty struct has nothing to copy.
+    }
+    auto align = structLayout->getAlignment();
+    return irBuilder.CreateMemCpy(store.destAddr, align, store.val, align, sizeInBytes);
+}
+
+bool IsVArrayToVArrayCopy(const StoreLowering& store)
+{
+    return store.valType != nullptr && store.valType->IsVArrayPtrType() &&
+        store.cgDestAddr.GetCGType() != nullptr && store.cgDestAddr.GetCGType()->IsVArrayPtrType();
+}
+
+llvm::Instruction* EmitVArrayCopy(IRBuilder2& irBuilder, const StoreLowering& store)
+{
+    auto elemLLVMType = store.valType->GetPointerElementType()->GetLLVMType();
+    const auto& dataLayout = irBuilder.GetLLVMModule()->getDataLayout();
+    auto size = irBuilder.getInt64(dataLayout.getTypeAllocSize(elemLLVMType));
+    auto align = llvm::Align(dataLayout.getABITypeAlignment(elemLLVMType));
+    return irBuilder.CreateMemCpy(store.destAddr, align, store.val, align, size);
+}
+
+bool IsFuncPtrStoredAsOpaqueStructPtr(const StoreLowering& store)
+{
+    return IsFuncPtrType(store.val->getType()) &&
+        IsLitStructPtrType(GetPointerElementType(store.destAddr->getType()));
+}
+
+llvm::Instruction* EmitFuncPtrStore(IRBuilder2& irBuilder, const StoreLowering& store)
+{
+    auto opaqueStructPtr = irBuilder.CreateBitCast(
+        store.val, llvm::PointerType::get(llvm::StructType::get(irBuilder.GetLLVMContext()), 0));
+    return irBuilder.CreateStore(opaqueStructPtr, store.destAddr);
+}
+} // namespace
+
+llvm::Instruction* IRBuilder2::CreateStore(
+    const CGValue& cgVal, const CGValue& cgDestAddr, CHIR::Type* boxType)
+{
+    const StoreLowering store(*this, cgVal, cgDestAddr, boxType);
+    CJC_ASSERT(store.destDerefType != nullptr);
+
+    if (NeedsRuntimeRefnessDispatch(store)) {
+        return EmitStoreDispatchedOnRefness(*this, store);
+    }
+    if (IsRefValueStoredIntoOpaqueDest(store)) {
+        return EmitRefValueStoreIntoOpaqueDest(*this, store);
+    }
     // When storing to global variable and cgVal contains a cj class type value,
     // we need to use gc write barrier, i.e. llvm.cj.gcwrite.static.xxx
-    if (IsGlobalVariableBasePtr(destAddr) && IsTypeContainsRef(destDerefType->GetLLVMType())) {
+    if (IsGlobalVariableBasePtr(store.destAddr) && IsTypeContainsRef(store.destDerefType->GetLLVMType())) {
         return CreateWriteBarrierForGlobalVariable(cgVal, cgDestAddr);
     }
-
-    auto dealWithGCWriteBarrier = [this, &cgDestAddr, &cgVal, &isMemberWrite, &isVolatile](
-                                      const CGType* cgValType, llvm::Value* basePtr) -> llvm::Instruction* {
-        if (auto elemType = cgDestAddr.GetCGType()->GetPointerElementType(); !elemType->GetSize()) {
-            CJC_ASSERT(isMemberWrite);
-            auto size = GetSize_32(cgValType->GetOriginal());
-            auto [gcwriteRefBB, gcwriteNonRefBB, gcwriteExitBB] = Vec2Tuple<3>(CreateAndInsertBasicBlocks(
-                {GenNameForBB("gcwrite_ref"), GenNameForBB("gcwrite_non_ref"), GenNameForBB("gcwrite_exit")}));
-            CreateCondBr(CreateTypeInfoIsReferenceCall(elemType->GetOriginal()), gcwriteRefBB, gcwriteNonRefBB);
-
-            SetInsertPoint(gcwriteRefBB);
-            CallGCWrite({cgVal.GetRawValue(), basePtr, cgDestAddr.GetRawValue()});
-            CreateBr(gcwriteExitBB);
-
-            SetInsertPoint(gcwriteNonRefBB);
-            CallIntrinsicGCWriteGeneric({basePtr, cgDestAddr.GetRawValue(), cgVal.GetRawValue(), size});
-            CreateBr(gcwriteExitBB);
-            SetInsertPoint(gcwriteExitBB);
-            return nullptr;
-        }
-        if (cgValType->IsStructPtrType()) {
-            auto structType = llvm::cast<llvm::StructType>(cgValType->GetPointerElementType()->GetLLVMType());
-            auto layOut = cgMod.GetLLVMModule()->getDataLayout().getStructLayout(structType);
-            CJC_NULLPTR_CHECK(layOut);
-            if (IsTypeContainsRef(cgValType->GetPointerElementType()->GetLLVMType())) {
-                if (cgVal.GetRawValue()->getType()->getPointerAddressSpace() == 1U) {
-                    auto base = GetCGContext().GetBasePtrOf(cgVal.GetRawValue());
-                    auto tempVal = CreateEntryAlloca(structType);
-                    auto heapLayout = cgMod.GetLLVMModule()->getDataLayout().getStructLayout(structType);
-                    auto size = getInt64(heapLayout->getSizeInBytes());
-                    CallGCReadAgg(structType, {tempVal, base, cgVal.GetRawValue(), size});
-                    return CallGCWriteAgg(structType, {basePtr, cgDestAddr.GetRawValue(), tempVal, size});
-                }
-                auto size = llvm::ConstantInt::get(llvm::Type::getInt64Ty(GetLLVMContext()), layOut->getSizeInBytes());
-                return CallGCWriteAgg(structType, {basePtr, cgDestAddr.GetRawValue(), cgVal.GetRawValue(), size});
-            }
-            auto align = layOut->getAlignment();
-            return CreateMemCpy(cgDestAddr.GetRawValue(), align, cgVal.GetRawValue(), align, layOut->getSizeInBytes());
-        } else if (cgValType->IsVArrayPtrType() && cgDestAddr.GetCGType()->IsVArrayPtrType()) {
-            auto valueType = cgValType->GetPointerElementType()->GetLLVMType();
-            auto layout = cgMod.GetLLVMModule()->getDataLayout();
-            auto size = getInt64(layout.getTypeAllocSize(valueType));
-            if (IsTypeContainsRef(cgValType->GetPointerElementType()->GetLLVMType())) {
-                return CallGCWriteAgg(cgValType->GetPointerElementType()->GetLayoutType(),
-                    {basePtr, cgDestAddr.GetRawValue(), cgVal.GetRawValue(), size});
-            }
-            auto align = llvm::Align(layout.getABITypeAlignment(valueType));
-            return CreateMemCpy(cgDestAddr.GetRawValue(), align, cgVal.GetRawValue(), align, size);
-        } else if (cgValType->IsReference() || cgValType->IsOptionLikeRef()) {
-            return CallGCWrite({cgVal.GetRawValue(), basePtr, cgDestAddr.GetRawValue()});
-        }
-        return LLVMIRBuilder2::CreateStore(*cgVal, *cgDestAddr, isVolatile);
-    };
-
     // When writing to an object field, it need to use GC write barrier, i.e. llvm.cj.gcwrite intrinsic
-    if (auto basePtr = cgMod.GetCGContext().GetBasePtrOf(destAddr);
-        basePtr && basePtr->getType()->getPointerAddressSpace() == 1) {
-        if (auto cgValType = cgVal.GetCGType(); cgValType) {
-            return dealWithGCWriteBarrier(cgValType, basePtr);
-        }
-        return LLVMIRBuilder2::CreateStore(val, destAddr, isVolatile);
+    if (store.IsWriteToManagedField()) {
+        return store.valType != nullptr ? EmitFieldWriteBarrier(*this, store)
+                                        : CreateStore(store.val, store.destAddr);
     }
-
-    if (cgVal.GetCGType() && cgVal.GetCGType()->IsStructPtrType() && cgDestAddr.GetCGType() &&
-        cgDestAddr.GetCGType()->IsStructPtrType()) {
-        auto layOut = cgMod.GetLLVMModule()->getDataLayout().getStructLayout(
-            llvm::cast<llvm::StructType>(cgVal.GetCGType()->GetPointerElementType()->GetLLVMType()));
-        CJC_NULLPTR_CHECK(layOut);
-        if (auto sizeInBytes = layOut->getSizeInBytes(); sizeInBytes) {
-            auto align = layOut->getAlignment();
-            return CreateMemCpy(destAddr, align, val, align, sizeInBytes);
-        } else {
-            return nullptr;
-        }
+    if (IsStructToStructCopy(store)) {
+        return EmitStructCopy(*this, store);
     }
-
-    if (cgVal.GetCGType() && cgVal.GetCGType()->IsVArrayPtrType() && cgDestAddr.GetCGType() &&
-        cgDestAddr.GetCGType()->IsVArrayPtrType()) {
-        auto valueType = cgVal.GetCGType()->GetPointerElementType()->GetLLVMType();
-        auto size = getInt64(cgMod.GetLLVMModule()->getDataLayout().getTypeAllocSize(valueType));
-        auto align = llvm::Align(cgMod.GetLLVMModule()->getDataLayout().getABITypeAlignment(valueType));
-        return CreateMemCpy(destAddr, align, val, align, size);
+    if (IsVArrayToVArrayCopy(store)) {
+        return EmitVArrayCopy(*this, store);
     }
-    if (IsFuncPtrType(val->getType()) && IsLitStructPtrType(GetPointerElementType((destAddr)->getType()))) {
-        val = CreateBitCast(val, llvm::PointerType::get(llvm::StructType::get(cgMod.GetLLVMContext()), 0));
-        return LLVMIRBuilder2::CreateStore(val, destAddr, isVolatile);
+    if (IsFuncPtrStoredAsOpaqueStructPtr(store)) {
+        return EmitFuncPtrStore(*this, store);
     }
-
-    return LLVMIRBuilder2::CreateStore(val, destAddr, isVolatile);
+    return CreateStore(store.val, store.destAddr);
 }
 
 namespace {
