@@ -567,10 +567,6 @@ bool GlobalOptions::CheckLtoOptions() const
         Errorln("Obfuscation is not supported when LTO is enabled on iOS.");
         return false;
     }
-    if (target.os == OSType::IOS && outputMode != OutputMode::STATIC_LIB) {
-        Errorln("iOS LTO only supports --output-type=staticlib.");
-        return false;
-    }
     if (outputMode == OutputMode::OBJ) {
         Errorln("--output-type=obj is not allowed in LTO mode");
         return false;
