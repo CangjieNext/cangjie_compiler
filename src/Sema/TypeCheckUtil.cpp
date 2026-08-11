@@ -1394,6 +1394,22 @@ Ptr<FuncDecl> GenerateGetTypeForTypeParamIntrinsic(Package& pkg, TypeManager& ty
     return declPtr;
 }
 
+Ptr<FuncDecl> GetDefaultInitDecl(ClassDecl& classDecl)
+{
+    std::vector<Ptr<FuncDecl>> inits;
+    for (auto& decl : classDecl.GetMemberDecls()) {
+        CJC_NULLPTR_CHECK(decl);
+        if (decl->astKind == ASTKind::FUNC_DECL && decl.get()->TestAttr(Attribute::CONSTRUCTOR)) {
+            auto funcDecl = Cangjie::StaticCast<FuncDecl*>(decl.get());
+            if (funcDecl->funcBody->paramLists.size() == 1 && funcDecl->funcBody->paramLists[0]->params.size() == 0) {
+                inits.emplace_back(funcDecl);
+            }
+        }
+    }
+    CJC_ASSERT(inits.size() == 1); // `init(fn: ()->T)` is the only constructor
+    return inits.front();
+}
+
 Ptr<FuncDecl> GenerateIsSubtypeTypesIntrinsic(Package& pkg, TypeManager& typeManager)
 {
     auto file = pkg.files[0].get();
