@@ -617,25 +617,34 @@ enum class Attribute {
 
     /**
      * Mark whether a pure cangjie decl is mapped to use by java side.
-     * W: Parser
-     * R: Sema.
+     * Attribute is deprecated since "cjmapping" has been removed.
+     * Could be considered for removal with any other compatibility-breaking changes in the attributes structure.
+     * W: - (before deprecation: Parser).
+     * R: - (before deprecation: Sema).
      */
-    JAVA_CJ_MAPPING_COMPAT,
+    JAVA_CJ_MAPPING [[deprecated("reverse-direction interop has been removed. "
+        "This attribute exists for compatibility persistance only and could be considered for removal")]],
 
     /**
      * Mark whether a pure cangjie decl is mapped to use by Objective-C side.
-     * W: Parser
-     * R: Sema.
+     * Attribute is deprecated since "cjmapping" has been removed.
+     * Could be considered for removal with any other compatibility-breaking changes in the attributes structure.
+     * W: - (before deprecation: Parser).
+     * R: - (before deprecation: Sema).
      */
-    OBJ_C_CJ_MAPPING_COMPAT,
+    OBJ_C_CJ_MAPPING [[deprecated("reverse-direction interop has been removed. "
+        "This attribute exists for compatibility persistance only and could be considered for removal")]],
 
     /**
      * Mark whether a class decl is an interface-forward class.
      * A forward class is used to forward the method call to Java side.
-     * W: Sema.
-     * R: Sema.
+     * Attribute is deprecated since "cjmapping" has been removed.
+     * Could be considered for removal with any other compatibility-breaking changes in the attributes structure.
+     * W: - (before deprecation: Sema).
+     * R: - (before deprecation: Sema).
      */
-    CJ_MIRROR_JAVA_INTERFACE_FWD_COMPAT,
+    CJ_MIRROR_JAVA_INTERFACE_FWD [[deprecated("reverse-direction interop has been removed. "
+        "This attribute exists for compatibility persistance only and could be considered for removal")]],
 
     /**
      * Mark whether a node is a desugared mirror field decl.
@@ -662,18 +671,24 @@ enum class Attribute {
 
     /**
      * Mark whether a function in interface-forward class is a default implementation of cj-mapping interface.
-     * W: Sema.
-     * R: Sema.
+     * Attribute is deprecated since "cjmapping" has been removed.
+     * Could be considered for removal with any other compatibility-breaking changes in the attributes structure.
+     * W: - (before deprecation: Sema).
+     * R: - (before deprecation: Sema).
      */
-    CJ_MIRROR_JAVA_INTERFACE_DEFAULT_COMPAT,
+    CJ_MIRROR_JAVA_INTERFACE_DEFAULT [[deprecated("reverse-direction interop has been removed. "
+        "This attribute exists for compatibility persistance only and could be considered for removal")]],
 
     /**
      * Mark whether a class decl is an interface-forward class.
      * A forward class is used to forward the method call to ObjC side.
-     * W: Sema.
-     * R: Sema.
+     * Attribute is deprecated since "cjmapping" has been removed.
+     * Could be considered for removal with any other compatibility-breaking changes in the attributes structure.
+     * W: - (before deprecation: Sema).
+     * R: - (before deprecation: Sema).
      */
-    CJ_MIRROR_OBJC_INTERFACE_FWD_COMPAT,
+    CJ_MIRROR_OBJC_INTERFACE_FWD [[deprecated("reverse-direction interop has been removed. "
+        "This attribute exists for compatibility persistance only and could be considered for removal")]],
 
     /**
      * Mark declaration that was already loaded from another CJO,

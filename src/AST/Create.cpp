@@ -23,7 +23,6 @@
 #include "cangjie/Basic/Position.h"
 #include "cangjie/Basic/Print.h"
 #include "cangjie/Basic/StringConvertor.h"
-#include "cangjie/Utils/CheckUtils.h"
 
 namespace Cangjie::AST {
 using namespace Meta;
