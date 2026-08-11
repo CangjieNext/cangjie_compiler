@@ -912,6 +912,7 @@ private:
     bool ChkCallBaseMemberAccess(
         ASTContext& ctx, AST::CallExpr& ce, Ptr<AST::Decl>& target, std::vector<Ptr<AST::FuncDecl>>& candidates);
     bool ChkCurryCallBase(ASTContext& ctx, AST::CallExpr& ce, Ptr<AST::Ty>& targetRet);
+    bool ChkImmediateLamCallBase(ASTContext& ctx, AST::CallExpr& ce, const Ptr<AST::Ty>& targetRet);
     bool CheckNonNormalCall(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce);
     bool ChkFunctionCallExpr(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce);
     bool ChkVariadicCallExpr(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce,
