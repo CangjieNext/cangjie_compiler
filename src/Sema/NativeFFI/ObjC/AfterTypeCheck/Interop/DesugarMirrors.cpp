@@ -99,7 +99,37 @@ void DesugarMirrors::DesugarCtor(InteropContext& ctx, ClassLikeDecl& mirror, Fun
         "Expected ASTKind::CLASS_DECL instead of " + ASTKIND_TO_STR.at(mirror.astKind));
 
     auto initCall = ctx.factory.CreateAllocInitCall(ctor);
-    thisCall->args.emplace_back(CreateFuncArg(std::move(initCall)));
+
+    auto type = CreateType(initCall->GetTy());          // class type
+    auto tempVar = CreateTmpVarDecl(type, initCall);    // let tmp = objc alloc init
+    auto refExpr = CreateRefExpr(*tempVar);
+    // (getPointerAddress<Unit>($tmp1) == 0)
+    auto checkForNull = ctx.factory.CreateGetObjcEntityOrNullCall(*tempVar, mirror.curFile);
+    // ObjCInitException
+    auto throwExpr = ctx.factory.CreateObjCInitException(*curFile, mirror);
+
+    std::vector<OwnedPtr<Node>> throwBody;
+    throwBody.emplace_back(std::move(throwExpr));
+    auto body = CreateBlock(std::move(throwBody));
+    CopyBasicInfo(ctor.outerDecl, body);
+    body->curFile = mirror.curFile;
+    body->SetTy(TypeManager::GetNothingTy());
+    auto ifExpr = CreateIfExpr(std::move(checkForNull), std::move(body)); // if (tmp.isNull()) { throw ... }
+    CopyBasicInfo(ctor.outerDecl, ifExpr);
+    ifExpr->curFile = mirror.curFile;
+    ifExpr->SetTy(CreateUnitType(mirror.curFile)->GetTy());
+
+    std::vector<OwnedPtr<Node>> nodes;
+    nodes.emplace_back(std::move(tempVar));
+    nodes.emplace_back(std::move(ifExpr));
+    nodes.emplace_back(std::move(std::move(refExpr)));
+    auto labmda = WrapReturningLambdaCall(
+        ctx.typeManager, std::move(nodes)
+    );
+    CopyBasicInfo(ctor.outerDecl, labmda);
+    labmda->curFile = mirror.curFile;
+
+    thisCall->args.emplace_back(CreateFuncArg(std::move(labmda)));
 
     ctor.constructorCall = ConstructorCall::OTHER_INIT;
     ctor.funcBody->body->body.emplace_back(std::move(thisCall));

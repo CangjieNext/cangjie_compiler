@@ -1269,6 +1269,23 @@ OwnedPtr<ThrowExpr> ASTFactory::CreateThrowUnreachableCodeExpr(File& file)
     return CreateThrowException(*exceptionDecl, {}, file, typeManager);
 }
 
+OwnedPtr<ThrowExpr> ASTFactory::CreateObjCInitException(File& file, ClassLikeDecl& cls)
+{
+    auto exceptionDecl = bridge.GetObjCInitException();
+    CJC_NULLPTR_CHECK(exceptionDecl);
+
+    constexpr auto OBJC_INIT_EXCEPTION_MESSAGE_PART_1 = "Initialization error: expected ";
+    constexpr auto OBJC_INIT_EXCEPTION_MESSAGE_PART_2 = ", got nil.";
+
+    auto argTy = GetStringDecl(importManager).GetTy();
+    auto className = nameGenerator.GetObjCDeclName(cls);
+    auto arg = CreateLitConstExpr(LitConstKind::STRING,
+        OBJC_INIT_EXCEPTION_MESSAGE_PART_1 + className + OBJC_INIT_EXCEPTION_MESSAGE_PART_2, argTy);
+    std::vector<OwnedPtr<Expr>> args;
+    args.emplace_back(std::move(arg));
+    return CreateThrowException(*exceptionDecl, std::move(args), file, typeManager);
+}
+
 OwnedPtr<ThrowExpr> ASTFactory::CreateThrowStaticMethodCallOnInterfaceExpr(File& file)
 {
     auto exceptionDecl = bridge.GetObjCStaticMethodCallOnIntefaceExceptionDecl();
