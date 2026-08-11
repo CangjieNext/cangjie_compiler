@@ -20,6 +20,7 @@
 #include "NativeFFI/Java/AfterTypeCheck/JniBridge.h"
 // #include "NativeFFI/Java/JavaFQName.h"
 #include "cangjie/AST/Node.h"
+#include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
 
 namespace Cangjie::Native::FFI::Java {
@@ -33,24 +34,26 @@ public:
         InteropLibBridge& ilib,
         Interop::Java::Utils& utils);
 
-    OwnedPtr<AST::Expr> CreateJMethodIdAccess(AfterTypeCheckContext& ctx, const AST::Ty& javaTy, Ptr<AST::Expr> envPtr);
+    OwnedPtr<AST::Expr> CreateJMethodIdAccess(AfterTypeCheckContext& ctx,
+        const AST::FuncDecl& method, Ptr<AST::Expr> jclass, Ptr<AST::Expr> envPtr);
 
     void Clear() noexcept;
 private:
     const ImportManager& importManager;
     TypeManager& typeManager;
+    BaseMangler& mangler;
     InteropLibBridge& ilib;
     JniBridge& jni;
     Interop::Java::Utils& utils;
 
     /**
-     * For jclasses, already presented in cache, just returns corresponding jclass variable.
-     * When there is no jclass of `fqname` (in form of "package.ClassName") in the cache,
-     * it creates mangled top-level variable for corresponding jclass and returns it.
+     * For jmethodId-s, already presented in cache, just returns corresponding jmethodId variable.
+     * When there is no jmethodId of in the cache,
+     * it creates mangled top-level variable for corresponding jmethod and returns it.
      */
-    AST::VarDecl& GetOrPut(AfterTypeCheckContext& ctx, const AST::Ty& javaTy, AST::File& curFile);
+    AST::VarDecl& GetOrPut(AfterTypeCheckContext& ctx, const AST::FuncDecl& method, AST::File& curFile);
 
-    std::string GetAccessorName(const AST::Ty& javaTy) const;
+    std::string GetAccessorName(const AST::FuncDecl& method) const;
 
     // std::unordered_map<JavaFQName, Ptr<AST::VarDecl>> cache;
     std::unordered_map<std::string, Ptr<AST::VarDecl>> cache;

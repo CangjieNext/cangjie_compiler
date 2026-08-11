@@ -36,6 +36,8 @@ std::vector<Ptr<AST::ClassDecl>> GetJavaImplRegistryCompanions(AST::Package& pkg
 
 bool IsJavaImplRegistryCompanionReferenceField(const AST::Node& node);
 
+bool IsUserDefinedJavaImplConstructor(const AST::Decl& implMember);
+
 } // namespace Cangjie::Native::FFI::Java
 
 #endif // CANGJIE_SEMA_NATIVE_FFI_JAVA_UTILS

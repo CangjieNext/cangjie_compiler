@@ -130,4 +130,27 @@ bool IsJavaImplRegistryCompanionReferenceField(const AST::Node& node)
     return field->identifier == JAVA_IMPL_REGISTRY_COMPANION_REFERENCE_FIELD_NAME_IN_REFERENCE_WRAPPER;
 }
 
+bool IsUserDefinedJavaImplConstructor(const AST::Decl& implMember)
+{
+    if (!implMember.TestAttr(Attribute::CONSTRUCTOR)) {
+        return false;
+    }
+
+    // Skip original primary constructors and only consider its FuncDecl counterpart.
+    auto ctor = As<ASTKind::FUNC_DECL>(&implMember);
+    if (!ctor) {
+        return false;
+    }
+    auto hasParams = !ctor->funcBody->paramLists.empty() && !ctor->funcBody->paramLists[0]->params.empty();
+
+    // Primary constructor is desugared as fresh FuncDecl with COMPILER_ADD attribute.
+    auto isPrimary = implMember.TestAttr(Attribute::PRIMARY_CONSTRUCTOR, Attribute::COMPILER_ADD);
+    // Visit implicit constructors too (compiler added without any parameters).
+    auto isImplicit = implMember.TestAttr(Attribute::COMPILER_ADD, Attribute::IMPLICIT_ADD) && !hasParams;
+    if (!isPrimary && !isImplicit && implMember.TestAttr(Attribute::COMPILER_ADD)) {
+        return false;
+    }
+    return true;
+}
+
 } // namespace Cangjie::Native::FFI::Java

@@ -7,7 +7,7 @@
 #include "JClassCache.h"
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "NativeFFI/Java/AfterTypeCheck/Utils.h"
-#include "NativeFFI/Java/JavaFQName.h"
+// #include "NativeFFI/Java/JavaFQName.h"
 #include "NativeFFI/Utils.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Node.h"
@@ -95,7 +95,7 @@ OwnedPtr<AST::Expr> JClassCache::CreateJClassAccess(
 
     ifNull.push_back(
         CreateAssignExpr(WithinFile(CreateRefExpr(classVar), &curFile),
-            jni.CreateNewGlobalRefCall(envPtr, ilib.CreateGetClassCall(javaTy, envPtr, curFile)),
+            jni.interface.CreateNewGlobalRefCall(envPtr, ilib.CreateGetClassCall(javaTy, envPtr, curFile)),
             TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)));
     ifNull.push_back(WithinFile(CreateRefExpr(classVar), &curFile));
 

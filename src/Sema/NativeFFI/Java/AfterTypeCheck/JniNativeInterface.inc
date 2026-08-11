@@ -12,6 +12,11 @@ DEFINE_MEMBER(NewGlobalRef, VAR_DECL, 1)
 // jweak NewWeakGlobalRef(JNIEnv *env, jobject obj);
 DEFINE_MEMBER(NewWeakGlobalRef, VAR_DECL, 1)
 
+// jobject NewObject(JNIEnv *env, jclass clazz, jmethodID methodID);
+DEFINE_MEMBER(NewObject, VAR_DECL, 2)
+// jobject NewObjectA(JNIEnv *env, jclass clazz, jmethodID methodID, const jvalue *args);
+DEFINE_MEMBER(NewObjectA, VAR_DECL, 3)
+
 // jfieldID GetFieldID(JNIEnv *env, jclass clazz, const char *name, const char *sig);
 DEFINE_MEMBER(GetFieldID, VAR_DECL, 3)
 // jfieldID GetStaticFieldID(JNIEnv *env, jclass clazz, const char *name, const char *sig);
