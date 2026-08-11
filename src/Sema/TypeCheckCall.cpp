@@ -2516,6 +2516,25 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseExpr(
             if (!mayCurry) {
                 PData::Reset(typeManager.constraints);
                 ce.baseFunc->Clear();
+                // A lambda called immediately (`({=> ...}())`) as a function argument has no
+                // contextual function-parameter type, so its return type otherwise degrades to the
+                // ideal literal default (Int64). When the call's expected return type is known,
+                // constrain the lambda's return type with it so ideal literals in the lambda body
+                // (e.g. `goo({=> return 0}())` expecting `Int32`) can be unified.
+                if (targetRet && Ty::IsTyCorrect(targetRet) && !targetRet->IsQuest()) {
+                    auto lam = DynamicCast<LambdaExpr>(ce.baseFunc.get());
+                    auto paramTys = lam ? TypeCheckUtil::GetFuncBodyParamTys(*lam->funcBody)
+                                        : std::vector<Ptr<Ty>>{};
+                    auto targetForBase =
+                        typeManager.GetFunctionTy(paramTys, targetRet, {false, false, false, true});
+                    auto ds = DiagSuppressor(diag);
+                    if (Check(ctx, targetForBase, ce.baseFunc.get())) {
+                        ds.ReportDiag();
+                        break;
+                    }
+                    ds.ReportDiag();
+                    ce.baseFunc->Clear();
+                }
                 Synthesize({ctx, SynPos::EXPR_ARG}, ce.baseFunc.get());
             }
             break;

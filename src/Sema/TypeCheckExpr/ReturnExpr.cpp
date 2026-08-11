@@ -39,7 +39,14 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynReturnExpr(ASTContext& ctx, ReturnExpr&
             ctx.targetTypeMap[re.expr.get()] = re.expr->GetTy();
         }
     } else {
-        isWellTyped = Synthesize({ctx, SynPos::EXPR_ARG}, re.expr.get()) && ReplaceIdealTy(*re.expr);
+        isWellTyped = Synthesize({ctx, SynPos::EXPR_ARG}, re.expr.get());
+        // Keep ideal literal types pending for the return expression of a lambda that is a direct
+        // argument of a generic call, so generic type argument inference can unify it against the
+        // expected contextual type (e.g. `functest({ => return 0 }, 2)` where the expected type is
+        // `() -> Int32`). Mirrors the implicit-return handling in `SynthesizeAndReplaceIdealTy`.
+        if (ctx.inFuncArgLambdaBody == 0) {
+            isWellTyped = isWellTyped && ReplaceIdealTy(*re.expr);
+        }
     }
 
     // Replace ClassThisTy to ClassTy when the function's outer declaration is not Class or Extend which extends class.

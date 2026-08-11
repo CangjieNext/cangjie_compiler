@@ -18,6 +18,33 @@ using namespace TypeCheckUtil;
 using namespace Utils;
 
 namespace {
+// RAII guard that marks synthesis as running inside the body of a lambda that is a direct
+// argument of a generic call. While active, the lambda's implicit-return expression keeps its
+// ideal literal type (IDEAL_INT / IDEAL_FLOAT) pending so generic type argument inference can
+// unify it against the expected contextual type. See `SynLamExpr` and `SynthesizeAndReplaceIdealTy`.
+class FuncArgLambdaBodyGuard {
+public:
+    FuncArgLambdaBodyGuard(ASTContext& ctx, const LambdaExpr& le) : ctx(&ctx), active(false)
+    {
+        if (ctx.funcArgReachable.count(&le) > 0) {
+            ctx.inFuncArgLambdaBody++;
+            active = true;
+        }
+    }
+    ~FuncArgLambdaBodyGuard()
+    {
+        if (active) {
+            ctx->inFuncArgLambdaBody--;
+        }
+    }
+    FuncArgLambdaBodyGuard(const FuncArgLambdaBodyGuard&) = delete;
+    FuncArgLambdaBodyGuard& operator=(const FuncArgLambdaBodyGuard&) = delete;
+
+private:
+    ASTContext* ctx;
+    bool active;
+};
+
 // we should clear the nodes in the block and then recheck the body according to the new `target`.
 void ClearLambdaBodyForReCheck(const LambdaExpr& le)
 {
@@ -321,6 +348,10 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLamExpr(ASTContext& ctx, LambdaExpr& le
     le.funcBody->retType->end = le.end;
     CJC_ASSERT(le.funcBody && !le.funcBody->paramLists.empty());
     TyVarScope sc(typeManager);
+    // While synthesizing the body of a lambda that is a direct argument of a generic call, the
+    // lambda's implicit-return expression keeps its ideal literal type pending so generic type
+    // argument inference can unify it against the expected contextual type.
+    FuncArgLambdaBodyGuard bodyGuard(ctx, le);
     for (auto& node : le.funcBody->paramLists[0]->params) {
         CJC_NULLPTR_CHECK(node);
         Ptr<Ty> ty = Synthesize({ctx, SynPos::NONE}, node->type.get());
