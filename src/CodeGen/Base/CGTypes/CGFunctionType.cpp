@@ -17,6 +17,27 @@
 #include "cangjie/CHIR/IR/Value/Value.h"
 
 namespace Cangjie::CodeGen {
+namespace {
+
+llvm::StructType* GetOrCreateFuncLayoutType(llvm::LLVMContext& llvmCtx)
+{
+    if (auto layoutType = llvm::StructType::getTypeByName(llvmCtx, "Func.Type")) {
+        return layoutType;
+    }
+    return llvm::StructType::create(llvmCtx, {llvm::Type::getInt8PtrTy(llvmCtx)}, "Func.Type");
+}
+
+bool IsRefToStructOrTuple(const CHIR::Type& ty)
+{
+    return ty.IsRef() && (ty.GetTypeArgs()[0]->IsStruct() || ty.GetTypeArgs()[0]->IsTuple());
+}
+
+bool NeedsPassByRef(const CHIR::Type& ty, const CGType& cgType)
+{
+    return ty.IsStruct() || ty.IsTuple() || (!cgType.GetSize() && !ty.IsGeneric());
+}
+} // namespace
+
 CGFunctionType::CGFunctionType(
     CGModule& cgMod, CGContext& cgCtx, const CHIR::FuncType& chirType, const TypeExtraInfo& extraInfo)
     : CGType(cgMod, cgCtx, chirType, CGTypeKind::CG_FUNCTION)
@@ -47,46 +68,61 @@ llvm::Type* CGFunctionType::GenLLVMType()
     if (llvmType) {
         return llvmType;
     }
-
     auto& llvmCtx = cgCtx.GetLLVMContext();
-    layoutType = llvm::StructType::getTypeByName(llvmCtx, "Func.Type");
-    if (!layoutType) {
-        layoutType = llvm::StructType::create(llvmCtx, {llvm::Type::getInt8PtrTy(llvmCtx)}, "Func.Type");
-    }
+    layoutType = GetOrCreateFuncLayoutType(llvmCtx);
 
     auto& funcTy = StaticCast<const CHIR::FuncType&>(chirType);
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (funcTy.IsCFunc()) {
-        llvmType = llvm::PointerType::get(llvm::StructType::get(llvmCtx), 0);
-        auto llvmFuncTy = cgMod.GetCGCFFI().GetCFuncType(funcTy);
-        return llvmFuncTy ? llvmFuncTy->getPointerTo() : llvmType;
+        return GenLLVMTypeForCFunc(funcTy);
     }
-#endif
     llvmType = llvm::Type::getInt8PtrTy(llvmCtx);
 
     std::vector<llvm::Type*> paramTypes;
     size_t realArgIdx = 0;
+    size_t containedCGTypeIndex = 1;
+    auto retType = GenReturnLLVMType(funcTy, paramTypes, realArgIdx);
+    for (auto paramType : funcTy.GetParamTypes()) {
+        (void)realParamIndices.emplace_back(realArgIdx);
+        AppendParamLLVMType(*paramType, containedCGTypeIndex++, paramTypes, realArgIdx);
+    }
+    AppendSupplementaryParamLLVMTypes(paramTypes, realArgIdx);
+
+    llvmFunctionType = llvm::FunctionType::get(retType, paramTypes, funcTy.HasVarArg());
+    return llvmType;
+}
+
+llvm::Type* CGFunctionType::GenLLVMTypeForCFunc(const CHIR::FuncType& funcTy)
+{
+    auto& llvmCtx = cgCtx.GetLLVMContext();
+    llvmType = llvm::PointerType::get(llvm::StructType::get(llvmCtx), 0);
+    auto llvmFuncTy = cgMod.GetCGCFFI().GetCFuncType(funcTy);
+    return llvmFuncTy ? llvmFuncTy->getPointerTo() : llvmType;
+}
+
+llvm::Type* CGFunctionType::GenReturnLLVMType(
+    const CHIR::FuncType& funcTy, std::vector<llvm::Type*>& paramTypes, size_t& realArgIdx)
+{
     auto retCGType = CGType::GetOrCreate(cgMod, funcTy.GetReturnType());
     llvm::Type* retType = retCGType->GetLLVMType();
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    if (retType->isStructTy() || retType->isArrayTy() || !retCGType->GetSize()) {
-        if (!retCGType->GetSize() && !funcTy.GetReturnType()->IsGeneric()) {
-            (void)paramTypes.emplace_back(retType->getPointerTo(1));
-        } else {
-            (void)paramTypes.emplace_back(retType->getPointerTo());
-        }
-        ++realArgIdx;
-        retType = llvm::Type::getVoidTy(llvmCtx);
-        hasSRet = true;
+    if (!retType->isStructTy() && !retType->isArrayTy() && retCGType->GetSize()) {
+        return retType;
     }
-    size_t containedCGTypeIndex = 1;
-#endif
-    for (auto paramType : funcTy.GetParamTypes()) {
-        auto cgType = CGType::GetOrCreate(cgMod, paramType);
-        auto llvmType = cgType->GetLLVMType();
 
-        (void)realParamIndices.emplace_back(realArgIdx);
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    if (!retCGType->GetSize() && !funcTy.GetReturnType()->IsGeneric()) {
+        (void)paramTypes.emplace_back(retType->getPointerTo(1));
+    } else {
+        (void)paramTypes.emplace_back(retType->getPointerTo());
+    }
+    ++realArgIdx;
+    hasSRet = true;
+    return llvm::Type::getVoidTy(cgCtx.GetLLVMContext());
+}
+
+void CGFunctionType::AppendParamLLVMType(const CHIR::Type& paramType, size_t containedCGTypeIndex,
+    std::vector<llvm::Type*>& paramTypes, size_t& realArgIdx)
+{
+    auto cgType = CGType::GetOrCreate(cgMod, &paramType);
+    if (IsRefToStructOrTuple(paramType)) {
         /// Effect Overview
         // The parameter that requires additional basePtr must meet and the function should not be 'mut'
         // either:
@@ -98,108 +134,74 @@ llvm::Type* CGFunctionType::GenLLVMType()
         // The type of basePtr is determined according to the following rules:
         //  - For above (1), basePtr is i8 addrspace(1)*.
         //  - For above (2), basePtr is i8*.
-        if (paramType->IsRef() &&
-            (paramType->GetTypeArgs()[0]->IsStruct() || paramType->GetTypeArgs()[0]->IsTuple())) {
-            llvmType = CGType::GetOrCreate(cgMod, DeRef(*paramType))->GetLLVMType()->getPointerTo(1U);
-            (void)paramTypes.emplace_back(llvmType);
-            if (allowBasePtr) {
-                (void) paramTypes.emplace_back(llvm::Type::getInt8PtrTy(llvmCtx, 1));
-                structParamNeedsBasePtr[realArgIdx] = containedCGTypeIndex;
-                ++realArgIdx;
-                hasBasePtr = true;
-            }
-        } else if (paramType->IsStruct() || paramType->IsTuple() ||
-            (!cgType->GetSize() && !paramType->IsGeneric())) {
-            // If current parameter is the first parameter in a struct method, aka `this`
-            if (containedCGTypeIndex == 1U && this->chirFunc &&
-                !this->chirFunc->TestAttr(CHIR::Attribute::STATIC) && IsStructOrExtendMethod(*chirFunc)) {
-                llvmType = cgType->GetLLVMType()->getPointerTo();
-            } else {
-                llvmType = cgType->GetLLVMType()->getPointerTo(cgType->GetSize() ? 0U : 1U);
-            }
-            (void)paramTypes.emplace_back(llvmType);
-        } else if (cgType->IsStructType() || cgType->IsVArrayType()) {
-            llvmType = cgType->GetLLVMType()->getPointerTo();
-            (void)paramTypes.emplace_back(llvmType);
-        } else {
-            (void)paramTypes.emplace_back(llvmType);
+        auto llvmType = CGType::GetOrCreate(cgMod, DeRef(paramType))->GetLLVMType()->getPointerTo(1U);
+        (void)paramTypes.emplace_back(llvmType);
+        if (allowBasePtr) {
+            (void)paramTypes.emplace_back(llvm::Type::getInt8PtrTy(cgCtx.GetLLVMContext(), 1));
+            structParamNeedsBasePtr[realArgIdx] = containedCGTypeIndex;
+            ++realArgIdx;
+            hasBasePtr = true;
         }
-        ++containedCGTypeIndex;
-        ++realArgIdx;
-#endif
+    } else if (NeedsPassByRef(paramType, *cgType)) {
+        // If current parameter is the first parameter in a struct method, aka `this`
+        llvm::Type* llvmType = nullptr;
+        if (containedCGTypeIndex == 1U && chirFunc && !chirFunc->TestAttr(CHIR::Attribute::STATIC) &&
+            IsStructOrExtendMethod(*chirFunc)) {
+            llvmType = cgType->GetLLVMType()->getPointerTo();
+        } else {
+            llvmType = cgType->GetLLVMType()->getPointerTo(cgType->GetSize() ? 0U : 1U);
+        }
+        (void)paramTypes.emplace_back(llvmType);
+    } else if (cgType->IsStructType() || cgType->IsVArrayType()) {
+        (void)paramTypes.emplace_back(cgType->GetLLVMType()->getPointerTo());
+    } else {
+        (void)paramTypes.emplace_back(cgType->GetLLVMType());
     }
+    ++realArgIdx;
+}
 
+void CGFunctionType::AppendSupplementaryParamLLVMTypes(std::vector<llvm::Type*>& paramTypes, size_t& realArgIdx)
+{
     // Adding Supplementary parameters
     if (this->chirFunc) { // Generic parameters introduced by a function
-        for (auto chirGT: this->chirFunc->GetGenericTypeParams()) {
-            (void) paramTypes.emplace_back(CGType::GetOrCreateTypeInfoPtrType(llvmCtx));
+        for (auto chirGT : this->chirFunc->GetGenericTypeParams()) {
+            (void)paramTypes.emplace_back(CGType::GetOrCreateTypeInfoPtrType(cgCtx.GetLLVMContext()));
             genericParamIndicesMap.emplace(chirGT, realArgIdx++); // map chirGT to ArgIdx
         }
     } else {
         for (std::size_t idx = 0; idx < this->instantiatedParamTypes.size(); ++idx) {
-            (void) paramTypes.emplace_back(CGType::GetOrCreateTypeInfoPtrType(llvmCtx));
+            (void)paramTypes.emplace_back(CGType::GetOrCreateTypeInfoPtrType(cgCtx.GetLLVMContext()));
             realArgIdx++;
         }
     }
     if (this->isMethod) { // For member method, add OuterTypeInfo
-        (void)paramTypes.emplace_back(CGType::GetOrCreateTypeInfoPtrType(llvmCtx));
+        (void)paramTypes.emplace_back(CGType::GetOrCreateTypeInfoPtrType(cgCtx.GetLLVMContext()));
         outerTypeInfoIndex = realArgIdx++;
     }
     if (this->isStaticMethod) { // For static member method, add ThisTypeInfo
-        (void)paramTypes.emplace_back(CGType::GetOrCreateTypeInfoPtrType(llvmCtx));
+        (void)paramTypes.emplace_back(CGType::GetOrCreateTypeInfoPtrType(cgCtx.GetLLVMContext()));
         thisTypeInfoIndex = realArgIdx++;
     }
-
-    llvmFunctionType = llvm::FunctionType::get(retType, paramTypes, funcTy.HasVarArg());
-    return llvmType;
 }
 
 llvm::FunctionType* CGFunctionType::GetLLVMFunctionType() const
 {
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (auto& chirFuncTy = StaticCast<const CHIR::FuncType&>(chirType); chirFuncTy.IsCFunc()) {
         return cgMod.GetCGCFFI().GetCFuncType(chirFuncTy);
     }
-#endif
     return llvmFunctionType;
 }
 
 void CGFunctionType::GenContainedCGTypes()
 {
-    size_t containedCGTypeIndex = 0;
-    // On CJNative backend, the parameters of structure type are passed by reference.
-    auto getFixedCGType = [this, &containedCGTypeIndex](const CHIR::Type& chirType) {
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    auto cgType = CGType::GetOrCreate(cgMod, &chirType);
-    if (chirType.IsRef() && chirType.GetTypeArgs()[0]->IsStruct()) {
-        return CGType::GetOrCreate(cgMod, &chirType, CGType::TypeExtraInfo(1U));
-    } else if (chirType.IsStruct() || chirType.IsTuple() || (!cgType->GetSize() && !chirType.IsGeneric())) {
-        auto refType =  CGType::GetRefTypeOf(cgCtx.GetCHIRBuilder(), chirType);
-        // If current parameter is the first parameter in a struct method, aka `this`
-        if (containedCGTypeIndex == 1U && this->chirFunc && IsStructOrExtendMethod(*chirFunc)) {
-            return CGType::GetOrCreate(cgMod, refType);
-        } else {
-            return CGType::GetOrCreate(cgMod, refType, CGType::TypeExtraInfo(cgType->GetSize() ? 0U : 1U));
-        }
-    } else if (cgType->IsStructType() || cgType->IsVArrayType()) {
-        return CGType::GetOrCreate(
-            cgMod, CGType::GetRefTypeOf(cgCtx.GetCHIRBuilder(), chirType), CGType::TypeExtraInfo(0U));
-    } else if (cgType->IsStructPtrType() || cgType->IsVArrayPtrType()) {
-        return CGType::GetOrCreate(cgMod, &chirType, CGType::TypeExtraInfo(1U));
-    } else {
-        return CGType::GetOrCreate(cgMod, &chirType);
-    }
-#endif
-    };
     // The contained types of a function type include:
-    // (1) return type
     auto& funcTy = StaticCast<const CHIR::FuncType&>(chirType);
-    (void)containedCGTypes.emplace_back(getFixedCGType(*funcTy.GetReturnType()));
-    ++containedCGTypeIndex;
+    size_t containedCGTypeIndex = 0;
+    // (1) return type
+    (void)containedCGTypes.emplace_back(GetFixedParamCGType(*funcTy.GetReturnType(), containedCGTypeIndex++));
     // (2) every parameter type
     for (auto paramType : funcTy.GetParamTypes()) {
-        (void)containedCGTypes.emplace_back(getFixedCGType(*paramType));
-        ++containedCGTypeIndex;
+        (void)containedCGTypes.emplace_back(GetFixedParamCGType(*paramType, containedCGTypeIndex++));
     }
     // (3) Supplementary parameters
     if (this->chirFunc) {
@@ -215,6 +217,30 @@ void CGFunctionType::GenContainedCGTypes()
         if (this->chirFunc->TestAttr(CHIR::Attribute::STATIC)) {
             (void)containedCGTypes.emplace_back(CGType::GetCGTI(cgMod));
         }
+    }
+}
+
+CGType* CGFunctionType::GetFixedParamCGType(const CHIR::Type& chirType, size_t containedCGTypeIndex)
+{
+    // On CJNative backend, the parameters of structure type are passed by reference.
+    auto cgType = CGType::GetOrCreate(cgMod, &chirType);
+    if (chirType.IsRef() && chirType.GetTypeArgs()[0]->IsStruct()) {
+        return CGType::GetOrCreate(cgMod, &chirType, CGType::TypeExtraInfo(1U));
+    } else if (NeedsPassByRef(chirType, *cgType)) {
+        auto refType = CGType::GetRefTypeOf(cgCtx.GetCHIRBuilder(), chirType);
+        // If current parameter is the first parameter in a struct method, aka `this`
+        if (containedCGTypeIndex == 1U && chirFunc && IsStructOrExtendMethod(*chirFunc)) {
+            return CGType::GetOrCreate(cgMod, refType);
+        } else {
+            return CGType::GetOrCreate(cgMod, refType, CGType::TypeExtraInfo(cgType->GetSize() ? 0U : 1U));
+        }
+    } else if (cgType->IsStructType() || cgType->IsVArrayType()) {
+        return CGType::GetOrCreate(
+            cgMod, CGType::GetRefTypeOf(cgCtx.GetCHIRBuilder(), chirType), CGType::TypeExtraInfo(0U));
+    } else if (cgType->IsStructPtrType() || cgType->IsVArrayPtrType()) {
+        return CGType::GetOrCreate(cgMod, &chirType, CGType::TypeExtraInfo(1U));
+    } else {
+        return CGType::GetOrCreate(cgMod, &chirType);
     }
 }
 

@@ -96,6 +96,20 @@ private:
     llvm::Constant* GenTypeArgsNumOfTypeInfo() override;
     llvm::Constant* GenTypeArgsOfTypeInfo() override;
 
+    // CFunc function type branch.
+    llvm::Type* GenLLVMTypeForCFunc(const CHIR::FuncType& funcTy);
+    // Lower a struct/array return value to an sret parameter; returns the real LLVM return type.
+    llvm::Type* GenReturnLLVMType(const CHIR::FuncType& funcTy, std::vector<llvm::Type*>& paramTypes,
+        size_t& realArgIdx);
+    // Append the LLVM type of a single parameter (and its basePtr if needed).
+    void AppendParamLLVMType(const CHIR::Type& paramType, size_t containedCGTypeIndex,
+        std::vector<llvm::Type*>& paramTypes, size_t& realArgIdx);
+    // The former `getFixedCGType` lambda in GenContainedCGTypes.
+    CGType* GetFixedParamCGType(const CHIR::Type& chirType, size_t containedCGTypeIndex);
+
+    // Supplementary parameters (TypeInfo for generic params / outerTI / thisTI) in the LLVM parameter list.
+    void AppendSupplementaryParamLLVMTypes(std::vector<llvm::Type*>& paramTypes, size_t& realArgIdx);
+
     bool hasSRet{false};
     bool hasBasePtr{false};
     llvm::FunctionType* llvmFunctionType{nullptr};

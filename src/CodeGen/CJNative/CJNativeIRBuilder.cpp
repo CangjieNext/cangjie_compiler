@@ -609,7 +609,7 @@ struct StoreLowering {
         : cgVal(cgVal),
           cgDestAddr(cgDestAddr),
           boxType(boxType),
-          valType(cgVal.GetCGType()), 
+          valType(cgVal.GetCGType()),
           destDerefType(cgDestAddr.GetCGType()->GetPointerElementType()),
           val(cgVal.GetRawValue()),
           destAddr(cgDestAddr.GetRawValue()),
