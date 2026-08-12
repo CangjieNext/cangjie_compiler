@@ -51,18 +51,29 @@ TEST(StdUtilsTest, StouiRejectsValuesAboveUintMax)
     EXPECT_FALSE(Stoui(OUT_OF_RANGE_DIGITS).has_value());
 
     // The `result > UINT_MAX` guard only has anything to reject where `unsigned long` is wider
-    // than `unsigned int` (LP64). On LLP64 both are 32 bits, std::stoul itself throws
-    // out_of_range and the value never reaches the comparison.
+    // than `unsigned int` (LP64). On LLP64 both are 32 bits and std::stoul throws out_of_range
+    // instead, so the value never reaches the comparison - either way the result is rejected.
     if constexpr (sizeof(unsigned long) > sizeof(unsigned int)) {
         // Fits in `unsigned long` but overflows `unsigned int`, so Stoui must reject it instead
         // of silently truncating.
         EXPECT_FALSE(Stoui(std::to_string(static_cast<unsigned long>(UINT_MAX) + 1UL)).has_value());
-        // std::stoul wraps a negative literal around to ULONG_MAX, which is also above UINT_MAX.
-        EXPECT_FALSE(Stoui("-1").has_value());
-    } else {
-        // ULONG_MAX == UINT_MAX here, so a wrapped "-1" is a legal unsigned int.
-        EXPECT_EQ(Stoui("-1").value(), UINT_MAX);
     }
+}
+
+// std::stoul wraps a negative literal around instead of failing, so Stoui rejects the sign
+// itself. Without that the result would differ between data models: on LP64 the wrapped
+// ULONG_MAX exceeds UINT_MAX and is caught, on LLP64 it *is* UINT_MAX and would be returned.
+TEST(StdUtilsTest, StouiRejectsNegativeInputOnEveryDataModel)
+{
+    EXPECT_FALSE(Stoui("-1").has_value());
+    EXPECT_FALSE(Stoui("-0").has_value());
+    EXPECT_FALSE(Stoui("  -42").has_value());
+    EXPECT_FALSE(Stoui("-ff", HEX_BASE).has_value());
+
+    // Only the sign position is examined, so trailing junk is still ignored the way std::stoul
+    // ignores it.
+    EXPECT_EQ(Stoui("5-").value(), 5U);
+    EXPECT_EQ(Stoui("7abc").value(), 7U);
 }
 
 TEST(StdUtilsTest, StolAcceptsValidAndRejectsInvalid)

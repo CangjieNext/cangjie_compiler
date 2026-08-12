@@ -258,6 +258,30 @@ TEST_F(ProfileRecorderTest, OutputResultWritesProfFilesAndSanitisesPackageName)
     UserTimer::Instance().OutputResult();
 }
 
+// A package name is turned into a file name, so every directory separator in it has to go -
+// not just the first. Leaving one behind would aim the write at a subdirectory that does not
+// exist, and WriteJson would then fail silently.
+TEST_F(ProfileRecorderTest, WriteJsonReplacesEverySeparatorInThePackageName)
+{
+    const std::string dir = TempDir("cj_profile_sep");
+    ASSERT_TRUE(FileUtil::IsDir(dir));
+
+    FakeUserRecord record;
+    record.SetOutputDir(dir);
+    record.Enable(true);
+
+    record.SetPackageName("a/b/c");
+    record.OutputResult();
+    EXPECT_TRUE(FileUtil::FileExist(FileUtil::JoinPath(dir, "a-b-c.fake.prof")));
+
+#ifdef _WIN32
+    // On Windows a backslash is a separator too.
+    record.SetPackageName("d\\e");
+    record.OutputResult();
+    EXPECT_TRUE(FileUtil::FileExist(FileUtil::JoinPath(dir, "d-e.fake.prof")));
+#endif
+}
+
 TEST_F(ProfileRecorderTest, SetOutputDirFallsBackToTheParentOfAFilePath)
 {
     const std::string dir = TempDir("cj_profile_dir");

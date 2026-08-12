@@ -41,10 +41,13 @@ void UserBase::OutputResult() const noexcept
 
 void UserBase::WriteJson(const std::string& context, const std::string& suffix) const
 {
+    // Replace every directory separator, not just the first one: a name that still contains one
+    // would send the profile into a subdirectory that does not exist, and the write would then
+    // fail silently below.
     std::string name = packageName;
-    size_t startPos = name.find('/');
-    if (startPos != std::string::npos) {
-        (void)name.replace(startPos, 1, "-");
+    for (size_t pos = name.find_first_of(DIR_SEPARATOR); pos != std::string::npos;
+         pos = name.find_first_of(DIR_SEPARATOR, pos + 1)) {
+        name[pos] = '-';
     }
     std::string filename = name + suffix;
     std::ofstream out(FileUtil::JoinPath(outputDir, filename).c_str());

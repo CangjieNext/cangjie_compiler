@@ -492,8 +492,10 @@ bool Remove(const std::string& itemPath)
     if (dwAttr == INVALID_FILE_ATTRIBUTES) {
         return false;
     }
-    if ((dwAttr & FILE_ATTRIBUTE_READONLY) == 1 || (dwAttr & FILE_ATTRIBUTE_SYSTEM) == 1 ||
-        (dwAttr & FILE_ATTRIBUTE_DEVICE) == 1 || (dwAttr & FILE_ATTRIBUTE_VIRTUAL) == 1) {
+    // Compare against 0, not 1: only FILE_ATTRIBUTE_READONLY happens to be 0x1, so `== 1` made
+    // the SYSTEM (0x4), DEVICE (0x40) and VIRTUAL (0x10000) checks unreachable.
+    if ((dwAttr & FILE_ATTRIBUTE_READONLY) != 0 || (dwAttr & FILE_ATTRIBUTE_SYSTEM) != 0 ||
+        (dwAttr & FILE_ATTRIBUTE_DEVICE) != 0 || (dwAttr & FILE_ATTRIBUTE_VIRTUAL) != 0) {
         return false;
     }
     return (IsDir(itemPath) ? _rmdir(itemPath.c_str()) : remove(itemPath.c_str())) == 0;

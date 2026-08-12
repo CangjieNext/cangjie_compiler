@@ -11,6 +11,14 @@ namespace Cangjie {
 std::optional<unsigned int> Stoui(const std::string& s, int base)
 {
     try {
+        // std::stoul silently wraps a negative literal around, so a leading '-' has to be
+        // rejected here. Relying on the `> UINT_MAX` check below is not enough: it only catches
+        // the wrapped value where `unsigned long` is wider than `unsigned int`, which makes the
+        // result differ between LP64 and LLP64. Only the sign position is examined, so trailing
+        // junk keeps being ignored the same way std::stoul ignores it.
+        if (size_t sign = s.find_first_not_of(" \t\n\v\f\r"); sign != std::string::npos && s[sign] == '-') {
+            return {};
+        }
         unsigned long result = std::stoul(s, nullptr, base);
         if (result > UINT_MAX) {
             return {};
