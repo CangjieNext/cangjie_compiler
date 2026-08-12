@@ -72,8 +72,12 @@ TEST(StdUtilsTest, StouiRejectsNegativeInputOnEveryDataModel)
 
     // Only the sign position is examined, so trailing junk is still ignored the way std::stoul
     // ignores it.
-    EXPECT_EQ(Stoui("5-").value(), 5U);
-    EXPECT_EQ(Stoui("7abc").value(), 7U);
+    auto trailingSign = Stoui("5-");
+    ASSERT_TRUE(trailingSign.has_value());
+    EXPECT_EQ(trailingSign.value(), 5U);
+    auto trailingText = Stoui("7abc");
+    ASSERT_TRUE(trailingText.has_value());
+    EXPECT_EQ(trailingText.value(), 7U);
 }
 
 TEST(StdUtilsTest, StolAcceptsValidAndRejectsInvalid)

@@ -353,6 +353,23 @@ TEST(FileUtilExtraTest, RemoveRejectsReadOnlyFiles)
 
     EXPECT_FALSE(Remove(JoinPath(dir.Path(), "missing")));
 }
+
+// The guard used to compare the masked attribute against 1, which only FILE_ATTRIBUTE_READONLY
+// (0x1) can ever equal, so a system file was deleted instead of refused. READONLY above cannot
+// tell the two versions apart - this one can.
+TEST(FileUtilExtraTest, RemoveRejectsSystemFiles)
+{
+    TempDir dir("cj_fileutil_system");
+    const std::string file = JoinPath(dir.Path(), "system.txt");
+    WriteRaw(file, "x");
+    ASSERT_NE(SetFileAttributesA(file.c_str(), FILE_ATTRIBUTE_SYSTEM), 0);
+
+    EXPECT_FALSE(Remove(file));
+    EXPECT_TRUE(FileExist(file));
+
+    ASSERT_NE(SetFileAttributesA(file.c_str(), FILE_ATTRIBUTE_NORMAL), 0);
+    EXPECT_TRUE(Remove(file));
+}
 #endif
 
 TEST(FileUtilExtraTest, IsAbsolutePathAboveLengthLimitDetectsOverlongPaths)
