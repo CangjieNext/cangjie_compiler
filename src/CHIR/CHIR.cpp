@@ -423,8 +423,8 @@ void ToCHIR::RunArrayListConstStartOpt()
     }
     Utils::ProfileRecorder recorder("CHIR Opt", "ArrayListOpt");
     auto functionInline = FunctionInline(builder, opts.optimizationLevel, opts.chirDebugOptimizer);
-    auto pass = ArrayListConstStartOpt(builder, opts, functionInline);
-    pass.RunOnPackage(chirPkg);
+    auto pass = ArrayListConstStartOpt(builder, functionInline);
+    pass.RunOnPackage(*chirPkg);
     MergeEffectMap(pass.GetEffectMap(), effectMap);
     DumpCHIRToFile("RunArrayListConstStartOpt");
 }
@@ -437,7 +437,7 @@ void ToCHIR::RunFunctionInline(DevirtualizationInfo& devirtInfo)
     Utils::ProfileRecorder::Start("CHIR Opt", "FunctionInline");
     CallGraphAnalysis callGraphAnalysis(chirPkg, devirtInfo);
     // Collect all call graph information.
-    callGraphAnalysis.DoCallGraphAnalysis(opts.chirDebugOptimizer);
+    callGraphAnalysis.DoCallGraphAnalysis(false);
     auto pass = FunctionInline(builder, opts.optimizationLevel, opts.chirDebugOptimizer);
     for (auto func : callGraphAnalysis.postOrderSCCFunctionlist) {
         if (!func) {
@@ -490,10 +490,9 @@ void ToCHIR::RunConstantPropagation()
     if (threadNum == 1) {
         auto cp = CHIR::ConstPropagation(builder, &constAnalysisWrapper, opts);
         MergeEffectMap(cp.GetEffectMap(), effectMap);
-        cp.RunOnPackage(chirPkg, opts.chirDebugOptimizer, ci.isCJLint);
+        cp.RunOnPackage(chirPkg, ci.isCJLint);
         dce.UnreachableBlockElimination(cp.GetFuncsNeedRemoveBlocks(), opts.chirDebugOptimizer);
     } else {
-        bool isDebug = opts.chirDebugOptimizer;
         bool isCJLint = ci.isCJLint;
         std::vector<Function*> globalFuncs = chirPkg->GetGlobalFuncsWithBody();
         size_t funcNum = globalFuncs.size();
@@ -503,8 +502,8 @@ void ToCHIR::RunConstantPropagation()
         for (size_t idx = 0; idx < funcNum; ++idx) {
             auto func = globalFuncs.at(idx);
             auto cp = std::make_unique<CHIR::ConstPropagation>(*builderList[idx], &constAnalysisWrapper, opts);
-            taskQueue.AddTask<void>([constPropagation = cp.get(), func, isDebug, isCJLint]() {
-                return constPropagation->RunOnFunc(func, isDebug, isCJLint);
+            taskQueue.AddTask<void>([constPropagation = cp.get(), func, isCJLint]() {
+                return constPropagation->RunOnFunc(func, isCJLint);
             });
             cpList.emplace_back(std::move(cp));
         }
@@ -575,7 +574,7 @@ void ToCHIR::RunArrayLambdaOpt()
     }
     Utils::ProfileRecorder recorder("CHIR Opt", "ArrayLambdaOpt");
     auto arrayLambdaOpt = CHIR::ArrayLambdaOpt(builder);
-    arrayLambdaOpt.RunOnPackage(chirPkg, opts.chirDebugOptimizer);
+    arrayLambdaOpt.RunOnPackage(*chirPkg);
     DumpCHIRToFile("ArrayLambdaOpt");
 }
 

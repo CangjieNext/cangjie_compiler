@@ -89,12 +89,7 @@ bool Type::IsAutoEnvGenericBase() const
 
 bool Type::IsString() const
 {
-    if (IsStruct()) {
-        auto ty = StaticCast<const StructType*>(this);
-        auto structDef = ty->GetStructDef();
-        return CheckCustomTypeDefIsExpected(*structDef, CORE_PACKAGE_NAME, STD_LIB_STRING);
-    }
-    return false;
+    return IsExpectedCustomType(*this, CORE_PACKAGE_NAME, STD_LIB_STRING);
 }
 
 bool Type::IsClassRef([[maybe_unused]] bool nullable) const
@@ -119,12 +114,7 @@ bool Type::IsConstant() const
 
 bool Type::IsStructArray() const
 {
-    if (IsStruct()) {
-        auto ty = StaticCast<const StructType*>(this);
-        auto structDef = ty->GetStructDef();
-        return CheckCustomTypeDefIsExpected(*structDef, CORE_PACKAGE_NAME, STD_LIB_ARRAY);
-    }
-    return false;
+    return IsExpectedCustomType(*this, CORE_PACKAGE_NAME, STD_LIB_ARRAY);
 }
 
 bool Type::IsBuiltinType() const
@@ -197,11 +187,7 @@ bool Type::IsCFunc() const
 
 bool Type::IsCType() const
 {
-    if (kind != TYPE_CLASS) {
-        return false;
-    }
-    auto def = static_cast<const ClassType*>(this)->GetClassDef();
-    return CheckCustomTypeDefIsExpected(*def, CORE_PACKAGE_NAME, CTYPE_NAME);
+    return IsExpectedCustomType(*this, CORE_PACKAGE_NAME, CTYPE_NAME);
 }
 
 std::vector<Function*> Type::GetDeclareAndExtendMethods([[maybe_unused]] CHIRBuilder& builder) const

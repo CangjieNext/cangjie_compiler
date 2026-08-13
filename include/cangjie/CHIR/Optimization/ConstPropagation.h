@@ -33,18 +33,16 @@ public:
     /**
      * @brief Main process to do const propagation.
      * @param package package to do optimization.
-     * @param isDebug flag whether print debug log.
      * @param isCJLint flag whether CJLint is enabled.
      */
-    void RunOnPackage(const Ptr<const Package>& package, bool isDebug, bool isCJLint);
+    void RunOnPackage(const Ptr<const Package>& package, bool isCJLint);
 
     /**
      * @brief Main process to do const propagation per func.
      * @param func func to do optimization.
-     * @param isDebug flag whether print debug log.
      * @param isCJLint flag whether CJLint is enabled.
      */
-    void RunOnFunc(const Ptr<const Function>& func, bool isDebug, bool isCJLint = false);
+    void RunOnFunc(const Ptr<const Function>& func, bool isCJLint = false);
 
     /**
      * @brief Get effect map after this pass.
@@ -69,7 +67,7 @@ private:
     };
 
     template <typename TConstDomain>
-    void VisitFunc(const Function& func, bool isDebug, bool isCJLint, Results<TConstDomain>& result);
+    void VisitFunc(const Function& func, bool isCJLint, Results<TConstDomain>& result);
 
     // ==================== Rewrite Non-terminator Expressions ==================== //
 
@@ -84,7 +82,7 @@ private:
      * This function will rewrite an expression based on the @p rewriteInfo, which stores
      * the exrpession to be rewrited, the index of this expression and the new expression.
      */
-    void RewriteToConstExpr(const RewriteInfo& rewriteInfo, bool isDebug) const;
+    void RewriteToConstExpr(const RewriteInfo& rewriteInfo) const;
 
     /**
      * This function will check if a unary expression can be simplified according to the rules
@@ -98,7 +96,7 @@ private:
      *
      * note: `-(-a) != a` as there might be an overflow while calculating `(-a)`.
      */
-    void TrySimplifyingUnaryExpr(const Ptr<UnaryExpression>& unary, bool isDebug) const;
+    void TrySimplifyingUnaryExpr(const Ptr<UnaryExpression>& unary) const;
 
     /**
      * This function will check if a binary expression can be simplified according to the rules
@@ -120,17 +118,17 @@ private:
      * note: We don't rewrite `0 - a` to `-a` as CodeGen will rewrite `-a` to `0 - a`.
      */
     template <typename T, typename tConstDomain>
-    void TrySimplifyingBinaryExpr(const tConstDomain& state, const Ptr<BinaryExpression>& binary, bool isDebug);
+    void TrySimplifyingBinaryExpr(const tConstDomain& state, const Ptr<BinaryExpression>& binary);
     
     /**
      * This function will replaced all use of the result of the expression @p expr with the value
-     * @p newVal. A debug message will also be printed if @p isDebug is true.
+     * @p newVal.
      */
-    void ReplaceUsageOfExprResult(const Ptr<const Expression>& expr, const Ptr<Value>& newVal, bool isDebug) const;
+    void ReplaceUsageOfExprResult(const Ptr<const Expression>& expr, const Ptr<Value>& newVal) const;
 
     // ==================== Rewrite Terminator Expressions ==================== //
 
-    void RewriteTerminator(Expression* oldTerminator, LiteralValue* newValue, Block* newTarget, bool isDebug) const;
+    void RewriteTerminator(Expression* oldTerminator, LiteralValue* newValue, Block* newTarget) const;
 
     // ==================== Rewrite Terminator Expressions ==================== //
 

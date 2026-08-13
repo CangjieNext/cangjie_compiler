@@ -26,24 +26,27 @@ public:
     /**
      * @brief run array lambda optimization on a certain package CHIR IR.
      * @param package package to do optimization.
-     * @param isDebug flag whether print debug log.
      */
-    void RunOnPackage(const Ptr<const Package>& package, bool isDebug);
+    void RunOnPackage(const Package& package);
 
 private:
-    void RunOnFunc(const Ptr<Function>& func, bool isDebug);
+    void RunOnFunc(const Function& func);
 
-    Ptr<Constant> CheckCanRewriteLambda(const Ptr<Expression>& expr) const;
+    Constant* CheckCanRewriteLambda(const Expression& expr) const;
 
-    Ptr<Constant> CheckIfLambdaReturnConst(const Lambda& lambda) const;
+    Constant* CheckIfLambdaReturnConst(const Lambda& lambda) const;
 
-    void RewriteArrayInitFunc(Apply& apply, const Ptr<const Constant>& constant);
+    void RewriteArrayInitFunc(Apply& apply, const Constant& constant);
 
-    Ptr<Intrinsic> CheckCanRewriteZeroValue(const Ptr<Expression>& expr) const;
+    Intrinsic* CheckCanRewriteZeroValue(const Expression& expr) const;
 
-    void RewriteZeroValue(const Ptr<RawArrayInitByValue>& init, const Ptr<Intrinsic>& zeroVal) const;
+    void RewriteZeroValue(RawArrayInitByValue& init, Intrinsic& zeroVal) const;
 
     CHIRBuilder& builder;
+
+    // `arrayInitByFunction` parameters index
+    size_t rawArrayIndex = 0;
+    size_t initLambdaIndex = 1;
 };
 } // namespace Cangjie::CHIR
 
