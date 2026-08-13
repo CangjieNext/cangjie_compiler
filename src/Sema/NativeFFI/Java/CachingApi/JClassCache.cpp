@@ -63,7 +63,7 @@ std::string JClassCache::GetAccessorName(const Ty& javaTy) const
 
     // encoding for for the poor.
     // TODO: Consider package parts and outer types in mangling scheme.
-    for (auto ch : utils.GetJavaJniClassName(javaTy)) {
+    for (auto ch : GetJavaJniClassName(javaTy)) {
         if (ch == '$') {
             mangledVarName += mangledDollar;
         } else {
@@ -110,7 +110,7 @@ OwnedPtr<AST::Expr> JClassCache::CreateJClassAccess(
 
 VarDecl& JClassCache::GetOrPut(AfterTypeCheckContext& ctx, const Ty& javaTy, File& curFile)
 {
-    auto className = utils.GetJavaJniClassName(javaTy);
+    auto className = GetJavaJniClassName(javaTy);
     // Get variable that stores JClass
     if (auto it = cache.find(className); it != cache.end()) {
         return *it->second;

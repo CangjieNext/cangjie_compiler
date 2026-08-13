@@ -11,9 +11,11 @@
 #include "Utils.h"
 #include "NativeFFI/Utils.h"
 
+#include "cangjie/AST/Node.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/AST/Match.h"
+#include "cangjie/Utils/CheckUtils.h"
 
 namespace Cangjie::Interop::Java {
 using namespace AST;
@@ -22,45 +24,139 @@ using namespace AST;
  * method or field jni signature
  */
 struct MemberJNISignature {
+public:
+
+    /**
+     * class type name in JNI form (internal JVM representation).
+     * Example: "java/lang/String"
+     */
+    std::string GetClassTypeJniName() const;
+
+    /**
+     * member name.
+     * Example: "toString"
+     */
+    std::string GetName() const;
+
+    /**
+     * member type signature in JNI form.
+     * Example: "()V"
+     */
+    std::string GetSignature() const;
+
     std::string classTypeSignature;
     std::string name;
     std::string signature;
 
+    static constexpr auto JAVA_CONSTRUCTOR = "<init>";
+
+    static MemberJNISignature FromMethod(Utils& utils, const FuncDecl& method)
+    {
+        CJC_ASSERT(method.outerDecl && method.outerDecl->IsClassLikeDecl());
+        CJC_ASSERT(!method.TestAnyAttr(Attribute::CONSTRUCTOR, Attribute::FINALIZER));
+        auto& outerDecl = *StaticAs<ASTKind::CLASS_LIKE_DECL>(method.outerDecl);
+        CJC_ASSERT(outerDecl.IsJavaMirror() || outerDecl.IsJavaImpl());
+
+        MemberJNISignature signature(
+            /* .classTypeSignature = */ GetJavaJniClassName(*outerDecl.GetTy()),
+            /* .name = */ GetJavaMemberName(method),
+            /* .signature = */ utils.GetJavaTypeSignature(*method.GetTy())
+        );
+        return signature;
+
+    }
+
+    static MemberJNISignature FromConstructor(Utils& utils, const FuncDecl& ctor, bool withMarker = false)
+    {
+        CJC_ASSERT(ctor.outerDecl && ctor.outerDecl->IsClassLikeDecl());
+        CJC_ASSERT(ctor.TestAttr(Attribute::CONSTRUCTOR));
+        auto& outerDecl = *StaticAs<ASTKind::CLASS_LIKE_DECL>(ctor.outerDecl);
+        CJC_ASSERT(outerDecl.IsJavaMirror() || outerDecl.IsJavaImpl());
+
+        static auto& voidTy = *TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+        std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*ctor.funcBody->paramLists[0]);
+        if (withMarker) {
+            paramTys.push_back(CreateConstructorMarkerClassDecl()->GetTy());
+        }
+
+        MemberJNISignature signature(
+            /* .classTypeSignature = */ GetJavaJniClassName(*outerDecl.GetTy()),
+            /* .name = */ JAVA_CONSTRUCTOR,
+            /* .signature = */ utils.GetJavaTypeSignature(voidTy, paramTys)
+        );
+        return signature;
+    }
+
+    static MemberJNISignature FromProperty(Utils& utils, const PropDecl& member)
+    {
+        CJC_ASSERT(member.outerDecl && member.outerDecl->IsClassLikeDecl());
+        auto& outerDecl = *StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl);
+        CJC_ASSERT(outerDecl.IsJavaMirror() || outerDecl.IsJavaImpl());
+
+        MemberJNISignature signature(
+            /* .classTypeSignature = */ GetJavaJniClassName(*outerDecl.GetTy()),
+            /* .name = */ GetJavaMemberName(member),
+            /* .signature = */ utils.GetJavaTypeSignature(*member.GetTy())
+        );
+        return signature;
+    }
+
+    static MemberJNISignature FromMember(Utils& utils, const Decl& member)
+    {
+        switch (member.astKind) {
+            case ASTKind::PROP_DECL:
+                return FromProperty(utils, StaticCast<const PropDecl&>(member));
+            case ASTKind::FUNC_DECL: {
+                if (member.TestAttr(Attribute::CONSTRUCTOR)) {
+                    return FromConstructor(utils, StaticCast<const FuncDecl&>(member));
+                }
+                return FromMethod(utils, StaticCast<const FuncDecl&>(member));
+            }
+            default: break;
+        }
+        CJC_ABORT(); // Unexpected branch
+        return MemberJNISignature("", "", ""); // compile-error on non-returning branch hack
+    }
+
+private:
     MemberJNISignature(std::string classTypeSignature, std::string name, std::string signature)
         : classTypeSignature(classTypeSignature), name(name), signature(signature) {}
 
-    MemberJNISignature(Utils& utils, FuncDecl& member)
-        : MemberJNISignature(utils, member, StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
-    {
-        auto& retTy = *member.funcBody->retType->GetTy();
-        std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
-        signature = utils.GetJavaTypeSignature(retTy, paramTys);
-    }
+    // MemberJNISignature(Utils& utils, const FuncDecl& member, bool withMarker = false)
+    //     : MemberJNISignature(utils, StaticCast<const Decl&>(member), StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
+    // {
+    //     auto& retTy = *member.funcBody->retType->GetTy();
+    //     std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
+    //     if (withMarker) {
+    //         paramTys.push_back(CreateConstructorMarkerClassDecl()->GetTy());
+    //     }
+    //     signature = utils.GetJavaTypeSignature(retTy, paramTys);
+    // }
 
-    MemberJNISignature(Utils& utils, PropDecl& member)
-        : MemberJNISignature(utils, member, StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
-    {
-        signature = utils.GetJavaTypeSignature(*member.GetTy());
-    }
+    // MemberJNISignature(Utils& utils, PropDecl& member)
+    //     : MemberJNISignature(utils, member, StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
+    // {
+    //     signature = utils.GetJavaTypeSignature(*member.GetTy());
+    // }
 
-    MemberJNISignature(Utils& utils, Decl& member, Ptr<ClassLikeDecl> jobject)
-    {
-        CJC_ASSERT(jobject);
-        Ptr<Ty> ty = jobject->GetTy();
+    // MemberJNISignature(Utils& utils, const Decl& member, const Ptr<ClassLikeDecl> jobject)
+    // {
+    //     CJC_ASSERT(jobject);
+    //     Ptr<Ty> ty = jobject->GetTy();
 
-        if (Java::IsSyntheticMirrorWrapper(*jobject)) {
-            if (jobject->inheritedTypes.size() > 1) {
-                ty = jobject->inheritedTypes[1]->GetTy(); // take interface ty
-            } else {
-                CJC_ASSERT_WITH_MSG(!jobject->inheritedTypes.empty(), "JObject must inherit Cangjie Object");
-                ty = jobject->inheritedTypes[0]->GetTy(); // take superclass ty
-            }
-        }
-        classTypeSignature = utils.GetJavaJniClassName(*ty);
-        name = GetJavaMemberName(member);
-        CJC_ASSERT(member.astKind == ASTKind::FUNC_DECL || member.astKind == ASTKind::PROP_DECL);
-        signature = utils.GetJavaTypeSignature(*member.GetTy());
-    }
+    //     // if (Java::IsSyntheticMirrorWrapper(*jobject)) {
+    //         // if (jobject->inheritedTypes.size() > 1) {
+    //             // ty = jobject->inheritedTypes[1]->GetTy(); // take interface ty
+    //         // } else {
+    //             // CJC_ASSERT_WITH_MSG(!jobject->inheritedTypes.empty(), "JObject must inherit Cangjie Object");
+    //             // ty = jobject->inheritedTypes[0]->GetTy(); // take superclass ty
+    //         // }
+    //     // }
+    //     classTypeSignature = GetJavaJniClassName(*ty);
+    //     name = member.TestAttr(Attribute::CONSTRUCTOR) ? "<init>" : GetJavaMemberName(member);
+    //     CJC_ASSERT(member.astKind == ASTKind::FUNC_DECL || member.astKind == ASTKind::PROP_DECL);
+    //     signature = utils.GetJavaTypeSignature(*member.GetTy());
+    // }
 };
 
 class InteropLibBridge {
@@ -346,13 +442,6 @@ public:
      */
     OwnedPtr<CallExpr> CreateGetJniEnvCall(Ptr<File> curFile);
 
-    /**
-     * Creates a block that performs Java object construction,
-     * including all required JNI setup (JNIEnv, class, constructor ID,
-     * arguments and exception handling), and returns the created object.
-     */
-    OwnedPtr<Block> CreateJavaConstructorBlock(Ptr<Ty> classTy, FuncParamList& paramList,
-        Ptr<File> curFile, bool isMirror);
 
     /**
      * Java_CFFI_newJavaArray(env, signature, [args])
@@ -571,6 +660,9 @@ public:
     OwnedPtr<Expr> CreateGetClassCall(const AST::Ty& javaTy, Ptr<Expr> envPtr, File& curFile);
     OwnedPtr<Expr> CreateGetClassCall(const std::string& className, Ptr<Expr> envPtr, File& curFile);
 
+    OwnedPtr<CallExpr> CreateGetMethodIdCall(Ptr<Expr> env, OwnedPtr<Expr> clazz,
+        const std::string& name, const std::string& signature, bool isStatic);
+
     bool IsInteropLibAccessible() const;
     void CheckInteropLibVersion();
     static bool IsInteropLibAccessible(const ImportManager& importManager);
@@ -582,6 +674,9 @@ public:
      * Converts a Cangjie expression to its JNI jvalue representation.
      */
     OwnedPtr<Expr> CreateJValueExpr(OwnedPtr<Expr> expr);
+    OwnedPtr<CallExpr> CreateAsJniJobjectCall(OwnedPtr<Expr> javaEntity);
+
+    OwnedPtr<Expr> CreateJNIHandlePendingExceptionCall(Ptr<Expr> jniEnvPtr);
 
 private:
    /**
@@ -666,10 +761,7 @@ private:
     Ptr<VarDecl> GetJNINativeInterfaceField(const std::string_view name);
     // OwnedPtr<FuncArg> PrepareJNIArgsVArray(OwnedPtr<Expr> expr);
     OwnedPtr<CallExpr> CreateJNIEnvReadCall(Ptr<Expr> env);
-    OwnedPtr<CallExpr> CreateAsJObjectCall(OwnedPtr<Expr> javaEntity);
     OwnedPtr<CallExpr> CreateBitCastExpr(OwnedPtr<Expr> expr, Ptr<Ty> resultTy, Ptr<Ty> valueTy, Ptr<File> curFile);
-    OwnedPtr<CallExpr> CreateJNIMethodId(Ptr<Expr> env, OwnedPtr<Expr> clazz,
-        const std::string& name, const std::string& signature, bool isStatic);
 
     const ImportManager& importManager;
     TypeManager& typeManager;

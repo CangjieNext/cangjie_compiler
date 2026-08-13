@@ -17,7 +17,10 @@
 namespace Cangjie::Native::FFI::Java {
 
 class ASTFactory {
-    explicit ASTFactory();
+public:
+    explicit ASTFactory(
+        TypeManager& typeManager, InteropLibBridge& ilib, JniBridge& jni,
+        JClassCache& jclassCache, JMethodIdCache& jmethodIdCache);
 
 
     /**
@@ -26,13 +29,41 @@ class ASTFactory {
      * `args` are java-compatible arguments.
      * `constructor` is Cangjie declaration of Java constructor that should be called.
      * For marked constructors (`isMarkedConstructor`) is additionally passes an extra marker as an argument.
+     * Includes all required JNI setup (JNIEnv, class, constructor ID,
+     * arguments and exception handling), and returns the created object.
      */
-    OwnedPtr<AST::Expr> CreateNewJavaObjectCall(
-        AfterTypeCheckContext& ctx,
-        Ptr<AST::Expr> jniEnv,
+    OwnedPtr<AST::Expr> CreateNewJavaObjectCall(AfterTypeCheckContext& ctx,
+        Ptr<AST::Expr> jniEnvPtr,
         AST::Ty& javaClassTy,
         AST::FuncDecl& constructor,
         std::vector<OwnedPtr<AST::Expr>> args) const;
+
+    /*
+     * Creates expression with `javaClassTy` (as a mirror/impl type) constructor call via JNI.
+     * Returned expr has `JavaEntity` ty.
+     * `args` are java-compatible arguments.
+     * `constructor` is Cangjie declaration of Java constructor that should be called.
+     * For marked constructors (`isMarkedConstructor`) is additionally passes an extra marker as an argument.
+     * Includes all required JNI setup (JNIEnv, class, constructor ID,
+     * arguments and exception handling), and returns the created object.
+     *
+     * In comparison with the overloaded version accepting `Ptr<AST::Expr> jniEnvPtr` parameter,
+     * this function creates and caches jniEnvPtr by itself.
+     */
+    OwnedPtr<AST::Expr> CreateNewJavaObjectCall(AfterTypeCheckContext& ctx,
+        AST::File& curFile,
+        AST::Ty& javaClassTy,
+        AST::FuncDecl& constructor,
+        std::vector<OwnedPtr<AST::Expr>> args) const;
+
+    OwnedPtr<AST::Expr> CreateSuperJavaMethodCall(AfterTypeCheckContext& ctx,
+        Ptr<AST::Expr> jniEnvPtr,
+        AST::ClassDecl& child, AST::CallExpr& call, std::vector<OwnedPtr<AST::Expr>> args) const;
+
+    /**
+     * Creates usages as RefExpr over parameters in `paramList`.
+     */
+    std::vector<OwnedPtr<AST::Expr>> CreateParamsUsage(const AST::FuncParamList& paramList) const;
 
 private:
 
@@ -41,10 +72,6 @@ private:
      */
     OwnedPtr<AST::VarDecl> CreateTmpVArrayVarDecl(std::vector<OwnedPtr<AST::Expr>> args, AST::File& curFile) const;
 
-    /**
-     * Creates usages as RefExpr over parameters in `paramList`.
-     */
-    std::vector<OwnedPtr<AST::Expr>> CreateParamsUsage(const AST::FuncParamList& paramList) const;
 
     /**
      * Converts `values` expressions as JValue expressions in-place.

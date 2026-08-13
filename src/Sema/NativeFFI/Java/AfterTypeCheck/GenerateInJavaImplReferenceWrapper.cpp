@@ -6,6 +6,8 @@
 
 #include "JavaDesugarManager.h"
 #include "GenerateInJavaImplReferenceWrapper.h"
+#include "NativeFFI/Java/AfterTypeCheck/ASTFactory.h"
+#include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "NativeFFI/Utils.h"
 #include "Utils.h"
 #include "NativeFFI/Java/Utils.h"
@@ -237,8 +239,8 @@ FuncDecl& GenerateInJavaImplReferenceWrapper::InsertJavaSideConstructor(FuncDecl
     return res;
 }
 
-void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorInitialization(FuncDecl& ctor,
-    VarDecl& companionRefField, ClassDecl& companion) const
+void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorInitialization(AfterTypeCheckContext& ctx,
+    FuncDecl& ctor, VarDecl& companionRefField, ClassDecl& companion) const
 {
     auto curFile = ctor.curFile;
     auto jniEnvCall = ilib.CreateGetJniEnvCall(curFile);
@@ -257,15 +259,13 @@ void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorInitializa
     FuncDecl& parentCtor = *GetJavaMirrorWrappingConstructor(*refWrapper.GetSuperClassDecl());
     CJC_ASSERT(parentCtor.funcBody->paramLists[0]->params.size() == 1); // Java_CFFI_JavaEntity
 
-    auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, jniEnvCall);
-
     CJC_ASSERT(ctor.funcBody);
     CJC_ASSERT(ctor.funcBody->paramLists.size() == 1);
     auto& paramList = *ctor.funcBody->paramLists[0];
 
     // No global reference is created here:
     // it is wrapped into global reference in `super` constructors chain call: within `JObject`.
-    auto javaCtorExpr = ilib.CreateJavaConstructorBlock(refWrapper.GetTy(), paramList, curFile, false);
+    auto javaCtorExpr = factory.CreateNewJavaObjectCall(ctx, *curFile, *refWrapper.GetTy(), ctor, factory.CreateParamsUsage(paramList));
     if (!javaCtorExpr) {
         ctor.EnableAttr(Attribute::IS_BROKEN);
         companion.EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
@@ -286,7 +286,7 @@ void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorsInitializ
     ClassDecl& refWrapper, VarDecl& companionRefField, ClassDecl& companion) const
 {
     for (auto ctor : ctx.GetJavaImplUserDefinedConstructors(refWrapper)) {
-        RewriteUserDefinedConstructorInitialization(*ctor, companionRefField, companion);
+        RewriteUserDefinedConstructorInitialization(ctx, *ctor, companionRefField, companion);
     }
 
     RewriteRefWrapperPrimaryConstructor(refWrapper, companion, companionRefField);
@@ -322,8 +322,8 @@ void GenerateInJavaImplReferenceWrapper::Process(ClassDecl& refWrapper, AfterTyp
 }
 
 GenerateInJavaImplReferenceWrapper::GenerateInJavaImplReferenceWrapper(TypeManager& typeManager,
-    const ImportManager& importManager, InteropLibBridge& ilib)
-    : typeManager(typeManager), importManager(importManager), ilib(ilib)
+    const ImportManager& importManager, InteropLibBridge& ilib, ASTFactory& factory)
+    : typeManager(typeManager), importManager(importManager), ilib(ilib), factory(factory)
 {
 }
 

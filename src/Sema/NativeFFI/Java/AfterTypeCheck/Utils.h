@@ -59,7 +59,6 @@ public:
     // Decl of String
     StructDecl& GetStringDecl();
 
-    std::string GetJavaJniClassName(const Ty& cjtype) const;
     std::string GetJavaTypeSignature(const Ty& cjtype);
     std::string GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& args);
     std::string GetJavaObjectTypeName(const Ty& ty);
@@ -149,6 +148,8 @@ Ptr<FuncDecl> GetJavaMirrorWrappingConstructor(ClassLikeDecl& mirrorLike);
  */
 Ptr<FuncDecl> GetJavaMirrorWrappingConstructor(ClassDecl& mirror);
 
+std::string GetJavaJniClassName(const Ty& cjtype);
+
 /**
  * Returns name of corresponding Java method or field with respect to @ForeignName annotation
  */
@@ -159,23 +160,6 @@ std::string GetJavaMemberName(const Decl& decl);
  */
 bool HasPredefinedJavaName(const ClassLikeDecl& decl);
 
-/**
- * Returns fully-qualified name of the extend decl
- */
-std::string GetJavaFQNameFromExtendDecl(const ExtendDecl& extendDecl);
-
-/**
- * Returns fully-qualified name of the decl or fq-name specified in @JavaMirror as attribute,
- * which is suitable for specifying in JNI calls
- */
-std::string GetJavaFQName(const Decl& decl);
-
-/**
- * Returns fully-qualified name of the decl or fq-name specified in @JavaMirror as attribute,
- * which is suitable for using Java source code:
- * - For specifying nested class '.' is used
- */
-std::string GetJavaFQSourceCodeName(const ClassLikeDecl& decl);
 
 
 struct DestructedJavaClassName {
@@ -189,10 +173,6 @@ struct DestructedJavaClassName {
     std::string fullClassName;
 };
 
-/**
- * Returns parts of java class name
- */
-DestructedJavaClassName DestructJavaClassName(const ClassLikeDecl& decl);
 
 /**
  * Returns package of the decl or package specified in @JavaMirror as attribute (omitting class name)

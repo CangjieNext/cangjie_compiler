@@ -14,9 +14,11 @@
 
 #include "AfterTypeCheckStage.h"
 #include "InteropLibBridge.h"
+#include "NativeFFI/Java/AfterTypeCheck/ASTFactory.h"
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "NativeFFI/Java/AfterTypeCheck/JniBridge.h"
 #include "NativeFFI/Java/CachingApi/JClassCache.h"
+#include "NativeFFI/Java/CachingApi/JMethodIdCache.h"
 #include "Utils.h"
 
 #include "cangjie/AST/Node.h"
@@ -49,6 +51,8 @@ public:
           lib(importManager, typeManager, diag, utils),
           jniBridge(typeManager, importManager, mangler, utils, *lib.GetJniEnvPtrDecl(), *lib.GetJobjectDecl(), *lib.GetJNINativeInterfaceDecl()),
           jclassCache(importManager, typeManager, lib, utils),
+          jmethodIdCache(importManager, typeManager, lib, utils),
+          factory(typeManager, lib, jniBridge, jclassCache, jmethodIdCache),
           javaCodeGenPath(javaCodeGenPath),
           outputLibPath(outputLibPath),
           memberMap(memberMap)
@@ -229,6 +233,8 @@ private:
     InteropLibBridge lib;
     JniBridge jniBridge;
     JClassCache jclassCache;
+    JMethodIdCache jmethodIdCache;
+    ASTFactory factory;
 
     const std::optional<std::string>& javaCodeGenPath;
     const std::string& outputLibPath;

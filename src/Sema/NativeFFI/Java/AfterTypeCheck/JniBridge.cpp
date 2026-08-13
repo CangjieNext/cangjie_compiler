@@ -5,8 +5,9 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "JniBridge.h"
-#include "NativeFFI/Utils.h"
 #include "Utils.h"
+#include "NativeFFI/Utils.h"
+#include "NativeFFI/Java/Utils.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/Utils/CheckUtils.h"
@@ -96,7 +97,7 @@ std::string JniBridge::GetJniMethodNameForProp(
     std::string varDeclSuffix = varDecl;
     CJC_ASSERT_WITH_MSG(!varDeclSuffix.empty(), "identifier cannot be an empty string");
     varDeclSuffix[0] = static_cast<char>(toupper(varDeclSuffix[0]));
-    std::string fqname = GetJavaFQName(*(propDecl.outerDecl));
+    std::string fqname = Native::FFI::Java::GetJavaFQName(*(propDecl.outerDecl));
 
     return GetJavaNativeFunctionName(fqname, (isSet ? "set" : "get") + varDeclSuffix + "Impl");
 }

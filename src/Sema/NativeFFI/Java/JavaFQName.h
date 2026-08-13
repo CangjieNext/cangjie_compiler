@@ -19,13 +19,13 @@
 
 namespace Cangjie::Native::FFI::Java {
 
-enum JavaClassNameKind {
+enum JavaTypeNameKind {
     CLASS, PRIMITIVE, ARRAY, VOID
 };
 
 struct JavaTypeName {
 public:
-    virtual JavaClassNameKind GetKind() const = 0;
+    virtual JavaTypeNameKind GetKind() const = 0;
     friend std::ostream& operator<<(std::ostream& os, const JavaTypeName& fqname);
 
     std::string ToString() const;
@@ -46,15 +46,15 @@ struct JavaClassName : JavaTypeName {
 };
 
 
-struct PrimitiveClassName : JavaTypeName {
+struct PrimitiveTypeName : JavaTypeName {
 
 };
 
-struct VoidClassName : JavaTypeName {
+struct VoidName : JavaTypeName {
 
 };
 
-struct ArrayClassName : JavaTypeName {
+struct ArrayName : JavaTypeName {
 
     const Cangjie::OwnedPtr<JavaTypeName> inner;
 };

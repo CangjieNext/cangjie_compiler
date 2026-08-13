@@ -16,6 +16,18 @@
 #include "cangjie/Modules/ImportManager.h"
 
 namespace Cangjie::Native::FFI::Java {
+
+struct DestructedJavaClassName {
+    /// Full package name
+    std::optional<std::string> packageName;
+
+    /// Name of top level class
+    std::string topLevelClassName;
+
+    /// Full name of the class, starting from top level
+    std::string fullClassName;
+};
+
 const Ptr<AST::ClassDecl> GetSyntheticClass(const ImportManager& importManager, const AST::ClassLikeDecl& cld);
 
 std::string GetMirrorReferenceWrapperNameFromClassLike(const AST::ClassLikeDecl &mirror);
@@ -37,6 +49,24 @@ std::vector<Ptr<AST::ClassDecl>> GetJavaImplRegistryCompanions(AST::Package& pkg
 bool IsJavaImplRegistryCompanionReferenceField(const AST::Node& node);
 
 bool IsUserDefinedJavaImplConstructor(const AST::Decl& implMember);
+
+/**
+ * Returns fully-qualified name of the decl or fq-name specified in @JavaMirror/@JavaImpl as attribute,
+ * which is used as target class name for JNI calls
+ */
+std::string GetJavaFQName(const AST::Decl& decl);
+
+/**
+ * Returns fully-qualified name of the decl or fq-name specified in @JavaMirror as attribute,
+ * which is suitable for using Java source code:
+ * - For specifying nested class '.' is used
+ */
+std::string GetJavaFQSourceCodeName(const AST::ClassLikeDecl& decl);
+
+/**
+ * Returns parts of java class name
+ */
+DestructedJavaClassName DestructJavaClassName(const AST::ClassLikeDecl& decl);
 
 } // namespace Cangjie::Native::FFI::Java
 

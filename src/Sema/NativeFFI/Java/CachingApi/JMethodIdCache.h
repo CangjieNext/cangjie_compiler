@@ -35,7 +35,7 @@ public:
         Interop::Java::Utils& utils);
 
     OwnedPtr<AST::Expr> CreateJMethodIdAccess(AfterTypeCheckContext& ctx,
-        const AST::FuncDecl& method, Ptr<AST::Expr> jclass, Ptr<AST::Expr> envPtr);
+        const AST::FuncDecl& method, Ptr<AST::Expr> jclass, Ptr<AST::Expr> envPtr, bool withMarker = false);
 
     void Clear() noexcept;
 private:
@@ -53,10 +53,11 @@ private:
      */
     AST::VarDecl& GetOrPut(AfterTypeCheckContext& ctx, const AST::FuncDecl& method, AST::File& curFile);
 
-    std::string GetAccessorName(const AST::FuncDecl& method) const;
+    std::string GetNewAccessorName(const AST::FuncDecl& method) const;
 
     // std::unordered_map<JavaFQName, Ptr<AST::VarDecl>> cache;
-    std::unordered_map<std::string, Ptr<AST::VarDecl>> cache;
+    // std::unordered_map<std::string, Ptr<AST::VarDecl>> cache;
+    std::unordered_map<Ptr<AST::FuncDecl>, Ptr<AST::VarDecl>> cache;
 };
 
 } // namespace Cangjie::Native::FFI::Java

@@ -296,9 +296,9 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
     CJC_ASSERT(ctor.funcBody);
     CJC_ASSERT(ctor.funcBody->paramLists.size() == 1);
     auto& body = ctor.funcBody->body->body;
-        auto& paramList = *ctor.funcBody->paramLists[0];
-    auto constructorExpr = lib.CreateJavaConstructorBlock(ctor.outerDecl->GetTy(),
-        paramList, curFile, true);
+    auto& paramList = *ctor.funcBody->paramLists[0];
+    auto constructorExpr = factory.CreateNewJavaObjectCall(ctx,
+        ctor.outerDecl->GetTy(), ctor, factory.CreateParamsUsage(paramList));
     if (!constructorExpr) {
         ctor.EnableAttr(Attribute::IS_BROKEN);
         return;
@@ -332,7 +332,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(ClassLikeDecl& mirror, FuncDecl
         methodCall = lib.CreateCFFICallArrayMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
             std::move(javaRefCall), paramList, genericParam, GetArrayOperationKind(fun));
     } else {
-        auto memberJNISignature = MemberJNISignature(utils, fun);
+        auto memberJNISignature = MemberJNISignature::FromMethod(utils, fun);
         auto methodBlock = lib.CreateJavaMethodCallBlock(curFile, paramList, retTy,
             fun.TestAttr(Attribute::STATIC), std::move(javaRefCall), memberJNISignature);
         if (!methodBlock) {
@@ -394,12 +394,12 @@ void JavaDesugarManager::InsertJavaMirrorPropGetter(PropDecl& prop)
         jniGetterCall = lib.CreateCFFIArrayLengthGetCall(CreateJavaRefCall(mirror, curFile), curFile);
     } else if (prop.TestAttr(Attribute::STATIC)) {
         jniGetterCall = lib.CreateGetStaticFieldCall(WithinFile(CreateRefExpr(jniEnv), curFile),
-            utils.GetJavaJniClassName(*mirror.GetTy()), GetJavaMemberName(prop),
+            GetJavaJniClassName(*mirror.GetTy()), GetJavaMemberName(prop),
             utils.GetJavaTypeSignature(*prop.GetTy()));
     } else {
         jniGetterCall = lib.CreateGetFieldCall(WithinFile(CreateRefExpr(jniEnv), curFile),
             CreateJavaRefCall(mirror, curFile),
-            utils.GetJavaJniClassName(*prop.outerDecl->GetTy()), GetJavaMemberName(prop),
+            GetJavaJniClassName(*prop.outerDecl->GetTy()), GetJavaMemberName(prop),
             utils.GetJavaTypeSignature(*prop.GetTy()));
     }
 
@@ -447,12 +447,12 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
 
     if (prop.TestAttr(Attribute::STATIC)) {
         jniSetterCall = lib.CreateSetStaticFieldCall(WithinFile(CreateRefExpr(jniEnv), curFile),
-            utils.GetJavaJniClassName(*mirror.GetTy()), GetJavaMemberName(prop),
+            GetJavaJniClassName(*mirror.GetTy()), GetJavaMemberName(prop),
             utils.GetJavaTypeSignature(*prop.GetTy()), std::move(paramRef));
     } else {
         jniSetterCall = lib.CreateSetFieldCall(WithinFile(CreateRefExpr(jniEnv), curFile),
             CreateJavaRefCall(mirror, curFile),
-            MemberJNISignature(utils, prop),
+            MemberJNISignature::FromProperty(utils, prop),
             std::move(paramRef));
     }
     body.emplace_back(std::move(jniSetterCall));

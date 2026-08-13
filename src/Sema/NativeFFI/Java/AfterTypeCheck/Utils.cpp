@@ -357,136 +357,6 @@ bool HasPredefinedJavaName(const ClassLikeDecl& decl)
     return false;
 }
 
-Ptr<std::string> GetJavaMirrorAnnoAttr(const ClassLikeDecl& decl)
-{
-    for (auto& anno : decl.annotations) {
-        if (anno->kind != AnnotationKind::JAVA_MIRROR && anno->kind != AnnotationKind::JAVA_IMPL) {
-            continue;
-        }
-
-        CJC_ASSERT(anno->args.size() < 2); // It is empty if < 2
-        if (anno->args.empty()) {
-            break;
-        }
-
-        CJC_ASSERT(anno->args[0]->expr->astKind == ASTKind::LIT_CONST_EXPR);
-        auto lce = As<ASTKind::LIT_CONST_EXPR>(anno->args[0]->expr.get());
-        CJC_ASSERT(lce);
-        return &lce->stringValue;
-    }
-    return nullptr;
-}
-
-namespace {
-
-template <typename I>
-std::string StringJoin(I begin, I end, std::string_view separator)
-{
-    std::string res;
-    for (auto it = begin; it != end; ++it) {
-        if (it != begin) {
-            res += separator;
-        }
-        res += *it;
-    }
-    return res;
-}
-
-std::vector<std::string> GetFQNameParts(std::string_view name)
-{
-    std::vector<std::string> res;
-    res.push_back("");
-
-    bool wasBackslash = false;
-    for (std::size_t i = 0; i < name.length(); ++i) {
-        switch (name[i]) {
-            case '\\':
-                if (wasBackslash) {
-                    res.back() += '\\';
-                }
-                wasBackslash = true;
-                continue;
-            case '$':
-                if (wasBackslash) {
-                    res.back() += '$';
-                } else {
-                    res.push_back("");
-                }
-                wasBackslash = false;
-                continue;
-            default:
-                if (wasBackslash) {
-                    res.back() += '\\';
-                }
-                res.back() += name[i];
-                wasBackslash = false;
-                continue;
-        }
-    }
-    if (wasBackslash) {
-        res.back() += '\\';
-    }
-
-    return res;
-}
-
-std::string GetFQNameJoinBy(const std::string& name, std::string_view separator)
-{
-    auto parts = GetFQNameParts(name);
-    return StringJoin(parts.begin(), parts.end(), separator);
-}
-
-} // namespace
-
-std::string GetJavaFQNameFromExtendDecl(const ExtendDecl& extendDecl)
-{
-    auto rt = DynamicCast<const RefType *>(extendDecl.extendedType.get());
-    CJC_ASSERT(rt);
-    return GetJavaFQName(*rt->ref.target);
-}
-
-std::string GetJavaFQName(const Decl& decl)
-{
-    if (auto extendDecl = DynamicCast<const ExtendDecl*>(&decl)) {
-        return GetJavaFQNameFromExtendDecl(*extendDecl);
-    }
-    if (auto classlikeDecl = DynamicCast<const ClassLikeDecl*>(&decl)) {
-        auto attr = GetJavaMirrorAnnoAttr(*classlikeDecl);
-        if (attr) {
-            return GetFQNameJoinBy(*attr, "$");
-        }
-    }
-    return decl.GetFullPackageName() + "." + decl.identifier;
-}
-
-std::string GetJavaFQSourceCodeName(const ClassLikeDecl& decl)
-{
-    auto attr = GetJavaMirrorAnnoAttr(decl);
-    return attr ? GetFQNameJoinBy(*attr, ".") : (decl.GetFullPackageName() + "." + decl.identifier);
-}
-
-DestructedJavaClassName DestructJavaClassName(const ClassLikeDecl& decl)
-{
-    auto attr = GetJavaMirrorAnnoAttr(decl);
-    if (!attr) {
-        return {decl.GetFullPackageName(), decl.identifier, decl.identifier};
-    }
-
-    auto parts = GetFQNameParts(*attr);
-    CJC_ASSERT(parts.size() > 0);
-    auto ind = parts[0].find_last_of('.');
-    if (ind == std::string::npos) {
-        return {.packageName = std::nullopt,
-            .topLevelClassName = parts[0],
-            .fullClassName = StringJoin(parts.begin(), parts.end(), ".")};
-    }
-    auto package = parts[0].substr(0, ind);
-    parts[0] = parts[0].substr(ind + 1);
-    return {.packageName = package,
-        .topLevelClassName = parts[0],
-        .fullClassName = StringJoin(parts.begin(), parts.end(), ".")};
-}
-
 ArrayOperationKind GetArrayOperationKind(Decl& decl)
 {
     CJC_ASSERT(IsJArray(*decl.outerDecl));
@@ -601,7 +471,7 @@ std::string Utils::GetJavaObjectTypeName(const Ty& ty)
  * Call only when the type is a class or interface.
  * such as: turn class 'Integer' to 'java/lang/Integer'
  */
-std::string Utils::GetJavaJniClassName(const Ty& cjtype) const
+std::string GetJavaJniClassName(const Ty& cjtype)
 {
     CJC_ASSERT(!IsJArray(cjtype));
     return NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(cjtype).commonDecl));
@@ -938,12 +808,13 @@ bool IsJArray(const Decl& decl)
         return false;
     }
 
-    auto attr = GetJavaMirrorAnnoAttr(*classLikeDecl);
-    if (!attr) {
-        return false;
-    }
+    // TODO: GetJavaMirrorAnnoAttr
+    auto attr = GetJavaFQName(*classLikeDecl);
+    // if (!attr) {
+        // return false;
+    // }
 
-    return *attr == "[]";
+    return attr == "[]";
 }
 
 bool IsJArray(const Ty& ty)

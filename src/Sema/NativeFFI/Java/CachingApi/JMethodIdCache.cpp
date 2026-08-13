@@ -6,6 +6,7 @@
 
 #include "JMethodIdCache.h"
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
+#include "NativeFFI/Java/AfterTypeCheck/InteropLibBridge.h"
 #include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 #include "NativeFFI/Utils.h"
 #include "cangjie/AST/Create.h"
@@ -17,16 +18,17 @@
 namespace Cangjie::Native::FFI::Java {
 using namespace Cangjie::AST;
 
-std::string JMethodIdCache::GetAccessorName(const FuncDecl& method) const
+std::string JMethodIdCache::GetNewAccessorName(const FuncDecl& method) const
 {
     constexpr static auto mangledDollar = "$DOLLAR$";
+    static size_t unique_id = 0;
     std::string mangledVarName = "jmethod$";
 
     // encoding for for the poor.
     // TODO: Consider package parts and outer types in mangling scheme.
     CJC_NULLPTR_CHECK(method.outerDecl);
-    
-    for (auto ch : utils.GetJavaJniClassName(*method.outerDecl->GetTy())) {
+
+    for (auto ch : GetJavaJniClassName(*method.outerDecl->GetTy())) {
         if (ch == '$') {
             mangledVarName += mangledDollar;
         } else {
@@ -42,6 +44,7 @@ std::string JMethodIdCache::GetAccessorName(const FuncDecl& method) const
             mangledVarName += ch;
         }
     }
+    mangledVarName += std::to_string(unique_id++);
 
     return mangledVarName;
 }
@@ -52,7 +55,7 @@ void JMethodIdCache::Clear() noexcept
 }
 
 OwnedPtr<Expr> JMethodIdCache::CreateJMethodIdAccess(AfterTypeCheckContext& ctx,
-    const AST::FuncDecl& method, Ptr<AST::Expr> jclass, Ptr<AST::Expr> envPtr)
+    const AST::FuncDecl& method, Ptr<AST::Expr> jclass, Ptr<AST::Expr> envPtr, bool withMarker)
 {
     CJC_NULLPTR_CHECK(method.outerDecl);
     CJC_ASSERT(IsMirror(*method.outerDecl) || IsImpl(*method.outerDecl));
@@ -63,9 +66,16 @@ OwnedPtr<Expr> JMethodIdCache::CreateJMethodIdAccess(AfterTypeCheckContext& ctx,
     std::vector<OwnedPtr<Node>> ifNull;
     std::vector<OwnedPtr<Node>> ifNotNull;
 
+    auto signature = MemberJNISignature::FromMember(utils, method, withMarker);
+
     ifNull.push_back(
         CreateAssignExpr(WithinFile(CreateRefExpr(jmethodVar), &curFile),
-            jni.interface.CreateNewGlobalRefCall(envPtr, ilib.CreateGetMethodIdCall(??javaTy, envPtr, curFile)),
+            jni.interface.CreateNewGlobalRefCall(envPtr,
+                ilib.CreateGetMethodIdCall(envPtr,
+                    ASTCloner::Clone(jclass),
+                    signature.name,
+                    signature.signature,
+                    method.TestAttr(Attribute::STATIC))),
             TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)));
     ifNull.push_back(WithinFile(CreateRefExpr(jmethodVar), &curFile));
 
@@ -80,11 +90,11 @@ OwnedPtr<Expr> JMethodIdCache::CreateJMethodIdAccess(AfterTypeCheckContext& ctx,
 
 VarDecl& JMethodIdCache::GetOrPut(AfterTypeCheckContext& ctx, const FuncDecl& method, File& curFile)
 {
-    auto cacheKey = utils.GetJavaJniClassName(*method.outerDecl);
-    cacheKey += '$';
-    cacheKey += mangler.MangleType(*method.GetTy());
+    // auto cacheKey = GetJavaJniClassName(*method.outerDecl);
+    // cacheKey += '$';
+    // cacheKey += mangler.MangleType(*method.GetTy());
     // Get variable that stores JClass
-    if (auto it = cache.find(cacheKey); it != cache.end()) {
+    if (auto it = cache.find(&method); it != cache.end()) {
         return *it->second;
     }
     // Create variable since it does not exist yet
@@ -93,12 +103,12 @@ VarDecl& JMethodIdCache::GetOrPut(AfterTypeCheckContext& ctx, const FuncDecl& me
 
     auto null = MakeOwned<PointerExpr>();
     null->SetTy(&jmethodIdTy);
-    auto varDecl = CreateVarDecl(GetAccessorName(method), std::move(null), nullptr);
+    auto varDecl = CreateVarDecl(GetNewAccessorName(method), std::move(null), nullptr);
     varDecl->EnableAttr(Attribute::INTERNAL, Attribute::GLOBAL, Attribute::INITIALIZED, Attribute::NO_REFLECT_INFO);
     varDecl->isVar = true;
     varDecl->curFile = &curFile;
 
-    cache[cacheKey] = varDecl.get();
+    cache[&method] = varDecl.get();
     auto& ret = *varDecl;
     ctx.AddGeneratedDecl(std::move(varDecl));
     return ret;

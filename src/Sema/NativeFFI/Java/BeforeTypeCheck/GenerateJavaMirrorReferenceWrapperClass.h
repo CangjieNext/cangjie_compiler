@@ -44,8 +44,8 @@ public:
 protected:
     void Process(PreTypeCheckContext& ctx) override;
 private:
-    OwnedPtr<AST::ClassDecl> GenerateWrapperClass(AST::ClassLikeDecl& mirror) const;
-    
+    OwnedPtr<AST::ClassDecl> GenerateWrapperClass(const ImportManager& importManager, AST::ClassLikeDecl& mirror) const;
+
     /**
      * Returns true if declaration `cd` is a @JavaMirror that should have a class wrapper for java reference.
      */
