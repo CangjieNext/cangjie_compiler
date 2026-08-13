@@ -18,23 +18,23 @@ ConstPropagation::ConstPropagation(CHIRBuilder& builder, ConstAnalysisWrapper* c
 {
 }
 
-void ConstPropagation::RunOnPackage(const Ptr<const Package>& package, bool isDebug, bool isCJLint)
+void ConstPropagation::RunOnPackage(const Ptr<const Package>& package, bool isCJLint)
 {
     for (auto func : package->GetGlobalFuncsWithBody()) {
-        RunOnFunc(func, isDebug, isCJLint);
+        RunOnFunc(func, isCJLint);
     }
 }
 
-void ConstPropagation::RunOnFunc(const Ptr<const Function>& func, bool isDebug, bool isCJLint)
+void ConstPropagation::RunOnFunc(const Ptr<const Function>& func, bool isCJLint)
 {
     bool isCommonFunctionWithoutBody = func->TestAttr(Attribute::SKIP_ANALYSIS);
     if (isCommonFunctionWithoutBody) {
         return; // Nothing to check
     }
     if (auto result = analysisWrapper->CheckFuncResult(*func); result) {
-        VisitFunc<ConstDomain>(*func, isDebug, isCJLint, *result);
+        VisitFunc<ConstDomain>(*func, isCJLint, *result);
     } else if (auto resultPool = analysisWrapper->CheckFuncActiveResult(*func); resultPool) {
-        VisitFunc<ConstPoolDomain>(*func, isDebug, isCJLint, *resultPool);
+        VisitFunc<ConstPoolDomain>(*func, isCJLint, *resultPool);
     }
 }
 
@@ -49,12 +49,12 @@ const std::vector<const Function*>& ConstPropagation::GetFuncsNeedRemoveBlocks()
 }
 
 template <typename TConstDomain>
-void ConstPropagation::VisitFunc(const Function& func, bool isDebug, bool isCJLint, Results<TConstDomain>& result)
+void ConstPropagation::VisitFunc(const Function& func, bool isCJLint, Results<TConstDomain>& result)
 {
     std::vector<RewriteInfo> toBeRewrited;
     std::unordered_map<Expression*, std::pair<LiteralValue*, Block*>> targetSuccMap;
     const auto actionBeforeVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
-    const auto actionAfterVisitExpr = [this, &toBeRewrited, &func, isDebug, isCJLint](
+    const auto actionAfterVisitExpr = [this, &toBeRewrited, &func, isCJLint](
                                           const TConstDomain& state, Expression* expr, size_t index) -> void {
         auto exprType = expr->GetResult()->GetType();
         if (auto binary = DynamicCast<BinaryExpression*>(expr)) {
@@ -62,9 +62,9 @@ void ConstPropagation::VisitFunc(const Function& func, bool isDebug, bool isCJLi
                 return (void)toBeRewrited.emplace_back(expr, index, GenerateConstExpr(exprType, absVal, isCJLint));
             } else if (expr->GetResult()->GetType()->IsInteger()) {
                 if (auto intTy = StaticCast<IntType*>(expr->GetResult()->GetType()); intTy->IsSigned()) {
-                    return TrySimplifyingBinaryExpr<ConstIntVal>(state, binary, isDebug);
+                    return TrySimplifyingBinaryExpr<ConstIntVal>(state, binary);
                 } else {
-                    return TrySimplifyingBinaryExpr<ConstUIntVal>(state, binary, isDebug);
+                    return TrySimplifyingBinaryExpr<ConstUIntVal>(state, binary);
                 }
             }
         }
@@ -72,7 +72,7 @@ void ConstPropagation::VisitFunc(const Function& func, bool isDebug, bool isCJLi
             if (auto absVal = state.CheckAbstractValue(expr->GetResult()); absVal) {
                 return (void)toBeRewrited.emplace_back(expr, index, GenerateConstExpr(exprType, absVal, isCJLint));
             } else {
-                return TrySimplifyingUnaryExpr(unary, isDebug);
+                return TrySimplifyingUnaryExpr(unary);
             }
         }
         if ((exprType->IsInteger() || exprType->IsFloat() || exprType->IsRune() ||
@@ -117,10 +117,10 @@ void ConstPropagation::VisitFunc(const Function& func, bool isDebug, bool isCJLi
     };
     result.VisitWith(actionBeforeVisitExpr, actionAfterVisitExpr, actionOnTerminator);
     for (auto& rewriteInfo : toBeRewrited) {
-        RewriteToConstExpr(rewriteInfo, isDebug);
+        RewriteToConstExpr(rewriteInfo);
     }
     for (auto& [terminator, v] : targetSuccMap) {
-        RewriteTerminator(terminator, v.first, v.second, isDebug);
+        RewriteTerminator(terminator, v.first, v.second);
     }
     if (!targetSuccMap.empty()) {
         funcsNeedRemoveBlocks.push_back(&func);
@@ -183,7 +183,7 @@ static bool SkipCP(const Expression& expr, const GlobalOptions& opts)
 
 template <typename T, typename TConstDomain>
 void ConstPropagation::TrySimplifyingBinaryExpr(
-    const TConstDomain& state, const Ptr<BinaryExpression>& binary, bool isDebug)
+    const TConstDomain& state, const Ptr<BinaryExpression>& binary)
 {
     if (SkipCP(*binary, opts)) {
         return;
@@ -195,9 +195,9 @@ void ConstPropagation::TrySimplifyingBinaryExpr(
         case ExprKind::ADD: {
             // `0 + a` => a, `a + 0` => a
             if (lhs && lhs->GetVal() == 0) {
-                return ReplaceUsageOfExprResult(binary, binary->GetRHSOperand(), isDebug);
+                return ReplaceUsageOfExprResult(binary, binary->GetRHSOperand());
             } else if (rhs && rhs->GetVal() == 0) {
-                return ReplaceUsageOfExprResult(binary, binary->GetLHSOperand(), isDebug);
+                return ReplaceUsageOfExprResult(binary, binary->GetLHSOperand());
             }
             return;
         }
@@ -206,16 +206,16 @@ void ConstPropagation::TrySimplifyingBinaryExpr(
         case ExprKind::SUB: {
             // `a << 0` => a, `a >> 0` => a, `a - 0` => a
             if (rhs && rhs->GetVal() == 0) {
-                return ReplaceUsageOfExprResult(binary, binary->GetLHSOperand(), isDebug);
+                return ReplaceUsageOfExprResult(binary, binary->GetLHSOperand());
             }
             return;
         }
         case ExprKind::MUL: {
             // `1 * a` => a, `a * 1` => a
             if (lhs && lhs->GetVal() == 1) {
-                return ReplaceUsageOfExprResult(binary, binary->GetRHSOperand(), isDebug);
+                return ReplaceUsageOfExprResult(binary, binary->GetRHSOperand());
             } else if (rhs && rhs->GetVal() == 1) {
-                return ReplaceUsageOfExprResult(binary, binary->GetLHSOperand(), isDebug);
+                return ReplaceUsageOfExprResult(binary, binary->GetLHSOperand());
             }
             return;
         }
@@ -223,7 +223,7 @@ void ConstPropagation::TrySimplifyingBinaryExpr(
         case ExprKind::EXP: {
             // `a / 1` => a, `a ** 1` => a
             if (rhs && rhs->GetVal() == 1) {
-                return ReplaceUsageOfExprResult(binary, binary->GetLHSOperand(), isDebug);
+                return ReplaceUsageOfExprResult(binary, binary->GetLHSOperand());
             }
             return;
         }
@@ -231,7 +231,7 @@ void ConstPropagation::TrySimplifyingBinaryExpr(
         case ExprKind::BITOR: {
             // `a & a` => a, `a | a` => a
             if (binary->GetLHSOperand() == binary->GetRHSOperand()) {
-                return ReplaceUsageOfExprResult(binary, binary->GetLHSOperand(), isDebug);
+                return ReplaceUsageOfExprResult(binary, binary->GetLHSOperand());
             }
             return;
         }
@@ -240,7 +240,7 @@ void ConstPropagation::TrySimplifyingBinaryExpr(
     }
 }
 
-void ConstPropagation::RewriteToConstExpr(const RewriteInfo& rewriteInfo, bool isDebug) const
+void ConstPropagation::RewriteToConstExpr(const RewriteInfo& rewriteInfo) const
 {
     if (!rewriteInfo.literalVal) {
         return;
@@ -254,15 +254,9 @@ void ConstPropagation::RewriteToConstExpr(const RewriteInfo& rewriteInfo, bool i
     auto newExpr = builder.CreateExpression<Constant>(oldExprResult->GetType(), rewriteInfo.literalVal, oldExprParent);
     newExpr->SetDebugLocation(oldExpr->GetDebugLocation());
     oldExprParent->GetExpressionByIdx(rewriteInfo.index)->ReplaceWith(*newExpr);
-    if (isDebug) {
-        std::string message = "[ConstPropagation] The " +
-            ExprKindMgr::Instance()->GetKindName(static_cast<size_t>(oldExpr->GetExprKind())) +
-            ToPosInfo(oldExpr->GetDebugLocation(), true) + " has been rewrited to a constant\n";
-        std::cout << message;
-    }
 }
 
-void ConstPropagation::TrySimplifyingUnaryExpr(const Ptr<UnaryExpression>& unary, bool isDebug) const
+void ConstPropagation::TrySimplifyingUnaryExpr(const Ptr<UnaryExpression>& unary) const
 {
     if (SkipCP(*unary, opts)) {
         return;
@@ -285,26 +279,19 @@ void ConstPropagation::TrySimplifyingUnaryExpr(const Ptr<UnaryExpression>& unary
         }
         auto targetVal = StaticCast<UnaryExpression*>(operandExpr)->GetOperand(); // `%0` in the example
 
-        ReplaceUsageOfExprResult(unary, targetVal, isDebug);
+        ReplaceUsageOfExprResult(unary, targetVal);
     }
 }
 
 void ConstPropagation::ReplaceUsageOfExprResult(
-    const Ptr<const Expression>& expr, const Ptr<Value>& newVal, bool isDebug) const
+    const Ptr<const Expression>& expr, const Ptr<Value>& newVal) const
 {
     // note: The scope of rewriting should be revised when nested block groups occur.
     expr->GetResult()->ReplaceWith(*newVal, expr->GetParentBlockGroup());
-
-    if (isDebug) {
-        std::string message = "[ConstPropagation] The result of the trivial " +
-            ExprKindMgr::Instance()->GetKindName(static_cast<size_t>(expr->GetExprKind())) +
-            ToPosInfo(expr->GetDebugLocation()) + " has been optimised\n";
-        std::cout << message;
-    }
 }
 
 void ConstPropagation::RewriteTerminator(
-    Expression* oldTerminator, LiteralValue* newValue, Block* newTarget, bool isDebug) const
+    Expression* oldTerminator, LiteralValue* newValue, Block* newTarget) const
 {
     if (SkipCP(*oldTerminator, opts)) {
         return;
@@ -319,13 +306,6 @@ void ConstPropagation::RewriteTerminator(
     }
     auto newTerminator = builder.CreateTerminator<GoTo>(loc, newTarget, parentBlock);
     parentBlock->AppendExpression(newTerminator);
-
-    if (isDebug) {
-        std::string message = "[ConstPropagation] The terminator " +
-            ExprKindMgr::Instance()->GetKindName(static_cast<size_t>(oldTerminator->GetExprKind())) +
-            ToPosInfo(oldTerminator->GetDebugLocation()) + " has been optimised\n";
-        std::cout << message;
-    }
 }
 
 static std::mutex g_mtx;

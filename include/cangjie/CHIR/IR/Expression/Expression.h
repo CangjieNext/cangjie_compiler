@@ -895,6 +895,14 @@ public:
     virtual std::vector<Value*> GetArgs() const = 0;
 
     /**
+     * @brief Retrieves the argument at the given index.
+     *
+     * @param index The index of the argument.
+     * @return The argument at the given index.
+     */
+    Value* GetArg(size_t index) const;
+
+    /**
      * @brief Retrieves the type of 'this'.
      *
      * @return The type of 'this'.
