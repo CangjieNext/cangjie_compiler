@@ -600,15 +600,17 @@ bool IsEnumSelectorType(const Type& type);
 std::vector<ClassDef*> GetExtendedInterfaceDefs(const CustomTypeDef& def);
 
 /**
- * @brief Checks if a custom type definition matches the expected package and source code name.
+ * @brief Checks if a type is a custom type matching the expected package and source code name.
  *
- * @param def The custom type definition to check.
+ * Does not strip references; callers that may hold RefType must StripAllRefs() first.
+ *
+ * @param ty The type to check.
  * @param packageName The expected package name.
  * @param defSrcCodeName The expected source code name.
- * @return True if the custom type definition matches the expected package and source code name, false otherwise.
+ * @return True if the type is the expected custom type, false otherwise.
  */
-bool CheckCustomTypeDefIsExpected(
-    const CustomTypeDef& def, const std::string& packageName, const std::string& defSrcCodeName);
+bool IsExpectedCustomType(
+    const Type& ty, const std::string& packageName, const std::string& defSrcCodeName);
 
 /**
  * @brief Checks if a custom type definition is the core 'Any' type.

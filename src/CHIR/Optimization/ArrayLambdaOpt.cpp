@@ -17,136 +17,155 @@ ArrayLambdaOpt::ArrayLambdaOpt(CHIRBuilder& builder) : builder(builder)
 {
 }
 
-void ArrayLambdaOpt::RunOnPackage(const Ptr<const Package>& package, bool isDebug)
+void ArrayLambdaOpt::RunOnPackage(const Package& package)
 {
-    for (auto func : package->GetGlobalFuncsWithBody()) {
-        RunOnFunc(func, isDebug);
+    for (auto func : package.GetGlobalFuncsWithBody()) {
+        RunOnFunc(*func);
     }
 }
 
-void ArrayLambdaOpt::RunOnFunc(const Ptr<Function>& func, bool isDebug)
+void ArrayLambdaOpt::RunOnFunc(const Function& func)
 {
-    auto preAcation = [this, isDebug](Expression& expr) {
-        if (auto constVal = CheckCanRewriteLambda(&expr); constVal) {
-            RewriteArrayInitFunc(StaticCast<Apply&>(expr), constVal);
-            if (isDebug) {
-                std::string message = "[ArrayLambda] The call to arrayInitByFunction" +
-                    ToPosInfo(expr.GetDebugLocation()) + " has been optimised to a call to arrayInitByValue.\n";
-                std::cout << message;
-            }
-        } else if (auto zeroValue = CheckCanRewriteZeroValue(&expr); zeroValue) {
-            RewriteZeroValue(StaticCast<RawArrayInitByValue*>(&expr), zeroValue);
-            if (isDebug) {
-                std::string message = "[ArrayLambda] The call to arrayInitByValue" +
-                    ToPosInfo(expr.GetDebugLocation()) + " has been optimised due to the item is ZeroValue.\n";
-                std::cout << message;
-            }
+    auto preAcation = [this](Expression& expr) {
+        if (auto constVal = CheckCanRewriteLambda(expr)) {
+            RewriteArrayInitFunc(StaticCast<Apply&>(expr), *constVal);
+        } else if (auto zeroValue = CheckCanRewriteZeroValue(expr)) {
+            RewriteZeroValue(StaticCast<RawArrayInitByValue&>(expr), *zeroValue);
         }
         return VisitResult::CONTINUE;
     };
-    Visitor::Visit(*func, preAcation);
+    Visitor::Visit(func, preAcation);
 }
 
-static const FuncInfo ARRAY_INIT_FUNC_INFO{"arrayInitByFunction", "", {NOT_CARE}, NOT_CARE, Cangjie::CORE_PACKAGE_NAME};
-Ptr<Constant> ArrayLambdaOpt::CheckCanRewriteLambda(const Ptr<Expression>& expr) const
+Constant* ArrayLambdaOpt::CheckCanRewriteLambda(const Expression& expr) const
 {
-    if (expr->GetExprKind() != ExprKind::APPLY) {
+    auto apply = DynamicCast<Apply*>(&expr);
+    if (!apply) {
         return nullptr;
     }
-    auto apply = StaticCast<Apply*>(expr);
     auto callee = apply->GetCallee();
     if (!callee->IsFuncWithBody()) {
         return nullptr;
     }
+    const FuncInfo ARRAY_INIT_FUNC_INFO{
+        "arrayInitByFunction", "", {NOT_CARE}, NOT_CARE, Cangjie::CORE_PACKAGE_NAME};
     if (!IsExpectedFunction(*StaticCast<Function*>(callee), ARRAY_INIT_FUNC_INFO)) {
         return nullptr;
     }
 
-    constexpr size_t INIT_LAMBDA_INDEX = 1;
-    CJC_ASSERT(apply->GetArgs().size() == INIT_LAMBDA_INDEX + 1);
-    auto closureVar = apply->GetArgs()[INIT_LAMBDA_INDEX];
-    if (!closureVar->IsLocalVar()) {
+    auto closureVar = DynamicCast<LocalVar*>(apply->GetArg(initLambdaIndex));
+    if (closureVar == nullptr) {
         return nullptr;
     }
-    auto closure = StaticCast<LocalVar*>(closureVar)->GetExpr();
-    if (closure->GetExprKind() != ExprKind::LAMBDA) {
+    auto closure = DynamicCast<Lambda*>(closureVar->GetExpr());
+    if (closure == nullptr) {
         return nullptr;
     }
-    return CheckIfLambdaReturnConst(*StaticCast<const Lambda*>(closure));
+    return CheckIfLambdaReturnConst(*closure);
 }
 
-Ptr<Constant> ArrayLambdaOpt::CheckIfLambdaReturnConst(const Lambda& lambda) const
+Constant* ArrayLambdaOpt::CheckIfLambdaReturnConst(const Lambda& lambda) const
 {
     auto ret = lambda.GetReturnValue();
-    if (!ret) {
+    CJC_NULLPTR_CHECK(ret);
+    CJC_ASSERT(ret->GetExpr()->GetExprKind() == ExprKind::ALLOCATE);
+    auto retValUsers = ret->GetUsers();
+    if (retValUsers.size() != 1) {
         return nullptr;
     }
-    CJC_ASSERT(ret->GetExpr()->GetExprKind() == ExprKind::ALLOCATE);
-    if (auto users = ret->GetUsers(); users.size() == 1) {
-        if (auto store = users[0]; store->GetExprKind() == ExprKind::STORE) {
-            auto retVal = StaticCast<Store*>(store)->GetValue();
-            if (!retVal->IsLocalVar()) {
-                return nullptr;
-            }
-            auto constant = StaticCast<LocalVar*>(retVal)->GetExpr();
-            if (constant->GetExprKind() != ExprKind::CONSTANT) {
-                return nullptr;
-            }
-
-            std::unordered_set<Expression*> validExprs{ret->GetExpr(), store, constant};
-
-            auto blocksInLambda = lambda.GetBody()->GetBlocks();
-            if (blocksInLambda.size() > 1) {
-                return nullptr;
-            }
-            for (auto e : blocksInLambda[0]->GetExpressions()) {
-                if (Is<Debug>(e) || e->IsTerminator()) {
-                    continue;
-                }
-                if (validExprs.find(e) == validExprs.end()) {
-                    return nullptr;
-                }
-            }
-
-            return StaticCast<Constant*>(constant);
+    auto store = DynamicCast<Store*>(retValUsers[0]);
+    if (store == nullptr) {
+        return nullptr;
+    }
+    auto srcValue = DynamicCast<LocalVar*>(store->GetValue());
+    if (srcValue == nullptr) {
+        return nullptr;
+    }
+    auto constRetVal = DynamicCast<Constant*>(srcValue->GetExpr());
+    if (constRetVal == nullptr) {
+        return nullptr;
+    }
+    auto blocksInLambda = lambda.GetBody()->GetBlocks();
+    if (blocksInLambda.size() > 1) {
+        return nullptr;
+    }
+    // can't have other expressions in the lambda body, in case of side effects
+    std::unordered_set<Expression*> validExprs{ret->GetExpr(), store, constRetVal};
+    for (auto e : blocksInLambda[0]->GetExpressions()) {
+        if (Is<Debug>(e) || e->IsTerminator()) {
+            continue;
+        }
+        if (validExprs.find(e) == validExprs.end()) {
+            return nullptr;
         }
     }
-    return nullptr;
+    return constRetVal;
 }
-void ArrayLambdaOpt::RewriteArrayInitFunc(Apply& apply, const Ptr<const Constant>& constant)
+
+void ArrayLambdaOpt::RewriteArrayInitFunc(Apply& apply, const Constant& constant)
 {
-    auto& loc = apply.GetDebugLocation();
-    auto rawArray = apply.GetArgs()[0];
-    auto size = StaticCast<LocalVar*>(rawArray)->GetExpr()->GetOperand(0);
+    /** cangjie code:
+            ArrayList<Int64>(10000, { i = 2 })
+        before optimization:
+            %0: (Int64) -> Int64 = Lambda(%27[i]: Int64): Int64
+            { Block Group: 0
+            Block #0: 
+                [ret] %1: Int64& = Allocate(Int64)
+                %2: Int64 = Constant(2i)
+                %3: Unit = Store(%2, %1)
+                Exit()
+            }
+            %4: Int64 = Constant(100000i)
+            %5: RawArray<Int64>& = RawArrayAllocate(Int64, %4)
+            %6: RawArray<Int64>& = Apply(@arrayInitByFunction, %5, %0)
+        after optimization:
+            %4: Int64 = Constant(100000i)
+            %5: RawArray<Int64>& = RawArrayAllocate(Int64, %4)
+            %6: Int64 = Constant(2i)
+            %7: Unit = RawArrayInitByValue(%5, %4, %6)  // address, size, init value
+    */
+    // 1. create init value, just clone the old one
     auto parent = apply.GetParentBlock();
-    auto initVal = builder.CreateExpression<Constant>(constant->GetDebugLocation(), constant->GetResult()->GetType(),
-        StaticCast<LiteralValue*>(constant->GetValue()), parent);
-    initVal->SetDebugLocation(constant->GetDebugLocation());
+    auto initVal = builder.CreateExpression<Constant>(constant.GetDebugLocation(), constant.GetResult()->GetType(),
+        StaticCast<LiteralValue*>(constant.GetValue()), parent);
+    initVal->MoveBefore(&apply);
+
+    // 2. create `RawArrayInitByValue`
+    auto lambda = StaticCast<Lambda*>(StaticCast<LocalVar*>(apply.GetArg(initLambdaIndex))->GetExpr());
+    auto& loc = apply.GetDebugLocation();
+    auto rawArray = apply.GetArg(rawArrayIndex);
+    auto size = StaticCast<RawArrayAllocateBase*>(StaticCast<LocalVar*>(rawArray)->GetExpr())->GetSize();
     auto newExpr = builder.CreateExpression<RawArrayInitByValue>(
         loc, builder.GetUnitTy(), rawArray, size, initVal->GetResult(), parent);
-
-    initVal->MoveBefore(&apply);
     apply.ReplaceWith(*newExpr);
+    // Apply's result is replaced with RawArrayInitByValue's result by `apply.ReplaceWith(*newExpr)`, that's illegal,
+    // so we need to replace it with the raw array
     newExpr->GetResult()->ReplaceWith(*rawArray, parent->GetParentBlockGroup());
+
+    // 3. remove the old lambda if it has no other users
+    auto users = lambda->GetResult()->GetUsers();
+    if (users.empty()) {
+        lambda->RemoveSelfFromBlock();
+    } else if (users.size() == 1 && users[0]->GetExprKind() == ExprKind::DEBUGEXPR) {
+        users[0]->RemoveSelfFromBlock();
+        lambda->RemoveSelfFromBlock();
+    }
 }
 
-Ptr<Intrinsic> ArrayLambdaOpt::CheckCanRewriteZeroValue(const Ptr<Expression>& expr) const
+Intrinsic* ArrayLambdaOpt::CheckCanRewriteZeroValue(const Expression& expr) const
 {
-    if (expr->GetExprKind() != ExprKind::RAW_ARRAY_INIT_BY_VALUE) {
+    auto init = DynamicCast<RawArrayInitByValue*>(&expr);
+    if (init == nullptr) {
         return nullptr;
     }
-
-    auto init = StaticCast<RawArrayInitByValue*>(expr);
-    if (!init->GetInitValue()->IsLocalVar()) {
+    auto initValue = DynamicCast<LocalVar*>(init->GetInitValue());
+    if (initValue == nullptr) {
         return nullptr;
     }
-
-    auto initVal = StaticCast<LocalVar*>(init->GetInitValue());
-    auto initExpr = initVal->GetExpr();
-    if (initExpr->GetExprKind() != ExprKind::INTRINSIC) {
+    auto intrinsic = DynamicCast<Intrinsic*>(initValue->GetExpr());
+    if (intrinsic == nullptr) {
         return nullptr;
     }
-    auto intrinsic = StaticCast<Intrinsic*>(initExpr);
     if (intrinsic->GetIntrinsicKind() != IntrinsicKind::OBJECT_ZERO_VALUE) {
         return nullptr;
     }
@@ -154,16 +173,27 @@ Ptr<Intrinsic> ArrayLambdaOpt::CheckCanRewriteZeroValue(const Ptr<Expression>& e
     return intrinsic;
 }
 
-void ArrayLambdaOpt::RewriteZeroValue(const Ptr<RawArrayInitByValue>& init, const Ptr<Intrinsic>& zeroVal) const
+void ArrayLambdaOpt::RewriteZeroValue(RawArrayInitByValue& init, Intrinsic& zeroVal) const
 {
-    CJC_ASSERT(init->GetResult()->GetUsers().empty());
-    init->RemoveSelfFromBlock();
+    /** cangjie code:
+            Array<Int64>(10000, repeat : unsafe { zeroValue<Int64>() })
+        before optimization:
+            %0: Int64 = Constant(10000i)
+            %1: RawArray<Int64>& = RawArrayAllocate(Int64, %0)
+            %2: Int64 = Intrinsic(zeroValue<Int64>)
+            %3: Unit = RawArrayInitByValue(%1, %0, %2)  // address, size, init value
+        after optimization:
+            %0: Int64 = Constant(10000i)
+            %1: RawArray<Int64>& = RawArrayAllocate(Int64, %0)
+    */
+    CJC_ASSERT(init.GetResult()->GetUsers().empty());
+    init.RemoveSelfFromBlock();
 
-    auto users = zeroVal->GetResult()->GetUsers();
+    auto users = zeroVal.GetResult()->GetUsers();
     if (users.empty()) {
-        zeroVal->RemoveSelfFromBlock();
+        zeroVal.RemoveSelfFromBlock();
     } else if (users.size() == 1 && users[0]->GetExprKind() == ExprKind::DEBUGEXPR) {
         users[0]->RemoveSelfFromBlock();
-        zeroVal->RemoveSelfFromBlock();
+        zeroVal.RemoveSelfFromBlock();
     }
 }

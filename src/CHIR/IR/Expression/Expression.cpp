@@ -923,6 +923,13 @@ FuncCall::FuncCall(ExprKind kind, const FuncCallContext& funcCallCtx, Block* par
 {
 }
 
+Value* FuncCall::GetArg(size_t index) const
+{
+    auto args = GetArgs();
+    CJC_ASSERT(index < args.size());
+    return args[index];
+}
+
 Type* FuncCall::GetThisType() const
 {
     return thisType;
