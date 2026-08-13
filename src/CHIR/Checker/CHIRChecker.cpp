@@ -1883,11 +1883,11 @@ void CHIRChecker::CheckRaiseException(const RaiseException& expr, const Function
     }
     // 4. exception value's type must be equal or sub type of class Exception or class Error
     auto isEqualOrSubTypeOfClassInCore = [this](ClassType& type, const std::string& className) {
-        if (CheckCustomTypeDefIsExpected(*type.GetClassDef(), CORE_PACKAGE_NAME, className)) {
+        if (IsExpectedCustomType(type, CORE_PACKAGE_NAME, className)) {
             return true;
         }
         for (auto superType : type.GetSuperTypesRecusively(builder)) {
-            if (CheckCustomTypeDefIsExpected(*superType->GetClassDef(), CORE_PACKAGE_NAME, className)) {
+            if (IsExpectedCustomType(*superType, CORE_PACKAGE_NAME, className)) {
                 return true;
             }
         }
@@ -1896,11 +1896,11 @@ void CHIRChecker::CheckRaiseException(const RaiseException& expr, const Function
     auto isLegalExceptionValueType = [&isEqualOrSubTypeOfClassInCore](ClassType& type) {
         return isEqualOrSubTypeOfClassInCore(type, CLASS_EXCEPTION) ||
             isEqualOrSubTypeOfClassInCore(type, CLASS_ERROR) ||
-            CheckCustomTypeDefIsExpected(*type.GetClassDef(), CORE_PACKAGE_NAME, OBJECT_NAME) ||
+            IsExpectedCustomType(type, CORE_PACKAGE_NAME, OBJECT_NAME) ||
             // these three classes are from effect handler plan, we set white list temprorarily
-            CheckCustomTypeDefIsExpected(*type.GetClassDef(), EFFECT_PACKAGE_NAME, "ImmediateEarlyReturn") ||
-            CheckCustomTypeDefIsExpected(*type.GetClassDef(), EFFECT_PACKAGE_NAME, "ImmediateFrameErrorWrapper") ||
-            CheckCustomTypeDefIsExpected(*type.GetClassDef(), EFFECT_PACKAGE_NAME, "ImmediateFrameExceptionWrapper");
+            IsExpectedCustomType(type, EFFECT_PACKAGE_NAME, "ImmediateEarlyReturn") ||
+            IsExpectedCustomType(type, EFFECT_PACKAGE_NAME, "ImmediateFrameErrorWrapper") ||
+            IsExpectedCustomType(type, EFFECT_PACKAGE_NAME, "ImmediateFrameExceptionWrapper");
     };
     auto derefType = exceptionType->StripAllRefs();
     if (auto classType = DynamicCast<ClassType*>(derefType)) {
@@ -3770,7 +3770,7 @@ void CHIRChecker::CheckGetException(const GetException& expr, const Function& to
         return;
     }
 
-    if (!CheckCustomTypeDefIsExpected(*StaticCast<ClassType*>(baseType)->GetClassDef(), CORE_PACKAGE_NAME, "Object")) {
+    if (!IsExpectedCustomType(*baseType, CORE_PACKAGE_NAME, "Object")) {
         TypeCheckError(expr, *result, "Object&", topLevelFunc);
     }
 }

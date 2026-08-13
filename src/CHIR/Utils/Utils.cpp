@@ -1005,34 +1005,34 @@ std::vector<ClassDef*> GetExtendedInterfaceDefs(const CustomTypeDef& def)
     return defs;
 }
 
-bool CheckCustomTypeDefIsExpected(
-    const CustomTypeDef& def, const std::string& packageName, const std::string& defSrcCodeName)
+bool IsExpectedCustomType(const Type& ty, const std::string& packageName, const std::string& defSrcCodeName)
 {
-    auto pkgName = def.GetPackageName();
-    if (auto genericDecl = def.GetGenericDecl()) {
-        pkgName = genericDecl->GetPackageName();
+    auto customTy = DynamicCast<const CustomType*>(&ty);
+    if (customTy == nullptr) {
+        return false;
     }
-    return pkgName == packageName && def.GetSrcCodeIdentifier() == defSrcCodeName;
+    auto def = customTy->GetCustomTypeDef();
+    return def->GetPackageName() == packageName && def->GetSrcCodeIdentifier() == defSrcCodeName;
 }
 
 bool IsCoreAny(const CustomTypeDef& def)
 {
-    return CheckCustomTypeDefIsExpected(def, CORE_PACKAGE_NAME, ANY_NAME);
+    return IsExpectedCustomType(*def.GetType(), CORE_PACKAGE_NAME, ANY_NAME);
 }
 
 bool IsCoreObject(const CustomTypeDef& def)
 {
-    return CheckCustomTypeDefIsExpected(def, CORE_PACKAGE_NAME, OBJECT_NAME);
+    return IsExpectedCustomType(*def.GetType(), CORE_PACKAGE_NAME, OBJECT_NAME);
 }
 
 bool IsCoreOption(const CustomTypeDef& def)
 {
-    return CheckCustomTypeDefIsExpected(def, CORE_PACKAGE_NAME, STD_LIB_OPTION);
+    return IsExpectedCustomType(*def.GetType(), CORE_PACKAGE_NAME, STD_LIB_OPTION);
 }
 
 bool IsCoreFuture(const CustomTypeDef& def)
 {
-    return CheckCustomTypeDefIsExpected(def, CORE_PACKAGE_NAME, STD_LIB_FUTURE);
+    return IsExpectedCustomType(*def.GetType(), CORE_PACKAGE_NAME, STD_LIB_FUTURE);
 }
 
 bool IsClosureConversionEnvClass(const ClassDef& def)

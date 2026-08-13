@@ -83,6 +83,7 @@ constexpr std::string_view IF_AVAILABLE{"IfAvailable"};
 // std::string and std::map types across translation units is undefined,especially on the Windows platform.
 inline const std::string DEFAULT_PACKAGE_NAME = "default";
 inline constexpr const char CORE_PACKAGE_NAME[] = "std.core";
+inline constexpr const char COLLECTION_PACKAGE_NAME[] = "std.collection";
 inline constexpr const char SYNC_PACKAGE_NAME[] = "std.sync";
 inline constexpr const char MATH_PACKAGE_NAME[] = "std.math";
 inline constexpr const char OVERFLOW_PACKAGE_NAME[] = "std.overflow";

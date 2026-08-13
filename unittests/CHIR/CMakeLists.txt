@@ -18,7 +18,13 @@ if(CANGJIE_CODEGEN_CJNATIVE_BACKEND)
     target_include_directories(CHIRSerialzierTest PRIVATE ${FLATBUFFERS_INCLUDE_DIR})
     add_test(NAME CHIRSerialzierTest COMMAND CHIRSerialzierTest)
 
-    add_executable(CHIROptTests ActiveStatePoolTest.cpp AnalysisToStringTest.cpp ArithmeticTest.cpp
+    add_executable(CHIROptTests ActiveStatePoolTest.cpp AnalysisFrameworkTest.cpp AnalysisToStringTest.cpp
+        ArithmeticTest.cpp CallGraphAnalysisTest.cpp
+        ConstAnalysisArithmeticAddTest.cpp ConstAnalysisArithmeticMulTest.cpp ConstAnalysisArithmeticSubTest.cpp
+        ConstAnalysisArithmeticDivModTest.cpp ConstAnalysisArithmeticNegExpTest.cpp
+        ConstAnalysisBitwiseTest.cpp ConstAnalysisRelationalEqNeTest.cpp ConstAnalysisRelationalCmpTest.cpp
+        ConstAnalysisTypeCastTerminatorTest.cpp
+        ConstAnalysisValueLogicTest.cpp ConstAnalysisControlAndWrapperTest.cpp ConstAnalysisApplyArrayCastTest.cpp
         ConstantRangeTest.cpp SIntDomainTest.cpp SIntTest.cpp VArrayTypeTest.cpp)
     target_link_libraries(
         CHIROptTests

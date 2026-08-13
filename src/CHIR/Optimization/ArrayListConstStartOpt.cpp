@@ -6,26 +6,31 @@
 
 #include "cangjie/CHIR/Optimization/ArrayListConstStartOpt.h"
 
-#include "cangjie/CHIR/Analysis/Analysis.h"
-#include "cangjie/CHIR/Analysis/ConstAnalysis.h"
+#include "cangjie/CHIR/IR/Type/CustomTypeDef.h"
+#include "cangjie/CHIR/IR/Type/Type.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/Utils/Utils.h"
+#include "cangjie/Utils/ConstantsUtils.h"
 
 namespace Cangjie::CHIR {
+namespace {
+constexpr const char* ARRAY_TYPE_NAME = "Array";
+constexpr const char* ARRAYLIST_TYPE_NAME = "ArrayList";
+constexpr const char* ARRAYLIST_ITERATOR_TYPE_NAME = "ArrayListIterator";
+constexpr const char* MY_DATA_MEMBER_NAME = "myData";
+constexpr const char* START_MEMBER_NAME = "start";
+
 static const std::vector<FuncInfo> ARRAY_FUNC_INLINE_WHITE_LIST = {
-    FuncInfo("getUnchecked", "Array", {NOT_CARE}, ANY_TYPE, "std.core"),
-    FuncInfo("setUnchecked", "Array", {NOT_CARE}, ANY_TYPE, "std.core"),
+    FuncInfo("getUnchecked", ARRAY_TYPE_NAME, {NOT_CARE}, ANY_TYPE, CORE_PACKAGE_NAME),
+    FuncInfo("setUnchecked", ARRAY_TYPE_NAME, {NOT_CARE}, ANY_TYPE, CORE_PACKAGE_NAME),
 };
 
 static const std::vector<FuncInfo> ARRAYLIST_FUNC_LIST = {
-    FuncInfo("[]", "ArrayList", {NOT_CARE}, ANY_TYPE, "std.collection"),
-    FuncInfo("==", "ArrayList", {NOT_CARE}, ANY_TYPE, "std.collection"),
+    FuncInfo("[]", ARRAYLIST_TYPE_NAME, {NOT_CARE}, ANY_TYPE, COLLECTION_PACKAGE_NAME),
+    FuncInfo("==", ARRAYLIST_TYPE_NAME, {NOT_CARE}, ANY_TYPE, COLLECTION_PACKAGE_NAME),
+    FuncInfo("next", ARRAYLIST_ITERATOR_TYPE_NAME, {NOT_CARE}, ANY_TYPE, COLLECTION_PACKAGE_NAME),
 };
 
-static const std::vector<FuncInfo> ARRAYLIST_ITERATOR_FUNC_LIST = {
-    FuncInfo("next", "ArrayListIterator", {NOT_CARE}, ANY_TYPE, "std.collection"),
-};
-
-namespace {
 bool InWhiteList(const Function& func, const std::vector<FuncInfo>& whiteList)
 {
     for (auto element : whiteList) {
@@ -35,6 +40,70 @@ bool InWhiteList(const Function& func, const std::vector<FuncInfo>& whiteList)
     }
     return false;
 }
+
+bool IsMemberAccess(const Type& baseTy, const std::vector<uint64_t>& path, const std::string& packageName,
+    const std::string& typeName, const std::string& memberName)
+{
+    if (path.size() != 1) {
+        return false;
+    }
+    auto customTy = DynamicCast<CustomType*>(baseTy.StripAllRefs());
+    if (customTy == nullptr || !IsExpectedCustomType(*customTy, packageName, typeName)) {
+        return false;
+    }
+    auto def = customTy->GetCustomTypeDef();
+    if (path[0] >= def->GetAllInstanceVarNum()) {
+        return false;
+    }
+    return def->GetInstanceVar(path[0]).name == memberName;
+}
+
+/** Match `value` as Load(GetElementRef(base, member)) on the given custom type.
+ *  Returns `base` on success, otherwise nullptr.
+ */
+Value* MatchLoadOfMemberRef(
+    Value& value, const std::string& packageName, const std::string& typeName, const std::string& memberName)
+{
+    auto local = DynamicCast<LocalVar*>(&value);
+    if (local == nullptr) {
+        return nullptr;
+    }
+    auto load = DynamicCast<Load*>(local->GetExpr());
+    if (load == nullptr) {
+        return nullptr;
+    }
+    auto locLocal = DynamicCast<LocalVar*>(load->GetLocation());
+    if (locLocal == nullptr) {
+        return nullptr;
+    }
+    auto getElementRef = DynamicCast<GetElementRef*>(locLocal->GetExpr());
+    if (getElementRef == nullptr) {
+        return nullptr;
+    }
+    if (!IsMemberAccess(
+        *getElementRef->GetBase()->GetType(), getElementRef->GetPath(), packageName, typeName, memberName)) {
+        return nullptr;
+    }
+    return getElementRef->GetBase();
+}
+
+/** True if `value` is a parameter of `func` with the expected custom type (e.g. this / that: ArrayList). */
+bool IsFuncParamOfType(
+    Value& value, const Function& func, const std::string& packageName, const std::string& typeName)
+{
+    if (!value.IsParameter()) {
+        return false;
+    }
+    auto* param = StaticCast<Parameter*>(&value);
+    bool belongsToFunc = false;
+    for (auto* funcParam : func.GetParams()) {
+        if (funcParam == param) {
+            belongsToFunc = true;
+            break;
+        }
+    }
+    return belongsToFunc && IsExpectedCustomType(*param->GetType()->StripAllRefs(), packageName, typeName);
+}
 } // namespace
 
 const OptEffectCHIRMap& ArrayListConstStartOpt::GetEffectMap() const
@@ -42,7 +111,7 @@ const OptEffectCHIRMap& ArrayListConstStartOpt::GetEffectMap() const
     return effectMap;
 }
 
-bool ArrayListConstStartOpt::CheckNeedRewrite(const Apply& apply) const
+bool ArrayListConstStartOpt::CheckNeedInline(const Apply& apply) const
 {
     if (!apply.GetCallee()->IsFuncWithBody()) {
         return false;
@@ -51,153 +120,125 @@ bool ArrayListConstStartOpt::CheckNeedRewrite(const Apply& apply) const
     return InWhiteList(*callee, ARRAY_FUNC_INLINE_WHITE_LIST);
 }
 
-bool ArrayListConstStartOpt::IsStartAddIndexExpression(const Field& field, bool isIteratorFunc) const
+/**
+ * Recognize Field of `Array.start` loaded from `ArrayList.myData` (optionally via
+ * `ArrayListIterator.myData`), using type and member names instead of layout indices.
+ *
+ * ArrayList:
+ *   Field(Load(GetElementRef(arrayList, myData)), start)
+ * ArrayListIterator:
+ *   Field(Load(GetElementRef(Load(GetElementRef(arrayListIterator, myData)), myData)), start)
+ */
+bool ArrayListConstStartOpt::IsStartOfArrayListMyData(const Field& field, const Function& func) const
 {
-    // After inline, CHIR will be like:
-    // %0: Class-_CNac9ArrayListIlE<Int64>&
-    // ...
-    // %39: Struct-_CNat5ArrayIlE<Int64>& =GetElementRef(%0, 0)
-    // %40: Struct-_CNat5ArrayIlE<Int64> = Load(%39)
-    // ...
-    // %58: Int64 = Field(40%, 1)
-    // %59: Int64 = Add(%58, %1) //%58 is start and %1 is index
-
-    // check the Field expression is or not the expected:
-    // 1.returnTy is TYPE_INT64
-    auto resultTy = field.GetResult()->GetType()->GetTypeKind();
-    if (resultTy != Type::TypeKind::TYPE_INT64) {
+    if (!IsMemberAccess(
+        *field.GetBase()->GetType(), field.GetPath(), CORE_PACKAGE_NAME, ARRAY_TYPE_NAME, START_MEMBER_NAME)) {
         return false;
     }
 
-    // 2.the first index must be 1 cause the index of start in struct Array is 1
-    if (field.GetPath().at(0) != 1) {
+    // ArrayList: Field(Load(GetElementRef(arrayList, myData)), start)
+    // arrayList may be `this` or `that` (e.g. in operator ==).
+    auto arrayList = MatchLoadOfMemberRef(
+        *field.GetBase(), COLLECTION_PACKAGE_NAME, ARRAYLIST_TYPE_NAME, MY_DATA_MEMBER_NAME);
+    if (arrayList == nullptr) {
         return false;
     }
-
-    // 3.check the Field expr operand is the array member of class arrayList
-    // e.g. get %40 experssion and check ExprKind
-    auto expr = StaticCast<LocalVar*>(field.GetBase())->GetExpr();
-    if (expr->GetExprKind() != ExprKind::LOAD) {
+    if (IsFuncParamOfType(*arrayList, func, COLLECTION_PACKAGE_NAME, ARRAYLIST_TYPE_NAME)) {
+        return true;
+    }
+    // ArrayListIterator: Field(Load(GetElementRef(Load(GetElementRef(arrayListIterator, myData)), myData)), start)
+    auto arrayListIterator = MatchLoadOfMemberRef(
+        *arrayList, COLLECTION_PACKAGE_NAME, ARRAYLIST_ITERATOR_TYPE_NAME, MY_DATA_MEMBER_NAME);
+    if (arrayListIterator == nullptr) {
         return false;
     }
-
-    // e.g. get %39 experssion and check ExprKind
-    expr = StaticCast<LocalVar*>(expr->GetOperand(0))->GetExpr();
-    if (expr->GetExprKind() != ExprKind::GET_ELEMENT_REF) {
-        return false;
-    }
-    auto getElementRef = StaticCast<GetElementRef*>(expr);
-    // the index of member Array myData of Class ArrayList is 0
-    if (getElementRef->GetPath().at(0) != 0) {
-        return false;
-    }
-
-    auto location = getElementRef->GetBase();
-    if (!isIteratorFunc && location->IsParameter()) {
-        auto param = StaticCast<Parameter*>(location);
-        // the index 0 or 1 parameter of ArrayList Function is class ArrayList
-        if (param == field.GetTopLevelFunc()->GetParam(0) ||
-            param == field.GetTopLevelFunc()->GetParam(1)) {
-            return true;
-            }
-    }
-
-    // ArrayListIterator func need check more expression:
-    // After inline,ArrayListIterator func CHIR will be like:
-    // %0: Class-_CNac17ArrayListIteratorIlE<Int64>&
-    // ...
-    // %27: Class-_CNac9ArrayListIlE<Int64>&& = GetElementRef(%0, 1)
-    // %28: Class-_CNac9ArrayListIlE<Int64>& = Load(%27)
-    // %29: Struct-_CNat5ArrayIlE<Int64>& = GetElementRef(%28, 0)
-    // %30: Struct-_CNat5Array0IlE<Int64> = Load(%29)
-    // ...
-    // %58: Int64 = Field(30%, 1)
-    // %59: Int64 = Add(%58, %1) //%58 is start and %1 is index
-    if (isIteratorFunc) {
-        expr = StaticCast<LocalVar*>(location)->GetExpr();
-        if (expr->GetExprKind() != ExprKind::LOAD) {
-            return false;
-        }
-        expr = StaticCast<LocalVar*>(expr->GetOperand(0))->GetExpr();
-        if (expr->GetExprKind() != ExprKind::GET_ELEMENT_REF) {
-            return false;
-        }
-        getElementRef = StaticCast<GetElementRef*>(expr);
-        // the index of member ArrayList myData of Class ArrayListIterator is 1
-        if (getElementRef->GetPath().at(0) != 1) {
-            return false;
-        }
-
-        location = getElementRef->GetBase();
-        if (!location->IsParameter()) {
-            return false;
-        }
-        // the index 0 or 1 parameter of ArrayListIterator Function is class ArrayListIterator
-        return StaticCast<Parameter*>(location) == field.GetTopLevelFunc()->GetParam(0) ||
-            StaticCast<Parameter*>(location) == field.GetTopLevelFunc()->GetParam(1);
-    }
-    return false;
+    return IsFuncParamOfType(
+        *arrayListIterator, func, COLLECTION_PACKAGE_NAME, ARRAYLIST_ITERATOR_TYPE_NAME);
 }
 
 void ArrayListConstStartOpt::RewriteStartWithConstZero(Expression& oldExpr) const
 {
     auto oldExprResult = oldExpr.GetResult();
     auto oldExprParent = oldExpr.GetParentBlock();
-    Ptr<LiteralValue> literalValueZero = builder.CreateLiteralValue<IntLiteral>(builder.GetInt64Ty(), 0UL);
+    auto literalValueZero = builder.CreateLiteralValue<IntLiteral>(builder.GetInt64Ty(), 0UL);
     auto newExpr = builder.CreateExpression<Constant>(oldExprResult->GetType(), literalValueZero, oldExprParent);
     newExpr->SetDebugLocation(oldExpr.GetDebugLocation());
 
     oldExpr.ReplaceWith(*newExpr);
-    oldExprResult->ReplaceWith(*newExpr->GetResult(), newExpr->GetParentBlockGroup());
+}
 
-    if (opts.chirDebugOptimizer) {
-        std::string message = "[ArrayListConstStartOpt] The " +
-            ExprKindMgr::Instance()->GetKindName(static_cast<size_t>(oldExpr.GetExprKind())) +
-            ToPosInfo(oldExpr.GetDebugLocation()) + " has been rewrited to a constant\n";
-        std::cout << message;
+void ArrayListConstStartOpt::RewriteStartAfterInline(Function& func) const
+{
+    /** after inline, the ir is like this:
+        public class ArrayList<T> {
+            ...
+            var myData: Array<T>
+            public operator func [](index: Int64, value!: T): Unit {
+                ...
+                arraySetUnchecked(this.myData.rawptr, this.myData.start + index, value)
+            }
+            public operator func ==(other: ArrayList<T>): Bool {
+                ...
+                for (i in this.size - 1..=0 : -1) {
+                    ...
+                    arrayGetUnchecked(this.myData.rawptr, this.myData.start + i)
+                    arrayGetUnchecked(other.myData.rawptr, other.myData.start + i)
+                }
+            }
+        }
+        class ArrayListIterator<T> {
+            ...
+            private let myData: ArrayList<T>
+            public func next(): Option<T> {
+                ...
+                arrayGetUnchecked(myData.myData.rawptr, myData.myData.start + this.myPosition)
+            }
+        }
+    
+    */
+    // 1. collect `myData.myData.start` in ArrayListIterator and `myData.start` in ArrayList
+    std::vector<Field*> startFields;
+    auto collect = [&startFields, &func, this](Expression& e) {
+        auto* field = DynamicCast<Field*>(&e);
+        if (field != nullptr && IsStartOfArrayListMyData(*field, func)) {
+            startFields.push_back(field);
+        }
+        return VisitResult::CONTINUE;
+    };
+    Visitor::Visit(func, collect);
+    // 2. rewrite start with const zero
+    for (auto* field : startFields) {
+        RewriteStartWithConstZero(*field);
     }
 }
 
-void ArrayListConstStartOpt::RunOnPackage(const Ptr<const Package>& package)
+void ArrayListConstStartOpt::RunOnPackage(const Package& package)
 {
-    for (auto func : package->GetGlobalFuncsWithBody()) {
-        bool isArrayListIteratorFunc = InWhiteList(*func, ARRAYLIST_ITERATOR_FUNC_LIST);
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         // only inline array func into arrayList and arrayListIterator func
-        if (!isArrayListIteratorFunc && !InWhiteList(*func, ARRAYLIST_FUNC_LIST)) {
+        if (!InWhiteList(*func, ARRAYLIST_FUNC_LIST)) {
             continue;
         }
 
-        auto preVisit = [this](Expression& e) {
-            if (e.GetExprKind() != ExprKind::APPLY) {
-                return VisitResult::CONTINUE;
+        std::vector<Apply*> applies;
+        auto collectApplies = [&applies, this](Expression& e) {
+            auto apply = DynamicCast<Apply*>(&e);
+            if (apply != nullptr && CheckNeedInline(*apply)) {
+                applies.push_back(apply);
             }
-
-            auto& apply = StaticCast<Apply&>(e);
-            if (CheckNeedRewrite(apply)) {
-                pass.DoFunctionInline(apply, optPassName);
-                MergeEffectMap(pass.GetEffectMap(), effectMap);
-            }
-
             return VisitResult::CONTINUE;
         };
-        Visitor::Visit(*func, preVisit);
+        Visitor::Visit(*func, collectApplies);
 
-        // remove start opt
-        auto removeStartVisit = [this, isArrayListIteratorFunc](Expression& e) {
-            if (e.GetExprKind() != ExprKind::FIELD) {
-                return VisitResult::CONTINUE;
-            }
-
-            auto& field = StaticCast<Field&>(e);
-            // find the Field expression related to the member start of myData in ArrayList
-            if (IsStartAddIndexExpression(field, isArrayListIteratorFunc)) {
-                // change this Field expression to Constant(0)
-                RewriteStartWithConstZero(e);
-            }
-
-            return VisitResult::CONTINUE;
-        };
-        Visitor::Visit(*func, removeStartVisit);
+        // Inline then rewrite start at each site, before other passes can reshape IR.
+        for (auto apply : applies) {
+            pass.DoFunctionInline(*apply, optPassName);
+            MergeEffectMap(pass.GetEffectMap(), effectMap);
+            RewriteStartAfterInline(*func);
+        }
+        // Also rewrite when there is no getUnchecked/setUnchecked to inline but
+        // myData.start is already present in the whitelist function body.
+        RewriteStartAfterInline(*func);
     }
 }
-}  // namespace Cangjie::CHIR2
+} // namespace Cangjie::CHIR
