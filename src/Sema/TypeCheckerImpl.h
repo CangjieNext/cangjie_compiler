@@ -825,6 +825,17 @@ private:
     bool ChkIsExpr(ASTContext& ctx, AST::Ty& target, AST::IsExpr& ie);
     Ptr<AST::Ty> SynAsExpr(ASTContext& ctx, AST::AsExpr& ae);
     bool ChkAsExpr(ASTContext& ctx, AST::Ty& target, AST::AsExpr& ae);
+    /**
+     * Synthesize the type of `e as (A1, A2, ..., An)` (tuple-destructuring cast).
+     * Result type is the tuple (Option<A1>, Option<A2>, ..., Option<An>); left expr must
+     * itself be a tuple of matching arity.
+     */
+    Ptr<AST::Ty> SynAsExprWithTupleType(ASTContext& ctx, AST::AsExpr& ae);
+    /**
+     * Check `e as (A1, ..., An)` against the expected target type. The synthesized type
+     * must be a tuple of matching arity.
+     */
+    bool ChkAsExprWithTupleType(ASTContext& ctx, AST::Ty& target, AST::AsExpr& ae);
     Ptr<AST::Ty> SynOptionalChainExpr(const CheckerContext& ctx, AST::OptionalChainExpr& oce);
     bool ChkOptionalChainExpr(ASTContext& ctx, AST::Ty& target, AST::OptionalChainExpr& oce);
     /**

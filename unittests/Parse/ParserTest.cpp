@@ -2039,6 +2039,41 @@ TEST(ParserTest1, IsAsExpr)
     EXPECT_TRUE(!wrongType);
 }
 
+// Verifies that `e as (A1, A2, ..., An)` is parsed into an AsExpr whose
+// `asType` is a TupleType carrying the inner field types in order.
+TEST(ParserTest1, AsTupleTypeExpr)
+{
+    std::string code = R"(
+        main() {
+            let x: (Int64, String) = (1, "a")
+            let y = x as (Int64, String)
+        }
+)";
+    SourceManager sm;
+    DiagnosticEngine diag;
+    diag.SetSourceManager(&sm);
+    Parser parser(code, diag, sm);
+
+    OwnedPtr<File> file = parser.ParseTopLevel();
+
+    bool found = false;
+    Walker walker(file.get(), [&found](Ptr<Node> node) -> VisitAction {
+        if (auto asExpr = DynamicCast<AsExpr*>(node); asExpr) {
+            if (auto tupleTy = AST::As<ASTKind::TUPLE_TYPE>(asExpr->asType.get()); tupleTy) {
+                EXPECT_EQ(tupleTy->fieldTypes.size(), 2u);
+                if (tupleTy->fieldTypes.size() == 2) {
+                    EXPECT_EQ(tupleTy->fieldTypes[0]->astKind, ASTKind::PRIMITIVE_TYPE);
+                    EXPECT_EQ(tupleTy->fieldTypes[1]->astKind, ASTKind::PRIMITIVE_TYPE);
+                    found = true;
+                }
+            }
+        }
+        return VisitAction::WALK_CHILDREN;
+    });
+    walker.Walk();
+    EXPECT_TRUE(found);
+}
+
 TEST(ParserTest1, OpExprs)
 {
     std::string code = R"(
