@@ -412,19 +412,19 @@ CHIR::Type* GetTypeInnerType(const CHIR::Type& type, const GenericTypeAndPath& g
 
 inline bool IsCoreFutureClass(const CHIR::ClassDef& classDef)
 {
-    return CheckCustomTypeDefIsExpected(classDef, CORE_PACKAGE_NAME, STD_LIB_FUTURE);
+    return IsExpectedCustomType(*classDef.GetType(), CORE_PACKAGE_NAME, STD_LIB_FUTURE);
 }
 
 inline bool IsSyncRelatedClass(const CHIR::ClassDef& classDef)
 {
-    return CheckCustomTypeDefIsExpected(classDef, SYNC_PACKAGE_NAME, STD_LIB_MONITOR) ||
-        CheckCustomTypeDefIsExpected(classDef, SYNC_PACKAGE_NAME, STD_LIB_MUTEX) ||
-        CheckCustomTypeDefIsExpected(classDef, SYNC_PACKAGE_NAME, STD_LIB_WAIT_QUEUE);
+    return IsExpectedCustomType(*classDef.GetType(), SYNC_PACKAGE_NAME, STD_LIB_MONITOR) ||
+        IsExpectedCustomType(*classDef.GetType(), SYNC_PACKAGE_NAME, STD_LIB_MUTEX) ||
+        IsExpectedCustomType(*classDef.GetType(), SYNC_PACKAGE_NAME, STD_LIB_WAIT_QUEUE);
 }
 
 inline bool IsWeakRefClass(const CHIR::ClassDef& classDef)
 {
-    return CheckCustomTypeDefIsExpected(classDef, REF_PACKAGE_NAME, STD_LIB_WEAK_REF);
+    return IsExpectedCustomType(*classDef.GetType(), REF_PACKAGE_NAME, STD_LIB_WEAK_REF);
 }
 
 inline bool IsExternalDefinedType(const CHIR::Type& type)

@@ -21,6 +21,9 @@
 
 #include "cangjie/CHIR/Analysis/CallGraphAnalysis.h"
 
+#include <iostream>
+#include <set>
+
 #include "cangjie/CHIR/Optimization/Devirtualization.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
@@ -253,6 +256,16 @@ void CallGraphAnalysis::PrintCallGraph(const CallGraph& callGraph) const
         }
         message += "\n";
         std::cout << message;
+    }
+
+    std::cout << "[CallGraphAnalysis] SCC Post-Order:\n";
+    for (size_t i = 0; i < postOrderSCCFunctionlist.size(); ++i) {
+        auto* func = postOrderSCCFunctionlist[i];
+        if (func == nullptr) {
+            std::cout << "  [" << i << "] <null>\n";
+            continue;
+        }
+        std::cout << "  [" << i << "] " << func->GetIdentifierWithoutPrefix() << "\n";
     }
 }
 
