@@ -445,10 +445,12 @@ std::vector<FuncBase*> VTableGenerator::CollectMethodsIncludeParentsMayBeInVtabl
     return methods;
 }
 
-std::unordered_map<std::string, VirtualMethodInfo> VTableGenerator::CollectAllPublicAndProtectedMethods(
+std::vector<std::pair<std::string, VirtualMethodInfo>> VTableGenerator::CollectAllPublicAndProtectedMethods(
     const CustomTypeDef& curDef)
 {
-    std::unordered_map<std::string, VirtualMethodInfo> allMethods;
+    // Preserve duplicate candidates and their inheritance order so the most
+    // specific implementation can update entries populated by its ancestors.
+    std::vector<std::pair<std::string, VirtualMethodInfo>> allMethods;
     std::unordered_map<const GenericType*, Type*> emptyTable;
     if (auto extendDef = DynamicCast<const ExtendDef*>(&curDef)) {
         auto brotherDefs = CollectBrotherDefs(*extendDef, builder);
@@ -461,7 +463,7 @@ std::unordered_map<std::string, VirtualMethodInfo> VTableGenerator::CollectAllPu
                 auto parentType = func->GetParentCustomTypeOrExtendedType();
                 CJC_NULLPTR_CHECK(parentType);
                 auto funcInfo = CreateVirtualFuncInfo(*func, *parentType, replaceTable);
-                allMethods.emplace(func->GetIdentifierWithoutPrefix(), std::move(funcInfo));
+                allMethods.emplace_back(func->GetIdentifierWithoutPrefix(), std::move(funcInfo));
             }
         }
     } else if (auto classDef = DynamicCast<ClassDef*>(&curDef)) {
@@ -473,7 +475,7 @@ std::unordered_map<std::string, VirtualMethodInfo> VTableGenerator::CollectAllPu
             if (aMethod.attributeInfo.TestAttr(Attribute::PUBLIC) ||
                 aMethod.attributeInfo.TestAttr(Attribute::PROTECTED)) {
                 auto funcInfo = CreateVirtualFuncInfo(aMethod, *classDef->GetType(), emptyTable);
-                allMethods.emplace(aMethod.GetASTMangledName(), std::move(funcInfo));
+                allMethods.emplace_back(aMethod.GetASTMangledName(), std::move(funcInfo));
             }
         }
     }
@@ -484,7 +486,7 @@ std::unordered_map<std::string, VirtualMethodInfo> VTableGenerator::CollectAllPu
             auto parentType = func->GetParentCustomTypeOrExtendedType();
             CJC_NULLPTR_CHECK(parentType);
             auto funcInfo = CreateVirtualFuncInfo(*func, *parentType, emptyTable);
-            allMethods.emplace(func->GetIdentifierWithoutPrefix(), std::move(funcInfo));
+            allMethods.emplace_back(func->GetIdentifierWithoutPrefix(), std::move(funcInfo));
         }
     }
 
