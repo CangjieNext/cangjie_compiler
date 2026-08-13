@@ -956,7 +956,7 @@ std::string FuncCall::OperandsToString() const
     func += TypeVecToString("<", instantiatedTypeArgs, ">");
     res.emplace_back(func);
     std::vector<Value*> ops;
-    if (auto intrinsic = DynamicCast<const IntrinsicBase*>(this)) {
+    if (Is<const IntrinsicBase*>(this)) {
         ops = operands;
     } else {
         ops = std::vector<Value*>(operands.begin() + 1, operands.end());
