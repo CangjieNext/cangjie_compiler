@@ -16,6 +16,9 @@ using namespace AST;
 using namespace TypeCheckUtil;
 
 namespace {
+// In an anonymous namespace so it has internal linkage; the original file uses
+// `namespace Cangjie::Sema::Desugar::AfterTypeCheck` only for the public
+// `DesugarAsExpr` entry point.
 OwnedPtr<CallExpr> CreateAsExprSomeCall(
     FuncDecl& someDecl, Type& theAsType, VarDecl& varDecl, FuncTy& someCtorTy)
 {
@@ -42,6 +45,108 @@ OwnedPtr<CallExpr> CreateAsExprSomeCall(
     some->SetTy(optionTy);
     return some;
 }
+
+// Build a per-element tuple-access SubscriptExpr `base[i]` carrying the
+// static type of the i-th tuple element. Equivalent to CreateTupleAccess but
+// keeps ownership transfer explicit (no intermediate OwnedPtr that is later
+// moved into a field, which trips static analysis).
+OwnedPtr<SubscriptExpr> BuildElemAccess(Expr& base, size_t i, Ty& elemTy)
+{
+    auto elemAccess = MakeOwnedNode<SubscriptExpr>();
+    elemAccess->baseExpr = ASTCloner::Clone(Ptr(&base));
+    elemAccess->indexExprs.emplace_back(
+        MakeOwnedNode<LitConstExpr>(LitConstKind::INTEGER, std::to_string(i)));
+    elemAccess->indexExprs[0]->constNumValue.asInt.SetUint64(i);
+    elemAccess->isTupleAccess = true;
+    elemAccess->SetTy(&elemTy);
+    return elemAccess;
+}
+
+// Build a sub-AsExpr `e[i] as Ai` whose Ty is the per-element Option<Ai>.
+// `ae` is the outer AsExpr (used for positions).
+OwnedPtr<AsExpr> BuildElemAsExpr(AsExpr& ae, OwnedPtr<Expr> elemAccess, Type& aiTy, Ty& optionElemTy)
+{
+    auto elemAs = MakeOwnedNode<AsExpr>();
+    elemAs->begin = ae.begin;
+    elemAs->end = ae.end;
+    elemAs->asPos = ae.asPos;
+    elemAs->leftExpr = std::move(elemAccess);
+    elemAs->asType = ASTCloner::Clone(Ptr(&aiTy));
+    elemAs->SetTy(&optionElemTy);
+    return elemAs;
+}
+
+// Desugar the tuple-destructuring cast `e as (A1, ..., An)`. Returns true if
+// the cast was handled (success or defensive skip). Caller must check
+// `ae.asType->astKind == TUPLE_TYPE` before invoking.
+bool DesugarAsExprTuple(TypeManager& typeManager, AsExpr& ae)
+{
+    if (!Ty::IsTyCorrect(ae.GetTy()) || !ae.GetTy()->IsTuple()) {
+        return true;
+    }
+    auto tupleAsType = StaticAs<ASTKind::TUPLE_TYPE>(ae.asType.get());
+    auto outerTupleTy = StaticCast<TupleTy*>(ae.GetTy());
+    if (outerTupleTy->typeArgs.size() != tupleAsType->fieldTypes.size()) {
+        return true; // rejected by SynAsExprWithTupleType
+    }
+    auto baseForAccess = ASTCloner::Clone(Ptr(ae.leftExpr.get()));
+    auto tupleLit = MakeOwnedNode<TupleLit>();
+    tupleLit->leftParenPos = tupleAsType->leftParenPos;
+    CopyBasicInfo(&ae, tupleLit.get());
+    for (size_t i = 0; i < tupleAsType->fieldTypes.size(); ++i) {
+        auto elemAccess = BuildElemAccess(*baseForAccess, i, *outerTupleTy->typeArgs[i]);
+        auto elemAs = BuildElemAsExpr(ae, std::move(elemAccess), *tupleAsType->fieldTypes[i],
+            *outerTupleTy->typeArgs[i]);
+        // Recursively desugar so each child becomes the match form in place.
+        DesugarAsExpr(typeManager, *elemAs);
+        tupleLit->children.emplace_back(std::move(elemAs));
+    }
+    tupleLit->SetTy(ae.GetTy());
+    ae.desugarExpr = std::move(tupleLit);
+    ae.desugarExpr->sugarKind = Expr::SugarKind::AS;
+    AddCurFile(*ae.desugarExpr, ae.curFile);
+    return true;
+}
+
+// Desugar the scalar `e as T` cast producing `match { Some(newVar), None }`.
+// Returns true if the cast was handled.
+bool DesugarAsExprOption(TypeManager& typeManager, AsExpr& ae)
+{
+    if (!Ty::IsTyCorrect(ae.GetTy()) || !ae.GetTy()->IsCoreOptionType()) {
+        return true;
+    }
+    auto optionTy = ae.GetTy();
+    auto selectorTy = ae.leftExpr->GetTy();
+    auto theAsType = ASTCloner::Clone(ae.asType.get());
+    auto theAsTy = ae.asType->GetTy();
+    auto optionDecl = StaticCast<EnumTy*>(optionTy)->decl;
+    auto someDecl = StaticCast<FuncDecl*>(LookupEnumMember(optionDecl, OPTION_VALUE_CTOR));
+    auto varPattern = CreateVarPattern(V_COMPILER, theAsTy);
+    auto varDecl = varPattern->varDecl.get();
+    varPattern->begin = ae.asPos;
+    varPattern->end = ae.asPos;
+    varDecl->fullPackageName = ae.GetFullPackageName();
+    auto noneDecl = LookupEnumMember(optionDecl, OPTION_NONE_CTOR);
+    auto wildcard = MakeOwnedNode<WildcardPattern>();
+    wildcard->SetTy(selectorTy);
+    auto none = CreateRefExpr(*noneDecl);
+    CopyBasicInfo(&ae, none.get());
+    none->typeArguments.emplace_back(std::move(theAsType));
+    none->instTys.emplace_back(theAsTy);
+    none->SetTy(optionTy);
+    std::vector<OwnedPtr<MatchCase>> matchCases;
+    matchCases.emplace_back(
+        CreateMatchCase(
+            CreateRuntimePreparedTypePattern(typeManager, std::move(varPattern), std::move(ae.asType),
+                *ae.leftExpr),
+            CreateAsExprSomeCall(*someDecl, *none->typeArguments[0], *varDecl,
+                *typeManager.GetFunctionTy({theAsTy}, optionTy))));
+    matchCases.emplace_back(CreateMatchCase(std::move(wildcard), std::move(none)));
+    ae.desugarExpr = CreateMatchExpr(std::move(ae.leftExpr), std::move(matchCases), optionTy, Expr::SugarKind::AS);
+    CopyBasicInfo(&ae, ae.desugarExpr.get());
+    AddCurFile(*ae.desugarExpr, ae.curFile);
+    return true;
+}
 } // namespace
 
 namespace Cangjie::Sema::Desugar::AfterTypeCheck {
@@ -57,43 +162,17 @@ namespace Cangjie::Sema::Desugar::AfterTypeCheck {
  * */
 void DesugarAsExpr(TypeManager& typeManager, AsExpr& ae)
 {
-    if (!Ty::IsTyCorrect(ae.GetTy()) || !ae.GetTy()->IsCoreOptionType() || ae.desugarExpr) {
+    if (ae.desugarExpr) {
         return;
     }
     CJC_NULLPTR_CHECK(ae.leftExpr);
     CJC_NULLPTR_CHECK(ae.asType);
     CJC_NULLPTR_CHECK(ae.leftExpr->GetTy());
     CJC_NULLPTR_CHECK(ae.asType->GetTy());
-    auto optionTy = ae.GetTy();
-    auto selectorTy = ae.leftExpr->GetTy();
-    auto theAsType = ASTCloner::Clone(ae.asType.get());
-    auto theAsTy = ae.asType->GetTy();
-    auto optionDecl = StaticCast<EnumTy*>(optionTy)->decl;
-    CJC_NULLPTR_CHECK(optionDecl);
-    auto someDecl = StaticCast<FuncDecl*>(LookupEnumMember(optionDecl, OPTION_VALUE_CTOR));
-    CJC_NULLPTR_CHECK(someDecl);
-    std::vector<OwnedPtr<MatchCase>> matchCases;
-    auto varPattern = CreateVarPattern(V_COMPILER, theAsTy);
-    varPattern->begin = ae.asPos;
-    varPattern->end = ae.asPos;
-    auto varDecl = varPattern->varDecl.get();
-    varDecl->fullPackageName = ae.GetFullPackageName();
-    matchCases.emplace_back(
-        CreateMatchCase(
-            CreateRuntimePreparedTypePattern(typeManager, std::move(varPattern), std::move(ae.asType), *ae.leftExpr),
-            CreateAsExprSomeCall(*someDecl, *theAsType, *varDecl, *typeManager.GetFunctionTy({theAsTy}, optionTy))));
-    auto wildcard = MakeOwnedNode<WildcardPattern>();
-    wildcard->SetTy(selectorTy);
-    auto noneDecl = LookupEnumMember(optionDecl, OPTION_NONE_CTOR);
-    CJC_NULLPTR_CHECK(noneDecl);
-    auto none = CreateRefExpr(*noneDecl);
-    CopyBasicInfo(&ae, none.get());
-    none->typeArguments.emplace_back(std::move(theAsType));
-    none->instTys.emplace_back(theAsTy);
-    none->SetTy(optionTy);
-    matchCases.emplace_back(CreateMatchCase(std::move(wildcard), std::move(none)));
-    ae.desugarExpr = CreateMatchExpr(std::move(ae.leftExpr), std::move(matchCases), optionTy, Expr::SugarKind::AS);
-    CopyBasicInfo(&ae, ae.desugarExpr.get());
-    AddCurFile(*ae.desugarExpr, ae.curFile);
+    if (ae.asType->astKind == ASTKind::TUPLE_TYPE) {
+        DesugarAsExprTuple(typeManager, ae);
+    } else {
+        DesugarAsExprOption(typeManager, ae);
+    }
 }
 } // namespace Cangjie::Sema::Desugar::AfterTypeCheck
