@@ -494,17 +494,6 @@ public:
     OwnedPtr<Block> CreateJavaMethodCallBlock(Ptr<File> curFile, FuncParamList& paramList, Ptr<Ty> retTy,
         bool isStatic, OwnedPtr<Expr> javaRef, const MemberJNISignature& signature);
 
-   /**
-    * Creates a block that prepares the JNI state and invokes the Java
-    * superclass method corresponding to the given call.
-    *
-    * @param impl      JavaImpl class containing the call.
-    * @param call      Original super-method call expression.
-    * @param signature JNI signature of the target superclass method.
-    */
-    OwnedPtr<Block> CreateJavaSuperMethodCallBlock(ClassDecl& impl, CallExpr& call,
-        const MemberJNISignature& signature);
-
     /**
      * Java_CFFI_removeFromRegistry(registryId)
      */

@@ -774,7 +774,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateGetMethodIdCall(Ptr<Expr> env, OwnedP
         std::move(clazz), std::move(methodName), std::move(signatureStr));
 }
 
-OwnedPtr<CallExpr> InteropLibBridge::CreateAsJObjectCall(OwnedPtr<Expr> javaEntity)
+OwnedPtr<CallExpr> InteropLibBridge::CreateAsJniJobjectCall(OwnedPtr<Expr> javaEntity)
 {
     CJC_NULLPTR_CHECK(javaEntity);
     auto curFile = javaEntity->curFile;
@@ -787,64 +787,6 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateAsJObjectCall(OwnedPtr<Expr> javaEnti
         retTy, CallKind::CALL_DECLARED_FUNCTION);
     callExpr->curFile = curFile;
     return callExpr;
-}
-
-OwnedPtr<Block> InteropLibBridge::CreateJavaSuperMethodCallBlock(ClassDecl& impl, CallExpr& call,
-    const MemberJNISignature& signature)
-{
-    auto curFile = call.curFile;
-    CJC_NULLPTR_CHECK(curFile);
-    static auto jniEnvPtrDecl = GetJniEnvPtrDecl();
-    CJC_NULLPTR_CHECK(jniEnvPtrDecl);
-    auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, CreateGetJniEnvCall(curFile));
-    std::vector<OwnedPtr<Expr>> jniArgs;
-    for (auto& arg : call.args) {
-        auto argExpr = ASTCloner::Clone(arg->expr.get());
-        CJC_NULLPTR_CHECK(argExpr);
-        jniArgs.emplace_back(CreateJValueExpr(std::move(argExpr)));
-    }
-    const bool hasArgs = !call.args.empty();
-    OwnedPtr<VarDecl> argsVar = nullptr;
-    OwnedPtr<Expr> argsRef = nullptr;
-    if (hasArgs) {
-        argsVar = CreateJNIArgsVar(std::move(jniArgs), *curFile);
-        argsRef = WithinFile(CreateRefExpr(*argsVar), curFile);
-    }
-    auto clazzVar = CreateJNIClassVar(WithinFile(CreateRefExpr(*jniEnvVar), curFile),
-        signature.classTypeSignature);
-    auto methodId = CreateGetMethodIdCall(WithinFile(CreateRefExpr(*jniEnvVar), curFile),
-        WithinFile(CreateRefExpr(*clazzVar), curFile), signature.name,
-        signature.signature, false);
-    CJC_NULLPTR_CHECK(methodId);
-    auto retTy = call.GetTy();
-    auto jniFunction = GetJNINativeInterfaceField(SelectJNIInstanceMethodName(retTy->kind, false, hasArgs));
-    CJC_NULLPTR_CHECK(jniFunction);
-    auto javaRef = CreateJavaRefCall(impl, curFile);
-    std::vector<OwnedPtr<FuncArg>> callArgs;
-    callArgs.emplace_back(CreateFuncArg(WithinFile(CreateRefExpr(*jniEnvVar), curFile)));
-    callArgs.emplace_back(CreateFuncArg(CreateAsJObjectCall(std::move(javaRef))));
-    callArgs.emplace_back(CreateFuncArg(WithinFile(CreateRefExpr(*clazzVar), curFile)));
-    callArgs.emplace_back(CreateFuncArg(std::move(methodId)));
-    if (hasArgs) {
-        callArgs.emplace_back(PrepareJNIArgsVArray(std::move(argsRef)));
-    }
-    auto jniMethodCall = CreateJNICall(WithinFile(CreateRefExpr(*jniEnvVar), curFile),
-        jniFunction, std::move(callArgs));
-    CJC_NULLPTR_CHECK(jniMethodCall);
-    OwnedPtr<Expr> methodCall = std::move(jniMethodCall);
-    if (!retTy->IsPrimitive()) {
-        methodCall = CreateJavaEntityJobjectCall(std::move(methodCall));
-    }
-    auto resultExpr = ConvertJavaResultToCJ(std::move(methodCall), retTy, impl);
-    CJC_NULLPTR_CHECK(resultExpr);
-    std::vector<OwnedPtr<Node>> nodes;
-    nodes.emplace_back(std::move(jniEnvVar));
-    nodes.emplace_back(std::move(clazzVar));
-    if (hasArgs) {
-        nodes.emplace_back(std::move(argsVar));
-    }
-    nodes.emplace_back(std::move(resultExpr));
-    return CreateBlock(std::move(nodes), call.GetTy());
 }
 
 OwnedPtr<Block> InteropLibBridge::CreateJavaMethodCallBlock(Ptr<File> curFile, FuncParamList& paramList,
@@ -1269,7 +1211,7 @@ OwnedPtr<Expr> InteropLibBridge::ConvertJavaResultToCJ(OwnedPtr<Expr> result, Pt
         return UnwrapJavaEntity(std::move(result), resultTy, scope);
     }
     if (resultTy->kind == TypeKind::TYPE_BOOLEAN) {
-        auto zero = CreateLitConstExpr(LitConstKind::INTEGER, "0", result->GetTy());
+        auto zero = CreateLitConstExpr(LitConstKind::INTEGER, "0", result->GetTy()); // JNI_FALSE constant
         auto cmp = CreateBinaryExpr(std::move(result), std::move(zero), TokenKind::NOTEQ);
         cmp->SetTy(typeManager.GetPrimitiveTy(TypeKind::TYPE_BOOLEAN));
         return cmp;

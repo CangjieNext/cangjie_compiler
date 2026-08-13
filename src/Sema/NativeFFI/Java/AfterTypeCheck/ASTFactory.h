@@ -39,7 +39,7 @@ public:
         std::vector<OwnedPtr<AST::Expr>> args) const;
 
     /*
-     * Creates expression with `javaClassTy` (as a mirror/impl type) constructor call via JNI.
+     * Creates expression of `javaClassTy` (as a mirror/impl type) constructor call via JNI.
      * Returned expr has `JavaEntity` ty.
      * `args` are java-compatible arguments.
      * `constructor` is Cangjie declaration of Java constructor that should be called.
@@ -56,14 +56,30 @@ public:
         AST::FuncDecl& constructor,
         std::vector<OwnedPtr<AST::Expr>> args) const;
 
+    /**
+     * Creates expression of `call.GetTy()` type super method call via JNI.
+     * Returned expr has java-compatible ty (converted from raw jni form into java-compatible).
+     */
     OwnedPtr<AST::Expr> CreateSuperJavaMethodCall(AfterTypeCheckContext& ctx,
         Ptr<AST::Expr> jniEnvPtr,
         AST::ClassDecl& child, AST::CallExpr& call, std::vector<OwnedPtr<AST::Expr>> args) const;
 
     /**
+     * Creates expression of `call.GetTy()` type super method call via JNI.
+     * Returned expr has java-compatible ty (converted from raw jni form into java-compatible).
+     *
+     * In comparison with the overloaded version accepting `Ptr<AST::Expr> jniEnvPtr` parameter,
+     * this function creates and caches jniEnvPtr by itself.
+     */
+    OwnedPtr<AST::Expr> CreateSuperJavaMethodCall(AfterTypeCheckContext& ctx, AST::ClassDecl& child,
+        AST::CallExpr& call, std::vector<OwnedPtr<AST::Expr>> args) const;
+
+    /**
      * Creates usages as RefExpr over parameters in `paramList`.
      */
     std::vector<OwnedPtr<AST::Expr>> CreateParamsUsage(const AST::FuncParamList& paramList) const;
+
+    std::vector<OwnedPtr<AST::Expr>> ExtractArgExprs(const std::vector<OwnedPtr<FuncArg>>& args) const;
 
 private:
 
