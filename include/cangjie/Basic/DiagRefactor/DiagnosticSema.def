@@ -12,6 +12,13 @@ ERROR(sema_unable_to_infer_decl, "unable to infer declaration type, please add t
 ERROR(sema_mismatched_types, "mismatched types", "expected '%s', found '%s'")
 ERROR(sema_mismatched_types_multiple_assign, "mismatched types", "the expression has type '%s'")
 ERROR(sema_mismatched_types_because, "mismatched types", "expected '%s', found '%s'", {"expected '%s' because of %s"})
+// Tuple-destructuring cast (`e as (A1, ..., An)`) errors. These are intentionally
+// emitted only via DiagKindRefactor so that they share the same code path as other
+// refactored diagnostics; the entry here exists for the kind symbol to be defined.
+ERROR(sema_invalid_tuple_destructuring_cast_left,
+    "the left-hand side of 'as (A1, A2, ...)' must be a tuple type")
+ERROR(sema_invalid_tuple_destructuring_cast_arity,
+    "the left-hand tuple has %s element(s) but the target type 'as (...)' has %s element(s)")
 ERROR(sema_ambiguous_use, "ambiguous use of '%s'")
 ERROR(sema_undeclared_identifier, "undeclared identifier '%s'")
 ERROR(sema_undefined_variable, "variable '%s' is used before being defined")

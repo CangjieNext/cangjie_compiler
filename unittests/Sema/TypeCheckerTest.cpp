@@ -11,7 +11,9 @@
 #include "gtest/gtest.h"
 #include "TestCompilerInstance.h"
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/Node.h"
 #include "cangjie/AST/PrintNode.h"
+#include "cangjie/AST/Types.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/Match.h"
 
@@ -811,4 +813,114 @@ main(): Int64 {
         return VisitAction::WALK_CHILDREN;
     });
     checker.Walk();
+}
+
+// Tuple-destructuring cast (`e as (A1, ..., An)`) end-to-end through Sema.
+// Verifies the synthesized result type is a tuple of per-element Options and
+// that the outer desugar rewrites the AsExpr into a TupleLit whose children
+// are themselves desugared AsExprs.
+TEST_F(TypeCheckerTest, AsTupleTypeDestructuringSucceeds)
+{
+    std::string code = R"(
+open class Base {}
+class Derived <: Base {}
+
+main() {
+    let tup: (Base, Base) = (Base(), Base())
+    let (a, b) = tup as (Base, Derived)
+    return 0
+}
+)";
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    auto ret = instance->Compile(CompileStage::DESUGAR_AFTER_SEMA);
+    ret = ret && instance->PerformDesugarAfterSema();
+    ASSERT_TRUE(ret);
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+
+    bool foundTupleAs = false;
+    bool foundTupleLit = false;
+    Walker walker(instance->GetSourcePackages()[0]->files[0].get(),
+        [&foundTupleAs, &foundTupleLit](Ptr<Node> node) -> VisitAction {
+            if (auto asExpr = DynamicCast<AsExpr*>(node); asExpr) {
+                if (asExpr->asType && asExpr->asType->astKind == ASTKind::TUPLE_TYPE) {
+                    foundTupleAs = true;
+                    EXPECT_TRUE(Ty::IsTyCorrect(asExpr->GetTy()));
+                    if (Ty::IsTyCorrect(asExpr->GetTy())) {
+                        EXPECT_TRUE(asExpr->GetTy()->IsTuple());
+                        auto tupleTy = StaticCast<TupleTy*>(asExpr->GetTy().get());
+                        EXPECT_EQ(tupleTy->typeArgs.size(), 2u);
+                        for (auto& elemTy : tupleTy->typeArgs) {
+                            EXPECT_TRUE(elemTy->IsCoreOptionType());
+                        }
+                    }
+                    // After desugar, the original AsExpr's desugarExpr should be
+                    // a TupleLit.
+                    if (asExpr->desugarExpr) {
+                        if (auto tl = DynamicCast<TupleLit*>(asExpr->desugarExpr.get().get()); tl) {
+                            foundTupleLit = true;
+                            EXPECT_EQ(tl->children.size(), 2u);
+                            for (auto& child : tl->children) {
+                                auto inner = DynamicCast<AsExpr*>(child.get());
+                                ASSERT_TRUE(inner);
+                                EXPECT_TRUE(inner->desugarExpr != nullptr);
+                            }
+                        }
+                    }
+                }
+            }
+            return VisitAction::WALK_CHILDREN;
+        });
+    walker.Walk();
+    EXPECT_TRUE(foundTupleAs);
+    EXPECT_TRUE(foundTupleLit);
+}
+
+// Left-hand side is not a tuple: must be rejected by Sema.
+TEST_F(TypeCheckerTest, AsTupleTypeLeftNotTupleFails)
+{
+    std::string code = R"(
+main() {
+    let x = 1 as (Int64, String)
+    return 0
+}
+)";
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->Compile(CompileStage::SEMA);
+    EXPECT_GE(diag.GetErrorCount(), 1);
+}
+
+// Arity mismatch: left-hand tuple and target tuple have different sizes.
+TEST_F(TypeCheckerTest, AsTupleTypeArityMismatchFails)
+{
+    std::string code = R"(
+main() {
+    let tup: (Int64, Int64, Int64) = (1, 2, 3)
+    let (a, b) = tup as (Int64, String)
+    return 0
+}
+)";
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->Compile(CompileStage::SEMA);
+    EXPECT_GE(diag.GetErrorCount(), 1);
+}
+
+// Nested tuple-destructuring cast.
+TEST_F(TypeCheckerTest, AsTupleTypeNestedSucceeds)
+{
+    std::string code = R"(
+main() {
+    let tup: ((Int64, String), Float64) = ((1, "x"), 3.14)
+    let ((a, b), c) = tup as ((Int64, String), Float64)
+    return 0
+}
+)";
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    auto ret = instance->Compile(CompileStage::DESUGAR_AFTER_SEMA);
+    ret = ret && instance->PerformDesugarAfterSema();
+    ASSERT_TRUE(ret);
+    EXPECT_EQ(diag.GetErrorCount(), 0);
 }
