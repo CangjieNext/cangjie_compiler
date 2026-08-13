@@ -49,15 +49,20 @@ static const std::vector<AST::ASTKind> ignoredKind = {
 
 class CastASTTests : public testing::Test {
 protected:
+    // Must be a template so `if constexpr` can discard MakeOwned for types without a default ctor.
+    template <typename TYPE> static void EmplaceDefaultNode(AST::ASTKind kind)
+    {
+        if constexpr (IgnoredType<TYPE>()) {
+            auto nodePtr = MakeOwned<TYPE>();
+            astMap.emplace(kind, nodePtr.get());
+            astPool.emplace_back(std::move(nodePtr));
+        }
+    }
+
     static void SetUpTestCase()
     {
 #ifndef CANGJIE_ENABLE_GCOV
-#define ASTKIND(KIND, VALUE, TYPE, SIZE)                                                                               \
-    if constexpr (IgnoredType<AST::TYPE>()) {                                                                          \
-        auto nodePtr = MakeOwned<AST::TYPE>();                                                                         \
-        astMap.emplace(AST::ASTKind::KIND, nodePtr.get());                                                             \
-        astPool.emplace_back(std::move(nodePtr));                                                                      \
-    }
+#define ASTKIND(KIND, VALUE, TYPE, SIZE) EmplaceDefaultNode<AST::TYPE>(AST::ASTKind::KIND);
 #include "cangjie/AST/ASTKind.inc"
 #undef ASTKIND
 #endif
