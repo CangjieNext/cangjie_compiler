@@ -10,6 +10,7 @@
 #include "cangjie/CHIR/Analysis/DevirtualizationInfo.h"
 #include "cangjie/CHIR/Analysis/Engine.h"
 #include "cangjie/CHIR/Analysis/Utils.h"
+#include "cangjie/CHIR/IR/Annotation.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
 #include "cangjie/CHIR/Utils/UserDefinedType.h"
 #include "cangjie/CHIR/Utils/Utils.h"
@@ -33,6 +34,7 @@ static void RewriteInvokeStatic(Expression* expr,
 {
     auto invoke = DynamicCast<InvokeStatic*>(expr);
     if (!invoke) { return; }
+    if (!invoke->GetInstantiatedTypeArgs().empty()) { return; }
     auto rttiLocalVar = DynamicCast<LocalVar>(invoke->GetRTTIValue());
     if (!rttiLocalVar) { return; }
     auto value = rttiLocalVar->GetExpr();
@@ -45,25 +47,52 @@ static void RewriteInvokeStatic(Expression* expr,
     }
 
     auto clazz = StaticCast<ClassType*>(thisType);
-    if (rttiStatic->GetRTTIType()->StripAllRefs() == clazz) {
-        auto thisTypeRef = invoke->GetThisType();
-
-        // Note: GetExpectedFunc does not support instantiated generic functions
-        // for now, so this optimization does not support them as well
-        std::vector<Type*> funcInstTypeArgs;
-        auto expectedFunc = clazz->GetExpectedFunc(
-            invoke->GetMethodName(),
-            *invoke->GetMethodType(),
-            /*isStatic=*/true, funcInstTypeArgs, builder, /*checkAbstractMethod=*/false);
-
-        if (!expectedFunc) { return; }
-
-        rewriteInfos.push_back({
-            .invokeStatic = invoke,
-            .realCallee = expectedFunc,
-            .thisType = thisTypeRef
-        });
+    if (rttiStatic->GetRTTIType()->StripAllRefs() != clazz) {
+        return;
     }
+
+    // Resolve the callee via vtable using the actual argument types.
+    // GetExpectedFunc(methodName, GetMethodType()) is incorrect when the same
+    // generic interface method is instantiated multiple times on one type
+    // (e.g. I<Int64>.f1 and I<String>.f1): both share name "f1" and a generic
+    // method type, so the first overload is always chosen and can create a
+    // self-recursive Apply (infinite loop at -O2).
+    std::vector<Type*> instParamTypes;
+    for (auto arg : invoke->GetArgs()) {
+        instParamTypes.emplace_back(arg->GetType());
+    }
+    auto instFuncType = builder.GetType<FuncType>(instParamTypes, builder.GetUnitTy());
+    FuncCallType funcCallType{invoke->GetMethodName(), instFuncType, invoke->GetInstantiatedTypeArgs()};
+    auto candidates = GetFuncIndexInVTable(*clazz, funcCallType, builder);
+    if (candidates.empty()) {
+        return;
+    }
+
+    Function* expectedFunc = nullptr;
+    auto preferOffset = invoke->Get<VirMethodOffset>();
+    for (auto& cand : candidates) {
+        if (preferOffset.has_value() && cand.offset != preferOffset.value()) {
+            continue;
+        }
+        if (cand.instance == nullptr || cand.instance->IsPureAbstract()) {
+            continue;
+        }
+        expectedFunc = cand.instance;
+        break;
+    }
+    if (expectedFunc == nullptr) {
+        return;
+    }
+    // Call the original method, not the boxing wrapper, so Apply args stay unboxed.
+    if (auto rawFunc = expectedFunc->Get<WrappedRawMethod>()) {
+        expectedFunc = rawFunc;
+    }
+
+    rewriteInfos.push_back({
+        .invokeStatic = invoke,
+        .realCallee = expectedFunc,
+        .thisType = invoke->GetThisType()
+    });
 }
 
 void DevirtualizeTrivialStatics::RunOnFunc(const Function* func, CHIRBuilder& builder)
