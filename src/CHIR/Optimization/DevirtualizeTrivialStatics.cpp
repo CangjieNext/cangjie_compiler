@@ -10,6 +10,7 @@
 #include "cangjie/CHIR/Analysis/DevirtualizationInfo.h"
 #include "cangjie/CHIR/Analysis/Engine.h"
 #include "cangjie/CHIR/Analysis/Utils.h"
+#include "cangjie/CHIR/IR/Annotation.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
 #include "cangjie/CHIR/Utils/UserDefinedType.h"
 #include "cangjie/CHIR/Utils/Utils.h"
@@ -27,12 +28,61 @@ void DevirtualizeTrivialStatics::RunOnPackage(const Package& package, CHIRBuilde
     RewriteToApply(builder, rewriteInfos, isDebug);
 }
 
+static Function* ResolveStaticCallee(InvokeStatic& invoke, ClassType& clazz, CHIRBuilder& builder)
+{
+    // Resolve the callee via vtable using the actual argument types.
+    // GetExpectedFunc(methodName, GetMethodType()) is incorrect when the same
+    // generic interface method is instantiated multiple times on one type
+    // (e.g. I<Int64>.f1 and I<String>.f1): both share name "f1" and a generic
+    // method type, so the first overload is always chosen and can create a
+    // self-recursive Apply (infinite loop at -O2).
+    //
+    // Instantiated type args are intentionally empty: callers with non-empty
+    // instTypeArgs are filtered out before this helper is invoked.
+    std::vector<Type*> instParamTypes;
+    for (auto arg : invoke.GetArgs()) {
+        instParamTypes.emplace_back(arg->GetType());
+    }
+    auto instFuncType = builder.GetType<FuncType>(instParamTypes, builder.GetUnitTy());
+    FuncCallType funcCallType{invoke.GetMethodName(), instFuncType, {}};
+    auto candidates = GetFuncIndexInVTable(clazz, funcCallType, builder);
+    for (auto& cand : candidates) {
+        if (cand.instance == nullptr || cand.instance->IsPureAbstract()) {
+            continue;
+        }
+        auto expectedFunc = cand.instance;
+        // Prefer the original method over its boxing wrapper so Apply args stay unboxed.
+        // ParamTypeIsEquivalent tolerates box-ref differences during matching, but
+        // RewriteToApply reuses invoke args without TypeCastOrBoxIfNeeded; only unwrap
+        // when every argument type exactly matches the raw parameter type.
+        if (auto rawFunc = expectedFunc->Get<WrappedRawMethod>()) {
+            auto rawParams = rawFunc->GetFuncType()->GetParamTypes();
+            auto args = invoke.GetArgs();
+            if (rawParams.size() != args.size()) {
+                return nullptr;
+            }
+            for (size_t i = 0; i < args.size(); ++i) {
+                if (args[i]->GetType() != rawParams[i]) {
+                    return nullptr;
+                }
+            }
+            expectedFunc = rawFunc;
+        }
+        return expectedFunc;
+    }
+    return nullptr;
+}
+
 static void RewriteInvokeStatic(Expression* expr,
     CHIRBuilder& builder,
     std::vector<DevirtualizeTrivialStatics::RewriteInfo>& rewriteInfos)
 {
     auto invoke = DynamicCast<InvokeStatic*>(expr);
     if (!invoke) { return; }
+    // RewriteToApply builds FuncCallContext without instTypeArgs. Generic static
+    // calls must be skipped here; otherwise Apply would lose instantiation info
+    // and can ICE
+    if (!invoke->GetInstantiatedTypeArgs().empty()) { return; }
     auto rttiLocalVar = DynamicCast<LocalVar>(invoke->GetRTTIValue());
     if (!rttiLocalVar) { return; }
     auto value = rttiLocalVar->GetExpr();
@@ -45,25 +95,20 @@ static void RewriteInvokeStatic(Expression* expr,
     }
 
     auto clazz = StaticCast<ClassType*>(thisType);
-    if (rttiStatic->GetRTTIType()->StripAllRefs() == clazz) {
-        auto thisTypeRef = invoke->GetThisType();
-
-        // Note: GetExpectedFunc does not support instantiated generic functions
-        // for now, so this optimization does not support them as well
-        std::vector<Type*> funcInstTypeArgs;
-        auto expectedFunc = clazz->GetExpectedFunc(
-            invoke->GetMethodName(),
-            *invoke->GetMethodType(),
-            /*isStatic=*/true, funcInstTypeArgs, builder, /*checkAbstractMethod=*/false);
-
-        if (!expectedFunc) { return; }
-
-        rewriteInfos.push_back({
-            .invokeStatic = invoke,
-            .realCallee = expectedFunc,
-            .thisType = thisTypeRef
-        });
+    if (rttiStatic->GetRTTIType()->StripAllRefs() != clazz) {
+        return;
     }
+
+    auto expectedFunc = ResolveStaticCallee(*invoke, *clazz, builder);
+    if (expectedFunc == nullptr) {
+        return;
+    }
+
+    rewriteInfos.push_back({
+        .invokeStatic = invoke,
+        .realCallee = expectedFunc,
+        .thisType = invoke->GetThisType()
+    });
 }
 
 void DevirtualizeTrivialStatics::RunOnFunc(const Function* func, CHIRBuilder& builder)
