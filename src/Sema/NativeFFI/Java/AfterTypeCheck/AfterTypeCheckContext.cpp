@@ -83,7 +83,7 @@ std::vector<Ptr<FuncDecl>> AfterTypeCheckContext::GetJavaImplUserDefinedConstruc
     std::vector<Ptr<FuncDecl>> ctors;
 
     for (auto member : refWrapper.GetMemberDeclPtrs()) {
-        if (!IsJavaImplUserDefinedConstructor(*member)) {
+        if (!IsUserDefinedJavaImplConstructor(*member)) {
             continue;
         }
         ctors.emplace_back(StaticAs<ASTKind::FUNC_DECL>(member));

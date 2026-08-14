@@ -243,6 +243,72 @@ std::string GetFQNameJoinBy(const std::string& name, std::string_view separator)
 }
 } // namespace
 
+std::string GetJniTypeSignature(const AST::Ty& javaCompatibleTy, bool withinArray = false)
+{
+    constexpr static std::string_view javaStringJniName = "java/lang/String";
+    static std::map<TypeKind, std::string> primitiveTypeMapper = {
+        {TypeKind::TYPE_UNIT, "V"},
+        {TypeKind::TYPE_BOOLEAN, "Z"},
+        {TypeKind::TYPE_INT8, "B"},
+        {TypeKind::TYPE_UINT16, "C"},
+        {TypeKind::TYPE_INT16, "S"},
+        {TypeKind::TYPE_INT32, "I"},
+        {TypeKind::TYPE_INT64, "J"},
+        {TypeKind::TYPE_FLOAT32, "F"},
+        {TypeKind::TYPE_FLOAT64, "D"},
+    };
+    static auto wrapAsArrayElementSignature = [](const std::string_view elementSignature) {
+        return std::string{"L"} + std::string{elementSignature} + ";";
+    };
+
+    if (javaCompatibleTy.IsPrimitive()) {
+        return primitiveTypeMapper[javaCompatibleTy.kind];
+    }
+
+    if (javaCompatibleTy.IsString()) {
+        return withinArray
+            ? wrapAsArrayElementSignature(javaStringJniName)
+            : std::string{javaStringJniName};
+    }
+    // if (javaCompatibleTy.IsStructArray()) {
+        // return "[" + GetJniTypeSignature(*javaCompatibleTy.typeArgs[0], /* withinArray = */ true);
+    // }
+
+    if (javaCompatibleTy.IsCoreOptionType()) {
+        CJC_ASSERT_WITH_MSG(!javaCompatibleTy.typeArgs.empty(), "Option type must be generic");
+        auto& argTy = *javaCompatibleTy.typeArgs[0];
+        return GetJniTypeSignature(argTy, withinArray);
+        // if (IsJArray(argTy)) {
+            // jsig = GetJniTypeSignature(argTy);
+        // } else {
+            // jsig = "L" + NormalizeJavaSignature(GetJavaObjectTypeName(argTy)) + ";";
+        // }
+    }
+
+    if (javaCompatibleTy.IsClassLike()) {
+        if (IsJArray(*StaticCast<ClassLikeTy&>(javaCompatibleTy).commonDecl)) {
+            return "[" + GetJniTypeSignature(*javaCompatibleTy.typeArgs[0], /* withinArray = */ true);
+        } else {
+            NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(javaCompatibleTy).commonDecl));
+            // jsig = "L" + NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(cjtype).commonDecl)) + ";";
+        }
+    }
+
+    if (javaCompatibleTy.IsFunc()) {
+        auto& funcTy = StaticCast<FuncTy&>(javaCompatibleTy);
+        std::string signature = "(";
+        for (auto paramTy : funcTy.paramTys) {
+            signature.append(GetJniTypeSignature(*paramTy, withinArray));
+        }
+        signature.append(")");
+        signature.append(GetJniTypeSignature(*funcTy.retTy, withinArray));
+        return signature;
+    }
+
+    CJC_ABORT(); // Unreachable state. This function should be called only on java-compatible types.
+    return "";
+}
+
 std::string GetJavaFQName(const Decl& decl)
 {
     if (auto extendDecl = DynamicCast<const ExtendDecl*>(&decl)) {

@@ -74,6 +74,13 @@ public:
     OwnedPtr<AST::Expr> CreateSuperJavaMethodCall(AfterTypeCheckContext& ctx, AST::ClassDecl& child,
         AST::CallExpr& call, std::vector<OwnedPtr<AST::Expr>> args) const;
 
+    OwnedPtr<AST::Expr> CreateJavaMethodCall(AfterTypeCheckContext& ctx,
+        Ptr<Expr> jniEnvPtr,
+        FuncDecl& method, bool isStatic, std::vector<OwnedPtr<Expr>> args) const;
+
+    OwnedPtr<AST::Expr> CreateJavaMethodCall(AfterTypeCheckContext& ctx,
+        File& curFile, FuncDecl& method, bool isStatic, std::vector<OwnedPtr<Expr>> args) const;
+
     /**
      * Creates usages as RefExpr over parameters in `paramList`.
      */

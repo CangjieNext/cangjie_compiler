@@ -50,6 +50,8 @@ bool IsJavaImplRegistryCompanionReferenceField(const AST::Node& node);
 
 bool IsUserDefinedJavaImplConstructor(const AST::Decl& implMember);
 
+std::string GetJniTypeSignature(const AST::Ty& javaCompatibleTy, bool withinArray);
+
 /**
  * Returns fully-qualified name of the decl or fq-name specified in @JavaMirror/@JavaImpl as attribute,
  * which is used as target class name for JNI calls

@@ -6,6 +6,7 @@
 
 #include "ASTFactory.h"
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
+#include "NativeFFI/Java/AfterTypeCheck/InteropLibBridge.h"
 #include "NativeFFI/Java/AfterTypeCheck/JniBridge.h"
 #include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 #include "NativeFFI/Java/Utils.h"
@@ -178,6 +179,154 @@ OwnedPtr<Expr> CreateNonvirtualJavaMethodCall(JniBridge& jni, const Ty& retTy, P
                 ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
     }
 }
+
+OwnedPtr<Expr> CreateVirtualInstanceJavaMethodCall(JniBridge& jni,
+    const Ty& retTy, Ptr<Expr> jniEnvPtr, Ptr<Expr> jobject, Ptr<Expr> jmethod)
+{
+    switch (retTy.kind) {
+        case TypeKind::TYPE_UNIT:
+            return jni.interface.CreateCallVoidMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_BOOLEAN:
+            return jni.interface.CreateCallBooleanMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT8:
+            return jni.interface.CreateCallByteMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_UINT16:
+            return jni.interface.CreateCallCharMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT16:
+            return jni.interface.CreateCallShortMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT32:
+            return jni.interface.CreateCallIntMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT64:
+            return jni.interface.CreateCallLongMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_FLOAT32:
+            return jni.interface.CreateCallFloatMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_FLOAT64:
+            return jni.interface.CreateCallDoubleMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        default:
+            return jni.interface.CreateCallObjectMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+    }
+}
+
+OwnedPtr<Expr> CreateVirtualInstanceJavaMethodCall(JniBridge& jni,
+    const Ty& retTy, Ptr<Expr> jniEnvPtr, Ptr<Expr> jobject, Ptr<Expr> jmethod, OwnedPtr<FuncArg> jniArgs)
+{
+    switch (retTy.kind) {
+        case TypeKind::TYPE_UNIT:
+            return jni.interface.CreateCallVoidMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_BOOLEAN:
+            return jni.interface.CreateCallBooleanMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT8:
+            return jni.interface.CreateCallByteMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_UINT16:
+            return jni.interface.CreateCallCharMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT16:
+            return jni.interface.CreateCallShortMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT32:
+            return jni.interface.CreateCallIntMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT64:
+            return jni.interface.CreateCallLongMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_FLOAT32:
+            return jni.interface.CreateCallFloatMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_FLOAT64:
+            return jni.interface.CreateCallDoubleMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        default:
+            return jni.interface.CreateCallObjectMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+    }
+}
+
+OwnedPtr<Expr> CreateStaticJavaMethodCall(JniBridge& jni,
+    const Ty& retTy, Ptr<Expr> jniEnvPtr, Ptr<Expr> jclass, Ptr<Expr> jmethod)
+{
+    switch (retTy.kind) {
+        case TypeKind::TYPE_UNIT:
+            return jni.interface.CreateCallStaticVoidMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_BOOLEAN:
+            return jni.interface.CreateCallStaticBooleanMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT8:
+            return jni.interface.CreateCallStaticByteMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_UINT16:
+            return jni.interface.CreateCallStaticCharMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT16:
+            return jni.interface.CreateCallStaticShortMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT32:
+            return jni.interface.CreateCallStaticIntMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT64:
+            return jni.interface.CreateCallStaticLongMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_FLOAT32:
+            return jni.interface.CreateCallStaticFloatMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_FLOAT64:
+            return jni.interface.CreateCallStaticDoubleMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        default:
+            return jni.interface.CreateCallStaticObjectMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+    }
+}
+
+OwnedPtr<Expr> CreateStaticJavaMethodCall(JniBridge& jni,
+    const Ty& retTy, Ptr<Expr> jniEnvPtr, Ptr<Expr> jclass, Ptr<Expr> jmethod, OwnedPtr<FuncArg> jniArgs)
+{
+    switch (retTy.kind) {
+        case TypeKind::TYPE_UNIT:
+            return jni.interface.CreateCallStaticVoidMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_BOOLEAN:
+            return jni.interface.CreateCallStaticBooleanMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT8:
+            return jni.interface.CreateCallStaticByteMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_UINT16:
+            return jni.interface.CreateCallStaticCharMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT16:
+            return jni.interface.CreateCallStaticShortMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT32:
+            return jni.interface.CreateCallStaticIntMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT64:
+            return jni.interface.CreateCallStaticLongMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_FLOAT32:
+            return jni.interface.CreateCallStaticFloatMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_FLOAT64:
+            return jni.interface.CreateCallStaticDoubleMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        default:
+            return jni.interface.CreateCallStaticObjectMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+    }
+}
 } // namespace
 
 OwnedPtr<Expr> ASTFactory::CreateSuperJavaMethodCall(AfterTypeCheckContext& ctx,
@@ -205,8 +354,8 @@ OwnedPtr<Expr> ASTFactory::CreateSuperJavaMethodCall(AfterTypeCheckContext& ctx,
     auto jmethod = jmethodIdCache.CreateJMethodIdAccess(ctx, superFunc, ASTCloner::Clone(jclass.get()), jniEnvPtr);
 
     if (call.args.empty()) {
-        auto jniMethodCall =
-            CreateNonvirtualJavaMethodCall(jni, *call.GetTy(), jniEnvPtr, jobject.get(), jclass.get(), jmethod.get());
+        auto jniMethodCall = CreateNonvirtualJavaMethodCall(jni,
+            *call.GetTy(), jniEnvPtr, jobject.get(), jclass.get(), jmethod.get());
         // TODO: exception handling missing?!
 
         if (!call.GetTy()->IsPrimitive()) {
@@ -244,70 +393,140 @@ OwnedPtr<AST::Expr> ASTFactory::CreateSuperJavaMethodCall(
     return methodCall;
 }
 
-// Ptr<Expr> jniEnvPtr, Ty& javaClassTy, FuncDecl& constructor, std::vector<OwnedPtr<Expr>> args) const
-OwnedPtr<Block> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx, Ptr<File> curFile, Ptr<Expr> jniEnvPtr,
-    FuncDecl& method, Ptr<Ty> retTy, bool isStatic, OwnedPtr<Expr> javaRef) // Params ok?
+OwnedPtr<Expr> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx, Ptr<Expr> jniEnvPtr,
+    ClassLikeDecl&
+    const MemberJNISignature& member, std::vector<OwnedPtr<Expr>> javaCompatibleArgs) const
 {
-    const bool hasParams = !paramList.params.empty();
+    auto curFile = jniEnvPtr->curFile;
+    CJC_NULLPTR_CHECK(curFile);
+    auto& instanceDecl = StaticCast<ClassLikeDecl&>(*method.outerDecl);
+    CJC_ASSERT(instanceDecl.IsJavaMirror() || instanceDecl.IsJavaImpl());
 
-    // TODO: continue here
+    auto& retTy = *StaticCast<FuncTy*>(method.GetTy())->retTy;
+    auto block = CreateBlock({}, &retTy);
 
-    OwnedPtr<VarDecl> argsVar = nullptr;
-    OwnedPtr<Expr> argsRef = nullptr;
+    static auto getInstanceJobject = [this, &instanceDecl, &curFile]() {
+        return ilib.CreateAsJniJobjectCall(CreateJavaRefCall(instanceDecl, curFile));
+    };
 
-    if (hasParams) {
-        auto args = CreateJNIArgJValueExprs(paramList, *curFile);
-        argsVar = CreateJNIArgsVar(std::move(args), *curFile);
-        argsRef = WithinFile(CreateRefExpr(*argsVar), curFile);
-    }
+    static auto convertJniValueToJavaCompatible = [this, &instanceDecl](OwnedPtr<Expr> jniValue, const Ty& expectedTy) {
+        auto ret = std::move(jniValue);
+        if (!expectedTy.IsPrimitive()) {
+            ret = ilib.CreateJavaEntityJobjectCall(std::move(ret));
+        }
+        return ilib.ConvertJavaResultToCJ(std::move(ret), &expectedTy, instanceDecl);
+    };
 
-    auto clazzVar = CreateJNIClassVar(WithinFile(CreateRefExpr(*jniEnvVar), curFile),
-        signature.classTypeSignature);
-    auto methodId = CreateGetMethodIdCall(WithinFile(CreateRefExpr(*jniEnvVar), curFile),
-        WithinFile(CreateRefExpr(*clazzVar), curFile), signature.name, signature.signature, isStatic);
-    CJC_NULLPTR_CHECK(methodId);
+    auto jclass = jclassCache.CreateJClassAccess(ctx, *instanceDecl.GetTy(), jniEnvPtr);
+    auto jmethod = jmethodIdCache.CreateJMethodIdAccess(ctx, method, ASTCloner::Clone(jclass.get()), jniEnvPtr);
 
-    Ptr<VarDecl> jniFunction =
-        GetJNINativeInterfaceField(isStatic ? SelectJNIStaticMethodName(retTy->kind, hasParams)
-                                            : SelectJNIInstanceMethodName(retTy->kind, true, hasParams));
-    CJC_NULLPTR_CHECK(jniFunction);
+    // 1. let callRes: retTy
+    auto& callResVar = StaticCast<VarDecl&>(*block->body.emplace_back(CreateTmpVarDecl(nullptr, nullptr)));
+    callResVar.SetTy(&retTy);
 
-    std::vector<OwnedPtr<FuncArg>> callArgs;
-    callArgs.emplace_back(CreateFuncArg(WithinFile(CreateRefExpr(*jniEnvVar), curFile)));
-
-    if (isStatic) {
-        callArgs.emplace_back(CreateFuncArg(WithinFile(CreateRefExpr(*clazzVar), curFile)));
+    if (args.empty()) {
+        // 2. jniCallRes = Java_CFFI_JavaEntity((*jniEnv)->CallMethod(jclass/jobject, jmethod))
+        auto jniMethodCall = isStatic
+        ? CreateStaticJavaMethodCall(jni, retTy, jniEnvPtr, jclass, jmethod)
+        : CreateVirtualInstanceJavaMethodCall(jni, retTy, jniEnvPtr, getInstanceJobject(), jmethod);
+        callResVar.initializer = convertJniValueToJavaCompatible(std::move(jniMethodCall), retTy);
     } else {
-        callArgs.emplace_back(CreateFuncArg(CreateAsJObjectCall(std::move(javaRef))));
-    }
+        static auto createInoutVArrayArg = [this, &curFile](VarDecl& varrayArg) {
+            return CreateInoutVArrayArg(WithinFile(CreateRefExpr(varrayArg), curFile), typeManager);
+        };
+        // 0. var jniArgs: VArray<jvalue, $x> = [args...]
+        auto& jniArgs = StaticCast<VarDecl&>(*block->body.emplace(block->body.begin(),
+            CreateTmpVArrayVarDecl(ConvertToJValues(std::move(args)), *curFile)));
 
-    callArgs.emplace_back(CreateFuncArg(std::move(methodId)));
-    if (hasParams) {
-        callArgs.emplace_back(PrepareJNIArgsVArray(std::move(argsRef)));
+        // 2. jniCallRes = Java_CFFI_JavaEntity((*jniEnv)->CallMethod(jclass/jobject, jmethod, inout jniArgs))
+        auto jniMethodCall = isStatic
+        ? CreateStaticJavaMethodCall(jni, retTy, jniEnvPtr, jclass, jmethod, createInoutVArrayArg(jniArgs))
+        : CreateVirtualInstanceJavaMethodCall(jni, retTy, jniEnvPtr, getInstanceJobject(), jmethod,
+            createInoutVArrayArg(jniArgs));
+        callResVar.initializer = convertJniValueToJavaCompatible(std::move(jniMethodCall), retTy);
     }
+    // 3. handlePendingException()
+    block->body.push_back(ilib.CreateJNIHandlePendingExceptionCall(jniEnvPtr));
+    // 4. return jniCallRes
+    block->body.push_back(WithinFile(CreateRefExpr(callResVar), curFile));
+    return block;
 
-    auto jniMethodCall = CreateJNICall(WithinFile(CreateRefExpr(*jniEnvVar), curFile),
-        jniFunction, std::move(callArgs));
-    CJC_NULLPTR_CHECK(jniMethodCall);
-    OwnedPtr<Expr> methodCall = std::move(jniMethodCall);
-    if (!retTy->IsPrimitive()) {
-        methodCall = CreateJavaEntityJobjectCall(std::move(methodCall));
+
+
+}
+
+
+OwnedPtr<Expr> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx, Ptr<Expr> jniEnvPtr,
+    FuncDecl& method, bool isStatic, std::vector<OwnedPtr<Expr>> args) const
+{
+    auto curFile = jniEnvPtr->curFile;
+    CJC_NULLPTR_CHECK(curFile);
+    auto& instanceDecl = StaticCast<ClassLikeDecl&>(*method.outerDecl);
+    CJC_ASSERT(instanceDecl.IsJavaMirror() || instanceDecl.IsJavaImpl());
+
+    auto& retTy = *StaticCast<FuncTy*>(method.GetTy())->retTy;
+    auto block = CreateBlock({}, &retTy);
+
+    static auto getInstanceJobject = [this, &instanceDecl, &curFile]() {
+        return ilib.CreateAsJniJobjectCall(CreateJavaRefCall(instanceDecl, curFile));
+    };
+
+    static auto convertJniValueToJavaCompatible = [this, &instanceDecl](OwnedPtr<Expr> jniValue, const Ty& expectedTy) {
+        auto ret = std::move(jniValue);
+        if (!expectedTy.IsPrimitive()) {
+            ret = ilib.CreateJavaEntityJobjectCall(std::move(ret));
+        }
+        return ilib.ConvertJavaResultToCJ(std::move(ret), &expectedTy, instanceDecl);
+    };
+
+    auto jclass = jclassCache.CreateJClassAccess(ctx, *instanceDecl.GetTy(), jniEnvPtr);
+    auto jmethod = jmethodIdCache.CreateJMethodIdAccess(ctx, method, ASTCloner::Clone(jclass.get()), jniEnvPtr);
+
+    // 1. let callRes: retTy
+    auto& callResVar = StaticCast<VarDecl&>(*block->body.emplace_back(CreateTmpVarDecl(nullptr, nullptr)));
+    callResVar.SetTy(&retTy);
+
+    if (args.empty()) {
+        // 2. jniCallRes = Java_CFFI_JavaEntity((*jniEnv)->CallMethod(jclass/jobject, jmethod))
+        auto jniMethodCall = isStatic
+        ? CreateStaticJavaMethodCall(jni, retTy, jniEnvPtr, jclass, jmethod)
+        : CreateVirtualInstanceJavaMethodCall(jni, retTy, jniEnvPtr, getInstanceJobject(), jmethod);
+        callResVar.initializer = convertJniValueToJavaCompatible(std::move(jniMethodCall), retTy);
+    } else {
+        static auto createInoutVArrayArg = [this, &curFile](VarDecl& varrayArg) {
+            return CreateInoutVArrayArg(WithinFile(CreateRefExpr(varrayArg), curFile), typeManager);
+        };
+        // 0. var jniArgs: VArray<jvalue, $x> = [args...]
+        auto& jniArgs = StaticCast<VarDecl&>(*block->body.emplace(block->body.begin(),
+            CreateTmpVArrayVarDecl(ConvertToJValues(std::move(args)), *curFile)));
+
+        // 2. jniCallRes = Java_CFFI_JavaEntity((*jniEnv)->CallMethod(jclass/jobject, jmethod, inout jniArgs))
+        auto jniMethodCall = isStatic
+        ? CreateStaticJavaMethodCall(jni, retTy, jniEnvPtr, jclass, jmethod, createInoutVArrayArg(jniArgs))
+        : CreateVirtualInstanceJavaMethodCall(jni, retTy, jniEnvPtr, getInstanceJobject(), jmethod,
+            createInoutVArrayArg(jniArgs));
+        callResVar.initializer = convertJniValueToJavaCompatible(std::move(jniMethodCall), retTy);
     }
-    auto resultVar = CreateTmpVarDecl(nullptr, std::move(methodCall));
-    auto resultVarPtr = resultVar.get();
-    static auto handlePendingDecl = GetJNIHandlePendingExceptionDecl();
-    CJC_NULLPTR_CHECK(handlePendingDecl);
-    auto handlePending = CreateCall(handlePendingDecl, curFile, WithinFile(CreateRefExpr(*jniEnvVar), curFile));
-    std::vector<OwnedPtr<Node>> nodes;
-    nodes.push_back(std::move(jniEnvVar));
-    nodes.push_back(std::move(clazzVar));
-    if (hasParams) {
-        nodes.push_back(std::move(argsVar));
-    }
-    nodes.push_back(std::move(resultVar));
-    nodes.push_back(std::move(handlePending));
-    nodes.push_back(WithinFile(CreateRefExpr(*resultVarPtr), curFile));
-    return CreateBlock(std::move(nodes), retTy);
+    // 3. handlePendingException()
+    block->body.push_back(ilib.CreateJNIHandlePendingExceptionCall(jniEnvPtr));
+    // 4. return jniCallRes
+    block->body.push_back(WithinFile(CreateRefExpr(callResVar), curFile));
+    return block;
+}
+
+OwnedPtr<Expr> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx, File& curFile,
+    FuncDecl& method, bool isStatic, std::vector<OwnedPtr<Expr>> args) const
+{
+    static auto jniEnvPtrDecl = ilib.GetJniEnvPtrDecl();
+    auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, ilib.CreateGetJniEnvCall(&curFile));
+
+    auto methodCall = CreateJavaMethodCall(ctx,
+        WithinFile(CreateRefExpr(*jniEnvVar), &curFile), method, isStatic, std::move(args));
+
+    // Assume that CreateJavaMethodCall always returns block.
+    auto block = StaticAs<ASTKind::BLOCK>(methodCall.get());
+    block->body.insert(block->body.begin(), std::move(jniEnvVar));
+    return methodCall;
 }
 
 OwnedPtr<VarDecl> ASTFactory::CreateTmpVArrayVarDecl(std::vector<OwnedPtr<Expr>> args, File& curFile) const

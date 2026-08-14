@@ -321,25 +321,26 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(ClassLikeDecl& mirror, FuncDecl
     auto& body = fun.funcBody->body->body;
     CJC_ASSERT_WITH_MSG(!fun.funcBody->paramLists.empty(), "paramLists cannot be empty");
     auto& paramList = *fun.funcBody->paramLists[0].get();
-    OwnedPtr<Expr> methodCall;
 
+    auto& jniEnv = *StaticAs<ASTKind::VAR_DECL>(
+        body.emplace_back(CreateTmpVarDecl(nullptr, lib.CreateGetJniEnvCall(curFile))).get());
+
+    OwnedPtr<Expr> methodCall;
     if (IsJArray(mirror) && !fun.TestAttr(Attribute::STATIC)) {
-        auto& jniEnv = *StaticAs<ASTKind::VAR_DECL>(
-            body.emplace_back(CreateTmpVarDecl(nullptr, lib.CreateGetJniEnvCall(curFile))).get());
         CJC_ASSERT_WITH_MSG(!mirror.generic->typeParameters.empty(), "JArray ctor must be generic");
         auto genericParam = mirror.generic->typeParameters[0].get();
         CJC_ASSERT(genericParam);
         methodCall = lib.CreateCFFICallArrayMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
             std::move(javaRefCall), paramList, genericParam, GetArrayOperationKind(fun));
+
+        if (!retTy->IsPrimitive()) {
+            methodCall = lib.CreateJavaEntityJobjectCall(std::move(methodCall));
+        }
+        methodCall = lib.ConvertJavaResultToCJ(std::move(methodCall), retTy, mirror);
     } else {
         auto memberJNISignature = MemberJNISignature::FromMethod(utils, fun);
-        auto methodBlock = lib.CreateJavaMethodCallBlock(curFile, paramList, retTy,
-            fun.TestAttr(Attribute::STATIC), std::move(javaRefCall), memberJNISignature);
-        if (!methodBlock) {
-            fun.EnableAttr(Attribute::IS_BROKEN);
-            return;
-        }
-        methodCall = WrapReturningLambdaCall(typeManager, std::move(methodBlock->body));
+        methodCall = factory.CreateJavaMethodCall(ctx, WithinFile(CreateRefExpr(jniEnv), curFile), fun,
+            fun.TestAttr(Attribute::STATIC), memberJNISignature, factory.CreateParamsUsage(paramList));
     }
     if (!methodCall) {
         fun.EnableAttr(Attribute::IS_BROKEN);
@@ -352,19 +353,13 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(ClassLikeDecl& mirror, FuncDecl
     CopyBasicInfo(methodCallRes.initializer.get(), &methodCallRes);
     methodCallRes.begin = fun.begin;
     methodCallRes.curFile = curFile;
-    auto callResRef = WithinFile(CreateRefExpr(methodCallRes), curFile);
-    OwnedPtr<Expr> retCallExpr = lib.ConvertJavaResultToCJ(std::move(callResRef), retTy, mirror);
-    if (!retCallExpr) {
-        fun.EnableAttr(Attribute::IS_BROKEN);
-        return;
-    }
 
-    auto& retExpr = *StaticAs<ASTKind::RETURN_EXPR>(
-        body.emplace_back(CreateReturnExpr(std::move(retCallExpr), fun.funcBody.get())).get());
+    auto& retExpr = *StaticAs<ASTKind::RETURN_EXPR>(body.emplace_back(
+        CreateReturnExpr(WithinFile(CreateRefExpr(methodCallRes), curFile), fun.funcBody.get())).get());
     retExpr.SetTy(TypeManager::GetNothingTy());
     retExpr.refFuncBody = fun.funcBody.get();
 
-    fun.funcBody->SetTy(TypeManager::GetNothingTy());
+    fun.funcBody->SetTy(retExpr.GetTy());
     if (IsSyntheticMirrorWrapper(mirror)) {
         fun.DisableAttr(Attribute::ABSTRACT);
     }
