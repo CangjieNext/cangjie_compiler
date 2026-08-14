@@ -93,6 +93,10 @@ void DesugarJArray::TransformConstructorCallsToPassJNIParam(File& file) const
             return VisitAction::WALK_CHILDREN;
         }
 
+        if (!ilib.CheckInteropLibVersion(*callExpr)) {
+            return VisitAction::STOP_NOW;
+        }
+
         // here funcDecl is size constructor of JArray
 
         static auto jniTypeConstr = FindSizeJNITypeConstructorFromInnerDecl(*funcDecl);
@@ -232,6 +236,10 @@ void DesugarJArray::ReplaceCallsWithArrayJavaEntityGet(File& file) const
             return VisitAction::WALK_CHILDREN;
         }
 
+        if (!ilib.CheckInteropLibVersion(*callExpr)) {
+            return VisitAction::STOP_NOW;
+        }
+
         static auto arrayJavaEntityGetDecl = ilib.FindArrayJavaEntityGetDecl(
             *As<ASTKind::CLASS_DECL>(funcDecl->outerDecl));
         CJC_ASSERT(arrayJavaEntityGetDecl);
@@ -274,6 +282,10 @@ void DesugarJArray::ReplaceCallsWithArrayJavaEntitySet(File& file) const
             return VisitAction::WALK_CHILDREN;
         }
 
+        if (!ilib.CheckInteropLibVersion(*callExpr)) {
+            return VisitAction::STOP_NOW;
+        }
+
         static auto arrayJavaEntitySetDecl = ilib.FindArrayJavaEntitySetDecl(
             *As<ASTKind::CLASS_DECL>(funcDecl->outerDecl));
         CJC_ASSERT(arrayJavaEntitySetDecl);
@@ -309,6 +321,10 @@ void DesugarJArray::Process(AfterTypeCheckContext& ctx)
     for (auto& mirror : ctx.GetJavaMirrors()) {
         if (!IsJArray(*mirror)) {
             continue;
+        }
+
+        if (!ilib.CheckInteropLibVersion(*mirror)) {
+            return;
         }
 
         auto& jArray = *StaticAs<ASTKind::CLASS_DECL>(mirror);

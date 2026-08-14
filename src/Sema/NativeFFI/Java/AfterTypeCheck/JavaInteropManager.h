@@ -42,8 +42,7 @@ public:
 
     /**
      * DesugarPackage is responsible for coordinating the desugaring process of Java interop features within a package.
-     * It processes Java mirror and impl stubs, actual desugaring, and typechecks for Java compatible types
-     * depending on the presence of Java interop declarations.
+     * It processes Java mirror and impl stubs, plus some rewrites that should run for every package.
      *
      * @param pkg The package that contains files to be desugared.
      * @param memberMap A reference to a collection containing member signature metadata,

@@ -15,10 +15,6 @@
 
 void Cangjie::Interop::ObjC::Desugar(InteropContext&& ctx)
 {
-    if (!ctx.bridge.IsInteropLibAccessible()) {
-        return;
-    }
-
     HandlerFactory<InteropContext>::Start<FindMirrors>()
         .Use<CheckMirrorTypes>()
         .Use<CheckImplTypes>()

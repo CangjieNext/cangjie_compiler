@@ -172,6 +172,11 @@ public:
     Ptr<AST::FuncDecl> GetObjectGetClassDecl();
     bool IsInteropLibAccessible() const;
     static bool IsInteropLibAccessible(ImportManager& importManager);
+    /**
+     * Checks that objc.internal is imported. Diagnoses on failure at [node].
+     * Repeated calls reuse the first result and do not emit the diagnostic again.
+     */
+    bool CheckInteropLib(const AST::Node& node);
 
 private:
     static constexpr auto INTEROPLIB_PACKAGE_NAME = "objc.internal";
@@ -203,6 +208,8 @@ private:
 
     ImportManager& importManager;
     DiagnosticEngine& diag;
+    bool interopLibChecked = false;
+    bool interopLibOk = false;
 };
 
 } // namespace Cangjie::Interop::ObjC

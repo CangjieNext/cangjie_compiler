@@ -20,6 +20,11 @@ using namespace Cangjie::Interop::ObjC;
 
 void FindMirrors::HandleImpl(InteropContext& ctx)
 {
+    if (!ctx.bridge.IsInteropLibAccessible()) {
+        // We have already reported an error in CheckObjCInteropLibImport during TypeCheck.
+        return;
+    }
+
     for (auto& file : ctx.pkg.files) {
         for (auto& decl : file->decls) {
             if (auto classLikeDecl = As<ASTKind::CLASS_LIKE_DECL>(decl);

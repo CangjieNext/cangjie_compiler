@@ -46,11 +46,15 @@ void DesugarIsExpr(InteropContext& ctx, IsExpr& expr)
     }
 
     auto type = static_cast<ClassTy*>(expr.isType->GetTy().get());
-    auto targetName = ctx.nameGenerator.GetObjCDeclName(*type->decl);
     if (ctx.typeMapper.IsObjCId(*type->decl)) {
         return;
     }
 
+    if (!ctx.bridge.CheckInteropLib(expr)) {
+        return;
+    }
+
+    auto targetName = ctx.nameGenerator.GetObjCDeclName(*type->decl);
     auto curFile = expr.curFile;
     CJC_NULLPTR_CHECK(curFile);
     static const auto BOOL_TY = ctx.typeManager.GetBoolTy();
@@ -117,16 +121,20 @@ void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
         return;
     }
 
-    auto curFile = expr.curFile;
-    CJC_NULLPTR_CHECK(curFile);
-    CJC_ASSERT(!expr.desugarExpr);
-
-    auto castTy = expr.asType->GetTy();
     auto type = static_cast<ClassTy*>(expr.asType->GetTy().get());
     if (ctx.typeMapper.IsObjCId(*type->decl)) {
         return;
     }
 
+    if (!ctx.bridge.CheckInteropLib(expr)) {
+        return;
+    }
+
+    auto curFile = expr.curFile;
+    CJC_NULLPTR_CHECK(curFile);
+    CJC_ASSERT(!expr.desugarExpr);
+
+    auto castTy = expr.asType->GetTy();
     auto objCIdDecl = ctx.bridge.GetObjCIdDecl();
     CJC_ASSERT(objCIdDecl);
 
@@ -299,6 +307,10 @@ void DesugarMatchCaseExpr(InteropContext& ctx, MatchCase& expr)
     
     if (typePatterns.empty()) { return; }
 
+    if (!ctx.bridge.CheckInteropLib(expr)) {
+        return;
+    }
+
     auto objCIdDecl = ctx.bridge.GetObjCIdDecl();
     CJC_ASSERT(objCIdDecl);
 
@@ -378,6 +390,10 @@ void DesugarLetDestructorExpr(InteropContext& ctx, IfExpr& expr)
         
         if (typePatterns.empty()) { return; }
 
+        if (!ctx.bridge.CheckInteropLib(expr)) {
+            return;
+        }
+
         CJC_ASSERT(typePatterns.size() == 1); // if (let a : M <- N)
 
         auto pat = typePatterns[0];
@@ -437,6 +453,10 @@ void DesugarWhileExpr(InteropContext& ctx, WhileExpr& expr)
         std::vector<Ptr<TypePattern>> typePatterns = CollectTypePatternWithObjCClass(ctx, lpat->patterns);
 
         if (typePatterns.empty()) { return; }
+
+        if (!ctx.bridge.CheckInteropLib(expr)) {
+            return;
+        }
 
         CJC_ASSERT(typePatterns.size() == 1); // if (let a : M <- N)
 

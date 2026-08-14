@@ -68,6 +68,10 @@ void RewriteObjCBlockConstruction::HandleImpl(InteropContext& ctx)
                 return VisitAction::WALK_CHILDREN;
             }
 
+            if (!ctx.bridge.CheckInteropLib(*callExpr)) {
+                return VisitAction::STOP_NOW;
+            }
+
             ctx.factory.SetDesugarExpr(
                 callExpr,
                 ctx.factory.CreateObjCBlockFromLambdaCall(ASTCloner::Clone<Expr>(arg->expr)));

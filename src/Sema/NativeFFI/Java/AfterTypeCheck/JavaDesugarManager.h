@@ -15,7 +15,6 @@
 #include "AfterTypeCheckStage.h"
 #include "InteropLibBridge.h"
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
-#include "NativeFFI/Java/AfterTypeCheck/JniBridge.h"
 #include "Utils.h"
 
 #include "cangjie/AST/Node.h"
@@ -46,12 +45,10 @@ public:
           diag(diag),
           mangler(mangler),
           lib(importManager, typeManager, diag, utils),
-          jniBridge(typeManager, mangler, utils, *lib.GetJniEnvPtrDecl(), *lib.GetJobjectDecl()),
           javaCodeGenPath(javaCodeGenPath),
           outputLibPath(outputLibPath),
           memberMap(memberMap)
     {
-        lib.CheckInteropLibVersion();
     }
 
     /**
@@ -75,6 +72,11 @@ public:
     void DesugarJavaMirror(ClassDecl& mirror);
     void DesugarJavaMirror(InterfaceDecl& mirror);
     void ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx, std::function<void(AST::Node&)> desugarPropRef);
+
+    /**
+     * Call-site rewrites that apply to any package.
+     */
+    void DesugarCallSites(AfterTypeCheckContext& ctx);
 private:
     /**
      * Processes logically isolated interop stage.
@@ -225,7 +227,6 @@ private:
     DiagnosticEngine& diag;
     const BaseMangler& mangler;
     InteropLibBridge lib;
-    JniBridge jniBridge;
     const std::optional<std::string>& javaCodeGenPath;
     const std::string& outputLibPath;
 

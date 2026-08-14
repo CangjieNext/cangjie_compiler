@@ -566,7 +566,11 @@ public:
     OwnedPtr<AST::FuncDecl> CreateDeletingGlobalRefFinalizer(AST::ClassDecl& decl);
 
     bool IsInteropLibAccessible() const;
-    void CheckInteropLibVersion();
+    /**
+     * Validates that the imported java.internal matches this compiler. Diagnoses on failure
+     * at [node]. Repeated calls reuse the first result and do not emit the diagnostic again.
+     */
+    bool CheckInteropLibVersion(const AST::Node& node);
     static bool IsInteropLibAccessible(const ImportManager& importManager);
     static bool IsJavaEntityTy(Ty& ty);
 
@@ -679,6 +683,8 @@ private:
     TypeManager& typeManager;
     DiagnosticEngine& diag;
     Utils& utils;
+    bool interopLibVersionChecked = false;
+    bool interopLibVersionOk = false;
 };
 }
 

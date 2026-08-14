@@ -112,6 +112,9 @@ void RewriteObjCFuncCall::HandleImpl(InteropContext& ctx)
             if (fTypeKind == ObjCFTypeKind::NONE) {
                 return VisitAction::WALK_CHILDREN;
             }
+            if (!ctx.bridge.CheckInteropLib(*callExpr)) {
+                return VisitAction::STOP_NOW;
+            }
             safeUsage.insert(ma);
             std::vector<OwnedPtr<Expr>> unwrappedArguments;
             auto tmpVar = CreateTmpVarDecl(nullptr, CreateReceiverExpr(ma));

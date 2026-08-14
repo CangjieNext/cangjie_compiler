@@ -17,6 +17,7 @@
 #include "DesugarTypeCheckingAndCasting.h"
 #include "DesugarJArray.h"
 #include "NativeFFI/Java/AfterTypeCheck/InteropLibBridge.h"
+#include "NativeFFI/Java/AfterTypeCheck/JniBridge.h"
 #include <unordered_map>
 
 namespace Cangjie::Interop::Java {
@@ -24,6 +25,13 @@ namespace Cangjie::Interop::Java {
 void JavaDesugarManager::ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx,
     std::function<void(AST::Node&)> desugarPropRef)
 {
+    auto jniEnvPtrDecl = lib.GetJniEnvPtrDecl();
+    auto jobjectDecl = lib.GetJobjectDecl();
+    if (!jniEnvPtrDecl || !jobjectDecl) {
+        return;
+    }
+    JniBridge jniBridge{typeManager, mangler, utils, *jniEnvPtrDecl, *jobjectDecl};
+
     for (auto& file : ctx.pkg.files) {
         GenerateInMirrors(*file, true);
     }
@@ -45,8 +53,12 @@ void JavaDesugarManager::ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx,
         DesugarMirrors(*file);
     }
 
-    Process<DesugarJArray>(ctx, typeManager, importManager, lib);
     GenerateJavaSourceCode(ctx);
+}
+
+void JavaDesugarManager::DesugarCallSites(AfterTypeCheckContext& ctx)
+{
+    Process<DesugarJArray>(ctx, typeManager, importManager, lib);
     Process<DesugarTypeCheckingAndCasting>(ctx, lib, diag, utils);
 }
 
@@ -55,20 +67,14 @@ void JavaInteropManager::DesugarPackage(Package& pkg,
     MemberMap>& memberMap,
     std::function<void(AST::Node&)> desugarPropRef)
 {
-    if (!hasMirrorOrImpl) {
-        return;
-    }
     JavaDesugarManager desugarer{
         importManager, typeManager, diag, mangler, javagenOutputPath, outputPath, memberMap};
 
-    if (!InteropLibBridge::IsInteropLibAccessible(importManager)) {
-        return;
-    }
-
+    AfterTypeCheckContext ctx{importManager, typeManager, pkg};
     if (hasMirrorOrImpl) {
-        AfterTypeCheckContext ctx{importManager, typeManager, pkg};
         desugarer.ProcessJavaMirrorImplStages(ctx, desugarPropRef);
     }
+    desugarer.DesugarCallSites(ctx);
 }
 
 } // namespace Cangjie::Interop::Java

@@ -1964,28 +1964,37 @@ bool InteropLibBridge::IsInteropLibAccessible() const
     return IsInteropLibAccessible(importManager);
 }
 
-void InteropLibBridge::CheckInteropLibVersion()
+bool InteropLibBridge::CheckInteropLibVersion(const AST::Node& node)
 {
+    if (interopLibVersionChecked) {
+        return interopLibVersionOk;
+    }
+    interopLibVersionChecked = true;
+
     auto versionDecl = GetInteropLibVersionVarDecl();
 
     if (!versionDecl && !IsInteropLibAccessible()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_interoplib_must_be_imported, DEFAULT_POSITION);
-        return;
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_interoplib_must_be_imported, node);
+        return false;
     }
 
     if (!versionDecl || !versionDecl->initializer || versionDecl->initializer->astKind != ASTKind::LIT_CONST_EXPR ||
         versionDecl->initializer->TyKind() != TypeKind::TYPE_INT64) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interoplib_version_too_old, DEFAULT_POSITION,
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interoplib_version_too_old, node,
             std::to_string(INTEROPLIB_VERSION));
-        return;
+        return false;
     }
 
     auto libVersionLit = StaticAs<ASTKind::LIT_CONST_EXPR>(versionDecl->initializer.get());
     auto libVersion = std::stoi(libVersionLit->stringValue);
     if (libVersion != INTEROPLIB_VERSION) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interoplib_version_mismatch, DEFAULT_POSITION,
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interoplib_version_mismatch, node,
             libVersionLit->stringValue, std::to_string(INTEROPLIB_VERSION));
+        return false;
     }
+
+    interopLibVersionOk = true;
+    return true;
 }
 
 } // namespace Cangjie::Interop::Java

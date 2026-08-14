@@ -226,6 +226,10 @@ void DesugarTypeCheckingAndCasting::DesugarMatchCase(MatchCase& matchCase) const
         return;
     }
 
+    if (!ilib.CheckInteropLibVersion(matchCase)) {
+        return;
+    }
+
     static auto jObjectDecl = utils.GetJObjectDecl();
 
     std::vector<OwnedPtr<Expr>> isInstanceGuards;
@@ -306,11 +310,17 @@ void DesugarTypeCheckingAndCasting::Process(AfterTypeCheckContext& ctx)
             if (!ShouldDesugarTypecheck(ie->isType, ie->leftExpr)) {
                 return VisitAction::WALK_CHILDREN;
             }
+            if (!ilib.CheckInteropLibVersion(*ie)) {
+                return VisitAction::STOP_NOW;
+            }
 
             DesugarIsExpression(*ie);
         } else if (auto ae = As<ASTKind::AS_EXPR>(node.get())) {
             if (!ShouldDesugarTypecheck(ae->asType, ae->leftExpr)) {
                 return VisitAction::WALK_CHILDREN;
+            }
+            if (!ilib.CheckInteropLibVersion(*ae)) {
+                return VisitAction::STOP_NOW;
             }
 
             DesugarAsExpression(*ae);

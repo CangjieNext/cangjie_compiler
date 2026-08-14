@@ -523,3 +523,19 @@ bool InteropLibBridge::IsInteropLibAccessible() const
 {
     return IsInteropLibAccessible(importManager);
 }
+
+bool InteropLibBridge::CheckInteropLib(const AST::Node& node)
+{
+    if (interopLibChecked) {
+        return interopLibOk;
+    }
+    interopLibChecked = true;
+
+    if (!IsInteropLibAccessible()) {
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_mirror_interoplib_must_be_imported, node);
+        return false;
+    }
+
+    interopLibOk = true;
+    return true;
+}

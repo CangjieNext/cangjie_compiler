@@ -171,12 +171,18 @@ void RewriteObjCPointerAccess::HandleImpl(InteropContext& ctx)
 
             if (funcDecl->identifier == OBJCPOINTER_READ_METHOD && callExpr->args.size() == 0 &&
                 ctx.typeMapper.IsObjCCompatible(*callExpr->GetTy())) {
+                if (!ctx.bridge.CheckInteropLib(*callExpr)) {
+                    return VisitAction::STOP_NOW;
+                }
                 HandleObjCPointerRead(ctx, *callExpr);
                 return VisitAction::WALK_CHILDREN;
             }
 
             if (funcDecl->identifier == OBJCPOINTER_WRITE_METHOD && callExpr->args.size() == 1 &&
                 ctx.typeMapper.IsObjCCompatible(*callExpr->args[0]->GetTy())) {
+                if (!ctx.bridge.CheckInteropLib(*callExpr)) {
+                    return VisitAction::STOP_NOW;
+                }
                 HandleObjCPointerWrite(ctx, *callExpr);
                 return VisitAction::WALK_CHILDREN;
             }
