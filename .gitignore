@@ -47,6 +47,7 @@ autoconf/autom4te.cache
 .ccls-cache
 .cache
 .claude/
+.cursor/
 
 # emacs
 *~
