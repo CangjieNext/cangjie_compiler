@@ -19,6 +19,7 @@
 #include "gtest/gtest.h"
 
 #include "TestCompilerInstance.h"
+#include "cangjie/AST/Node.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Frontend/FrontendOptions.h"
 #include "cangjie/FrontendTool/CjdCompilerInstance.h"
@@ -143,6 +144,29 @@ TEST_F(FrontendEntryTest, CjdCompilerInstanceSavesResultsOnlyForChirOutput)
         std::string::npos);
 
     Utils::ProfileRecorder::Enable(false, Utils::ProfileRecorder::Type::ALL);
+}
+
+/*
+ * The case above leaves the cjo loop with zero iterations, so its body never runs. Give the
+ * instance one package and the loop executes for real.
+ *
+ * An empty package is enough and is deliberately chosen: DefaultCIImpl::SaveCjo returns early on
+ * `pkg.IsEmpty()`, so the loop body is exercised without pulling in the import manager, the AST
+ * serializer or the temporary-file manager - none of which a unit test can set up.
+ */
+TEST_F(FrontendEntryTest, CjdCompilerInstanceSavesEverySourcePackage)
+{
+    invocation.globalOptions.outputMode = GlobalOptions::OutputMode::CHIR;
+    CjdCompilerInstance ci(invocation, diag);
+
+    ci.srcPkgs.push_back(MakeOwned<AST::Package>());
+    ci.srcPkgs.push_back(MakeOwned<AST::Package>());
+    ASSERT_EQ(ci.GetSourcePackages().size(), 2U);
+
+    EXPECT_TRUE(ci.PerformResultsSaving());
+    EXPECT_EQ(diag.GetErrorCount(), 0U);
+    // Saving must not consume the packages.
+    EXPECT_EQ(ci.GetSourcePackages().size(), 2U);
 }
 
 TEST_F(FrontendEntryTest, DumpTokensPrintsEveryTokenOfEverySourceFile)
