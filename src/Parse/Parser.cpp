@@ -316,10 +316,10 @@ OwnedPtr<PackageSpec> ParserImpl::ParsePackageHeader(std::set<Modifier>&& modifi
     packageHeader->end = curIdent.End();
     (void)CheckDeclModifiers(modifiers, ScopeKind::TOPLEVEL, DefKind::PACKAGE);
     auto fullPackageName = packageHeader->GetPackageName();
-    if (!packageHeader->TestAttr(Attribute::IS_BROKEN) && fullPackageName.size() > PACKAGE_NAME_LEN_LIMIT) {
+    if (!packageHeader->TestAttr(Attribute::IS_BROKEN) && fullPackageName.size() > Utils::PACKAGE_NAME_LEN_LIMIT) {
         auto packageNameBeginPos =
             packageHeader->prefixPaths.empty() ? curIdent.Begin() : packageHeader->prefixPoses[0];
-        DiagNameLengthOverflow(MakeRange(packageNameBeginPos, curIdent.End()), fullPackageName, PACKAGE_NAME_LEN_LIMIT,
+        DiagNameLengthOverflow(MakeRange(packageNameBeginPos, curIdent.End()), fullPackageName, Utils::PACKAGE_NAME_LEN_LIMIT,
             fullPackageName.size());
     }
 

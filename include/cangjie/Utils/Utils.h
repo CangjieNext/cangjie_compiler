@@ -276,6 +276,19 @@ std::unordered_map<std::string, std::string> StringifyEnvironmentPointer(const c
 
 std::string GetRootPackageName(const std::string& fullPackageName);
 
+/// Maximum length of a full package name, shared with the parser (moved from src/Parse/ParserImpl.h).
+constexpr std::size_t PACKAGE_NAME_LEN_LIMIT = 200U;
+
+/**
+ * Validate a full package name against Cangjie's package-name grammar: a
+ * dot-separated sequence of identifier segments, with an optional single
+ * leading "org::". Returns false for empty names, empty segments (leading,
+ * trailing or duplicated '.', or '::' misuse), and any code point that is not
+ * a valid identifier start/continue character — which also rejects path
+ * separators, ".." traversal, control characters and backticks.
+ */
+bool IsValidPackageName(const std::string& fullPackageName);
+
 #ifdef _WIN32
 std::optional<std::string> GetApplicationPath();
 #else

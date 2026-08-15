@@ -20,8 +20,6 @@
 namespace Cangjie {
 using namespace AST;
 
-const size_t PACKAGE_NAME_LEN_LIMIT = 200U;
-
 enum class DefKind : uint8_t {
     FUNC = 0,
     MAIN,

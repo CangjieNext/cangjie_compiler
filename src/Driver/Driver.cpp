@@ -154,7 +154,7 @@ bool Driver::ExtractBCPackageNames()
         unsigned subCHIRPackageIdx = 0;
         unsigned Radix = 10;
         if (pkgName.consumeInteger(Radix, subCHIRPackageIdx) ||
-            !pkgName.consume_front("-") || pkgName.empty()) {
+            !pkgName.consume_front("-") || !Utils::IsValidPackageName(std::string(pkgName))) {
                 diag.DiagnoseRefactor(DiagKindRefactor::bc_invalid_package_name, DEFAULT_POSITION, bcPath);
                 return false;
         }

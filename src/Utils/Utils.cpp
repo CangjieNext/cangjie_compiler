@@ -29,6 +29,7 @@
 #include "cangjie/AST/Node.h"
 #include "cangjie/Parse/Parser.h"
 #include "cangjie/Utils/StdUtils.h"
+#include "cangjie/Utils/Unicode.h"
 
 #ifdef __WIN32
 #include <libloaderapi.h> // should be at the end to avoid same macro define
@@ -196,6 +197,63 @@ std::string GetRootPackageName(const std::string& fullPackageName)
         return fullPackageName.substr(0, dotPos + 1);
     }
     return fullPackageName;
+}
+
+bool IsValidPackageName(const std::string& fullPackageName)
+{
+    if (fullPackageName.empty() || fullPackageName.size() > PACKAGE_NAME_LEN_LIMIT) {
+        return false;
+    }
+
+    // Invalid UTF-8 degrades to raw non-ASCII bytes (see ToUTF32), but the '.'
+    // ':' separators and dangerous chars below are all ASCII, so they're still caught.
+    const auto codePoints = Unicode::StringRef(fullPackageName).ToUTF32();
+    const Unicode::UTF32 colon = static_cast<Unicode::UTF32>(':');
+    const Unicode::UTF32 dot = static_cast<Unicode::UTF32>('.');
+
+    auto isIdentStart = [](Unicode::UTF32 cp) {
+        return Unicode::IsASCIIIdStart(cp) || Unicode::IsCJXIDStart(cp);
+    };
+    auto isIdentContinue = [](Unicode::UTF32 cp) {
+        return Unicode::IsASCIIIdContinue(cp) || Unicode::IsXIDContinue(cp);
+    };
+    // Validate one identifier segment spanning [begin, end): the first code
+    // point must be an identifier start, the rest must be identifier continues.
+    auto isValidIdentifier = [&](size_t begin, size_t end) {
+        if (begin >= end || !isIdentStart(codePoints[begin])) {
+            return false;
+        }
+        for (size_t i = begin + 1; i < end; ++i) {
+            if (!isIdentContinue(codePoints[i])) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    // '::' is the organization separator: at most one, and only before any '.'.
+    bool sawDot = false;
+    bool sawDoubleColon = false;
+    size_t segmentBegin = 0;
+    for (size_t i = 0; i < codePoints.size(); ++i) {
+        const Unicode::UTF32 cp = codePoints[i];
+        if (cp == colon) {
+            if (i + 1 >= codePoints.size() || codePoints[i + 1] != colon || sawDoubleColon || sawDot ||
+                !isValidIdentifier(segmentBegin, i)) {
+                return false;
+            }
+            sawDoubleColon = true;
+            ++i; // skip the second ':'
+            segmentBegin = i + 1;
+        } else if (cp == dot) {
+            if (!isValidIdentifier(segmentBegin, i)) {
+                return false;
+            }
+            sawDot = true;
+            segmentBegin = i + 1;
+        }
+    }
+    return isValidIdentifier(segmentBegin, codePoints.size());
 }
 
 #ifdef _WIN32
