@@ -9,11 +9,12 @@
  *
  * This file declares java member declaration abstraction.
  */
-#ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_MEMBER_JNI_SIGNATURE
-#define CANGJIE_SEMA_NATIVE_FFI_JAVA_MEMBER_JNI_SIGNATURE
+#ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_MEMBER_SIGNATURE
+#define CANGJIE_SEMA_NATIVE_FFI_JAVA_MEMBER_SIGNATURE
 
 #include <sstream>
 #include <string>
+#include "NativeFFI/Java/JavaClassSignature.h"
 #include "cangjie/AST/Node.h"
 
 namespace Cangjie::Native::FFI::Java {
@@ -21,7 +22,7 @@ namespace Cangjie::Native::FFI::Java {
 /**
  * Abstraction over Java member (method, constructor, field) declaration
  */
-struct MemberJNISignature {
+struct JavaMemberSignature {
 public:
 
     /**
@@ -29,6 +30,8 @@ public:
      * Example: "java/lang/String"
      */
     std::string GetClassTypeJniName() const;
+
+    JavaClassSignature GetClassSignature() const;
 
     /**
      * member name.
@@ -44,18 +47,18 @@ public:
 
     bool IsStatic() const;
 
-    static MemberJNISignature FromMethod(const AST::FuncDecl& method);
+    static JavaMemberSignature FromMethod(const AST::FuncDecl& method);
 
-    static MemberJNISignature FromConstructor(const AST::FuncDecl& ctor, bool withMarker = false);
+    static JavaMemberSignature FromConstructor(const AST::FuncDecl& ctor, bool withMarker = false);
 
-    static MemberJNISignature FromProperty(const AST::PropDecl& member);
+    static JavaMemberSignature FromProperty(const AST::PropDecl& member);
 
-    static MemberJNISignature FromMember(const AST::Decl& member, bool withMarker = false);
+    static JavaMemberSignature FromMember(const AST::Decl& member, bool withMarker = false);
 
 private:
-    MemberJNISignature(std::string classTypeSignature, std::string name, std::string signature, bool isStatic = false);
+    JavaMemberSignature(JavaClassSignature javaClass, std::string name, std::string signature, bool isStatic = false);
 
-    const std::string classTypeSignature;
+    const JavaClassSignature classSignature;
     const std::string name;
     const std::string signature;
 
@@ -65,8 +68,8 @@ private:
 } // namespace Cangjie::Native::FFI::Java
 
 template<>
-struct std::hash<Cangjie::Native::FFI::Java::MemberJNISignature> {
-    std::size_t operator()(const Cangjie::Native::FFI::Java::MemberJNISignature& member) const noexcept
+struct std::hash<Cangjie::Native::FFI::Java::JavaMemberSignature> {
+    std::size_t operator()(const Cangjie::Native::FFI::Java::JavaMemberSignature& member) const noexcept
     {
         std::stringstream str{};
         str << member.GetClassTypeJniName();
@@ -79,4 +82,4 @@ struct std::hash<Cangjie::Native::FFI::Java::MemberJNISignature> {
     }
 };
 
-#endif // CANGJIE_SEMA_NATIVE_FFI_JAVA_MEMBER_JNI_SIGNATURE
+#endif // CANGJIE_SEMA_NATIVE_FFI_JAVA_MEMBER_SIGNATURE

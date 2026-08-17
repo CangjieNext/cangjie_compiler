@@ -59,8 +59,8 @@ public:
     // Decl of String
     StructDecl& GetStringDecl();
 
-    std::string GetJavaTypeSignature(const Ty& cjtype);
-    std::string GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& args);
+    // std::string GetJavaTypeSignature(const Ty& cjtype);
+    // std::string GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& args);
     std::string GetJavaObjectTypeName(const Ty& ty);
 
     OwnedPtr<Expr> CreateOptionMatch(
@@ -150,10 +150,6 @@ Ptr<FuncDecl> GetJavaMirrorWrappingConstructor(ClassDecl& mirror);
 
 std::string GetJavaJniClassName(const Ty& cjtype);
 
-/**
- * Returns name of corresponding Java method or field with respect to @ForeignName annotation
- */
-std::string GetJavaMemberName(const Decl& decl);
 
 /**
  * Returns true if has java fully-qualified name defined in annotation as a string literal
@@ -172,12 +168,6 @@ struct DestructedJavaClassName {
     /// Full name of the class, starting from top level
     std::string fullClassName;
 };
-
-
-/**
- * Returns package of the decl or package specified in @JavaMirror as attribute (omitting class name)
- */
-std::string GetJavaPackage(const Decl& decl);
 
 /**
  * Performs mangling of `javaTy` with `mangler`. If `javaTy` is a mirrror or impl, then it returns `jobjectTy`
@@ -203,8 +193,6 @@ bool IsOptionOfString(Ptr<Ty> ty);
 bool IsMirror(const Ty& ty);
 
 bool IsImpl(const Ty& ty);
-std::string ReplaceClassName(std::string& classTypeSignature, std::string newSegment);
-std::string NormalizeJavaSignature(const std::string& sig);
 
 ArrayOperationKind GetArrayOperationKind(Decl& decl);
 
@@ -279,13 +267,6 @@ Ptr<MemberDecl> FindFirstMemberDecl(
  * This constructor
  */
 Ptr<AST::FuncDecl> GetJavaImplRegistryCompanionConstructor(AST::ClassDecl& companion);
-
-/**
- * Returns FQ name of marker class for Cangjie side constructor of Java class
- */
-std::string GetConstructorMarkerFQName();
-std::string GetConstructorMarkerClassName();
-OwnedPtr<ClassDecl> CreateConstructorMarkerClassDecl();
 
 void GenerateSyntheticClassMemberStubs(ClassDecl& synthetic, const MemberMap& members);
 

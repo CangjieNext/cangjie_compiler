@@ -11,7 +11,10 @@
  */
 #include "Utils.h"
 #include "NativeFFI/Java/AfterTypeCheck/Utils.h"
+#include "NativeFFI/Utils.h"
+#include "NativeFFI/Java/JavaClassSignature.h"
 #include "cangjie/AST/Node.h"
+#include "cangjie/AST/Types.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Utils/CheckUtils.h"
 
@@ -241,9 +244,16 @@ std::string GetFQNameJoinBy(const std::string& name, std::string_view separator)
     auto parts = GetFQNameParts(name);
     return StringJoin(parts.begin(), parts.end(), separator);
 }
+
+
+std::string WrapClassNameAsTypeSignature(const std::string_view classType)
+{
+    return std::string{"L"} + std::string{classType} + ";";
+}
+
 } // namespace
 
-std::string GetJniTypeSignature(const AST::Ty& javaCompatibleTy, bool withinArray = false)
+std::string GetJniTypeSignature(const AST::Ty& javaCompatibleTy, bool withObjectTypeSeparator, bool withMarker)
 {
     constexpr static std::string_view javaStringJniName = "java/lang/String";
     static std::map<TypeKind, std::string> primitiveTypeMapper = {
@@ -257,17 +267,14 @@ std::string GetJniTypeSignature(const AST::Ty& javaCompatibleTy, bool withinArra
         {TypeKind::TYPE_FLOAT32, "F"},
         {TypeKind::TYPE_FLOAT64, "D"},
     };
-    static auto wrapAsArrayElementSignature = [](const std::string_view elementSignature) {
-        return std::string{"L"} + std::string{elementSignature} + ";";
-    };
 
     if (javaCompatibleTy.IsPrimitive()) {
         return primitiveTypeMapper[javaCompatibleTy.kind];
     }
 
     if (javaCompatibleTy.IsString()) {
-        return withinArray
-            ? wrapAsArrayElementSignature(javaStringJniName)
+        return withObjectTypeSeparator
+            ? WrapClassNameAsTypeSignature(javaStringJniName)
             : std::string{javaStringJniName};
     }
     // if (javaCompatibleTy.IsStructArray()) {
@@ -277,7 +284,7 @@ std::string GetJniTypeSignature(const AST::Ty& javaCompatibleTy, bool withinArra
     if (javaCompatibleTy.IsCoreOptionType()) {
         CJC_ASSERT_WITH_MSG(!javaCompatibleTy.typeArgs.empty(), "Option type must be generic");
         auto& argTy = *javaCompatibleTy.typeArgs[0];
-        return GetJniTypeSignature(argTy, withinArray);
+        return GetJniTypeSignature(argTy, withObjectTypeSeparator, withMarker);
         // if (IsJArray(argTy)) {
             // jsig = GetJniTypeSignature(argTy);
         // } else {
@@ -287,7 +294,7 @@ std::string GetJniTypeSignature(const AST::Ty& javaCompatibleTy, bool withinArra
 
     if (javaCompatibleTy.IsClassLike()) {
         if (IsJArray(*StaticCast<ClassLikeTy&>(javaCompatibleTy).commonDecl)) {
-            return "[" + GetJniTypeSignature(*javaCompatibleTy.typeArgs[0], /* withinArray = */ true);
+            return "[" + GetJniTypeSignature(*javaCompatibleTy.typeArgs[0], /* withObjectTypeSeparator = */ true);
         } else {
             NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(javaCompatibleTy).commonDecl));
             // jsig = "L" + NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(cjtype).commonDecl)) + ";";
@@ -296,17 +303,30 @@ std::string GetJniTypeSignature(const AST::Ty& javaCompatibleTy, bool withinArra
 
     if (javaCompatibleTy.IsFunc()) {
         auto& funcTy = StaticCast<FuncTy&>(javaCompatibleTy);
-        std::string signature = "(";
-        for (auto paramTy : funcTy.paramTys) {
-            signature.append(GetJniTypeSignature(*paramTy, withinArray));
-        }
-        signature.append(")");
-        signature.append(GetJniTypeSignature(*funcTy.retTy, withinArray));
-        return signature;
+        return GetJniTypeSignature(*funcTy.retTy, funcTy.paramTys, withMarker);
     }
 
     CJC_ABORT(); // Unreachable state. This function should be called only on java-compatible types.
     return "";
+}
+
+std::string GetJniTypeSignature(const AST::Ty& javaCompatibleRetTy, const std::vector<Ptr<AST::Ty>> paramTys,
+    bool withMarker)
+{
+    std::string signature = "(";
+    for (auto paramTy : paramTys) {
+        signature.append(GetJniTypeSignature(*paramTy,
+            /* withObjectTypeSeparator = */ true));
+    }
+    if (withMarker) {
+        // Last parameter is marker parameter
+        signature.append(
+            WrapClassNameAsTypeSignature(JavaClassSignature::GetConstructorMarkerClass().GetJniClassName()));
+    }
+    signature.append(")");
+    signature.append(GetJniTypeSignature(javaCompatibleRetTy,
+        /* withObjectTypeSeparator = */ true));
+    return signature;
 }
 
 std::string GetJavaFQName(const Decl& decl)
@@ -329,26 +349,77 @@ std::string GetJavaFQSourceCodeName(const ClassLikeDecl& decl)
     return attr ? GetFQNameJoinBy(*attr, ".") : (decl.GetFullPackageName() + "." + decl.identifier);
 }
 
-DestructedJavaClassName DestructJavaClassName(const ClassLikeDecl& decl)
+std::string GetJavaTopLevelClassName(const ClassLikeDecl& decl)
 {
     auto attr = GetJavaMirrorAnnoAttr(decl);
     if (!attr) {
-        return {decl.GetFullPackageName(), decl.identifier, decl.identifier};
+        return decl.identifier;
+    }
+    return GetFQNameParts(*attr).front();
+}
+
+std::string GetJavaUnqualifiedNestedTypeName(const ClassLikeDecl& decl, const std::string_view nestedSeparator)
+{
+    auto attr = GetJavaMirrorAnnoAttr(decl);
+    if (!attr) {
+        return decl.identifier;
     }
 
-    auto parts = GetFQNameParts(*attr);
-    CJC_ASSERT(parts.size() > 0);
-    auto ind = parts[0].find_last_of('.');
-    if (ind == std::string::npos) {
-        return {.packageName = std::nullopt,
-            .topLevelClassName = parts[0],
-            .fullClassName = StringJoin(parts.begin(), parts.end(), ".")};
-    }
-    auto package = parts[0].substr(0, ind);
-    parts[0] = parts[0].substr(ind + 1);
-    return {.packageName = package,
-        .topLevelClassName = parts[0],
-        .fullClassName = StringJoin(parts.begin(), parts.end(), ".")};
+    auto fqnameParts = GetFQNameParts(*attr);
+    // iterator pointing to outermost type (omitting package).
+    auto itype = fqnameParts.size() > 1 ? fqnameParts.begin() + 1 : fqnameParts.begin();
+    return StringJoin(itype, fqnameParts.end(), nestedSeparator);
 }
+
+std::string GetJavaPackage(const Decl& decl)
+{
+    for (auto& anno : decl.annotations) {
+        if (anno->kind != AnnotationKind::JAVA_MIRROR && anno->kind != AnnotationKind::JAVA_IMPL) {
+            continue;
+        }
+
+        // @JavaMirror or @JavaImpl annotations could accept optional string literal argument with fully-qualified name.
+        CJC_ASSERT_WITH_MSG(anno->args.size() < 2, "@JavaMirror or @JavaImpl could accept maximum one argument");
+        if (anno->args.empty()) {
+            break;
+        }
+
+        CJC_ASSERT(anno->args[0]->expr->astKind == ASTKind::LIT_CONST_EXPR);
+        auto lce = As<ASTKind::LIT_CONST_EXPR>(anno->args[0]->expr.get());
+        CJC_ASSERT(lce);
+        std::string fqname = lce->stringValue;
+        auto beforeClassNamePos = fqname.rfind(".");
+        if (beforeClassNamePos != std::string::npos) {
+            fqname.erase(beforeClassNamePos);
+        } else {
+            return "";
+        }
+        return fqname;
+    }
+
+    return decl.GetFullPackageName();
+}
+
+std::string GetJavaMemberName(const Decl& member)
+{
+    auto foreignNameAnno = GetForeignNameAnnotation(member);
+    if (!foreignNameAnno) {
+        return member.identifier;
+    }
+    CJC_ASSERT(foreignNameAnno->args.size() == 1);
+    auto litExpr = DynamicCast<LitConstExpr>(foreignNameAnno->args[0]->expr.get());
+    CJC_ASSERT(litExpr);
+    return litExpr->stringValue;
+
+    return member.identifier;
+}
+
+std::string NormalizeJavaSignature(const std::string& sig)
+{
+    std::string normalized = sig;
+    std::replace(normalized.begin(), normalized.end(), '.', '/');
+    return normalized;
+}
+
 
 } // namespace Cangjie::Native::FFI::Java

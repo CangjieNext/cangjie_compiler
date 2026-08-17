@@ -4,6 +4,7 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+#include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "NativeFFI/Java/Utils.h"
 #include "TypeCheckUtil.h"
 #include "JavaDesugarManager.h"
@@ -297,6 +298,7 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
     CJC_ASSERT(ctor.funcBody->paramLists.size() == 1);
     auto& body = ctor.funcBody->body->body;
     auto& paramList = *ctor.funcBody->paramLists[0];
+    AfterTypeCheckContext ctx;
     auto constructorExpr = factory.CreateNewJavaObjectCall(ctx,
         ctor.outerDecl->GetTy(), ctor, factory.CreateParamsUsage(paramList));
     if (!constructorExpr) {
@@ -338,9 +340,17 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(ClassLikeDecl& mirror, FuncDecl
         }
         methodCall = lib.ConvertJavaResultToCJ(std::move(methodCall), retTy, mirror);
     } else {
-        auto memberJNISignature = MemberJNISignature::FromMethod(utils, fun);
-        methodCall = factory.CreateJavaMethodCall(ctx, WithinFile(CreateRefExpr(jniEnv), curFile), fun,
-            fun.TestAttr(Attribute::STATIC), memberJNISignature, factory.CreateParamsUsage(paramList));
+        auto methodSignature = JavaMemberSignature::FromMethod(fun);
+        AfterTypeCheckContext ctx;
+
+        methodCall = methodSignature.IsStatic()
+            ? factory.CreateStaticJavaMethodCall(ctx,
+                WithinFile(CreateRefExpr(jniEnv), curFile),
+                methodSignature, *retTy, factory.CreateParamsUsage(paramList))
+            : factory.CreateVirtualJavaMethodCall(ctx,
+                WithinFile(CreateRefExpr(jniEnv), curFile),
+                lib.CreateAsJniJobjectCall(CreateJavaRefCall(mirror, curFile))
+                methodSignature, *retTy, factory.CreateParamsUsage(paramList));
     }
     if (!methodCall) {
         fun.EnableAttr(Attribute::IS_BROKEN);
@@ -447,7 +457,7 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
     } else {
         jniSetterCall = lib.CreateSetFieldCall(WithinFile(CreateRefExpr(jniEnv), curFile),
             CreateJavaRefCall(mirror, curFile),
-            MemberJNISignature::FromProperty(utils, prop),
+            JavaMemberSignature::FromProperty(prop),
             std::move(paramRef));
     }
     body.emplace_back(std::move(jniSetterCall));

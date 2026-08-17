@@ -10,7 +10,7 @@
 #include "NativeFFI/Java/Utils.h"
 #include "Utils.h"
 #include "NativeFFI/Utils.h"
-#include "NativeFFI/Java/MemberJNISignature.h"
+#include "NativeFFI/Java/JavaMemberSignature.h"
 
 #include "cangjie/AST/Node.h"
 #include "cangjie/Modules/ImportManager.h"
@@ -406,7 +406,7 @@ public:
      *                        signature.name, signature.signature, Java_CFFI_JavaEntity(value))
      */
     OwnedPtr<CallExpr> CreateSetFieldCall(Ptr<Expr> env, OwnedPtr<Expr> obj,
-                                          const Native::FFI::Java::MemberJNISignature& signature,
+                                          const Native::FFI::Java::JavaMemberSignature& signature,
                                           OwnedPtr<Expr> value);
 
     /**

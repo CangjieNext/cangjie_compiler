@@ -7,10 +7,11 @@
 /**
  * @file
  *
- * This file declares java ...
+ * This file declares implementation of java class type abstraction.
  */
 
 #include "NativeFFI/Java/JavaClassSignature.h"
+#include "NativeFFI/Java/Utils.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include <ostream>
 #include <string_view>
@@ -55,9 +56,9 @@ std::string Join(const std::vector<std::string_view>& vec, const std::string_vie
 
 } // namespace
 
-static JavaClassSignature JavaClassSignature::FromDecl(const AST::ClassLikeDecl& decl)
+JavaClassSignature JavaClassSignature::FromDecl(const AST::ClassLikeDecl& decl)
 {
-
+    return JavaClassSignature(GetJavaPackage(decl), GetJavaUnqualifiedNestedTypeName(decl, "."));
 }
 
 JavaClassSignature::JavaClassSignature(std::string_view package, std::string_view type)
@@ -65,6 +66,16 @@ JavaClassSignature::JavaClassSignature(std::string_view package, std::string_vie
 {
     CJC_ASSERT(!package.empty());
     CJC_ASSERT(!type.empty());
+}
+
+JavaClassSignature JavaClassSignature::GetConstructorMarkerClass()
+{
+    constexpr static auto NATIVE_CONSTRUCTOR_MARKER_CLASS_NAME = "$$NativeConstructorMarker";
+    constexpr static auto NATIVE_CONSTRUCTOR_MARKER_PACKAGE_NAME = "cangjie.lang.internal";
+    static auto marker = JavaClassSignature(
+        NATIVE_CONSTRUCTOR_MARKER_PACKAGE_NAME,
+        NATIVE_CONSTRUCTOR_MARKER_CLASS_NAME);
+    return marker;
 }
 
 bool JavaClassSignature::IsNested() const
@@ -94,7 +105,7 @@ std::string JavaClassSignature::ToString() const
     return str;
 }
 
-std::string JavaClassSignature::ToJniClassNameString() const
+std::string JavaClassSignature::GetJniClassName() const
 {
     constexpr static std::string_view packageDelimiter = "/";
     constexpr static std::string_view nestedTypeDelimiter = "$";
@@ -109,6 +120,15 @@ std::string JavaClassSignature::ToJniClassNameString() const
 
     str += type;
     return str;
+}
+
+std::string JavaClassSignature::GetUnqualifiedTypeName(const std::string_view nestedDelimiter)
+{
+    if (!IsNested()) {
+        return std::string(type);
+    }
+
+    return Join(outerTypes, nestedDelimiter) + std::string(nestedDelimiter) + std::string(type);
 }
 
 

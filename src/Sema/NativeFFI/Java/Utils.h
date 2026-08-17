@@ -17,17 +17,6 @@
 
 namespace Cangjie::Native::FFI::Java {
 
-struct DestructedJavaClassName {
-    /// Full package name
-    std::optional<std::string> packageName;
-
-    /// Name of top level class
-    std::string topLevelClassName;
-
-    /// Full name of the class, starting from top level
-    std::string fullClassName;
-};
-
 const Ptr<AST::ClassDecl> GetSyntheticClass(const ImportManager& importManager, const AST::ClassLikeDecl& cld);
 
 std::string GetMirrorReferenceWrapperNameFromClassLike(const AST::ClassLikeDecl &mirror);
@@ -50,7 +39,21 @@ bool IsJavaImplRegistryCompanionReferenceField(const AST::Node& node);
 
 bool IsUserDefinedJavaImplConstructor(const AST::Decl& implMember);
 
-std::string GetJniTypeSignature(const AST::Ty& javaCompatibleTy, bool withinArray);
+/**
+ * Returns fully-qualified JNI name (in form of internal JVM representation) of `javaCompatibleTy`
+ * or type JNI signature for array and function types.
+ *
+ * @param `withObjectTypeSeparator` specifies if an object type signature should be prefixed with `L`
+ * and suffixed with `;` - like `L<signature>;`. Such escaped representation is used for:
+ * - function type signatures like: `(Ljava/lang/String;)Ljava/lang/Object;`;
+ * - array signatures like: `[[Ljava/lang/String;`.
+ */
+std::string GetJniTypeSignature(const AST::Ty& javaCompatibleTy,
+    bool withObjectTypeSeparator = false,
+    bool withMarker = false);
+std::string GetJniTypeSignature(const AST::Ty& javaCompatibleRetTy,
+    const std::vector<Ptr<AST::Ty>> paramTys,
+    bool withMarker = false);
 
 /**
  * Returns fully-qualified name of the decl or fq-name specified in @JavaMirror/@JavaImpl as attribute,
@@ -65,10 +68,22 @@ std::string GetJavaFQName(const AST::Decl& decl);
  */
 std::string GetJavaFQSourceCodeName(const AST::ClassLikeDecl& decl);
 
+std::string GetJavaTopLevelClassName(const AST::ClassLikeDecl& decl);
+
+std::string GetJavaUnqualifiedNestedTypeName(const AST::ClassLikeDecl& decl,
+    const std::string_view nestedSeparator = "$");
+
 /**
- * Returns parts of java class name
+ * Returns package of the decl or package specified in @JavaMirror/@JavaImpl as parameter (omitting class name)
  */
-DestructedJavaClassName DestructJavaClassName(const AST::ClassLikeDecl& decl);
+std::string GetJavaPackage(const AST::Decl& decl);
+
+/**
+ * Returns name of corresponding Java method or field with respect to @ForeignName annotation
+ */
+std::string GetJavaMemberName(const AST::Decl& member);
+
+std::string NormalizeJavaSignature(const std::string& sig);
 
 } // namespace Cangjie::Native::FFI::Java
 

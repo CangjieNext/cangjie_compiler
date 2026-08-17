@@ -204,6 +204,228 @@ Ty& JniBridge::ConvertCangjieToJniTy(Ty& javaCompatibleTy) const
     return javaCompatibleTy; // never succeeding fallback
 }
 
+OwnedPtr<Expr> JniBridge::CreateNonvirtualJavaMethodCall(const Ty& retTy,
+    Ptr<Expr> jniEnvPtr, Ptr<Expr> jobject, Ptr<Expr> jclass, Ptr<Expr> jmethod) const
+{
+    switch (retTy.kind) {
+        case TypeKind::TYPE_UNIT:
+            return interface.CreateCallNonvirtualVoidMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_BOOLEAN:
+            return interface.CreateCallNonvirtualBooleanMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT8:
+            return interface.CreateCallNonvirtualByteMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_UINT16:
+            return interface.CreateCallNonvirtualCharMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT16:
+            return interface.CreateCallNonvirtualShortMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT32:
+            return interface.CreateCallNonvirtualIntMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT64:
+            return interface.CreateCallNonvirtualLongMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_FLOAT32:
+            return interface.CreateCallNonvirtualFloatMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_FLOAT64:
+            return interface.CreateCallNonvirtualDoubleMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        default:
+            return interface.CreateCallNonvirtualObjectMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+    }
+}
+
+OwnedPtr<Expr> JniBridge::CreateNonvirtualJavaMethodCall(const Ty& retTy,
+    Ptr<Expr> jniEnvPtr, Ptr<Expr> jobject, Ptr<Expr> jclass, Ptr<Expr> jmethod, OwnedPtr<FuncArg> jniArgs) const
+{
+    switch (retTy.kind) {
+        case TypeKind::TYPE_UNIT:
+            return interface.CreateCallNonvirtualVoidMethodACall(jniEnvPtr, ASTCloner::Clone(jobject),
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_BOOLEAN:
+            return interface.CreateCallNonvirtualBooleanMethodACall(jniEnvPtr, ASTCloner::Clone(jobject),
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT8:
+            return interface.CreateCallNonvirtualByteMethodACall(jniEnvPtr, ASTCloner::Clone(jobject),
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_UINT16:
+            return interface.CreateCallNonvirtualCharMethodACall(jniEnvPtr, ASTCloner::Clone(jobject),
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT16:
+            return interface.CreateCallNonvirtualShortMethodACall(jniEnvPtr, ASTCloner::Clone(jobject),
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT32:
+            return interface.CreateCallNonvirtualIntMethodACall(jniEnvPtr, ASTCloner::Clone(jobject),
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT64:
+            return interface.CreateCallNonvirtualLongMethodACall(jniEnvPtr, ASTCloner::Clone(jobject),
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_FLOAT32:
+            return interface.CreateCallNonvirtualFloatMethodACall(jniEnvPtr, ASTCloner::Clone(jobject),
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_FLOAT64:
+            return interface.CreateCallNonvirtualDoubleMethodACall(jniEnvPtr, ASTCloner::Clone(jobject),
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        default:
+            return interface.CreateCallNonvirtualObjectMethodACall(jniEnvPtr, ASTCloner::Clone(jobject),
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+    }
+}
+
+OwnedPtr<Expr> JniBridge::CreateVirtualInstanceJavaMethodCall(const Ty& retTy,
+    Ptr<Expr> jniEnvPtr, Ptr<Expr> jobject, Ptr<Expr> jmethod) const
+{
+    switch (retTy.kind) {
+        case TypeKind::TYPE_UNIT:
+            return interface.CreateCallVoidMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_BOOLEAN:
+            return interface.CreateCallBooleanMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT8:
+            return interface.CreateCallByteMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_UINT16:
+            return interface.CreateCallCharMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT16:
+            return interface.CreateCallShortMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT32:
+            return interface.CreateCallIntMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT64:
+            return interface.CreateCallLongMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_FLOAT32:
+            return interface.CreateCallFloatMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_FLOAT64:
+            return interface.CreateCallDoubleMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        default:
+            return interface.CreateCallObjectMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+    }
+}
+
+OwnedPtr<Expr> JniBridge::CreateVirtualInstanceJavaMethodCall(const Ty& retTy,
+    Ptr<Expr> jniEnvPtr, Ptr<Expr> jobject, Ptr<Expr> jmethod, OwnedPtr<FuncArg> jniArgs) const
+{
+    switch (retTy.kind) {
+        case TypeKind::TYPE_UNIT:
+            return interface.CreateCallVoidMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_BOOLEAN:
+            return interface.CreateCallBooleanMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT8:
+            return interface.CreateCallByteMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_UINT16:
+            return interface.CreateCallCharMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT16:
+            return interface.CreateCallShortMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT32:
+            return interface.CreateCallIntMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT64:
+            return interface.CreateCallLongMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_FLOAT32:
+            return interface.CreateCallFloatMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_FLOAT64:
+            return interface.CreateCallDoubleMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        default:
+            return interface.CreateCallObjectMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+    }
+}
+
+OwnedPtr<Expr> JniBridge::CreateStaticJavaMethodCall(const Ty& retTy,
+    Ptr<Expr> jniEnvPtr, Ptr<Expr> jclass, Ptr<Expr> jmethod) const
+{
+    switch (retTy.kind) {
+        case TypeKind::TYPE_UNIT:
+            return interface.CreateCallStaticVoidMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_BOOLEAN:
+            return interface.CreateCallStaticBooleanMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT8:
+            return interface.CreateCallStaticByteMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_UINT16:
+            return interface.CreateCallStaticCharMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT16:
+            return interface.CreateCallStaticShortMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT32:
+            return interface.CreateCallStaticIntMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_INT64:
+            return interface.CreateCallStaticLongMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_FLOAT32:
+            return interface.CreateCallStaticFloatMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        case TypeKind::TYPE_FLOAT64:
+            return interface.CreateCallStaticDoubleMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        default:
+            return interface.CreateCallStaticObjectMethodCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+    }
+}
+
+OwnedPtr<Expr> JniBridge::CreateStaticJavaMethodCall(const Ty& retTy,
+    Ptr<Expr> jniEnvPtr, Ptr<Expr> jclass, Ptr<Expr> jmethod, OwnedPtr<FuncArg> jniArgs) const
+{
+    switch (retTy.kind) {
+        case TypeKind::TYPE_UNIT:
+            return interface.CreateCallStaticVoidMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_BOOLEAN:
+            return interface.CreateCallStaticBooleanMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT8:
+            return interface.CreateCallStaticByteMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_UINT16:
+            return interface.CreateCallStaticCharMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT16:
+            return interface.CreateCallStaticShortMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT32:
+            return interface.CreateCallStaticIntMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_INT64:
+            return interface.CreateCallStaticLongMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_FLOAT32:
+            return interface.CreateCallStaticFloatMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        case TypeKind::TYPE_FLOAT64:
+            return interface.CreateCallStaticDoubleMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+        default:
+            return interface.CreateCallStaticObjectMethodACall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+    }
+}
+
 JniNativeInterfaceBridge::JniNativeInterfaceBridge(
     TypeManager& typeManager, const ImportManager& importManager, AST::StructDecl& jniInterfaceDecl)
 : typeManager(typeManager), importManager(importManager), jniInterfaceDecl(jniInterfaceDecl) {}

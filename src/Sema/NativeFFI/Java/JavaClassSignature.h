@@ -7,10 +7,10 @@
 /**
  * @file
  *
- * This file declares java ...
+ * This file declares java java class type abstraction.
  */
-#ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_FQ_NAME
-#define CANGJIE_SEMA_NATIVE_FFI_JAVA_FQ_NAME
+#ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_CLASS_SIGNATURE
+#define CANGJIE_SEMA_NATIVE_FFI_JAVA_CLASS_SIGNATURE
 
 #include <ostream>
 #include <string>
@@ -27,13 +27,26 @@ enum JavaTypeNameKind {
 
 struct JavaClassSignature {
 public:
-
     static JavaClassSignature FromDecl(const AST::ClassLikeDecl& decl);
+    static JavaClassSignature GetConstructorMarkerClass();
 
     friend std::ostream& operator<<(std::ostream& os, const JavaClassSignature& fqname);
 
     std::string ToString() const;
-    std::string ToJniClassNameString() const;
+
+    /**
+     * Returns fully-qualified name of java class in JNI (JVM internal) form:
+     * `package/subpackage/OuterClass$NestedClass`
+     */
+    std::string GetJniClassName() const;
+
+    /**
+     * Returns fully-qualified name of java class in form of:
+     * `package.subpackage.OuterClass.NestedClass`
+     */
+    std::string GetFQName() const;
+
+    std::string GetUnqualifiedTypeName(const std::string_view nestedDelimiter = ".") const;
 
     /**
      * Is this type nested.
@@ -41,6 +54,7 @@ public:
      *
      */
     bool IsNested() const;
+
 private:
     JavaClassSignature(std::string_view package, std::string_view type);
     const std::vector<std::string_view> packageParts;
@@ -58,4 +72,4 @@ struct std::hash<Cangjie::Native::FFI::Java::JavaClassSignature> {
     }
 };
 
-#endif // CANGJIE_SEMA_NATIVE_FFI_JAVA_FQ_NAME
+#endif // CANGJIE_SEMA_NATIVE_FFI_JAVA_CLASS_SIGNATURE

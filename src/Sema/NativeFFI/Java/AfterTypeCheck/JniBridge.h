@@ -156,6 +156,27 @@ public:
      */
     AST::Ty& ConvertCangjieToJniTy(AST::Ty& javaCompatibleTy) const;
 
+    OwnedPtr<AST::Expr> CreateNonvirtualJavaMethodCall(const AST::Ty& retTy,
+        Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jobject, Ptr<AST::Expr> jclass, Ptr<AST::Expr> jmethod) const;
+
+    OwnedPtr<AST::Expr> CreateNonvirtualJavaMethodCall(const AST::Ty& retTy,
+        Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jobject, Ptr<AST::Expr> jclass, Ptr<AST::Expr> jmethod,
+        OwnedPtr<AST::FuncArg> jniArgs) const;
+
+    OwnedPtr<AST::Expr> CreateVirtualInstanceJavaMethodCall(const AST::Ty& retTy,
+        Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jobject, Ptr<AST::Expr> jmethod) const;
+
+    OwnedPtr<AST::Expr> CreateVirtualInstanceJavaMethodCall(const AST::Ty& retTy,
+        Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jobject, Ptr<AST::Expr> jmethod,
+        OwnedPtr<FuncArg> jniArgs) const;
+
+    OwnedPtr<AST::Expr> CreateStaticJavaMethodCall(const AST::Ty& retTy,
+        Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jclass, Ptr<AST::Expr> jmethod) const;
+
+    OwnedPtr<AST::Expr> CreateStaticJavaMethodCall(const AST::Ty& retTy,
+        Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jclass, Ptr<AST::Expr> jmethod,
+        OwnedPtr<FuncArg> jniArgs) const;
+
     const JniNativeInterfaceBridge interface;
 
 private:

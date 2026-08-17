@@ -18,7 +18,7 @@
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "NativeFFI/Java/AfterTypeCheck/InteropLibBridge.h"
 #include "NativeFFI/Java/AfterTypeCheck/JniBridge.h"
-// #include "NativeFFI/Java/JavaFQName.h"
+#include "NativeFFI/Java/JavaMemberSignature.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
@@ -35,7 +35,7 @@ public:
         Interop::Java::Utils& utils);
 
     OwnedPtr<AST::Expr> CreateJMethodIdAccess(AfterTypeCheckContext& ctx,
-        const AST::FuncDecl& method, Ptr<AST::Expr> jclass, Ptr<AST::Expr> envPtr, bool withMarker = false);
+       JavaMemberSignature method, Ptr<AST::Expr> jclass, Ptr<AST::Expr> envPtr);
 
     void Clear() noexcept;
 private:
@@ -51,13 +51,13 @@ private:
      * When there is no jmethodId of in the cache,
      * it creates mangled top-level variable for corresponding jmethod and returns it.
      */
-    AST::VarDecl& GetOrPut(AfterTypeCheckContext& ctx, const AST::FuncDecl& method, AST::File& curFile);
+    AST::VarDecl& GetOrPut(AfterTypeCheckContext& ctx, JavaMemberSignature method, AST::File& curFile);
 
-    std::string GetNewAccessorName(const AST::FuncDecl& method) const;
+    std::string GetNewAccessorName(const JavaMemberSignature& method) const;
 
     // std::unordered_map<JavaFQName, Ptr<AST::VarDecl>> cache;
     // std::unordered_map<std::string, Ptr<AST::VarDecl>> cache;
-    std::unordered_map<Ptr<AST::FuncDecl>, Ptr<AST::VarDecl>> cache;
+    std::unordered_map<JavaMemberSignature, Ptr<AST::VarDecl>> cache;
 };
 
 } // namespace Cangjie::Native::FFI::Java

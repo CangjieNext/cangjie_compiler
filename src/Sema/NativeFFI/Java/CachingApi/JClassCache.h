@@ -18,7 +18,6 @@
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "NativeFFI/Java/AfterTypeCheck/InteropLibBridge.h"
 #include "NativeFFI/Java/AfterTypeCheck/JniBridge.h"
-// #include "NativeFFI/Java/JavaFQName.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/Modules/ImportManager.h"
 
@@ -33,7 +32,9 @@ public:
         InteropLibBridge& ilib,
         Interop::Java::Utils& utils);
 
-    OwnedPtr<AST::Expr> CreateJClassAccess(AfterTypeCheckContext& ctx, const AST::Ty& javaTy, Ptr<AST::Expr> envPtr);
+    OwnedPtr<AST::Expr> CreateJClassAccess(AfterTypeCheckContext& ctx,
+        JavaClassSignature javaClass,
+        Ptr<AST::Expr> envPtr);
 
     void Clear() noexcept;
 private:
@@ -45,15 +46,14 @@ private:
 
     /**
      * For jclasses, already presented in cache, just returns corresponding jclass variable.
-     * When there is no jclass of `fqname` (in form of "package.ClassName") in the cache,
+     * When there is no jclass in the cache,
      * it creates mangled top-level variable for corresponding jclass and returns it.
      */
-    AST::VarDecl& GetOrPut(AfterTypeCheckContext& ctx, const AST::Ty& javaTy, AST::File& curFile);
+    AST::VarDecl& GetOrPut(AfterTypeCheckContext& ctx, JavaClassSignature javaClass, AST::File& curFile);
 
-    std::string GetAccessorName(const AST::Ty& javaTy) const;
+    std::string GetNewAccessorName(const JavaClassSignature& javaClass) const;
 
-    // std::unordered_map<JavaFQName, Ptr<AST::VarDecl>> cache;
-    std::unordered_map<std::string, Ptr<AST::VarDecl>> cache;
+    std::unordered_map<JavaClassSignature, Ptr<AST::VarDecl>> cache;
 };
 
 } // namespace Cangjie::Native::FFI::Java

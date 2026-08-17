@@ -6,70 +6,19 @@
 
 #include "JClassCache.h"
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
-#include "NativeFFI/Java/AfterTypeCheck/Utils.h"
-// #include "NativeFFI/Java/JavaFQName.h"
 #include "NativeFFI/Utils.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Node.h"
-#include "cangjie/AST/Utils.h"
-#include "cangjie/Utils/CheckUtils.h"
-#include <algorithm>
 
 namespace Cangjie::Native::FFI::Java {
 using namespace Cangjie::AST;
 
-// std::string JClassCache::GetAccessorName(const Ty& javaTy) const
-// {
-//     constexpr static auto mangledDollar = "$DOLLAR$";
-//     std::string mangledVarName = "jclass$";
-
-//     for (auto packagePart : className.packageParts) {
-//         for (auto ch : packagePart) {
-//             if (ch == '$') {
-//                 mangledVarName += mangledDollar;
-//             } else {
-//                 mangledVarName += ch;
-//             }
-//         }
-//         mangledVarName += '$';
-//     }
-
-//     for (auto outerType : className.outerTypes) {
-//         for (auto ch : outerType) {
-//             if (ch == '$') {
-//                 mangledVarName += mangledDollar;
-//             } else {
-//                 mangledVarName += ch;
-//             }
-//         }
-//         mangledVarName += "$$";
-//     }
-
-//     for (auto ch : className.type) {
-//         if (ch == '$') {
-//             mangledVarName += mangledDollar;
-//         } else {
-//             mangledVarName += ch;
-//         }
-//     }
-
-//     return mangledVarName;
-// }
-
-std::string JClassCache::GetAccessorName(const Ty& javaTy) const
+std::string JClassCache::GetNewAccessorName(const JavaClassSignature& javaClass) const
 {
-    constexpr static auto mangledDollar = "$DOLLAR$";
+    static size_t unique_id = 0;
     std::string mangledVarName = "jclass$";
-
-    // encoding for for the poor.
-    // TODO: Consider package parts and outer types in mangling scheme.
-    for (auto ch : GetJavaJniClassName(javaTy)) {
-        if (ch == '$') {
-            mangledVarName += mangledDollar;
-        } else {
-            mangledVarName += ch;
-        }
-    }
+    mangledVarName += javaClass.GetUnqualifiedTypeName("$");
+    mangledVarName += std::to_string(unique_id++);
 
     return mangledVarName;
 }
@@ -81,21 +30,22 @@ void JClassCache::Clear() noexcept
 
 OwnedPtr<AST::Expr> JClassCache::CreateJClassAccess(
     AfterTypeCheckContext& ctx,
-    const Ty& javaTy,
+    JavaClassSignature javaClass,
     Ptr<Expr> envPtr)
 {
-    CJC_ASSERT(!IsJArray(javaTy));
-    CJC_ASSERT(IsMirror(javaTy) || IsImpl(javaTy));
-
     auto& curFile = *envPtr->curFile;
-    auto& classVar = GetOrPut(ctx, javaTy, curFile);
+    auto& classVar = GetOrPut(ctx, javaClass, curFile);
+
+    static auto createGetClassCall = [this, envPtr, &curFile](JavaClassSignature javaClass) {
+        return ilib.CreateGetClassCall(javaClass.GetJniClassName(), envPtr, curFile);
+    };
 
     std::vector<OwnedPtr<Node>> ifNull;
     std::vector<OwnedPtr<Node>> ifNotNull;
 
     ifNull.push_back(
         CreateAssignExpr(WithinFile(CreateRefExpr(classVar), &curFile),
-            jni.interface.CreateNewGlobalRefCall(envPtr, ilib.CreateGetClassCall(javaTy, envPtr, curFile)),
+            jni.interface.CreateNewGlobalRefCall(envPtr, createGetClassCall(javaClass)),
             TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)));
     ifNull.push_back(WithinFile(CreateRefExpr(classVar), &curFile));
 
@@ -108,11 +58,10 @@ OwnedPtr<AST::Expr> JClassCache::CreateJClassAccess(
         &ilib.GetJniJClassTy());
 }
 
-VarDecl& JClassCache::GetOrPut(AfterTypeCheckContext& ctx, const Ty& javaTy, File& curFile)
+VarDecl& JClassCache::GetOrPut(AfterTypeCheckContext& ctx, JavaClassSignature javaClass, File& curFile)
 {
-    auto className = GetJavaJniClassName(javaTy);
     // Get variable that stores JClass
-    if (auto it = cache.find(className); it != cache.end()) {
+    if (auto it = cache.find(javaClass); it != cache.end()) {
         return *it->second;
     }
     // Create variable since it does not exist yet
@@ -121,12 +70,12 @@ VarDecl& JClassCache::GetOrPut(AfterTypeCheckContext& ctx, const Ty& javaTy, Fil
 
     auto null = MakeOwned<PointerExpr>();
     null->SetTy(&jclassTy);
-    auto varDecl = CreateVarDecl(GetAccessorName(javaTy), std::move(null), nullptr);
+    auto varDecl = CreateVarDecl(GetNewAccessorName(javaClass), std::move(null), nullptr);
     varDecl->EnableAttr(Attribute::INTERNAL, Attribute::GLOBAL, Attribute::INITIALIZED, Attribute::NO_REFLECT_INFO);
     varDecl->isVar = true;
     varDecl->curFile = &curFile;
 
-    cache[className] = varDecl.get();
+    cache[javaClass] = varDecl.get();
     auto& ret = *varDecl;
     ctx.AddGeneratedDecl(std::move(varDecl));
     return ret;

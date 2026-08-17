@@ -8,6 +8,7 @@
 #include "Desugar/AfterTypeCheck.h"
 #include "JavaDesugarManager.h"
 #include "NativeFFI/Java/AfterTypeCheck/Utils.h"
+#include "NativeFFI/Java/Utils.h"
 #include "NativeFFI/Utils.h"
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/Clone.h"
@@ -633,7 +634,7 @@ OwnedPtr<Expr> InteropLibBridge::CreateJavaEntityCall(OwnedPtr<Expr> arg)
 OwnedPtr<Expr> InteropLibBridge::SelectJSigByTypeKind([[maybe_unused]] TypeKind kind, Ptr<Ty> ty)
 {
     static auto strTy = utils.GetStringDecl().GetTy();
-    return CreateLitConstExpr(LitConstKind::STRING, utils.GetJavaTypeSignature(*ty), strTy);
+    return CreateLitConstExpr(LitConstKind::STRING, GetJniTypeSignature(*ty), strTy);
 }
 
 OwnedPtr<Expr> InteropLibBridge::SelectJPrimitiveNameByTypeKind(TypeKind kind, [[maybe_unused]] Ptr<Ty> ty)
@@ -1190,7 +1191,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateGetStaticFieldCall(
 }
 
 OwnedPtr<CallExpr> InteropLibBridge::CreateSetFieldCall(
-    Ptr<Expr> env, OwnedPtr<Expr> obj, const MemberJNISignature& signature, OwnedPtr<Expr> value)
+    Ptr<Expr> env, OwnedPtr<Expr> obj, const JavaMemberSignature& signature, OwnedPtr<Expr> value)
 {
     auto curFile = value->curFile;
     auto funcDecl = GetSetFieldDecl();

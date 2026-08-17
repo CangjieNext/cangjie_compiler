@@ -329,22 +329,6 @@ bool IsGeneratedJavaImplConstructor(const FuncDecl& ctor)
     return plists[0]->params[0]->identifier == JAVA_IMPL_ENTITY_ARG_NAME_IN_GENERATED_CTOR;
 }
 
-std::string GetJavaMemberName(const Decl& decl)
-{
-    for (auto& anno : decl.annotations) {
-        if (anno->kind != AnnotationKind::FOREIGN_NAME) {
-            continue;
-        }
-
-        CJC_ASSERT(anno->args.size() == 1);
-
-        auto litExpr = DynamicCast<LitConstExpr>(anno->args[0]->expr.get());
-        CJC_ASSERT(litExpr);
-        return litExpr->stringValue;
-    }
-
-    return decl.identifier;
-}
 
 bool HasPredefinedJavaName(const ClassLikeDecl& decl)
 {
@@ -390,35 +374,6 @@ ArrayOperationKind GetArrayOperationKind(Decl& decl)
     CJC_ABORT();
 
     return ArrayOperationKind::GET;
-}
-
-std::string GetJavaPackage(const Decl& decl)
-{
-    for (auto& anno : decl.annotations) {
-        if (anno->kind != AnnotationKind::JAVA_MIRROR && anno->kind != AnnotationKind::JAVA_IMPL) {
-            continue;
-        }
-
-        // @JavaMirror or @JavaImpl annotations could accept optional string literal argument with fully-qualified name.
-        CJC_ASSERT_WITH_MSG(anno->args.size() < 2, "@JavaMirror or @JavaImpl could accept maximum one argument");
-        if (anno->args.empty()) {
-            break;
-        }
-
-        CJC_ASSERT(anno->args[0]->expr->astKind == ASTKind::LIT_CONST_EXPR);
-        auto lce = As<ASTKind::LIT_CONST_EXPR>(anno->args[0]->expr.get());
-        CJC_ASSERT(lce);
-        std::string fqname = lce->stringValue;
-        auto beforeClassNamePos = fqname.rfind(".");
-        if (beforeClassNamePos != std::string::npos) {
-            fqname.erase(beforeClassNamePos);
-        } else {
-            return "";
-        }
-        return fqname;
-    }
-
-    return decl.GetFullPackageName();
 }
 
 std::string Utils::GetJavaObjectTypeName(const Ty& ty)
@@ -475,99 +430,6 @@ std::string GetJavaJniClassName(const Ty& cjtype)
 {
     CJC_ASSERT(!IsJArray(cjtype));
     return NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(cjtype).commonDecl));
-}
-
-/*
- * Should be called only on java compatible type or a function type over java compatible types
- */
-std::string Utils::GetJavaTypeSignature(const Ty& cjtype)
-{
-    std::string jsig;
-
-    switch (cjtype.kind) {
-        case TypeKind::TYPE_UNIT:
-            jsig = "V";
-            break;
-        case TypeKind::TYPE_BOOLEAN:
-            jsig = "Z";
-            break;
-        case TypeKind::TYPE_INT8:
-            jsig = "B";
-            break;
-        case TypeKind::TYPE_UINT16:
-            jsig = "C";
-            break;
-        case TypeKind::TYPE_INT16:
-            jsig = "S";
-            break;
-        case TypeKind::TYPE_INT32:
-            jsig = "I";
-            break;
-        case TypeKind::TYPE_INT64:
-            jsig = "J";
-            break;
-        case TypeKind::TYPE_FLOAT32:
-            jsig = "F";
-            break;
-        case TypeKind::TYPE_FLOAT64:
-            jsig = "D";
-            break;
-
-        case TypeKind::TYPE_STRUCT: {
-            if (cjtype.IsString()) {
-                jsig = "L" + NormalizeJavaSignature(GetJavaFQName(*GetJStringDecl())) + ";";
-                break;
-            }
-            if (!cjtype.IsStructArray()) {
-                break;
-            }
-            [[fallthrough]]; // for Array<T> - fallback
-        }
-        case TypeKind::TYPE_ARRAY:
-            jsig = "[" + GetJavaTypeSignature(*cjtype.typeArgs[0]);
-            break;
-        case TypeKind::TYPE_ENUM: {
-            if (!cjtype.IsCoreOptionType()) {
-                break;
-            };
-            CJC_ASSERT_WITH_MSG(!cjtype.typeArgs.empty(), "Option type must be generic");
-            auto& argTy = *cjtype.typeArgs[0];
-            if (IsJArray(argTy)) {
-                jsig = GetJavaTypeSignature(argTy);
-            } else {
-                jsig = "L" + NormalizeJavaSignature(GetJavaObjectTypeName(argTy)) + ";";
-            }
-            break;
-        }
-        case TypeKind::TYPE_CLASS:
-        case TypeKind::TYPE_INTERFACE:
-            if (IsJArray(*StaticCast<ClassLikeTy&>(cjtype).commonDecl)) {
-                jsig = "[" + GetJavaTypeSignature(*cjtype.typeArgs[0]);
-            } else {
-                jsig = "L" + NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(cjtype).commonDecl)) + ";";
-            }
-            break;
-        case TypeKind::TYPE_FUNC: {
-            auto& funcTy = *StaticCast<FuncTy>(&cjtype);
-            jsig = "(";
-            for (auto paramTy : funcTy.paramTys) {
-                jsig.append(GetJavaTypeSignature(*paramTy));
-            }
-            jsig.append(")");
-            jsig.append(GetJavaTypeSignature(*funcTy.retTy));
-            break;
-        }
-        default:
-            CJC_ABORT();
-            break; // method must be called only on java-compatible types
-    }
-
-    return jsig;
-}
-
-std::string Utils::GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& params)
-{
-    return GetJavaTypeSignature(*typeManager.GetFunctionTy(params, &retTy));
 }
 
 OwnedPtr<CallExpr> Utils::CreateZeroValue(Ptr<Ty> ty, File& curFile) const
@@ -654,31 +516,6 @@ bool IsImpl(const Ty& ty)
 {
     auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty);
     return classLikeTy && classLikeTy->commonDecl && IsImpl(*classLikeTy->commonDecl);
-}
-
-std::string ReplaceClassName(std::string& classTypeSignature, std::string newSegment)
-{
-    bool hasSemicolon = (!classTypeSignature.empty() && classTypeSignature.back() == ';');
-
-    std::string base = hasSemicolon
-        ? classTypeSignature.substr(0, classTypeSignature.length() - 1)
-        : classTypeSignature;
-
-    size_t lastSlash = classTypeSignature.rfind('/');
-    if (lastSlash != std::string::npos) {
-        base = base.substr(0, lastSlash + 1) + newSegment;
-    } else {
-        base = newSegment;
-    }
-
-    return hasSemicolon ? base + ";" : base;
-}
-
-std::string NormalizeJavaSignature(const std::string& sig)
-{
-    std::string normalized = sig;
-    std::replace(normalized.begin(), normalized.end(), '.', '/');
-    return normalized;
 }
 
 OwnedPtr<Expr> CreateMirrorConstructorCall(
@@ -951,13 +788,6 @@ OwnedPtr<MatchExpr> InteropLibBridge::CreateMatchByTypeArgument(
     return std::move(matchExpr);
 }
 
-namespace {
-
-constexpr auto NATIVE_CONSTRUCTOR_MARKER_CLASS_NAME = "$$NativeConstructorMarker";
-constexpr auto NATIVE_CONSTRUCTOR_MARKER_PACKAGE_NAME = "cangjie.lang.internal";
-
-} // namespace
-
 Ptr<FuncDecl> GetJavaImplRegistryCompanionConstructor(AST::ClassDecl& companion)
 {
     CJC_ASSERT(IsImplRegistryCompanion(companion));
@@ -973,28 +803,6 @@ Ptr<FuncDecl> GetJavaImplRegistryCompanionConstructor(AST::ClassDecl& companion)
 
     CJC_ABORT_WITH_MSG("Bad registry companion");
     return nullptr;
-}
-
-std::string GetConstructorMarkerFQName()
-{
-    std::string res;
-    res += NATIVE_CONSTRUCTOR_MARKER_PACKAGE_NAME;
-    res += ".";
-    res += NATIVE_CONSTRUCTOR_MARKER_CLASS_NAME;
-    return res;
-}
-
-std::string GetConstructorMarkerClassName()
-{
-    return NATIVE_CONSTRUCTOR_MARKER_CLASS_NAME;
-}
-
-OwnedPtr<ClassDecl> CreateConstructorMarkerClassDecl()
-{
-    OwnedPtr<ClassDecl> markerClassDecl = MakeOwned<ClassDecl>();
-    markerClassDecl->identifier = std::string(NATIVE_CONSTRUCTOR_MARKER_CLASS_NAME);
-    markerClassDecl->fullPackageName = NATIVE_CONSTRUCTOR_MARKER_PACKAGE_NAME;
-    return markerClassDecl;
 }
 
 void GenerateSyntheticClassMemberStubs(ClassDecl& synthetic, const MemberMap& members)

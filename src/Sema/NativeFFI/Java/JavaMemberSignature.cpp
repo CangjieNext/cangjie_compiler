@@ -7,29 +7,28 @@
 /**
  * @file
  *
- * This file declares java ...
+ * This file declares implementation of java member abstraction.
  */
 
-#include "NativeFFI/Java/MemberJNISignature.h"
+#include "NativeFFI/Java/JavaMemberSignature.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CheckUtils.h"
-#include <ostream>
-#include <string_view>
 #include "NativeFFI/Java/Utils.h"
+#include "NativeFFI/Utils.h"
 
 namespace Cangjie::Native::FFI::Java {
 using namespace AST;
 
-MemberJNISignature MemberJNISignature::FromMethod(const FuncDecl& method)
+JavaMemberSignature JavaMemberSignature::FromMethod(const FuncDecl& method)
 {
     CJC_ASSERT(method.outerDecl && method.outerDecl->IsClassLikeDecl());
     CJC_ASSERT(!method.TestAnyAttr(Attribute::CONSTRUCTOR, Attribute::FINALIZER));
     auto& outerDecl = *StaticAs<ASTKind::CLASS_LIKE_DECL>(method.outerDecl);
     CJC_ASSERT(outerDecl.IsJavaMirror() || outerDecl.IsJavaImpl());
 
-    MemberJNISignature signature(
-        /* .classTypeSignature = */ GetJavaJniClassName(*outerDecl.GetTy()),
+    JavaMemberSignature signature(
+        /* .classSignature = */ JavaClassSignature::FromDecl(outerDecl),
         /* .name = */ GetJavaMemberName(method),
         /* .signature = */ GetJniTypeSignature(*method.GetTy()),
         /* .isStatic = */ method.TestAttr(Attribute::STATIC)
@@ -37,7 +36,7 @@ MemberJNISignature MemberJNISignature::FromMethod(const FuncDecl& method)
     return signature;
 }
 
-MemberJNISignature MemberJNISignature::FromConstructor(const FuncDecl& ctor, bool withMarker)
+JavaMemberSignature JavaMemberSignature::FromConstructor(const FuncDecl& ctor, bool withMarker)
 {
     static constexpr auto JAVA_CONSTRUCTOR = "<init>";
     CJC_ASSERT(ctor.outerDecl && ctor.outerDecl->IsClassLikeDecl());
@@ -47,26 +46,23 @@ MemberJNISignature MemberJNISignature::FromConstructor(const FuncDecl& ctor, boo
 
     static auto& voidTy = *TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*ctor.funcBody->paramLists[0]);
-    if (withMarker) {
-        paramTys.push_back(CreateConstructorMarkerClassDecl()->GetTy());
-    }
 
-    MemberJNISignature signature(
-        /* .classTypeSignature = */ GetJavaJniClassName(*outerDecl.GetTy()),
+    JavaMemberSignature signature(
+        /* .classSignature = */ JavaClassSignature::FromDecl(outerDecl),
         /* .name = */ JAVA_CONSTRUCTOR,
-        /* .signature = */ GetJniTypeSignature(??? get for function voidTy, paramTys) // TODO: for function type overload
+        /* .signature = */ GetJniTypeSignature(voidTy, paramTys, withMarker)
     );
     return signature;
 }
 
-MemberJNISignature MemberJNISignature::FromProperty(const PropDecl& member)
+JavaMemberSignature JavaMemberSignature::FromProperty(const PropDecl& member)
 {
     CJC_ASSERT(member.outerDecl && member.outerDecl->IsClassLikeDecl());
     auto& outerDecl = *StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl);
     CJC_ASSERT(outerDecl.IsJavaMirror() || outerDecl.IsJavaImpl());
 
-    MemberJNISignature signature(
-        /* .classTypeSignature = */ GetJavaJniClassName(*outerDecl.GetTy()),
+    JavaMemberSignature signature(
+        /* .classSignature = */ JavaClassSignature::FromDecl(outerDecl),
         /* .name = */ GetJavaMemberName(member),
         /* .signature = */ GetJniTypeSignature(*member.GetTy()),
         /* .isStatic = */ member.TestAttr(Attribute::STATIC)
@@ -74,7 +70,7 @@ MemberJNISignature MemberJNISignature::FromProperty(const PropDecl& member)
     return signature;
 }
 
-MemberJNISignature MemberJNISignature::FromMember(const AST::Decl& member, bool withMarker)
+JavaMemberSignature JavaMemberSignature::FromMember(const AST::Decl& member, bool withMarker)
 {
     switch (member.astKind) {
         case ASTKind::PROP_DECL:
@@ -90,34 +86,39 @@ MemberJNISignature MemberJNISignature::FromMember(const AST::Decl& member, bool 
         default: break;
     }
     CJC_ABORT(); // Unexpected branch
-    return MemberJNISignature("", "", ""); // compile-error on non-returning branch hack
+    // compile-error on non-returning branch hack here
+    return JavaMemberSignature(JavaClassSignature::FromDecl(StaticCast<ClassLikeDecl&>(*member.outerDecl)), "", "");
 }
 
-MemberJNISignature::MemberJNISignature(
-    std::string classTypeSignature,
+JavaMemberSignature::JavaMemberSignature(
+    JavaClassSignature javaClass,
     std::string name,
     std::string signature,
-    bool isStatic)
-    : classTypeSignature(classTypeSignature), name(name), signature(signature), isStatic(isStatic)
+    bool isStatic) : classSignature(javaClass), name(name), signature(signature), isStatic(isStatic)
 {
 }
 
-std::string MemberJNISignature::GetClassTypeJniName() const
+std::string JavaMemberSignature::GetClassTypeJniName() const
 {
-    return classTypeSignature;
+    return classSignature.GetJniClassName();
 }
 
-std::string MemberJNISignature::GetName() const
+JavaClassSignature JavaMemberSignature::GetClassSignature() const
+{
+    return classSignature;
+}
+
+std::string JavaMemberSignature::GetName() const
 {
     return name;
 }
 
-std::string MemberJNISignature::GetSignature() const
+std::string JavaMemberSignature::GetSignature() const
 {
     return signature;
 }
 
-bool MemberJNISignature::IsStatic() const
+bool JavaMemberSignature::IsStatic() const
 {
     return isStatic;
 }

@@ -74,12 +74,29 @@ public:
     OwnedPtr<AST::Expr> CreateSuperJavaMethodCall(AfterTypeCheckContext& ctx, AST::ClassDecl& child,
         AST::CallExpr& call, std::vector<OwnedPtr<AST::Expr>> args) const;
 
-    OwnedPtr<AST::Expr> CreateJavaMethodCall(AfterTypeCheckContext& ctx,
-        Ptr<Expr> jniEnvPtr,
-        FuncDecl& method, bool isStatic, std::vector<OwnedPtr<Expr>> args) const;
+    OwnedPtr<AST::Expr> CreateNonvirtualJavaMethodCall(AfterTypeCheckContext& ctx,
+        Ptr<Expr> jniEnvPtr, Ptr<Expr> jobjectInstance,
+        JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> javaCompatibleArgs) const;
 
-    OwnedPtr<AST::Expr> CreateJavaMethodCall(AfterTypeCheckContext& ctx,
-        File& curFile, FuncDecl& method, bool isStatic, std::vector<OwnedPtr<Expr>> args) const;
+    OwnedPtr<AST::Expr> CreateNonvirtualJavaMethodCall(AfterTypeCheckContext& ctx,
+        File& curFile, Ptr<Expr> jobjectInstance,
+        JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args) const;
+
+    OwnedPtr<AST::Expr> CreateStaticJavaMethodCall(AfterTypeCheckContext& ctx,
+        Ptr<Expr> jniEnvPtr,
+        JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> javaCompatibleArgs) const;
+
+    OwnedPtr<AST::Expr> CreateStaticJavaMethodCall(AfterTypeCheckContext& ctx,
+        File& curFile,
+        JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args) const;
+
+    OwnedPtr<AST::Expr> CreateVirtualJavaMethodCall(AfterTypeCheckContext& ctx,
+        Ptr<Expr> jniEnvPtr, Ptr<Expr> jobjectInstance,
+        JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> javaCompatibleArgs) const;
+
+    OwnedPtr<AST::Expr> CreateVirtualJavaMethodCall(AfterTypeCheckContext& ctx,
+        File& curFile, Ptr<Expr> jobjectInstance,
+        JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args) const;
 
     /**
      * Creates usages as RefExpr over parameters in `paramList`.
@@ -89,6 +106,14 @@ public:
     std::vector<OwnedPtr<AST::Expr>> ExtractArgExprs(const std::vector<OwnedPtr<FuncArg>>& args) const;
 
 private:
+
+    OwnedPtr<AST::Expr> CreateJavaMethodCall(AfterTypeCheckContext& ctx,
+        Ptr<Expr> jniEnvPtr, Ptr<Expr> jobjectInstance,
+        JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> javaCompatibleArgs, bool isVirtual) const;
+
+    OwnedPtr<AST::Expr> CreateJavaMethodCall(AfterTypeCheckContext& ctx,
+        File& curFile, Ptr<Expr> jobjectInstance,
+        JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args, bool isVirtual) const;
 
     /**
      * Creates tmp variable of VArray type by `args`.
