@@ -6,7 +6,10 @@
 
 #include "cangjie/CHIR/Optimization/Devirtualization.h"
 
+#include <iostream>
+#include <mutex>
 #include <optional>
+#include <unordered_set>
 
 #include "cangjie/CHIR/Optimization/DeadCodeElimination.h"
 #include "cangjie/CHIR/Analysis/DevirtualizationInfo.h"
@@ -37,6 +40,64 @@ Devirtualization::Devirtualization(
     : analysisWrapper(typeAnalysisWrapper), devirtFuncInfo(devirtFuncInfo)
 {
 }
+
+namespace {
+void PrintIfSplitVTableDevirt(const Invoke& invoke, Function& picked, Type& thisType)
+{
+    auto* customTy = DynamicCast<CustomType*>(thisType.StripAllRefs());
+    if (customTy == nullptr) {
+        return;
+    }
+    auto* def = customTy->GetCustomTypeDef();
+    if (def == nullptr) {
+        return;
+    }
+    auto* genericDef = def->GetGenericDecl() != nullptr ? def->GetGenericDecl() : def;
+    const auto& methodName = invoke.GetMethodName();
+    std::vector<std::pair<std::string, Function*>> hits;
+    std::unordered_set<Function*> uniq;
+    for (const auto& vtableIt : genericDef->GetDefVTable().GetTypeVTables()) {
+        for (const auto& info : vtableIt.GetVirtualMethods()) {
+            if (info.GetMethodName() != methodName) {
+                continue;
+            }
+            auto* inst = info.GetVirtualMethod();
+            if (inst == nullptr) {
+                continue;
+            }
+            auto* raw = inst->Get<WrappedRawMethod>() != nullptr ? inst->Get<WrappedRawMethod>() : inst;
+            hits.emplace_back(vtableIt.GetSrcParentType()->ToString(), inst);
+            uniq.insert(raw);
+        }
+    }
+    if (uniq.size() <= 1) {
+        return;
+    }
+
+    static std::mutex mu;
+    static std::unordered_set<std::string> printed;
+    std::string key = genericDef->GetPackageName() + "." + genericDef->GetSrcCodeIdentifier() + "." + methodName +
+        ToPosInfo(invoke.GetDebugLocation());
+    std::lock_guard<std::mutex> lock(mu);
+    if (!printed.insert(key).second) {
+        return;
+    }
+
+    auto* pickedRaw = picked.Get<WrappedRawMethod>() != nullptr ? picked.Get<WrappedRawMethod>() : &picked;
+    std::cout << "[DEVIRT WARN] virtual call '" << methodName << "'" << ToPosInfo(invoke.GetDebugLocation())
+              << " : type '" << genericDef->GetPackageName() << "." << genericDef->GetSrcCodeIdentifier()
+              << "' has multiple same-name vtable slots with different implementations. "
+              << "Devirtualization looks up by name and may pick the wrong slot (UsersForum#3280).\n";
+    for (const auto& [parent, inst] : hits) {
+        auto* raw = inst->Get<WrappedRawMethod>() != nullptr ? inst->Get<WrappedRawMethod>() : inst;
+        auto* parentDef = inst->GetParentCustomTypeDef();
+        std::cout << "    slot " << parent << "." << methodName << " -> " << inst->GetPackageName() << "::"
+                  << (parentDef != nullptr ? parentDef->GetSrcCodeIdentifier() : "?") << "."
+                  << inst->GetSrcCodeIdentifier() << (inst->IsPureAbstract() ? " [abstract]" : " [implemented]")
+                  << (raw == pickedRaw ? "  <picked>" : "") << "\n";
+    }
+}
+} // namespace
 
 void Devirtualization::RunOnFuncs(const std::vector<Function*>& funcs, CHIRBuilder& builder, bool isDebug)
 {
@@ -81,6 +142,7 @@ void Devirtualization::RunOnFunc(const Function* func, CHIRBuilder& builder)
         if (!realCallee) {
             return;
         }
+        PrintIfSplitVTableDevirt(*invoke, *realCallee, *thisType);
         if (thisType->IsGenericRelated()) {
             if (visibleGenericTypes == std::nullopt) {
                 auto types = GetVisiableGenericTypes(*func);

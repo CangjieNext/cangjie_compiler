@@ -10,7 +10,84 @@
 #include "cangjie/CHIR/Analysis/ReachingDefinitionAnalysis.h"
 #include "cangjie/CHIR/Analysis/Utils.h"
 
+#include <iostream>
+#include <unordered_set>
+#include <vector>
+
 namespace Cangjie::CHIR {
+
+namespace {
+// Temporary diagnostics for issue 1088: RLE reuses a whole-object Store/Load
+// after nested fields of a tracked struct have been mutated via GetElementRef.
+struct Issue1088NestedMutation {
+    std::vector<const GetElementRef*> readonlyGetElemRefs;
+    std::vector<const StoreElementRef*> nestedStores;
+};
+
+Issue1088NestedMutation CollectIssue1088Pattern(const Value* location)
+{
+    Issue1088NestedMutation info;
+    std::vector<const Value*> worklist{location};
+    std::unordered_set<const Value*> visited;
+    while (!worklist.empty()) {
+        auto cur = worklist.back();
+        worklist.pop_back();
+        if (!visited.insert(cur).second) {
+            continue;
+        }
+        for (auto user : cur->GetUsers()) {
+            if (auto ger = DynamicCast<GetElementRef*>(user)) {
+                if (ger->GetResult()->TestAttr(Attribute::READONLY)) {
+                    info.readonlyGetElemRefs.push_back(ger);
+                }
+                worklist.push_back(ger->GetResult());
+            } else if (auto gebn = DynamicCast<GetElementByName*>(user)) {
+                worklist.push_back(gebn->GetResult());
+            } else if (auto ser = DynamicCast<StoreElementRef*>(user)) {
+                // Direct StoreElementRef to the allocation itself is handled by
+                // reaching-def; only nested stores through GetElementRef are missed.
+                if (ser->GetBase() == cur && cur != location) {
+                    info.nestedStores.push_back(ser);
+                }
+            }
+        }
+    }
+    return info;
+}
+
+void PrintIssue1088Rle(
+    const Function& func, const Load& load, const Expression& reused, const Issue1088NestedMutation& info)
+{
+    if (info.nestedStores.empty()) {
+        return;
+    }
+    auto location = load.GetLocation();
+    std::cout << "[ISSUE-1088][rle-reuse-stale-struct] "
+              << "func=" << func.GetSrcCodeIdentifier()
+              << " mangled=" << func.GetIdentifier()
+              << " pkg=" << func.GetPackageName()
+              << " load" << ToPosInfo(load.GetDebugLocation(), true)
+              << " location=" << location->GetIdentifier();
+    auto srcName = location->GetSrcCodeIdentifier();
+    if (!srcName.empty()) {
+        std::cout << "[" << srcName << "]";
+    }
+    std::cout << " type=" << location->GetType()->ToString()
+              << " reused=" << reused.GetExprKindName() << ToPosInfo(reused.GetDebugLocation(), true)
+              << " nestedStores=" << info.nestedStores.size()
+              << " readonlyGetElemRef=" << info.readonlyGetElemRefs.size()
+              << "\n";
+    for (auto ser : info.nestedStores) {
+        std::cout << "  StoreElementRef" << ToPosInfo(ser->GetDebugLocation(), true)
+                  << " " << "base=" << ser->GetBase()->GetIdentifier() << "\n";
+    }
+    for (auto ger : info.readonlyGetElemRefs) {
+        std::cout << "  READONLY GetElementRef" << ToPosInfo(ger->GetDebugLocation(), true)
+                  << " " << ger->GetResult()->GetIdentifier() << " = GetElementRef("
+                  << ger->GetBase()->GetIdentifier() << ")\n";
+    }
+}
+} // namespace
 
 RedundantLoadElimination::RedundantLoadElimination()
 {
@@ -73,6 +150,8 @@ void RedundantLoadElimination::RunOnFunc(const Ptr<const Function>& func, bool i
              */
             ModifyApplyCalleeInfo(*load->GetResult(), *def->GetValue());
 
+            PrintIssue1088Rle(*func, *load, *def, CollectIssue1088Pattern(load->GetLocation()));
+
             // replace load with its exact value
             load->GetResult()->ReplaceWith(*def->GetValue(), func->GetBody());
             toBeRemoved[load->GetParentBlock()].emplace_back(index);
@@ -89,6 +168,7 @@ void RedundantLoadElimination::RunOnFunc(const Ptr<const Function>& func, bool i
             if (validLoad == load) {
                 return;
             }
+            PrintIssue1088Rle(*func, *load, *validLoad, CollectIssue1088Pattern(load->GetLocation()));
             load->GetResult()->ReplaceWith(*validLoad->GetResult(), func->GetBody());
             toBeRemoved[load->GetParentBlock()].emplace_back(index);
             if (isDebug) {
