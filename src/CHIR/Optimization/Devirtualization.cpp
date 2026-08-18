@@ -6,7 +6,10 @@
 
 #include "cangjie/CHIR/Optimization/Devirtualization.h"
 
+#include <iostream>
+#include <mutex>
 #include <optional>
+#include <unordered_set>
 
 #include "cangjie/CHIR/Optimization/DeadCodeElimination.h"
 #include "cangjie/CHIR/Analysis/DevirtualizationInfo.h"
@@ -37,6 +40,53 @@ Devirtualization::Devirtualization(
     : analysisWrapper(typeAnalysisWrapper), devirtFuncInfo(devirtFuncInfo)
 {
 }
+
+namespace {
+Function* UnwrapVirtMethod(Function* func)
+{
+    if (func == nullptr) {
+        return nullptr;
+    }
+    return func->Get<WrappedRawMethod>() != nullptr ? func->Get<WrappedRawMethod>() : func;
+}
+
+const CustomTypeDef* CanonicalDef(const CustomTypeDef* def)
+{
+    if (def == nullptr) {
+        return nullptr;
+    }
+    return def->GetGenericDecl() != nullptr ? def->GetGenericDecl() : def;
+}
+
+std::string FormatFuncDesc(Function* func)
+{
+    if (func == nullptr) {
+        return "<unknown>";
+    }
+    auto* parent = func->GetParentCustomTypeDef();
+    std::string desc = func->GetPackageName();
+    desc += "::";
+    if (parent != nullptr) {
+        desc += parent->GetSrcCodeIdentifier();
+        desc += ".";
+    }
+    desc += func->GetSrcCodeIdentifier();
+    if (auto* funcTy = func->GetFuncType()) {
+        desc += " ";
+        desc += funcTy->ToString();
+    }
+    const auto& loc = func->GetDebugLocation();
+    if (!loc.GetAbsPath().empty() && loc.GetBeginPos().line != 0) {
+        desc += "  (";
+        desc += loc.GetAbsPath();
+        desc += ":";
+        desc += std::to_string(loc.GetBeginPos().line);
+        desc += ")";
+    }
+    return desc;
+}
+
+} // namespace
 
 void Devirtualization::RunOnFuncs(const std::vector<Function*>& funcs, CHIRBuilder& builder, bool isDebug)
 {
@@ -76,8 +126,12 @@ void Devirtualization::RunOnFunc(const Function* func, CHIRBuilder& builder)
             paramTys.emplace_back(param->GetType());
         }
         // Grab the function from the classMap.
+        const CustomTypeDef* declaringParent = nullptr;
+        if (auto* callee = invoke->GetCallee()) {
+            declaringParent = callee->GetParentCustomTypeDef();
+        }
         auto [realCallee, thisType] = FindRealCallee(builder, resVal,
-            {invoke->GetMethodName(), std::move(paramTys), invoke->GetInstantiatedTypeArgs()});
+            {invoke->GetMethodName(), std::move(paramTys), invoke->GetInstantiatedTypeArgs(), declaringParent});
         if (!realCallee) {
             return;
         }
@@ -441,6 +495,109 @@ Function* FindFunctionInVtable(const ClassType* parentTy, const std::vector<Virt
     }
     return nullptr;
 }
+
+void PrintDevirtSlotFix(const Devirtualization::FuncSig& method, Function* wrongFirst, Function* fixed,
+    const CustomTypeDef* declaringParent, Type* thisType)
+{
+    if (wrongFirst == nullptr || fixed == nullptr || UnwrapVirtMethod(wrongFirst) == UnwrapVirtMethod(fixed)) {
+        return;
+    }
+    static std::mutex mu;
+    static std::unordered_set<std::string> printed;
+    std::string parentName = declaringParent != nullptr
+        ? (declaringParent->GetPackageName() + "::" + declaringParent->GetSrcCodeIdentifier())
+        : "<unknown>";
+    std::string key = method.name + "|" + parentName + "|" + FormatFuncDesc(UnwrapVirtMethod(wrongFirst)) + "|" +
+        FormatFuncDesc(UnwrapVirtMethod(fixed));
+    std::lock_guard<std::mutex> lock(mu);
+    if (!printed.insert(key).second) {
+        return;
+    }
+    std::cout << "[DEVIRT FIX] 按 invoke 声明父类槽纠正虚函数目标\n"
+              << "  虚函数名: " << method.name << "\n"
+              << "  声明父类: " << parentName << "\n"
+              << "  thisType: " << (thisType != nullptr ? thisType->ToString() : "<null>") << "\n"
+              << "  旧逻辑(取首个同签名槽): " << FormatFuncDesc(UnwrapVirtMethod(wrongFirst)) << "\n"
+              << "  纠正后(声明父类槽): " << FormatFuncDesc(UnwrapVirtMethod(fixed)) << "\n"
+              << std::flush;
+}
+
+void PrintDevirtUnsafeSkip(const Devirtualization::FuncSig& method, Function* legacyTarget, Type* legacyThisType,
+    const CustomTypeDef* declaringParent, Type* collectRoot)
+{
+    if (legacyTarget == nullptr) {
+        return;
+    }
+    static std::mutex mu;
+    static std::unordered_set<std::string> printed;
+    std::string parentName = declaringParent != nullptr
+        ? (declaringParent->GetPackageName() + "::" + declaringParent->GetSrcCodeIdentifier())
+        : "<unknown>";
+    std::string key = method.name + "|skip|" + parentName + "|" + FormatFuncDesc(UnwrapVirtMethod(legacyTarget));
+    std::lock_guard<std::mutex> lock(mu);
+    if (!printed.insert(key).second) {
+        return;
+    }
+    std::cout << "[DEVIRT FIX] 拒绝不安全的首槽去虚（声明父类下子类实现不一致，保留虚调用）\n"
+              << "  虚函数名: " << method.name << "\n"
+              << "  声明父类: " << parentName << "\n"
+              << "  收集根类型: " << (collectRoot != nullptr ? collectRoot->ToString() : "<null>") << "\n"
+              << "  旧逻辑会错误选中: " << FormatFuncDesc(UnwrapVirtMethod(legacyTarget)) << "\n"
+              << "  旧逻辑thisType: " << (legacyThisType != nullptr ? legacyThisType->ToString() : "<null>") << "\n"
+              << std::flush;
+}
+
+/** Log-only: preferred declaring-parent slot vs legacy first-slot. Always returns firstHit. */
+Function* FirstFromTypeVTables(CustomTypeDef& genericDef, const Devirtualization::FuncSig& method,
+    CHIRBuilder& builder, Type* thisTypeForLog)
+{
+    Function* firstHit = nullptr;
+    Function* preferredHit = nullptr;
+    auto* preferParent = CanonicalDef(method.declaringParent);
+    for (const auto& it : genericDef.GetDefVTable().GetTypeVTables()) {
+        auto* target = FindFunctionInVtable(it.GetSrcParentType(), it.GetVirtualMethods(), method, builder);
+        if (target == nullptr) {
+            continue;
+        }
+        if (firstHit == nullptr) {
+            firstHit = target;
+        }
+        auto* slotParent = CanonicalDef(
+            it.GetSrcParentType() != nullptr ? it.GetSrcParentType()->GetClassDef() : nullptr);
+        if (preferParent != nullptr && slotParent == preferParent) {
+            preferredHit = target;
+        }
+    }
+    if (preferredHit != nullptr) {
+        PrintDevirtSlotFix(method, firstHit, preferredHit, method.declaringParent, thisTypeForLog);
+    }
+    return firstHit;
+}
+
+Function* FirstFromVTableSearchRes(const std::vector<VTableSearchRes>& res,
+    const Devirtualization::FuncSig& method, Type* thisTypeForLog)
+{
+    Function* firstHit = nullptr;
+    Function* preferredHit = nullptr;
+    auto* preferParent = CanonicalDef(method.declaringParent);
+    for (const auto& item : res) {
+        if (item.instance == nullptr || item.instance->IsPureAbstract()) {
+            continue;
+        }
+        if (firstHit == nullptr) {
+            firstHit = item.instance;
+        }
+        auto* slotParent = CanonicalDef(
+            item.instSrcParentType != nullptr ? item.instSrcParentType->GetClassDef() : nullptr);
+        if (preferParent != nullptr && slotParent == preferParent) {
+            preferredHit = item.instance;
+        }
+    }
+    if (preferredHit != nullptr) {
+        PrintDevirtSlotFix(method, firstHit, preferredHit, method.declaringParent, thisTypeForLog);
+    }
+    return firstHit;
+}
 } // namespace
 
 bool Devirtualization::IsInstantiationOf(
@@ -523,8 +680,9 @@ std::pair<Function*, Type*> Devirtualization::FindRealCallee(
             auto funcType = builder.GetType<FuncType>(paramTypes, builder.GetUnitTy());
             FuncCallType funcCallType{method.name, funcType, method.typeArgs};
             auto res = def->GetFuncIndexInVTable(funcCallType, replaceTable, builder);
-            if (!res.empty() && !res[0].instance->IsPureAbstract()) {
-                target = res[0].instance;
+            // Legacy: take first hit. Log-only if declaring-parent slot differs.
+            target = FirstFromVTableSearchRes(res, method, specificType);
+            if (target != nullptr) {
                 break;
             }
         }
@@ -535,6 +693,21 @@ std::pair<Function*, Type*> Devirtualization::FindRealCallee(
         ClassType* specificType1 = StaticCast<ClassType*>(typeState->GetSpecificType());
         std::pair<Function*, Type*> res{nullptr, nullptr};
         CollectCandidates(builder, specificType1, res, method);
+        // Log-only: if collecting from declaring parent would refuse while legacy still picks.
+        if (method.declaringParent != nullptr && res.first != nullptr) {
+            if (auto* declTy = DynamicCast<ClassType*>(method.declaringParent->GetType());
+                declTy != nullptr && declTy != specificType1) {
+                std::pair<Function*, Type*> preferRes{nullptr, nullptr};
+                CollectCandidates(builder, declTy, preferRes, method);
+                if (preferRes.first == nullptr) {
+                    PrintDevirtUnsafeSkip(
+                        method, res.first, res.second, method.declaringParent, declTy);
+                } else if (UnwrapVirtMethod(preferRes.first) != UnwrapVirtMethod(res.first)) {
+                    PrintDevirtSlotFix(
+                        method, res.first, preferRes.first, method.declaringParent, res.second);
+                }
+            }
+        }
         return res;
     }
 }
@@ -550,10 +723,9 @@ Function* Devirtualization::GetCandidateFromSpecificType(
     auto extendsOrImplements = devirtFuncInfo.defsMap[customType];
     for (auto oriDef : extendsOrImplements) {
         auto genericDef = oriDef->GetGenericDecl() != nullptr ? oriDef->GetGenericDecl() : oriDef;
-        for (const auto& it : genericDef->GetDefVTable().GetTypeVTables()) {
-            if (auto target = FindFunctionInVtable(it.GetSrcParentType(), it.GetVirtualMethods(), method, builder)) {
-                return target;
-            }
+        // Legacy: first matching slice. Log-only if declaring-parent slot differs.
+        if (auto target = FirstFromTypeVTables(*genericDef, method, builder, &specific)) {
+            return target;
         }
     }
     return nullptr;
@@ -602,18 +774,37 @@ void Devirtualization::CollectCandidates(
             auto extendsOrImplements = devirtFuncInfo.defsMap[subtypeCustom];
             for (auto oriDef : extendsOrImplements) {
                 auto def = oriDef->GetGenericDecl() != nullptr ? oriDef->GetGenericDecl() : oriDef;
+                Function* firstHit = nullptr;
+                Function* preferredHit = nullptr;
+                auto* preferParent = CanonicalDef(method.declaringParent);
                 for (const auto& vtableIt : def->GetDefVTable().GetTypeVTables()) {
                     if (!expected->IsEqualOrSubTypeOf(*vtableIt.GetSrcParentType(), builder)) {
                         continue;
                     }
                     if (auto target = FindFunctionInVtable(
                         vtableIt.GetSrcParentType(), vtableIt.GetVirtualMethods(), method, builder)) {
-                        if (res.first == nullptr) {
-                            res = {target, subtypeCustom};
-                        } else if (res.first != target) {
-                            res = {nullptr, nullptr};
-                            return;
+                        if (firstHit == nullptr) {
+                            firstHit = target;
                         }
+                        auto* slotParent = CanonicalDef(vtableIt.GetSrcParentType() != nullptr
+                                ? vtableIt.GetSrcParentType()->GetClassDef()
+                                : nullptr);
+                        if (preferParent != nullptr && slotParent == preferParent) {
+                            preferredHit = target;
+                        }
+                    }
+                }
+                if (preferredHit != nullptr) {
+                    PrintDevirtSlotFix(method, firstHit, preferredHit, method.declaringParent, subtypeCustom);
+                }
+                // Legacy: always use first matching slice.
+                auto target = firstHit;
+                if (target != nullptr) {
+                    if (res.first == nullptr) {
+                        res = {target, subtypeCustom};
+                    } else if (res.first != target) {
+                        res = {nullptr, nullptr};
+                        return;
                     }
                 }
             }

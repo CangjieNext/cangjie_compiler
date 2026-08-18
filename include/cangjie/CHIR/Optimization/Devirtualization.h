@@ -69,6 +69,8 @@ public:
         std::string name;
         std::vector<Type*> types;
         std::vector<Type*> typeArgs;
+        /// Parent CustomTypeDef that statically declares the invoke callee (vtable slice to prefer).
+        const CustomTypeDef* declaringParent{nullptr};
     };
 
 private:
