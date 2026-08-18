@@ -18,6 +18,7 @@
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "NativeFFI/Java/AfterTypeCheck/JniBridge.h"
 #include "NativeFFI/Java/CachingApi/JClassCache.h"
+#include "NativeFFI/Java/CachingApi/JFieldIdCache.h"
 #include "NativeFFI/Java/CachingApi/JMethodIdCache.h"
 #include "Utils.h"
 
@@ -34,8 +35,6 @@ using namespace AST;
 using namespace std;
 using namespace Native::FFI::Java;
 
-const std::string JAVA_ARRAY_GET_FOR_REF_TYPES = "$javaarrayget";
-const std::string JAVA_ARRAY_SET_FOR_REF_TYPES = "$javaarrayset";
 const std::string JAVA_IMPL_ENTITY_ARG_NAME_IN_GENERATED_CTOR = "$obj";
 
 class JavaDesugarManager {
@@ -49,10 +48,14 @@ public:
           diag(diag),
           mangler(mangler),
           lib(importManager, typeManager, diag, utils),
-          jniBridge(typeManager, importManager, mangler, utils, *lib.GetJniEnvPtrDecl(), *lib.GetJobjectDecl(), *lib.GetJNINativeInterfaceDecl()),
-          jclassCache(importManager, typeManager, lib, utils),
-          jmethodIdCache(importManager, typeManager, lib, utils),
-          factory(typeManager, lib, jniBridge, jclassCache, jmethodIdCache),
+          jniBridge(typeManager, importManager, mangler, utils, 
+              *lib.GetJniEnvPtrDecl(),
+              *lib.GetJobjectDecl(),
+              *lib.GetJNINativeInterfaceDecl()),
+          jclassCache(importManager, typeManager, lib, jniBridge),
+          jmethodIdCache(importManager, typeManager, lib, jniBridge),
+          jfieldIdCache(importManager, typeManager, lib, jniBridge),
+          factory(typeManager, lib, jniBridge, jclassCache, jmethodIdCache, jfieldIdCache),
           javaCodeGenPath(javaCodeGenPath),
           outputLibPath(outputLibPath),
           memberMap(memberMap)
@@ -71,15 +74,8 @@ public:
 
     void GenerateInSynthetic(ClassDecl& cd);
 
-    /**
-     * Desugar constructors, methods, etc
-     */
-    void DesugarMirrors(File& file);
-
     void GenerateJavaSourceCode(AfterTypeCheckContext& ctx);
 
-    void DesugarJavaMirror(ClassDecl& mirror);
-    void DesugarJavaMirror(InterfaceDecl& mirror);
     void ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx, std::function<void(AST::Node&)> desugarPropRef);
 private:
     /**
@@ -141,76 +137,6 @@ private:
      */
     void InsertJavaRefGetterWithBody(ClassDecl& decl);
 
-     /**
-     * Rewrites a Java mirror constructor to initialize the generated wrapper
-     * with a Java object created via JNI.
-     *
-     * before:
-     *   init(a1: A, ..., an: N) {
-     *   }
-     *
-     * after:
-     *   init(a1: A, ..., an: N) {
-     *       this({
-     *           // Create Java object via JNI.
-     *           ...
-     *       })
-     *   }
-    */
-    void DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& generatedCtor);
-
-    /**
-     * for func [fun]:
-     *     func foo(args): Ret
-     *
-     * the following will be generated:
-     *     func foo(args): Ret {
-     *         *UnwrapJavaEntity*(
-     *             Java_CFFI_callMethod_raw(
-     *                 Java_CFFI_get_env(),
-     *                 this.javaref, // or getJavaref if mirror is an interface
-     *                 typeSignature, "foo", "(<argsSignature>)Ret",
-     *                 [Java_CFFI_JavaEntity(args[0]), ... Java_CFFI_JavaEntity(args[n])]
-     *         )
-     *     }
-     *
-     * where *UnwrapJavaEntity* - generated unwrapper for Ret type value.
-     */
-    void DesugarJavaMirrorMethod(FuncDecl& fun, ClassLikeDecl& mirror);
-
-    /**
-     * used in DesugarJavaMirrorMethod for method's body generation
-     *
-     */
-    void AddJavaMirrorMethodBody(ClassLikeDecl& mirror,
-        FuncDecl& fun,
-        OwnedPtr<Expr> javaRefCall);
-
-    /**
-     * for prop [prop]:
-     *   mut prop p: Ret
-     *
-     * the following will be generated:
-     *     mut prop p: Ret {
-     *         get() {
-     *             *UnwrapJavaEntity*(
-     *                 Java_CFFI_getField_raw(
-     *                     Java_CFFI_get_env(), this.javaref, typeSignature, "p", "Ret"
-     *             ))
-     *         }
-     *         set(v) {
-     *             Java_CFFI_setField_raw(
-     *                 Java_CFFI_get_env(),
-     *                 this.javaref, typeSignature, "p", "Ret", Java_CFFI_JavaEntity(v)
-     *             )
-     *         }
-     *     }
-     */
-    void DesugarJavaMirrorProp(PropDecl& prop);
-
-    void InsertJavaMirrorPropGetter(PropDecl& prop);
-    void InsertJavaMirrorPropSetter(PropDecl& prop);
-
     /**
      * Inserts constructor of form `JString(String)`.
      * The operation consists of two steps:
@@ -234,6 +160,7 @@ private:
     JniBridge jniBridge;
     JClassCache jclassCache;
     JMethodIdCache jmethodIdCache;
+    JFieldIdCache jfieldIdCache;
     ASTFactory factory;
 
     const std::optional<std::string>& javaCodeGenPath;

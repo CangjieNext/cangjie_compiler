@@ -12,6 +12,7 @@
 #include "DesugarJavaImplSuperMethodCall.h"
 #include "GenerateInJavaImplReferenceWrapper.h"
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
+#include "NativeFFI/Java/AfterTypeCheck/PopulateJavaMirrorStubs.h"
 #include "RewriteJavaImplReferenceWrapperFields.h"
 #include "GenerateNativeBridgeForJavaImpl.h"
 #include "DesugarTypeCheckingAndCasting.h"
@@ -37,13 +38,11 @@ void JavaDesugarManager::ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx,
     Process<GenerateInJavaImplRegistryCompanion>(ctx, typeManager, lib);
     Process<DesugarJavaImplSuperConstructorCall>(ctx, typeManager, lib, jniBridge, diag, utils);
     Process<GenerateInJavaImplReferenceWrapper>(ctx, typeManager, importManager, lib, factory);
-    Process<DesugarJavaImplSuperMethodCall>(ctx, lib, utils, factory);
+    Process<DesugarJavaImplSuperMethodCall>(ctx, lib, factory);
     Process<RewriteJavaImplReferenceWrapperFields>(ctx, typeManager, utils, desugarPropRef);
     Process<GenerateNativeBridgeForJavaImpl>(ctx, typeManager, importManager, lib, jniBridge);
 
-    for (auto& file : ctx.pkg.files) {
-        DesugarMirrors(*file);
-    }
+    Process<PopulateJavaMirrorStubs>(ctx, lib, factory);
 
     Process<DesugarJArray>(ctx, typeManager, importManager, lib);
     GenerateJavaSourceCode(ctx);

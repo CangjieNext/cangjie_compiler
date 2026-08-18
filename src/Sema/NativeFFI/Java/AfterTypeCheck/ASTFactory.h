@@ -11,7 +11,10 @@
 #include "NativeFFI/Java/AfterTypeCheck/InteropLibBridge.h"
 #include "NativeFFI/Java/AfterTypeCheck/JniBridge.h"
 #include "NativeFFI/Java/CachingApi/JClassCache.h"
+#include "NativeFFI/Java/CachingApi/JFieldIdCache.h"
 #include "NativeFFI/Java/CachingApi/JMethodIdCache.h"
+#include "NativeFFI/Java/JavaClassSignature.h"
+#include "NativeFFI/Java/JavaMemberSignature.h"
 #include "cangjie/AST/Node.h"
 
 namespace Cangjie::Native::FFI::Java {
@@ -20,7 +23,7 @@ class ASTFactory {
 public:
     explicit ASTFactory(
         TypeManager& typeManager, InteropLibBridge& ilib, JniBridge& jni,
-        JClassCache& jclassCache, JMethodIdCache& jmethodIdCache);
+        JClassCache& jclassCache, JMethodIdCache& jmethodIdCache, JFieldIdCache& jfieldIdCache);
 
 
     /**
@@ -34,8 +37,7 @@ public:
      */
     OwnedPtr<AST::Expr> CreateNewJavaObjectCall(AfterTypeCheckContext& ctx,
         Ptr<AST::Expr> jniEnvPtr,
-        AST::Ty& javaClassTy,
-        AST::FuncDecl& constructor,
+        JavaMemberSignature constructor,
         std::vector<OwnedPtr<AST::Expr>> args) const;
 
     /*
@@ -52,51 +54,49 @@ public:
      */
     OwnedPtr<AST::Expr> CreateNewJavaObjectCall(AfterTypeCheckContext& ctx,
         AST::File& curFile,
-        AST::Ty& javaClassTy,
-        AST::FuncDecl& constructor,
+        JavaMemberSignature constructor,
         std::vector<OwnedPtr<AST::Expr>> args) const;
 
-    /**
-     * Creates expression of `call.GetTy()` type super method call via JNI.
-     * Returned expr has java-compatible ty (converted from raw jni form into java-compatible).
-     */
-    OwnedPtr<AST::Expr> CreateSuperJavaMethodCall(AfterTypeCheckContext& ctx,
+    OwnedPtr<AST::Expr> CreateNonvirtualJavaMethodCall(AfterTypeCheckContext& ctx,
+        Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jobjectInstance,
+        JavaMemberSignature method, AST::Ty& retTy, std::vector<OwnedPtr<AST::Expr>> javaCompatibleArgs) const;
+
+    OwnedPtr<AST::Expr> CreateNonvirtualJavaMethodCall(AfterTypeCheckContext& ctx,
+        AST::File& curFile, Ptr<AST::Expr> jobjectInstance,
+        JavaMemberSignature method, AST::Ty& retTy, std::vector<OwnedPtr<AST::Expr>> args) const;
+
+    OwnedPtr<AST::Expr> CreateStaticJavaMethodCall(AfterTypeCheckContext& ctx,
         Ptr<AST::Expr> jniEnvPtr,
-        AST::ClassDecl& child, AST::CallExpr& call, std::vector<OwnedPtr<AST::Expr>> args) const;
-
-    /**
-     * Creates expression of `call.GetTy()` type super method call via JNI.
-     * Returned expr has java-compatible ty (converted from raw jni form into java-compatible).
-     *
-     * In comparison with the overloaded version accepting `Ptr<AST::Expr> jniEnvPtr` parameter,
-     * this function creates and caches jniEnvPtr by itself.
-     */
-    OwnedPtr<AST::Expr> CreateSuperJavaMethodCall(AfterTypeCheckContext& ctx, AST::ClassDecl& child,
-        AST::CallExpr& call, std::vector<OwnedPtr<AST::Expr>> args) const;
-
-    OwnedPtr<AST::Expr> CreateNonvirtualJavaMethodCall(AfterTypeCheckContext& ctx,
-        Ptr<Expr> jniEnvPtr, Ptr<Expr> jobjectInstance,
-        JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> javaCompatibleArgs) const;
-
-    OwnedPtr<AST::Expr> CreateNonvirtualJavaMethodCall(AfterTypeCheckContext& ctx,
-        File& curFile, Ptr<Expr> jobjectInstance,
-        JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args) const;
+        JavaMemberSignature method, AST::Ty& retTy, std::vector<OwnedPtr<AST::Expr>> javaCompatibleArgs) const;
 
     OwnedPtr<AST::Expr> CreateStaticJavaMethodCall(AfterTypeCheckContext& ctx,
-        Ptr<Expr> jniEnvPtr,
-        JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> javaCompatibleArgs) const;
-
-    OwnedPtr<AST::Expr> CreateStaticJavaMethodCall(AfterTypeCheckContext& ctx,
-        File& curFile,
-        JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args) const;
+        AST::File& curFile,
+        JavaMemberSignature method, AST::Ty& retTy, std::vector<OwnedPtr<AST::Expr>> args) const;
 
     OwnedPtr<AST::Expr> CreateVirtualJavaMethodCall(AfterTypeCheckContext& ctx,
-        Ptr<Expr> jniEnvPtr, Ptr<Expr> jobjectInstance,
-        JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> javaCompatibleArgs) const;
+        Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jobjectInstance,
+        JavaMemberSignature method, AST::Ty& retTy, std::vector<OwnedPtr<AST::Expr>> javaCompatibleArgs) const;
 
     OwnedPtr<AST::Expr> CreateVirtualJavaMethodCall(AfterTypeCheckContext& ctx,
-        File& curFile, Ptr<Expr> jobjectInstance,
-        JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args) const;
+        AST::File& curFile, Ptr<AST::Expr> jobjectInstance,
+        JavaMemberSignature method, AST::Ty& retTy, std::vector<OwnedPtr<AST::Expr>> args) const;
+    
+    
+    OwnedPtr<AST::Expr> CreateInstanceJavaFieldGetCall(AfterTypeCheckContext& ctx,
+        AST::File& curFile, Ptr<AST::Expr> jobjectInstance,
+        JavaMemberSignature field, AST::Ty& ty) const;
+    
+    OwnedPtr<AST::Expr> CreateStaticJavaFieldGetCall(AfterTypeCheckContext& ctx,
+        AST::File& curFile,
+        JavaMemberSignature field, AST::Ty& ty) const;
+    
+    OwnedPtr<AST::Expr> CreateInstanceJavaFieldSetCall(AfterTypeCheckContext& ctx,
+        AST::File& curFile, Ptr<AST::Expr> jobjectInstance,
+        JavaMemberSignature field, AST::Ty& ty, OwnedPtr<AST::Expr> value) const;
+    
+    OwnedPtr<AST::Expr> CreateStaticJavaFieldSetCall(AfterTypeCheckContext& ctx,
+        AST::File& curFile,
+        JavaMemberSignature field, AST::Ty& ty, OwnedPtr<AST::Expr> value) const;
 
     /**
      * Creates usages as RefExpr over parameters in `paramList`.
@@ -105,21 +105,47 @@ public:
 
     std::vector<OwnedPtr<AST::Expr>> ExtractArgExprs(const std::vector<OwnedPtr<FuncArg>>& args) const;
 
+    /**
+     * AST Block builder. Inserts JNI `handlePendingException` after builder execution
+     * and returns user value saved into variable.
+     */
+    OwnedPtr<AST::Expr> CreateBlockWithJniHandlePendingException(Ptr<AST::Expr> jniEnvPtr,
+        std::function<void(AST::Block&)> builder) const;
+    
+    OwnedPtr<AST::Expr> CreateBlockWithJniHandlePendingException(Ptr<AST::Expr> jniEnvPtr,
+        std::vector<OwnedPtr<Node>> nodes) const;
+
 private:
 
     OwnedPtr<AST::Expr> CreateJavaMethodCall(AfterTypeCheckContext& ctx,
-        Ptr<Expr> jniEnvPtr, Ptr<Expr> jobjectInstance,
-        JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> javaCompatibleArgs, bool isVirtual) const;
+        Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jobjectInstance,
+        JavaMemberSignature method, AST::Ty& retTy, std::vector<OwnedPtr<AST::Expr>> javaCompatibleArgs,
+        bool isVirtual) const;
 
     OwnedPtr<AST::Expr> CreateJavaMethodCall(AfterTypeCheckContext& ctx,
-        File& curFile, Ptr<Expr> jobjectInstance,
-        JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args, bool isVirtual) const;
+        AST::File& curFile, Ptr<AST::Expr> jobjectInstance,
+        JavaMemberSignature method, AST::Ty& retTy, std::vector<OwnedPtr<AST::Expr>> args, bool isVirtual) const;
+    
+    OwnedPtr<AST::Expr> CreateJavaFieldGetCall(AfterTypeCheckContext& ctx,
+        Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jobjectInstance,
+        JavaMemberSignature field, AST::Ty& ty) const;
+    
+    OwnedPtr<AST::Expr> CreateJavaFieldGetCall(AfterTypeCheckContext& ctx,
+        AST::File& curFile, Ptr<AST::Expr> jobjectInstance,
+        JavaMemberSignature field, AST::Ty& ty) const;
 
+    OwnedPtr<AST::Expr> CreateJavaFieldSetCall(AfterTypeCheckContext& ctx,
+        Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jobjectInstance,
+        JavaMemberSignature field, AST::Ty& ty, OwnedPtr<AST::Expr> value) const;
+
+    OwnedPtr<AST::Expr> CreateJavaFieldSetCall(AfterTypeCheckContext& ctx,
+        AST::File& curFile, Ptr<AST::Expr> jobjectInstance,
+        JavaMemberSignature field, AST::Ty& ty, OwnedPtr<AST::Expr> value) const;
+    
     /**
      * Creates tmp variable of VArray type by `args`.
      */
     OwnedPtr<AST::VarDecl> CreateTmpVArrayVarDecl(std::vector<OwnedPtr<AST::Expr>> args, AST::File& curFile) const;
-
 
     /**
      * Converts `values` expressions as JValue expressions in-place.
@@ -131,6 +157,7 @@ private:
     JniBridge& jni;
     JClassCache& jclassCache;
     JMethodIdCache& jmethodIdCache;
+    JFieldIdCache& jfieldIdCache;
 };
 
 }

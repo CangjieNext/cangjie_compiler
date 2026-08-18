@@ -7,12 +7,12 @@
 /**
  * @file
  *
- * This file declares JNI jclass cache module.
+ * This file declares JNI jmethodId cache module.
  * Currently, it is not thread-safe but probably it should not be an issue
  * besides an extra access, global ref allocation and previously written global ref leak in the case of races.
  */
-#ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_CACHING_API_JMETHOD_ID_CACHER
-#define CANGJIE_SEMA_NATIVE_FFI_JAVA_CACHING_API_JMETHOD_ID_CACHER
+#ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_CACHING_API_JMETHOD_ID_CACHE
+#define CANGJIE_SEMA_NATIVE_FFI_JAVA_CACHING_API_JMETHOD_ID_CACHE
 
 #include <unordered_map>
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
@@ -20,7 +20,6 @@
 #include "NativeFFI/Java/AfterTypeCheck/JniBridge.h"
 #include "NativeFFI/Java/JavaMemberSignature.h"
 #include "cangjie/AST/Node.h"
-#include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
 
 namespace Cangjie::Native::FFI::Java {
@@ -32,7 +31,7 @@ public:
         const ImportManager& importManager,
         TypeManager& typeManager,
         InteropLibBridge& ilib,
-        Interop::Java::Utils& utils);
+        JniBridge& jni);
 
     OwnedPtr<AST::Expr> CreateJMethodIdAccess(AfterTypeCheckContext& ctx,
        JavaMemberSignature method, Ptr<AST::Expr> jclass, Ptr<AST::Expr> envPtr);
@@ -41,10 +40,8 @@ public:
 private:
     const ImportManager& importManager;
     TypeManager& typeManager;
-    BaseMangler& mangler;
     InteropLibBridge& ilib;
     JniBridge& jni;
-    Interop::Java::Utils& utils;
 
     /**
      * For jmethodId-s, already presented in cache, just returns corresponding jmethodId variable.
@@ -62,4 +59,4 @@ private:
 
 } // namespace Cangjie::Native::FFI::Java
 
-#endif // CANGJIE_SEMA_NATIVE_FFI_JAVA_CACHING_API_JMETHOD_ID_CACHER
+#endif // CANGJIE_SEMA_NATIVE_FFI_JAVA_CACHING_API_JMETHOD_ID_CACHE

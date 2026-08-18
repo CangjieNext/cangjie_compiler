@@ -31,7 +31,6 @@ constexpr std::string_view GET_POINTER_ADDRESS_INTRINSIC = "getPointerAddress";
 
 using namespace AST;
 
-enum class ArrayOperationKind : uint8_t { CREATE, GET, SET, GET_LENGTH };
 
 OwnedPtr<RefExpr> CreateThisRef(Ptr<Decl> target, Ptr<Ty> ty, Ptr<File> curFile);
 
@@ -46,7 +45,6 @@ OwnedPtr<RefExpr> CreateSuperRef(Ptr<Decl> target, Ptr<Ty> ty);
 
 OwnedPtr<CallExpr> CreateSuperCall(Decl& target, FuncDecl& baseTarget, Ptr<Ty> funcTy);
 
-ArrayOperationKind GetArrayOperationKind(Decl& decl);
 
 template <typename Ret = Node, typename... Args> std::vector<OwnedPtr<Ret>> Nodes(OwnedPtr<Args>&&... args)
 {
@@ -60,11 +58,19 @@ namespace Details {
 template <typename T> void WrapArg(std::vector<OwnedPtr<FuncArg>>* funcArgs, OwnedPtr<T>&& e)
 {
     CJC_ASSERT(e);
-    if (auto ptr = As<ASTKind::FUNC_ARG>(e.get())) {
-        funcArgs->emplace_back(ptr);
-    } else {
-        funcArgs->push_back(CreateFuncArg(std::forward<OwnedPtr<T>>(e)));
-    }
+    funcArgs->push_back(CreateFuncArg(StaticCast<Expr*>(e.release())));
+}
+
+template<> inline void WrapArg<FuncArg>(std::vector<OwnedPtr<FuncArg>>* funcArgs, OwnedPtr<FuncArg>&& e)
+{
+    CJC_ASSERT(e);
+    funcArgs->emplace_back(std::move(e));
+}
+
+template<> inline void WrapArg<Expr>(std::vector<OwnedPtr<FuncArg>>* funcArgs, OwnedPtr<Expr>&& e)
+{
+    CJC_ASSERT(e);
+    funcArgs->push_back(CreateFuncArg(std::forward<OwnedPtr<Expr>>(e)));
 }
 
 } // namespace Details

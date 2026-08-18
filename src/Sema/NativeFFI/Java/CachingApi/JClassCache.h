@@ -11,8 +11,8 @@
  * Currently, it is not thread-safe but probably it should not be an issue
  * besides an extra access, global ref allocation and previously written global ref leak in the case of races.
  */
-#ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_CACHING_API_JCLASS_CACHER
-#define CANGJIE_SEMA_NATIVE_FFI_JAVA_CACHING_API_JCLASS_CACHER
+#ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_CACHING_API_JCLASS_CACHE
+#define CANGJIE_SEMA_NATIVE_FFI_JAVA_CACHING_API_JCLASS_CACHE
 
 #include <unordered_map>
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
@@ -30,7 +30,7 @@ public:
         const ImportManager& importManager,
         TypeManager& typeManager,
         InteropLibBridge& ilib,
-        Interop::Java::Utils& utils);
+        JniBridge& jni);
 
     OwnedPtr<AST::Expr> CreateJClassAccess(AfterTypeCheckContext& ctx,
         JavaClassSignature javaClass,
@@ -42,7 +42,6 @@ private:
     TypeManager& typeManager;
     InteropLibBridge& ilib;
     JniBridge& jni;
-    Interop::Java::Utils& utils;
 
     /**
      * For jclasses, already presented in cache, just returns corresponding jclass variable.
@@ -53,9 +52,9 @@ private:
 
     std::string GetNewAccessorName(const JavaClassSignature& javaClass) const;
 
-    std::unordered_map<JavaClassSignature, Ptr<AST::VarDecl>> cache;
+    std::unordered_map<JavaClassSignature, Ptr<AST::VarDecl>, std::hash<JavaClassSignature>> cache;
 };
 
 } // namespace Cangjie::Native::FFI::Java
 
-#endif // CANGJIE_SEMA_NATIVE_FFI_JAVA_CACHING_API_JCLASS_CACHER
+#endif // CANGJIE_SEMA_NATIVE_FFI_JAVA_CACHING_API_JCLASS_CACHE

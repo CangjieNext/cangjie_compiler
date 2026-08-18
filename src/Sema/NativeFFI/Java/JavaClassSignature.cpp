@@ -28,7 +28,11 @@ std::vector<std::string_view> Split(std::string_view str, std::string_view separ
         parts.push_back(str.substr(prevPos, startPos));
         prevPos = startPos;
     }
-    parts.push_back(str.substr(startPos));
+    if (startPos != std::string::npos) {
+        parts.push_back(str.substr(startPos));
+    } else {
+        parts.push_back(str);
+    }
     return parts;
 }
 
@@ -91,18 +95,7 @@ std::ostream& operator<<(std::ostream& out, const JavaClassSignature& fqname)
 
 std::string JavaClassSignature::ToString() const
 {
-    constexpr static std::string_view packageDelimiter = ".";
-    constexpr static std::string_view nestedTypeDelimiter = ".";
-    std::string str{Join(packageParts, packageDelimiter)};
-    str += packageDelimiter;
-
-    if (IsNested()) {
-        str += Join(outerTypes, nestedTypeDelimiter);
-        str += nestedTypeDelimiter;
-    }
-
-    str += type;
-    return str;
+    return GetFQName();
 }
 
 std::string JavaClassSignature::GetJniClassName() const
@@ -122,13 +115,39 @@ std::string JavaClassSignature::GetJniClassName() const
     return str;
 }
 
-std::string JavaClassSignature::GetUnqualifiedTypeName(const std::string_view nestedDelimiter)
+std::string JavaClassSignature::GetFQName() const
+{
+    constexpr static std::string_view packageDelimiter = ".";
+    constexpr static std::string_view nestedTypeDelimiter = ".";
+    std::string str{Join(packageParts, packageDelimiter)};
+    str += packageDelimiter;
+
+    if (IsNested()) {
+        str += Join(outerTypes, nestedTypeDelimiter);
+        str += nestedTypeDelimiter;
+    }
+
+    str += type;
+    return str;
+}
+
+std::string JavaClassSignature::GetUnqualifiedTypeName(const std::string_view nestedDelimiter) const
 {
     if (!IsNested()) {
         return std::string(type);
     }
 
     return Join(outerTypes, nestedDelimiter) + std::string(nestedDelimiter) + std::string(type);
+}
+
+bool JavaClassSignature::operator==(const JavaClassSignature& other) const
+{
+    return ToString() == other.ToString();
+}
+
+bool JavaClassSignature::operator!=(const JavaClassSignature& other) const
+{
+    return !(*this == other); 
 }
 
 

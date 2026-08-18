@@ -13,6 +13,14 @@
 namespace Cangjie::Native::FFI::Java {
 using namespace Cangjie::AST;
 
+JClassCache::JClassCache(
+    const ImportManager& importManager,
+    TypeManager& typeManager,
+    InteropLibBridge& ilib,
+    JniBridge& jni) : importManager(importManager),
+    typeManager(typeManager), ilib(ilib), jni(jni)
+{}
+
 std::string JClassCache::GetNewAccessorName(const JavaClassSignature& javaClass) const
 {
     static size_t unique_id = 0;

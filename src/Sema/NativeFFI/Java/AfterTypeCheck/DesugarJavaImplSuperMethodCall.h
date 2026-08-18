@@ -29,7 +29,7 @@ using namespace Interop::Java;
 class DesugarJavaImplSuperMethodCall : public AfterTypeCheckStage {
 public:
     explicit DesugarJavaImplSuperMethodCall(
-        InteropLibBridge& ilib, Native::FFI::Java::Utils& utils, ASTFactory& factory);
+        InteropLibBridge& ilib, ASTFactory& factory);
 
 protected:
     void Process(AfterTypeCheckContext& ctx) override;
@@ -37,7 +37,6 @@ private:
     void DesugarSuperMethodCall(AfterTypeCheckContext& ctx, AST::CallExpr& call, AST::ClassDecl& impl) const;
 
     InteropLibBridge& ilib;
-    Native::FFI::Java::Utils& utils;
     ASTFactory& factory;
 };
 

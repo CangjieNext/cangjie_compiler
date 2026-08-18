@@ -11,7 +11,6 @@
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/Utils/CheckUtils.h"
-#include "TypeCheckUtil.h"
 #include <string>
 
 namespace Cangjie::Native::FFI::Java {
@@ -117,7 +116,7 @@ std::string JniBridge::GetJniInitCjObjectFuncName(
     return GetJavaNativeFunctionName(fqname, mangledFuncName);
 }
 
-std::string JniBridge::GetJniInitCjObjectFuncNameForVarDecl(const AST::VarDecl& ctor) const
+std::string JniBridge::GetJniInitCjObjectFuncNameForVarDecl(const VarDecl& ctor) const
 {
     std::string fqname = GetJavaFQName(*(ctor.outerDecl));
     auto mangledFuncName = ctor.identifier.Val();
@@ -426,8 +425,144 @@ OwnedPtr<Expr> JniBridge::CreateStaticJavaMethodCall(const Ty& retTy,
     }
 }
 
+OwnedPtr<Expr> JniBridge::CreateGetStaticJavaFieldCall(const Ty& ty,
+    Ptr<Expr> jniEnvPtr, Ptr<Expr> jclass, Ptr<Expr> jfield) const
+{
+    switch (ty.kind) {
+        case TypeKind::TYPE_BOOLEAN:
+            return interface.CreateGetStaticBooleanFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield));
+        case TypeKind::TYPE_INT8:
+            return interface.CreateGetStaticByteFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield));
+        case TypeKind::TYPE_UINT16:
+            return interface.CreateGetStaticCharFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield));
+        case TypeKind::TYPE_INT16:
+            return interface.CreateGetStaticShortFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield));
+        case TypeKind::TYPE_INT32:
+            return interface.CreateGetStaticIntFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield));
+        case TypeKind::TYPE_INT64:
+            return interface.CreateGetStaticLongFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield));
+        case TypeKind::TYPE_FLOAT32:
+            return interface.CreateGetStaticFloatFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield));
+        case TypeKind::TYPE_FLOAT64:
+            return interface.CreateGetStaticDoubleFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield));
+        default:
+            return interface.CreateGetStaticObjectFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield));
+    }
+}
+
+OwnedPtr<Expr> JniBridge::CreateGetInstanceJavaFieldCall(const Ty& ty,
+    Ptr<Expr> jniEnvPtr, Ptr<Expr> jobject, Ptr<Expr> jfield) const
+{
+    switch (ty.kind) {
+        case TypeKind::TYPE_BOOLEAN:
+            return interface.CreateGetBooleanFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield));
+        case TypeKind::TYPE_INT8:
+            return interface.CreateGetByteFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield));
+        case TypeKind::TYPE_UINT16:
+            return interface.CreateGetCharFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield));
+        case TypeKind::TYPE_INT16:
+            return interface.CreateGetShortFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield));
+        case TypeKind::TYPE_INT32:
+            return interface.CreateGetIntFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield));
+        case TypeKind::TYPE_INT64:
+            return interface.CreateGetLongFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield));
+        case TypeKind::TYPE_FLOAT32:
+            return interface.CreateGetFloatFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield));
+        case TypeKind::TYPE_FLOAT64:
+            return interface.CreateGetDoubleFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield));
+        default:
+            return interface.CreateGetObjectFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield));
+    }
+}
+
+OwnedPtr<Expr> JniBridge::CreateSetStaticJavaFieldCall(const Ty& ty,
+    Ptr<Expr> jniEnvPtr, Ptr<Expr> jclass, Ptr<Expr> jfield, Ptr<Expr> value) const
+{
+    switch (ty.kind) {
+        case TypeKind::TYPE_BOOLEAN:
+            return interface.CreateSetStaticBooleanFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+        case TypeKind::TYPE_INT8:
+            return interface.CreateSetStaticByteFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+        case TypeKind::TYPE_UINT16:
+            return interface.CreateSetStaticCharFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+        case TypeKind::TYPE_INT16:
+            return interface.CreateSetStaticShortFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+        case TypeKind::TYPE_INT32:
+            return interface.CreateSetStaticIntFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+        case TypeKind::TYPE_INT64:
+            return interface.CreateSetStaticLongFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+        case TypeKind::TYPE_FLOAT32:
+            return interface.CreateSetStaticFloatFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+        case TypeKind::TYPE_FLOAT64:
+            return interface.CreateSetStaticDoubleFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+        default:
+            return interface.CreateSetStaticObjectFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jclass), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+    }
+}
+
+OwnedPtr<Expr> JniBridge::CreateSetInstanceJavaFieldCall(const Ty& ty,
+    Ptr<Expr> jniEnvPtr, Ptr<Expr> jobject, Ptr<Expr> jfield, Ptr<Expr> value) const
+{
+    switch (ty.kind) {
+        case TypeKind::TYPE_BOOLEAN:
+            return interface.CreateSetBooleanFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+        case TypeKind::TYPE_INT8:
+            return interface.CreateSetByteFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+        case TypeKind::TYPE_UINT16:
+            return interface.CreateSetCharFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+        case TypeKind::TYPE_INT16:
+            return interface.CreateSetShortFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+        case TypeKind::TYPE_INT32:
+            return interface.CreateSetIntFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+        case TypeKind::TYPE_INT64:
+            return interface.CreateSetLongFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+        case TypeKind::TYPE_FLOAT32:
+            return interface.CreateSetFloatFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+        case TypeKind::TYPE_FLOAT64:
+            return interface.CreateSetDoubleFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+        default:
+            return interface.CreateSetObjectFieldCall(jniEnvPtr,
+                ASTCloner::Clone(jobject), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
+    }
+}
+
 JniNativeInterfaceBridge::JniNativeInterfaceBridge(
-    TypeManager& typeManager, const ImportManager& importManager, AST::StructDecl& jniInterfaceDecl)
+    TypeManager& typeManager, const ImportManager& importManager, StructDecl& jniInterfaceDecl)
 : typeManager(typeManager), importManager(importManager), jniInterfaceDecl(jniInterfaceDecl) {}
 
 OwnedPtr<Expr> JniNativeInterfaceBridge::CreateJNIEnvReadCall(Ptr<Expr> env) const

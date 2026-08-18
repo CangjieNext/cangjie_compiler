@@ -54,6 +54,9 @@ public:
      *
      */
     bool IsNested() const;
+    
+    bool operator==(const JavaClassSignature& other) const;
+    bool operator!=(const JavaClassSignature& other) const;
 
 private:
     JavaClassSignature(std::string_view package, std::string_view type);
