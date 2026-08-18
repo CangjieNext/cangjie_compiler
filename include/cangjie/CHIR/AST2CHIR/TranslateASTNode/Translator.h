@@ -109,12 +109,18 @@ public:
     }
 
     struct InstCalleeInfo {
+        /**
+         * Instantiated parent type where the (virtual) method is looked up in vtable.
+         * For Invoke, implicit `this` should be cast to this type (except mut struct).
+         */
         Type* instParentCustomTy{nullptr};
         Type* thisType{nullptr};
         std::vector<Type*> instParamTys;
         Type* instRetTy{nullptr};
         std::vector<Type*> instantiatedTypeArgs;
         bool isVirtualFuncCall{false};
+        /** Top-overridden AST func decl; Invoke/InvokeStatic callee is GetSymbolTable of this. */
+        const AST::FuncDecl* originalFuncDecl{nullptr};
     };
 
     // === static helper functions ==
@@ -954,8 +960,7 @@ private:
     bool IsVirtualFuncCall(
         const CustomTypeDef& obj, const AST::FuncDecl& funcDecl, bool baseExprIsSuper);
     InvokeCallContext GenerateInvokeCallContext(const InstCalleeInfo& instFuncInfo, Value& caller,
-        const AST::FuncDecl& callee, const std::vector<Value*>& args,
-        const OverflowStrategy strategy = OverflowStrategy::THROWING);
+        const std::vector<Value*>& args, const OverflowStrategy strategy = OverflowStrategy::THROWING);
     InstCalleeInfo GetInstCalleeInfoFromVarInit(const AST::RefExpr& expr);
     std::pair<Type*, FuncCallType> GetExactParentTypeAndFuncType(
         const AST::NameReferenceExpr& expr, Type& thisType, const AST::FuncDecl& funcDecl, bool& isVirtualFuncCall);

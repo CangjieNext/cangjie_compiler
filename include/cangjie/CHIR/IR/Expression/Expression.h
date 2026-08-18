@@ -1074,7 +1074,7 @@ public:
      *
      * @return The offset, greater than or equal to zero.
      */
-    size_t GetVirtualMethodOffset(CHIRBuilder* builder = nullptr) const;
+    size_t GetVirtualMethodOffset() const;
 
     // ===--------------------------------------------------------------------===//
     // Instantiated Types
@@ -1103,9 +1103,6 @@ protected:
     ~DynamicDispatch() override = default;
 
     Cangjie::OverflowStrategy overflowStrategy{Cangjie::OverflowStrategy::NA};
-
-private:
-    std::vector<VTableSearchRes> GetVirtualMethodInfo(CHIRBuilder& builder) const;
 };
 
 /**

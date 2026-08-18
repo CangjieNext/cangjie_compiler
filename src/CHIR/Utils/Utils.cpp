@@ -1366,6 +1366,40 @@ Type* GetInstParentCustomTyOfCallee(
         builtinType && builtinType->IsSameTypeKind(*calleeParentDef->GetType())) {
         // we should compare type pointer, but CPointer<T> is generic type, so we have to compare type kind
         return derefThisType;
+    } else if (auto genericType = DynamicCast<GenericType*>(derefThisType)) {
+        /**
+         * `thisType` is a generic type parameter, find parent type from its upper bounds.
+         *  interface I {
+         *      func foo() {}
+         *  }
+         *  func goo<T>(a: T) where T <: I {
+         *      a.foo()  // `thisType` is Generic-T, `foo`'s parent def is I, parent type is I
+         *  }
+         *
+         *  interface I<U> {
+         *      func foo() {}
+         *  }
+         *  func goo<T>(a: T) where T <: I<Bool> {
+         *      a.foo()  // `thisType` is Generic-T, parent type is I<Bool>
+         *  }
+         *
+         *  interface I<U> {
+         *      func foo(a: U) {}
+         *  }
+         *  func goo<T>(a: T) where T <: I<Bool> & I<Int64> {
+         *      a.foo(1)  // need to pick I<Int64> by argument types
+         *  }
+         */
+        CJC_ASSERT(!genericType->GetUpperBounds().empty());
+        auto parentTypes = GetSuperTypesRecusively(*genericType, builder);
+        std::vector<ClassType*> matchedTypes;
+        for (auto pType : parentTypes) {
+            if (typeAndDefIsEquivalent(*pType, *calleeParentDef)) {
+                matchedTypes.emplace_back(pType);
+            }
+        }
+        CJC_ASSERT(!matchedTypes.empty());
+        return GetInstParentType(matchedTypes, *callee, args, builder);
     } else {
         /**
          * a function declared in parent def, but called by sub type, then we need to compute instantiated parent type
@@ -1392,7 +1426,7 @@ Type* GetInstParentCustomTyOfCallee(
          *      func foo(a: T) {}
          *  }
          *  class B <: A<Bool> & A<Int64> {}
-         *  B().foo(1)  // `thisType` is B<Bool>, `foo`'s parent def is A<T>, then parent type is A<Int64>
+         *  B().foo(1)  // `thisType` is B, `foo`'s parent def is A<T>, then parent type is A<Int64>
          */
         auto parentTypes = GetSuperTypesRecusively(*derefThisType, builder);
         std::vector<ClassType*> matchedTypes;
@@ -1403,11 +1437,6 @@ Type* GetInstParentCustomTyOfCallee(
         }
         return GetInstParentType(matchedTypes, *callee, args, builder);
     }
-}
-
-Type* GetInstParentCustomTypeForApplyCallee(const ApplyBase& expr, CHIRBuilder& builder)
-{
-    return GetInstParentCustomTyOfCallee(*expr.GetCallee(), expr.GetArgs(), expr.GetThisType(), builder);
 }
 
 std::vector<VTableSearchRes> GetFuncIndexInVTable(Type& root, const FuncCallType& funcCallType, CHIRBuilder& builder)
