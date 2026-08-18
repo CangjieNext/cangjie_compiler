@@ -360,6 +360,7 @@ std::string ConvertFilenameToLibCangjieBaseFormat(const std::string& objectFile)
  * Convert filename '<file>.<ext>' to a form of 'libcangjie-<file><.extension>'
  */
 std::string ConvertFilenameToLibCangjieFormat(const std::string& objectFile, const std::string& extension);
+
 #else
 /**
  * Convert filename '<file>.<ext>' to a form of 'cangjie-<file><sanitizerSuffix>'

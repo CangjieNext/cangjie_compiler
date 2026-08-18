@@ -138,6 +138,40 @@ void MachO::HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Too
     GenerateLinkOptions(tool);
 }
 
+void MachO::AppendLTOBcInputs(const std::vector<TempFileInfo>& objFiles, Tool& tool)
+{
+    // For LTO staticlib production with -staticlib, only pass bitcode files so they
+    // participate in LTO cross-module optimization. Runtime .a/.dylib, section.o,
+    // cjstart.o, and -L paths are skipped — they belong to the final link step.
+    // Only invoked on the LTO path (GenerateStaticLibObjects with LTO enabled).
+    SortInputlibraryFileAndAppend(tool, objFiles);
+
+    // With --dy-std the std modules are deliberately left out of the LTO
+    // pipeline: their symbols stay undefined in the produced static library and
+    // are resolved by the final link against the dynamically linked std, so the
+    // std bitcode is not baked into this archive. direct/indirectBuiltinDependencies
+    // only ever hold std packages, so skipping both iteration passes is exactly
+    // equivalent to the former per-file IsStandardLibraryPackage filter.
+    bool skipStd = driverOptions.linkStaticStd.has_value() && !driverOptions.linkStaticStd.value();
+    if (skipStd)
+        return;
+
+    // Append stdlib .bc files from built-in dependencies so they participate in LTO.
+    // objFiles may already contain some .bc (e.g. stdlib), so dedup via a set.
+    std::set<std::string> seen;
+    for (const auto& f : objFiles) {
+        seen.emplace(f.filePath);
+    }
+    const std::function<void(std::string)> appendBcToTool = [&tool, &seen](const std::string& cjoFileName) {
+        auto bcFile = FileUtil::ConvertFilenameToLtoLibCangjieFormat(cjoFileName);
+        if (seen.emplace(bcFile).second) {
+            tool.AppendArg(bcFile);
+        }
+    };
+    ForEachBuiltinDependencies(driverOptions.directBuiltinDependencies, appendBcToTool);
+    ForEachBuiltinDependencies(driverOptions.indirectBuiltinDependencies, appendBcToTool);
+}
+
 void MachO::HandleLibrarySearchPaths(Tool& tool, const std::string& cangjieLibPath)
 {
     // Append -L (those specified in command) as search paths
