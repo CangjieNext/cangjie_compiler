@@ -6,7 +6,10 @@
 
 #include "cangjie/CHIR/Optimization/Devirtualization.h"
 
+#include <iostream>
+#include <mutex>
 #include <optional>
+#include <unordered_set>
 
 #include "cangjie/CHIR/Optimization/DeadCodeElimination.h"
 #include "cangjie/CHIR/Analysis/DevirtualizationInfo.h"
@@ -37,6 +40,122 @@ Devirtualization::Devirtualization(
     : analysisWrapper(typeAnalysisWrapper), devirtFuncInfo(devirtFuncInfo)
 {
 }
+
+namespace {
+Function* UnwrapVirtMethod(Function* func)
+{
+    if (func == nullptr) {
+        return nullptr;
+    }
+    return func->Get<WrappedRawMethod>() != nullptr ? func->Get<WrappedRawMethod>() : func;
+}
+
+const CustomTypeDef* CanonicalDef(const CustomTypeDef* def)
+{
+    if (def == nullptr) {
+        return nullptr;
+    }
+    return def->GetGenericDecl() != nullptr ? def->GetGenericDecl() : def;
+}
+
+std::string FormatFuncDesc(Function* func)
+{
+    if (func == nullptr) {
+        return "<unknown>";
+    }
+    auto* parent = func->GetParentCustomTypeDef();
+    std::string desc = func->GetPackageName();
+    desc += "::";
+    if (parent != nullptr) {
+        desc += parent->GetSrcCodeIdentifier();
+        desc += ".";
+    }
+    desc += func->GetSrcCodeIdentifier();
+    const auto& loc = func->GetDebugLocation();
+    if (!loc.GetAbsPath().empty() && loc.GetBeginPos().line != 0) {
+        desc += "  (";
+        desc += loc.GetAbsPath();
+        desc += ":";
+        desc += std::to_string(loc.GetBeginPos().line);
+        desc += ")";
+    }
+    return desc;
+}
+
+std::string FormatCallSite(const Invoke& invoke)
+{
+    const auto& loc = invoke.GetDebugLocation();
+    std::string path = loc.GetAbsPath();
+    if (path.empty()) {
+        path = loc.GetFileName();
+    }
+    if (path.empty()) {
+        path = "<unknown>";
+    }
+    auto begin = loc.GetBeginPos();
+    path += ":" + std::to_string(begin.line);
+    if (begin.column != 0) {
+        path += ":" + std::to_string(begin.column);
+    }
+    return path;
+}
+
+void PrintIfSplitVTableDevirt(const Invoke& invoke, Function& picked, Type& thisType)
+{
+    auto* customTy = DynamicCast<CustomType*>(thisType.StripAllRefs());
+    if (customTy == nullptr) {
+        return;
+    }
+    auto* def = customTy->GetCustomTypeDef();
+    if (def == nullptr) {
+        return;
+    }
+    auto* genericDef = CanonicalDef(def);
+    const auto& methodName = invoke.GetMethodName();
+    auto* pickedRaw = UnwrapVirtMethod(&picked);
+    auto* callee = invoke.GetCallee();
+    const auto* intendedParent = CanonicalDef(callee != nullptr ? callee->GetParentCustomTypeDef() : nullptr);
+
+    std::unordered_set<Function*> uniq;
+    Function* intendedInst = nullptr;
+    for (const auto& vtableIt : genericDef->GetDefVTable().GetTypeVTables()) {
+        auto* slotParent = CanonicalDef(vtableIt.GetSrcParentType()->GetClassDef());
+        for (const auto& info : vtableIt.GetVirtualMethods()) {
+            if (info.GetMethodName() != methodName) {
+                continue;
+            }
+            auto* inst = info.GetVirtualMethod();
+            if (inst == nullptr) {
+                continue;
+            }
+            auto* raw = UnwrapVirtMethod(inst);
+            uniq.insert(raw);
+            if (intendedParent != nullptr && slotParent == intendedParent) {
+                intendedInst = inst;
+            }
+        }
+    }
+    // Only report when the invoke's declaring parent slot exists, has a different
+    // implementation than the one Devirtualization picked by name.
+    if (uniq.size() <= 1 || intendedInst == nullptr || UnwrapVirtMethod(intendedInst) == pickedRaw) {
+        return;
+    }
+
+    static std::mutex mu;
+    static std::unordered_set<std::string> printed;
+    std::string key = FormatCallSite(invoke) + "." + methodName;
+    std::lock_guard<std::mutex> lock(mu);
+    if (!printed.insert(key).second) {
+        return;
+    }
+
+    std::cout << "[DEVIRT WARN] 虚函数调用优化选错目标\n"
+              << "  调用位置: " << FormatCallSite(invoke) << "\n"
+              << "  虚函数名: " << methodName << "\n"
+              << "  优化错误后调用: " << FormatFuncDesc(pickedRaw) << "\n"
+              << "  优化正确应调用: " << FormatFuncDesc(intendedInst) << "\n";
+}
+} // namespace
 
 void Devirtualization::RunOnFuncs(const std::vector<Function*>& funcs, CHIRBuilder& builder, bool isDebug)
 {
@@ -81,6 +200,7 @@ void Devirtualization::RunOnFunc(const Function* func, CHIRBuilder& builder)
         if (!realCallee) {
             return;
         }
+        PrintIfSplitVTableDevirt(*invoke, *realCallee, *thisType);
         if (thisType->IsGenericRelated()) {
             if (visibleGenericTypes == std::nullopt) {
                 auto types = GetVisiableGenericTypes(*func);
