@@ -870,9 +870,10 @@ Value* Translator::TranslateMemberFuncCall(const AST::CallExpr& expr)
     Type* expectedThisObjTy = nullptr;
     auto expectedParamTys = instCallInfo.instParamTys;
     if (!resolvedFunction->TestAttr(AST::Attribute::STATIC)) {
-        // for virtual func call, we should calculate the correct this object type and store it in instParamTys[0]
+        // for virtual func call, cast implicit `this` to instantiated parent type
         if (instCallInfo.isVirtualFuncCall) {
-            expectedThisObjTy = AddRefIfFuncIsMutOrClass(*instCallInfo.instParentCustomTy, *resolvedFunction, builder);
+            expectedThisObjTy =
+                AddRefIfFuncIsMutOrClass(*instCallInfo.instParentCustomTy, *instCallInfo.originalFuncDecl, builder);
         } else {
             expectedThisObjTy = expectedParamTys[0];
         }
@@ -904,16 +905,14 @@ Value* Translator::TranslateMemberFuncCall(const AST::CallExpr& expr)
                 rtti = CreateAndAppendExpression<GetRTTIStatic>(
                     builder.GetUnitTy(), instCallInfo.thisType->StripAllRefs(), currentBlock)->GetResult();
             }
-            auto invokeInfo =
-                GenerateInvokeCallContext(instCallInfo, *rtti, *resolvedFunction, args, expr.overflowStrategy);
+            auto invokeInfo = GenerateInvokeCallContext(instCallInfo, *rtti, args, expr.overflowStrategy);
             ret = TryCreate<InvokeStatic>(currentBlock, loc, instCallInfo.instRetTy, invokeInfo)->GetResult();
         } else {
             // Invoke
             CJC_ASSERT(!args.empty());
             auto obj = args[0];
             args.erase(args.begin());
-            auto invokeInfo =
-                GenerateInvokeCallContext(instCallInfo, *obj, *resolvedFunction, args, expr.overflowStrategy);
+            auto invokeInfo = GenerateInvokeCallContext(instCallInfo, *obj, args, expr.overflowStrategy);
             ret = TryCreate<Invoke>(currentBlock, loc, instCallInfo.instRetTy, invokeInfo)->GetResult();
         }
         if (HasNothingTypeArg(args)) {
