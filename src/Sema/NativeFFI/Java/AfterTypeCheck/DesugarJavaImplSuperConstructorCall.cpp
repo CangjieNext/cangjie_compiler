@@ -5,6 +5,7 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "DesugarJavaImplSuperConstructorCall.h"
+#include "NativeFFI/Java/Utils.h"
 #include "NativeFFI/Utils.h"
 #include "Utils.h"
 #include "InteropLibBridge.h"

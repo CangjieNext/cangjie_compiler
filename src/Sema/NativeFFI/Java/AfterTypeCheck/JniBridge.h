@@ -176,6 +176,18 @@ public:
     OwnedPtr<AST::Expr> CreateStaticJavaMethodCall(const AST::Ty& retTy,
         Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jclass, Ptr<AST::Expr> jmethod,
         OwnedPtr<FuncArg> jniArgs) const;
+    
+    OwnedPtr<AST::Expr> CreateGetStaticJavaFieldCall(const AST::Ty& ty,
+        Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jclass, Ptr<AST::Expr> jfield) const;
+    
+    OwnedPtr<AST::Expr> CreateGetInstanceJavaFieldCall(const AST::Ty& ty,
+        Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jobject, Ptr<AST::Expr> jfield) const;
+    
+    OwnedPtr<AST::Expr> CreateSetStaticJavaFieldCall(const AST::Ty& ty,
+        Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jclass, Ptr<AST::Expr> jfield, Ptr<AST::Expr> value) const;
+    
+    OwnedPtr<AST::Expr> CreateSetInstanceJavaFieldCall(const AST::Ty& ty,
+        Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jobject, Ptr<AST::Expr> jfield, Ptr<AST::Expr> value) const;
 
     const JniNativeInterfaceBridge interface;
 

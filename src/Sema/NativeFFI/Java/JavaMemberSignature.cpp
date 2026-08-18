@@ -31,6 +31,7 @@ JavaMemberSignature JavaMemberSignature::FromMethod(const FuncDecl& method)
         /* .classSignature = */ JavaClassSignature::FromDecl(outerDecl),
         /* .name = */ GetJavaMemberName(method),
         /* .signature = */ GetJniTypeSignature(*method.GetTy()),
+        /* kind = */ JavaMemberKind::METHOD,
         /* .isStatic = */ method.TestAttr(Attribute::STATIC)
     );
     return signature;
@@ -50,7 +51,8 @@ JavaMemberSignature JavaMemberSignature::FromConstructor(const FuncDecl& ctor, b
     JavaMemberSignature signature(
         /* .classSignature = */ JavaClassSignature::FromDecl(outerDecl),
         /* .name = */ JAVA_CONSTRUCTOR,
-        /* .signature = */ GetJniTypeSignature(voidTy, paramTys, withMarker)
+        /* .signature = */ GetJniTypeSignature(voidTy, paramTys, withMarker),
+        /* kind = */ JavaMemberKind::CONSTRUCTOR
     );
     return signature;
 }
@@ -65,6 +67,7 @@ JavaMemberSignature JavaMemberSignature::FromProperty(const PropDecl& member)
         /* .classSignature = */ JavaClassSignature::FromDecl(outerDecl),
         /* .name = */ GetJavaMemberName(member),
         /* .signature = */ GetJniTypeSignature(*member.GetTy()),
+        /* kind = */ JavaMemberKind::FIELD,
         /* .isStatic = */ member.TestAttr(Attribute::STATIC)
     );
     return signature;
@@ -87,15 +90,18 @@ JavaMemberSignature JavaMemberSignature::FromMember(const AST::Decl& member, boo
     }
     CJC_ABORT(); // Unexpected branch
     // compile-error on non-returning branch hack here
-    return JavaMemberSignature(JavaClassSignature::FromDecl(StaticCast<ClassLikeDecl&>(*member.outerDecl)), "", "");
+    return JavaMemberSignature(
+        JavaClassSignature::FromDecl(StaticCast<ClassLikeDecl&>(*member.outerDecl)), "", "", JavaMemberKind::METHOD);
 }
 
 JavaMemberSignature::JavaMemberSignature(
     JavaClassSignature javaClass,
     std::string name,
     std::string signature,
-    bool isStatic) : classSignature(javaClass), name(name), signature(signature), isStatic(isStatic)
+    JavaMemberKind kind, bool isStatic) : classSignature(javaClass),
+    name(name), signature(signature), isStatic(isStatic), kind(kind)
 {
+    CJC_ASSERT(kind != JavaMemberKind::CONSTRUCTOR || !isStatic); // constructor cannot be static
 }
 
 std::string JavaMemberSignature::GetClassTypeJniName() const
@@ -121,6 +127,44 @@ std::string JavaMemberSignature::GetSignature() const
 bool JavaMemberSignature::IsStatic() const
 {
     return isStatic;
+}
+
+bool JavaMemberSignature::IsField() const
+{
+    return kind == JavaMemberKind::FIELD;
+}
+
+bool JavaMemberSignature::IsMethod() const
+{
+    return kind == JavaMemberKind::METHOD;
+}
+
+bool JavaMemberSignature::IsConstructor() const
+{
+    return kind == JavaMemberKind::CONSTRUCTOR;
+}
+
+bool JavaMemberSignature::operator==(const JavaMemberSignature& other) const
+{
+    if (signature != other.signature) {
+        return false;
+    }
+    if (kind != other.kind) {
+        return false;
+    }
+    if (isStatic != other.isStatic) {
+        return false;
+    }
+    if (classSignature != other.classSignature) {
+        return false;
+    }
+
+    return this->name == other.name;
+}
+
+bool JavaMemberSignature::operator!=(const JavaMemberSignature& other) const
+{
+    return !(*this == other); 
 }
 
 

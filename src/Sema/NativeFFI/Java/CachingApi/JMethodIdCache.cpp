@@ -15,6 +15,13 @@
 namespace Cangjie::Native::FFI::Java {
 using namespace Cangjie::AST;
 
+JMethodIdCache::JMethodIdCache( const ImportManager& importManager,
+    TypeManager& typeManager,
+    InteropLibBridge& ilib,
+    JniBridge& jni) : importManager(importManager),
+    typeManager(typeManager), ilib(ilib), jni(jni)
+{}
+
 std::string JMethodIdCache::GetNewAccessorName(const JavaMemberSignature& method) const
 {
     static size_t unique_id = 0;

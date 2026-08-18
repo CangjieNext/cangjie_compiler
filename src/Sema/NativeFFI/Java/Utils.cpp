@@ -22,6 +22,42 @@ namespace Cangjie::Native::FFI::Java {
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::Java;
 
+ArrayOperationKind GetArrayOperationKind(Decl& decl)
+{
+    static constexpr std::string_view JAVA_ARRAY_LENGTH = "length";
+    CJC_ASSERT(IsJArray(*decl.outerDecl));
+
+    if (Is<PropDecl>(decl) && decl.identifier == JAVA_ARRAY_LENGTH) {
+        return ArrayOperationKind::GET_LENGTH;
+    }
+
+    if (auto funcDecl = As<ASTKind::FUNC_DECL>(&decl); funcDecl && funcDecl->identifier == "[]") {
+        auto paramsNumber = funcDecl->funcBody->paramLists[0]->params.size();
+        if (paramsNumber == 1) {
+            // Array "get" has one parameter: index.
+            return ArrayOperationKind::GET;
+        } else if (paramsNumber == 2) {
+            // Array "set" has two parameters: index and value to be set.
+            return ArrayOperationKind::SET;
+        }
+    }
+
+    if (auto funcDecl = As<ASTKind::FUNC_DECL>(&decl)) {
+        if (funcDecl->identifier == JAVA_ARRAY_GET_FOR_REF_TYPES) {
+            // Special version of get operation for object-based types
+            return ArrayOperationKind::GET;
+        }
+        if (funcDecl->identifier == JAVA_ARRAY_SET_FOR_REF_TYPES) {
+            // Special version of set operation for object-based types
+            return ArrayOperationKind::SET;
+        }
+    }
+
+    CJC_ABORT();
+
+    return ArrayOperationKind::GET;
+}
+
 const Ptr<ClassDecl> GetSyntheticClass(const ImportManager& importManager, const ClassLikeDecl& cld)
 {
     ClassDecl* synthetic =
@@ -140,7 +176,7 @@ bool IsUserDefinedJavaImplConstructor(const AST::Decl& implMember)
     }
 
     // Skip original primary constructors and only consider its FuncDecl counterpart.
-    auto ctor = As<ASTKind::FUNC_DECL>(&implMember);
+    auto ctor = DynamicCast<const FuncDecl*>(&implMember);
     if (!ctor) {
         return false;
     }
@@ -253,7 +289,7 @@ std::string WrapClassNameAsTypeSignature(const std::string_view classType)
 
 } // namespace
 
-std::string GetJniTypeSignature(const AST::Ty& javaCompatibleTy, bool withObjectTypeSeparator, bool withMarker)
+std::string GetJniTypeSignature(const AST::Ty& javaCompatibleTy)
 {
     constexpr static std::string_view javaStringJniName = "java/lang/String";
     static std::map<TypeKind, std::string> primitiveTypeMapper = {
@@ -273,37 +309,27 @@ std::string GetJniTypeSignature(const AST::Ty& javaCompatibleTy, bool withObject
     }
 
     if (javaCompatibleTy.IsString()) {
-        return withObjectTypeSeparator
-            ? WrapClassNameAsTypeSignature(javaStringJniName)
-            : std::string{javaStringJniName};
+        return WrapClassNameAsTypeSignature(javaStringJniName);
     }
-    // if (javaCompatibleTy.IsStructArray()) {
-        // return "[" + GetJniTypeSignature(*javaCompatibleTy.typeArgs[0], /* withinArray = */ true);
-    // }
 
     if (javaCompatibleTy.IsCoreOptionType()) {
         CJC_ASSERT_WITH_MSG(!javaCompatibleTy.typeArgs.empty(), "Option type must be generic");
         auto& argTy = *javaCompatibleTy.typeArgs[0];
-        return GetJniTypeSignature(argTy, withObjectTypeSeparator, withMarker);
-        // if (IsJArray(argTy)) {
-            // jsig = GetJniTypeSignature(argTy);
-        // } else {
-            // jsig = "L" + NormalizeJavaSignature(GetJavaObjectTypeName(argTy)) + ";";
-        // }
+        return GetJniTypeSignature(argTy);
     }
 
     if (javaCompatibleTy.IsClassLike()) {
         if (IsJArray(*StaticCast<ClassLikeTy&>(javaCompatibleTy).commonDecl)) {
-            return "[" + GetJniTypeSignature(*javaCompatibleTy.typeArgs[0], /* withObjectTypeSeparator = */ true);
+            return "[" + GetJniTypeSignature(*javaCompatibleTy.typeArgs[0]);
         } else {
-            NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(javaCompatibleTy).commonDecl));
-            // jsig = "L" + NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(cjtype).commonDecl)) + ";";
+            WrapClassNameAsTypeSignature(
+                NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(javaCompatibleTy).commonDecl)));
         }
     }
 
     if (javaCompatibleTy.IsFunc()) {
         auto& funcTy = StaticCast<FuncTy&>(javaCompatibleTy);
-        return GetJniTypeSignature(*funcTy.retTy, funcTy.paramTys, withMarker);
+        return GetJniTypeSignature(*funcTy.retTy, funcTy.paramTys);
     }
 
     CJC_ABORT(); // Unreachable state. This function should be called only on java-compatible types.
@@ -315,8 +341,7 @@ std::string GetJniTypeSignature(const AST::Ty& javaCompatibleRetTy, const std::v
 {
     std::string signature = "(";
     for (auto paramTy : paramTys) {
-        signature.append(GetJniTypeSignature(*paramTy,
-            /* withObjectTypeSeparator = */ true));
+        signature.append(GetJniTypeSignature(*paramTy));
     }
     if (withMarker) {
         // Last parameter is marker parameter
@@ -324,8 +349,7 @@ std::string GetJniTypeSignature(const AST::Ty& javaCompatibleRetTy, const std::v
             WrapClassNameAsTypeSignature(JavaClassSignature::GetConstructorMarkerClass().GetJniClassName()));
     }
     signature.append(")");
-    signature.append(GetJniTypeSignature(javaCompatibleRetTy,
-        /* withObjectTypeSeparator = */ true));
+    signature.append(GetJniTypeSignature(javaCompatibleRetTy));
     return signature;
 }
 

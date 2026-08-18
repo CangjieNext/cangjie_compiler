@@ -36,7 +36,6 @@ namespace {
 
 constexpr auto VALUE_IDENT = "value";
 constexpr auto FINALIZER_IDENT = "~init";
-constexpr auto GET_POINTER_ADDRESS_INTRINSIC = "getPointerAddress";
 
 } // namespace
 
@@ -483,10 +482,8 @@ OwnedPtr<Expr> ASTFactory::CreateMirrorConstructorCall(OwnedPtr<Expr> entity, Pt
 // return tmp.isNull()
 OwnedPtr<Expr> ASTFactory::CreateGetObjcEntityOrNullCall(VarDecl &entity, Ptr<File> file)
 {
-    static auto getPointerAddressFunc = importManager.GetCoreDecl<FuncDecl>(
-        GET_POINTER_ADDRESS_INTRINSIC);
-    CJC_NULLPTR_CHECK(getPointerAddressFunc);
-    auto readPointerRef = WithinFile(CreateRefExpr(*getPointerAddressFunc), file);
+    static auto& getPointerAddressFunc = GetGetPointerAddressIntrinsicDecl(importManager);
+    auto readPointerRef = WithinFile(CreateRefExpr(getPointerAddressFunc), file);
     auto uintNativeTy = typeManager.GetPrimitiveTy(TypeKind::TYPE_UINT_NATIVE);
     CJC_ASSERT(entity.GetTy()->IsPointer());
     readPointerRef->instTys.push_back(entity.GetTy()->typeArgs.front());
@@ -499,7 +496,7 @@ OwnedPtr<Expr> ASTFactory::CreateGetObjcEntityOrNullCall(VarDecl &entity, Ptr<Fi
     auto getPointerAddressCall = CreateCallExpr(
         std::move(readPointerRef),
         std::move(callArgs),
-        getPointerAddressFunc,
+        &getPointerAddressFunc,
         uintNativeTy,
         CallKind::CALL_INTRINSIC_FUNCTION);
 

@@ -17,16 +17,6 @@ DEFINE_MEMBER(NewObject, VAR_DECL, 2)
 // jobject NewObjectA(JNIEnv *env, jclass clazz, jmethodID methodID, const jvalue *args);
 DEFINE_MEMBER(NewObjectA, VAR_DECL, 3)
 
-// jfieldID GetFieldID(JNIEnv *env, jclass clazz, const char *name, const char *sig);
-DEFINE_MEMBER(GetFieldID, VAR_DECL, 3)
-// jfieldID GetStaticFieldID(JNIEnv *env, jclass clazz, const char *name, const char *sig);
-DEFINE_MEMBER(GetStaticFieldID, VAR_DECL, 3)
-
-// jmethodID GetMethodID(JNIEnv *env, jclass clazz, const char *name, const char *sig);
-DEFINE_MEMBER(GetMethodID, VAR_DECL, 3)
-// jmethodID GetStaticMethodID(JNIEnv *env, jclass clazz, const char *name, const char *sig);
-DEFINE_MEMBER(GetStaticMethodID, VAR_DECL, 3)
-
 // jbyte CallByteMethod(JNIEnv *env, jobject obj, jmethodID methodID);
 DEFINE_MEMBER(CallByteMethod, VAR_DECL, 2)
 // jbyte CallByteMethodA (JNIEnv *env, jobject obj, jmethodID methodID, const jvalue *args);
@@ -184,5 +174,87 @@ DEFINE_MEMBER(CallNonvirtualObjectMethodA, VAR_DECL, 4)
 DEFINE_MEMBER(CallStaticObjectMethod, VAR_DECL, 2)
 // jobject CallStaticObjectMethodA(JNIEnv *env, jclass clazz, jmethodID methodID, const jvalue *args);
 DEFINE_MEMBER(CallStaticObjectMethodA, VAR_DECL, 3)
+
+
+// jobject GetObjectField(JNIEnv *env, jobject obj, jfieldID fieldID);
+DEFINE_MEMBER(GetObjectField, VAR_DECL, 2)
+// void SetObjectField(JNIEnv *env, jobject obj, jfieldID fieldID, jobject val);
+DEFINE_MEMBER(SetObjectField, VAR_DECL, 3)
+// jobject GetStaticObjectField(JNIEnv *env, jclass clazz, jfieldID fieldID);
+DEFINE_MEMBER(GetStaticObjectField, VAR_DECL, 2)
+// void SetStaticObjectField(JNIEnv *env, jclass clazz, jfieldID fieldID, jobject value);
+DEFINE_MEMBER(SetStaticObjectField, VAR_DECL, 3)
+
+// jboolean GetBooleanField(JNIEnv *env, jobject obj, jfieldID fieldID);
+DEFINE_MEMBER(GetBooleanField, VAR_DECL, 2)
+// void SetBooleanField(JNIEnv *env, jobject obj, jfieldID fieldID, jboolean val);
+DEFINE_MEMBER(SetBooleanField, VAR_DECL, 3)
+// jboolean GetStaticBooleanField(JNIEnv *env, jclass clazz, jfieldID fieldID);
+DEFINE_MEMBER(GetStaticBooleanField, VAR_DECL, 2)
+// void SetStaticBooleanField(JNIEnv *env, jclass clazz, jfieldID fieldID, jboolean value);
+DEFINE_MEMBER(SetStaticBooleanField, VAR_DECL, 3)
+
+// jbyte GetByteField(JNIEnv *env, jobject obj, jfieldID fieldID);
+DEFINE_MEMBER(GetByteField, VAR_DECL, 2)
+// void SetByteField(JNIEnv *env, jobject obj, jfieldID fieldID, jbyte val);
+DEFINE_MEMBER(SetByteField, VAR_DECL, 3)
+// jbyte GetStaticByteField(JNIEnv *env, jclass clazz, jfieldID fieldID);
+DEFINE_MEMBER(GetStaticByteField, VAR_DECL, 2)
+// void SetStaticByteField(JNIEnv *env, jclass clazz, jfieldID fieldID, jbyte value);
+DEFINE_MEMBER(SetStaticByteField, VAR_DECL, 3)
+
+// jchar GetCharField(JNIEnv *env, jobject obj, jfieldID fieldID);
+DEFINE_MEMBER(GetCharField, VAR_DECL, 2)
+// void SetCharField(JNIEnv *env, jobject obj, jfieldID fieldID, jchar val);
+DEFINE_MEMBER(SetCharField, VAR_DECL, 3)
+// jchar GetStaticCharField(JNIEnv *env, jclass clazz, jfieldID fieldID);
+DEFINE_MEMBER(GetStaticCharField, VAR_DECL, 2)
+// void SetStaticCharField(JNIEnv *env, jclass clazz, jfieldID fieldID, jchar value);
+DEFINE_MEMBER(SetStaticCharField, VAR_DECL, 3)
+
+// jshort GetShortField(JNIEnv *env, jobject obj, jfieldID fieldID);
+DEFINE_MEMBER(GetShortField, VAR_DECL, 2)
+// void SetShortField(JNIEnv *env, jobject obj, jfieldID fieldID, jshort val);
+DEFINE_MEMBER(SetShortField, VAR_DECL, 3)
+// jshort GetStaticShortField(JNIEnv *env, jclass clazz, jfieldID fieldID);
+DEFINE_MEMBER(GetStaticShortField, VAR_DECL, 2)
+// void SetStaticShortField(JNIEnv *env, jclass clazz, jfieldID fieldID, jshort value);
+DEFINE_MEMBER(SetStaticShortField, VAR_DECL, 3)
+
+// jint GetIntField(JNIEnv *env, jobject obj, jfieldID fieldID);
+DEFINE_MEMBER(GetIntField, VAR_DECL, 2)
+// void SetIntField(JNIEnv *env, jobject obj, jfieldID fieldID, jint val);
+DEFINE_MEMBER(SetIntField, VAR_DECL, 3)
+// jint GetStaticIntField(JNIEnv *env, jclass clazz, jfieldID fieldID);
+DEFINE_MEMBER(GetStaticIntField, VAR_DECL, 2)
+// void SetStaticIntField(JNIEnv *env, jclass clazz, jfieldID fieldID, jint value);
+DEFINE_MEMBER(SetStaticIntField, VAR_DECL, 3)
+
+// jlong GetLongField(JNIEnv *env, jobject obj, jfieldID fieldID);
+DEFINE_MEMBER(GetLongField, VAR_DECL, 2)
+// void SetLongField(JNIEnv *env, jobject obj, jfieldID fieldID, jlong val);
+DEFINE_MEMBER(SetLongField, VAR_DECL, 3)
+// jlong GetStaticLongField(JNIEnv *env, jclass clazz, jfieldID fieldID);
+DEFINE_MEMBER(GetStaticLongField, VAR_DECL, 2)
+// void SetStaticLongField(JNIEnv *env, jclass clazz, jfieldID fieldID, jlong value);
+DEFINE_MEMBER(SetStaticLongField, VAR_DECL, 3)
+
+// jfloat GetFloatField(JNIEnv *env, jobject obj, jfieldID fieldID);
+DEFINE_MEMBER(GetFloatField, VAR_DECL, 2)
+// void SetFloatField(JNIEnv *env, jobject obj, jfieldID fieldID, jfloat val);
+DEFINE_MEMBER(SetFloatField, VAR_DECL, 3)
+// jfloat GetStaticFloatField(JNIEnv *env, jclass clazz, jfieldID fieldID);
+DEFINE_MEMBER(GetStaticFloatField, VAR_DECL, 2)
+// void SetStaticFloatField(JNIEnv *env, jclass clazz, jfieldID fieldID, jfloat value);
+DEFINE_MEMBER(SetStaticFloatField, VAR_DECL, 3)
+
+// jdouble GetDoubleField(JNIEnv *env, jobject obj, jfieldID fieldID);
+DEFINE_MEMBER(GetDoubleField, VAR_DECL, 2)
+// void SetDoubleField(JNIEnv *env, jobject obj, jfieldID fieldID, jdouble val);
+DEFINE_MEMBER(SetDoubleField, VAR_DECL, 3)
+// jdouble GetStaticDoubleField(JNIEnv *env, jclass clazz, jfieldID fieldID);
+DEFINE_MEMBER(GetStaticDoubleField, VAR_DECL, 2)
+// void SetStaticDoubleField(JNIEnv *env, jclass clazz, jfieldID fieldID, jdouble value);
+DEFINE_MEMBER(SetStaticDoubleField, VAR_DECL, 3)
 
 #endif // DEFINE_MEMBER

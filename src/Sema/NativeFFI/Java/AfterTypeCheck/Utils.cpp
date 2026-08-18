@@ -341,40 +341,6 @@ bool HasPredefinedJavaName(const ClassLikeDecl& decl)
     return false;
 }
 
-ArrayOperationKind GetArrayOperationKind(Decl& decl)
-{
-    CJC_ASSERT(IsJArray(*decl.outerDecl));
-
-    if (Is<PropDecl>(decl) && decl.identifier == "length") {
-        return ArrayOperationKind::GET_LENGTH;
-    }
-
-    if (auto funcDecl = As<ASTKind::FUNC_DECL>(&decl); funcDecl && funcDecl->identifier == "[]") {
-        auto paramsNumber = funcDecl->funcBody->paramLists[0]->params.size();
-        if (paramsNumber == 1) {
-            // Array "get" has one parameter: index.
-            return ArrayOperationKind::GET;
-        } else if (paramsNumber == 2) {
-            // Array "set" has two parameters: index and value to be set.
-            return ArrayOperationKind::SET;
-        }
-    }
-
-    if (auto funcDecl = As<ASTKind::FUNC_DECL>(&decl)) {
-        if (funcDecl->identifier == JAVA_ARRAY_GET_FOR_REF_TYPES) {
-            // Special version of get operation for object-based types
-            return ArrayOperationKind::GET;
-        }
-        if (funcDecl->identifier == JAVA_ARRAY_SET_FOR_REF_TYPES) {
-            // Special version of set operation for object-based types
-            return ArrayOperationKind::SET;
-        }
-    }
-
-    CJC_ABORT();
-
-    return ArrayOperationKind::GET;
-}
 
 std::string Utils::GetJavaObjectTypeName(const Ty& ty)
 {

@@ -46,6 +46,12 @@ public:
     std::string GetSignature() const;
 
     bool IsStatic() const;
+    
+    bool IsField() const;
+    
+    bool IsMethod() const;
+    
+    bool IsConstructor() const;
 
     static JavaMemberSignature FromMethod(const AST::FuncDecl& method);
 
@@ -54,15 +60,27 @@ public:
     static JavaMemberSignature FromProperty(const AST::PropDecl& member);
 
     static JavaMemberSignature FromMember(const AST::Decl& member, bool withMarker = false);
+    
+    bool operator==(const JavaMemberSignature& other) const;
+    bool operator!=(const JavaMemberSignature& other) const;
 
 private:
-    JavaMemberSignature(JavaClassSignature javaClass, std::string name, std::string signature, bool isStatic = false);
+    enum class JavaMemberKind {
+        FIELD,
+        METHOD,
+        CONSTRUCTOR
+    };
+    
+    JavaMemberSignature(JavaClassSignature javaClass, std::string name, std::string signature,
+        JavaMemberKind kind, bool isStatic = false);
+
 
     const JavaClassSignature classSignature;
     const std::string name;
     const std::string signature;
 
     const bool isStatic;
+    const JavaMemberKind kind;
 };
 
 } // namespace Cangjie::Native::FFI::Java

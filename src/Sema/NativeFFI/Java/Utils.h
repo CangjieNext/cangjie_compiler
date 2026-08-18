@@ -16,6 +16,13 @@
 #include "cangjie/Modules/ImportManager.h"
 
 namespace Cangjie::Native::FFI::Java {
+    
+enum class ArrayOperationKind : uint8_t { CREATE, GET, SET, GET_LENGTH };
+    
+static constexpr std::string_view JAVA_ARRAY_GET_FOR_REF_TYPES = "$javaarrayget";
+static constexpr std::string_view JAVA_ARRAY_SET_FOR_REF_TYPES = "$javaarrayset";
+
+ArrayOperationKind GetArrayOperationKind(AST::Decl& decl);
 
 const Ptr<AST::ClassDecl> GetSyntheticClass(const ImportManager& importManager, const AST::ClassLikeDecl& cld);
 
@@ -40,17 +47,15 @@ bool IsJavaImplRegistryCompanionReferenceField(const AST::Node& node);
 bool IsUserDefinedJavaImplConstructor(const AST::Decl& implMember);
 
 /**
- * Returns fully-qualified JNI name (in form of internal JVM representation) of `javaCompatibleTy`
- * or type JNI signature for array and function types.
- *
- * @param `withObjectTypeSeparator` specifies if an object type signature should be prefixed with `L`
- * and suffixed with `;` - like `L<signature>;`. Such escaped representation is used for:
- * - function type signatures like: `(Ljava/lang/String;)Ljava/lang/Object;`;
- * - array signatures like: `[[Ljava/lang/String;`.
+ * Returns JNI signature of `javaCompatibleTy` type.
+ * An example of signatures:
+ * - `B` for `Int8`
+ * - `Ljava/lang/Object` for `java.lang.JObject`
+ * - `[[Ljava/lang/String` for `java.lang.JArray<java.lang.JString>`
+ * - `(Ljava/lang/String;I)Ljava/lang/Object;` for function (java.lang.JString, Int32) -> java.lang.JObject
+ * NOTE: fully-qualified names are wrapped with 'L'-prefix and ';'-suffix.
  */
-std::string GetJniTypeSignature(const AST::Ty& javaCompatibleTy,
-    bool withObjectTypeSeparator = false,
-    bool withMarker = false);
+std::string GetJniTypeSignature(const AST::Ty& javaCompatibleTy);
 std::string GetJniTypeSignature(const AST::Ty& javaCompatibleRetTy,
     const std::vector<Ptr<AST::Ty>> paramTys,
     bool withMarker = false);

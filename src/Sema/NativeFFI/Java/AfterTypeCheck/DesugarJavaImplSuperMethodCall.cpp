@@ -9,6 +9,7 @@
 
 #include "NativeFFI/Java/AfterTypeCheck/ASTFactory.h"
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
+#include "NativeFFI/Java/JavaMemberSignature.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
@@ -21,12 +22,30 @@ using namespace Cangjie::Interop::Java;
 void DesugarJavaImplSuperMethodCall::DesugarSuperMethodCall(
     AfterTypeCheckContext& ctx, CallExpr& call, ClassDecl& impl) const
 {
-    call.desugarExpr = factory.CreateSuperJavaMethodCall(ctx, impl, call, factory.ExtractArgExprs(call.args));
+    CJC_ASSERT(call.baseFunc && call.baseFunc->astKind == ASTKind::MEMBER_ACCESS);
+    auto& ma = *StaticAs<ASTKind::MEMBER_ACCESS>(call.baseFunc.get());
+    CJC_ASSERT(ma.baseExpr && ma.baseExpr->astKind == ASTKind::REF_EXPR);
+    auto& ref = *StaticAs<ASTKind::REF_EXPR>(ma.baseExpr.get().get());
+    CJC_ASSERT(ref.isSuper);
+    CJC_ASSERT(call.resolvedFunction && call.resolvedFunction->outerDecl);
+    auto& superFunc = *call.resolvedFunction;
+
+    // Only a class is expected to be a target of super call / to be a java impl
+    auto& predecessor = StaticCast<ClassDecl&>(*superFunc.outerDecl);
+    CJC_ASSERT(predecessor.IsJavaMirror()); // since no Impl <: Impl relationship is allowed
+
+    auto jobjectInstance = ilib.CreateAsJniJobjectCall(CreateJavaRefCall(impl, call.curFile));
+    call.desugarExpr = factory.CreateNonvirtualJavaMethodCall(ctx, *call.curFile,
+        std::move(jobjectInstance),
+        JavaMemberSignature::FromMethod(superFunc),
+        *call.GetTy(),
+        factory.ExtractArgExprs(call.args)
+    );
 }
 
 DesugarJavaImplSuperMethodCall::DesugarJavaImplSuperMethodCall(
-    InteropLibBridge& ilib, Native::FFI::Java::Utils& utils, ASTFactory& factory)
-    : ilib(ilib), utils(utils), factory(factory)
+    InteropLibBridge& ilib, ASTFactory& factory)
+    : ilib(ilib), factory(factory)
 {}
 
 void DesugarJavaImplSuperMethodCall::Process(AfterTypeCheckContext& ctx)

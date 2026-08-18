@@ -9,7 +9,6 @@
 
 #include "NativeFFI/Java/Utils.h"
 #include "Utils.h"
-#include "NativeFFI/Utils.h"
 #include "NativeFFI/Java/JavaMemberSignature.h"
 
 #include "cangjie/AST/Node.h"
@@ -17,6 +16,7 @@
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/Utils/CheckUtils.h"
+#include "cangjie/Utils/SafePointer.h"
 
 namespace Cangjie::Interop::Java {
 using namespace AST;
@@ -167,26 +167,6 @@ public:
     Ptr<FuncDecl> GetGetFromRegistryOptionDecl();
 
     /**
-     * Java_CFFI_getField_raw
-     */
-    Ptr<FuncDecl> GetGetFieldDecl();
-
-    /**
-     * Java_CFFI_setField_raw
-     */
-    Ptr<FuncDecl> GetSetFieldDecl();
-
-    /**
-     * Java_CFFI_getStaticField_raw
-     */
-    Ptr<FuncDecl> GetGetStaticFieldDecl();
-
-    /**
-     * Java_CFFI_setStaticField_raw
-     */
-    Ptr<FuncDecl> GetSetStaticFieldDecl();
-
-    /**
      * INTEROPLIB_VERSION
      */
     Ptr<VarDecl> GetInteropLibVersionVarDecl();
@@ -214,13 +194,8 @@ public:
     Ptr<FuncDecl> GetGetClassDecl() const;
     Ptr<FuncDecl> GetGetMethodIdDecl() const;
     Ptr<FuncDecl> GetGetStaticMethodIdDecl() const;
-    Ptr<FuncDecl> GetParseMethodSignatureDecl();
-    Ptr<FuncDecl> GetParseComponentSignatureDecl();
-    Ptr<FuncDecl> GetCallNestDecl();
-    Ptr<FuncDecl> GetMethodIdConstr();
-    Ptr<FuncDecl> GetMethodIdConstrStatic();
-    Ptr<FuncDecl> GetFieldIdConstr();
-    Ptr<FuncDecl> GetFieldIdConstrStatic();
+    Ptr<FuncDecl> GetGetInstanceFieldIdDecl() const;
+    Ptr<FuncDecl> GetGetStaticFieldIdDecl() const;
 
     /**
      * deleteLocalRef()
@@ -331,7 +306,8 @@ public:
      * Java_CFFI_arraySet(jniEnv, obj, typeSignature, cffiMethodArgs)
      */
     OwnedPtr<AST::Expr> CreateCFFICallArrayMethodCall(OwnedPtr<AST::Expr> jniEnv, OwnedPtr<AST::Expr> obj,
-        AST::FuncParamList& params, const Ptr<AST::GenericParamDecl> genericParam, ArrayOperationKind kind);
+        AST::FuncParamList& params, const Ptr<AST::GenericParamDecl> genericParam,
+        Native::FFI::Java::ArrayOperationKind kind);
 
     /**
      * Converts the result of a direct JNI method call to the Cangjie value expected
@@ -388,32 +364,6 @@ public:
      * Java_CFFI_getFromRegistryOption<ty>(regId)
      */
     OwnedPtr<CallExpr> CreateGetFromRegistryOptionCall(OwnedPtr<Expr> regId, Ptr<Ty> ty);
-
-    /**
-     * Java_CFFI_getField_raw(env, obj, typeSignature, fieldName, fieldSignature)
-     */
-    OwnedPtr<CallExpr> CreateGetFieldCall(Ptr<Expr> env, OwnedPtr<Expr> obj, std::string typeSignature,
-                                          std::string fieldName, std::string fieldSignature);
-
-    /**
-     * Java_CFFI_getStaticField_raw(env, typeSignature, fieldName, fieldSignature)
-     */
-    OwnedPtr<CallExpr> CreateGetStaticFieldCall(Ptr<Expr> env, std::string typeSignature,
-                                          std::string fieldName, std::string fieldSignature);
-
-    /**
-     * Java_CFFI_setField_raw(env, obj, signature.classTypeSignature,
-     *                        signature.name, signature.signature, Java_CFFI_JavaEntity(value))
-     */
-    OwnedPtr<CallExpr> CreateSetFieldCall(Ptr<Expr> env, OwnedPtr<Expr> obj,
-                                          const Native::FFI::Java::JavaMemberSignature& signature,
-                                          OwnedPtr<Expr> value);
-
-    /**
-     * Java_CFFI_setStaticField_raw(env, typeSignature, fieldName, fieldSignature, Java_CFFI_JavaEntity(value))
-     */
-    OwnedPtr<CallExpr> CreateSetStaticFieldCall(Ptr<Expr> env, std::string typeSignature, std::string fieldName,
-                                          std::string fieldSignature, OwnedPtr<Expr> value);
 
     /**
      * Java_CFFI_ensure_not_null(entity)
@@ -500,6 +450,9 @@ public:
 
     OwnedPtr<CallExpr> CreateGetMethodIdCall(Ptr<Expr> env, OwnedPtr<Expr> clazz,
         const std::string& name, const std::string& signature, bool isStatic);
+
+    OwnedPtr<CallExpr> CreateGetFieldIdCall(Ptr<Expr> env, OwnedPtr<Expr> clazz,
+        const Native::FFI::Java::JavaMemberSignature javaField);
 
     bool IsInteropLibAccessible() const;
     void CheckInteropLibVersion();

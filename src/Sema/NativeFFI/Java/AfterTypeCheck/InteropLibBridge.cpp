@@ -13,6 +13,7 @@
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
+#include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CastingTemplate.h"
@@ -44,6 +45,8 @@ constexpr auto INTEROPLIB_JNI_JNINativeInterface_ID = "JNINativeInterface_";
 constexpr auto INTEROPLIB_JNI_GET_ENV_ID = "Java_CFFI_get_env";
 constexpr auto INTEROPLIB_CFFI_GET_METHOD_ID = "Java_CFFI_getMethodID";
 constexpr auto INTEROPLIB_CFFI_GET_STATIC_METHOD_ID = "Java_CFFI_getStaticMethodID";
+constexpr auto INTEROPLIB_CFFI_GET_INSTANCE_FIELD_ID = "Java_CFFI_getInstanceFieldId";
+constexpr auto INTEROPLIB_CFFI_GET_STATIC_FIELD_ID = "Java_CFFI_getStaticFieldId";
 constexpr auto INTEROPLIB_JNI_HANDLE_PENDING_EXCEPTION_DECL_ID = "handlePendingException";
 constexpr auto INTEROPLIB_CFFI_NEW_GLOBAL_REF_ID = "Java_CFFI_newGlobalReference";
 constexpr auto INTEROPLIB_CFFI_DELETE_GLOBAL_REF_ID = "Java_CFFI_deleteGlobalReference";
@@ -60,10 +63,6 @@ constexpr auto INTEROPLIB_JNI_REMOVE_FROM_REGISTRY_DECL_ID = "Java_CFFI_removeFr
 constexpr auto INTEROPLIB_CFFI_UNWRAP_JAVA_ENTITY_METHOD_DECL_ID = "Java_CFFI_unwrapJavaEntityAsValue";
 constexpr auto INTEROPLIB_CFFI_GET_FROM_REGISTRY_METHOD_DECL_ID = "Java_CFFI_getFromRegistry";
 constexpr auto INTEROPLIB_CFFI_GET_FROM_REGISTRY_OPTION_METHOD_DECL_ID = "Java_CFFI_getFromRegistryOption";
-constexpr auto INTEROPLIB_CFFI_GET_FIELD_METHOD_DECL_ID = "Java_CFFI_getField";
-constexpr auto INTEROPLIB_CFFI_GET_STATIC_FIELD_METHOD_DECL_ID = "Java_CFFI_getStaticField";
-constexpr auto INTEROPLIB_CFFI_SET_FIELD_METHOD_DECL_ID = "Java_CFFI_setField";
-constexpr auto INTEROPLIB_CFFI_SET_STATIC_FIELD_METHOD_DECL_ID = "Java_CFFI_setStaticField";
 constexpr auto INTEROPLIB_CFFI_ENSURE_NOT_NULL_METHOD_DECL_ID = "Java_CFFI_ensure_not_null";
 constexpr auto INTEROPLIB_CFFI_GET_JAVA_ENTITY_OR_NULL_METHOD_DECL_ID = "Java_CFFI_getJavaEntityOrNull";
 constexpr auto INTEROPLIB_CFFI_IS_INSTANCE_OF_DECL_ID = "Java_CFFI_isInstanceOf";
@@ -75,13 +74,6 @@ constexpr auto INTEROPLIB_CFFI_JAVA_STRING_TO_CANGJIE = "Java_CFFI_JavaStringToC
 constexpr auto INTEROPLIB_CFFI_CANGJIE_STRING_TO_JAVA = "Java_CFFI_CangjieStringToJava";
 constexpr auto INTEROPLIB_CFFI_WITH_EXCEPTION_HANDLING_ID = "withExceptionHandling";
 constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_GET_CLASS = "Java_CFFI_getClass";
-constexpr auto INTEROPLIB_CFFI_PARSE_METHOD_SIGNATURE_ID = "Java_CFFI_parseMethodSignature";
-constexpr auto INTEROPLIB_CFFI_PARSE_COMPONENT_SIGNATURE_ID = "Java_CFFI_parseComponentSignature";
-constexpr auto INTEROPLIB_CFFI_JAVA_CALLNEST_ID = "Java_CFFI_JavaCallNestInit";
-constexpr auto INTEROPLIB_CFFI_JAVA_METHODID_CONSTR_ID = "Java_CFFI_MethodIDConstr";
-constexpr auto INTEROPLIB_CFFI_JAVA_METHODID_CONSTR_STATIC_ID = "Java_CFFI_MethodIDConstrStatic";
-constexpr auto INTEROPLIB_CFFI_JAVA_FIELDID_CONSTR_ID = "Java_CFFI_FieldIDConstr";
-constexpr auto INTEROPLIB_CFFI_JAVA_FIELDID_CONSTR_STATIC_ID = "Java_CFFI_FieldIDConstrStatic";
 constexpr auto DELETE_LOCAL_REF = "deleteLocalRef";
 
 } // namespace
@@ -244,6 +236,16 @@ Ptr<FuncDecl> InteropLibBridge::GetGetStaticMethodIdDecl() const
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_GET_STATIC_METHOD_ID);
 }
 
+Ptr<FuncDecl> InteropLibBridge::GetGetInstanceFieldIdDecl() const
+{
+    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_GET_INSTANCE_FIELD_ID);
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetGetStaticFieldIdDecl() const
+{
+    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_GET_STATIC_FIELD_ID);
+}
+
 Ptr<Ty> InteropLibBridge::GetJValueTy()
 {
     return typeManager.GetPrimitiveTy(TypeKind::TYPE_UINT64);
@@ -309,25 +311,6 @@ Ptr<FuncDecl> InteropLibBridge::GetGetFromRegistryOptionDecl()
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_GET_FROM_REGISTRY_OPTION_METHOD_DECL_ID);
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetGetFieldDecl()
-{
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_GET_FIELD_METHOD_DECL_ID);
-}
-
-Ptr<FuncDecl> InteropLibBridge::GetGetStaticFieldDecl()
-{
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_GET_STATIC_FIELD_METHOD_DECL_ID);
-}
-
-Ptr<FuncDecl> InteropLibBridge::GetSetFieldDecl()
-{
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_SET_FIELD_METHOD_DECL_ID);
-}
-
-Ptr<FuncDecl> InteropLibBridge::GetSetStaticFieldDecl()
-{
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_SET_STATIC_FIELD_METHOD_DECL_ID);
-}
 
 Ptr<VarDecl> InteropLibBridge::GetInteropLibVersionVarDecl()
 {
@@ -357,41 +340,6 @@ Ptr<FuncDecl> InteropLibBridge::GetWithExceptionHandlingDecl()
 Ptr<FuncDecl> InteropLibBridge::GetGetClassDecl() const
 {
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_CFFI_GET_CLASS);
-}
-
-Ptr<FuncDecl> InteropLibBridge::GetParseMethodSignatureDecl()
-{
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_PARSE_METHOD_SIGNATURE_ID);
-}
-
-Ptr<FuncDecl> InteropLibBridge::GetParseComponentSignatureDecl()
-{
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_PARSE_COMPONENT_SIGNATURE_ID);
-}
-
-Ptr<FuncDecl> InteropLibBridge::GetCallNestDecl()
-{
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_CALLNEST_ID);
-}
-
-Ptr<FuncDecl> InteropLibBridge::GetMethodIdConstr()
-{
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_METHODID_CONSTR_ID);
-}
-
-Ptr<FuncDecl> InteropLibBridge::GetMethodIdConstrStatic()
-{
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_METHODID_CONSTR_STATIC_ID);
-}
-
-Ptr<FuncDecl> InteropLibBridge::GetFieldIdConstr()
-{
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_FIELDID_CONSTR_ID);
-}
-
-Ptr<FuncDecl> InteropLibBridge::GetFieldIdConstrStatic()
-{
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_FIELDID_CONSTR_STATIC_ID);
 }
 
 Ptr<FuncDecl> InteropLibBridge::GetDeleteLocalRefDecl()
@@ -775,6 +723,19 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateGetMethodIdCall(Ptr<Expr> env, OwnedP
         std::move(clazz), std::move(methodName), std::move(signatureStr));
 }
 
+OwnedPtr<CallExpr> InteropLibBridge::CreateGetFieldIdCall(Ptr<Expr> env, OwnedPtr<Expr> clazz,
+    const Native::FFI::Java::JavaMemberSignature javaField)
+{
+    static auto getInstanceFieldIdDecl = GetGetInstanceFieldIdDecl();
+    static auto getStaticFieldIdDecl = GetGetStaticFieldIdDecl();
+    auto getFieldIdDecl = javaField.IsStatic() ? getStaticFieldIdDecl : getInstanceFieldIdDecl;
+    static auto strTy = utils.GetStringDecl().GetTy();
+    auto fieldNameLit = CreateLitConstExpr(LitConstKind::STRING, javaField.GetName(), strTy);
+    auto fieldSignatureLit = CreateLitConstExpr(LitConstKind::STRING, javaField.GetSignature(), strTy);
+    return CreateCall(getFieldIdDecl, env->curFile,
+        ASTCloner::Clone(env), std::move(clazz), std::move(fieldNameLit), std::move(fieldSignatureLit));
+}
+
 OwnedPtr<CallExpr> InteropLibBridge::CreateAsJniJobjectCall(OwnedPtr<Expr> javaEntity)
 {
     CJC_NULLPTR_CHECK(javaEntity);
@@ -1123,138 +1084,6 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateGetFromRegistryOptionCall(OwnedPtr<Ex
     fdRef->instTys.push_back(ty->typeArgs[0]);
     fdRef->SetTy(typeManager.GetInstantiatedTy(funcDecl->GetTy(), GenerateTypeMapping(*funcDecl, fdRef->instTys)));
     return CreateCallExpr(std::move(fdRef), std::move(callArgs), funcDecl, ty, CallKind::CALL_DECLARED_FUNCTION);
-}
-
-OwnedPtr<CallExpr> InteropLibBridge::CreateGetFieldCall(Ptr<Expr> env, OwnedPtr<Expr> obj,
-    std::string typeSignature, std::string fieldName, std::string fieldSignature)
-{
-    auto curFile = obj->curFile;
-    auto funcDecl = GetGetFieldDecl();
-    // auto jclassInitFuncDecl = GetJClassDecl();
-    auto parseSignatureFuncDecl = GetParseComponentSignatureDecl();
-    auto fieldIDFuncDecl = GetFieldIdConstr();
-    if (!funcDecl || !parseSignatureFuncDecl || !fieldIDFuncDecl) {
-        return nullptr;
-    }
-
-    // CJC_ASSERT_WITH_MSG(!jclassInitFuncDecl->funcBody->paramLists.empty(), "paramLists cannot be empty");
-    // CJC_ASSERT_WITH_MSG(jclassInitFuncDecl->funcBody->paramLists[0]->params.size() > 1,
-        // "at least 2 parameters expected for classInit function");
-    // CJC_ASSERT(jclassInitFuncDecl->funcBody->paramLists[0] && jclassInitFuncDecl->funcBody->paramLists[0]->params[1]);
-    static auto strTy = GetStringDecl(importManager).GetTy();
-
-    auto tsigExpr = CreateLitConstExpr(LitConstKind::STRING, typeSignature, strTy);
-    auto fieldNameExpr = CreateLitConstExpr(LitConstKind::STRING, fieldName, strTy);
-    auto fsigExpr = CreateLitConstExpr(LitConstKind::STRING, fieldSignature, strTy);
-
-    // auto jclass = CreateCall(jclassInitFuncDecl, curFile, ASTCloner::Clone(env), std::move(tsigExpr));
-    auto filedSignature = CreateCall(parseSignatureFuncDecl, curFile, std::move(fsigExpr));
-    auto fieldID = CreateCall(fieldIDFuncDecl, curFile, ASTCloner::Clone(env), std::move(jclass),
-        std::move(fieldNameExpr), std::move(filedSignature));
-
-    return CreateCall(funcDecl, curFile, ASTCloner::Clone(env), std::move(obj), std::move(fieldID));
-}
-
-OwnedPtr<CallExpr> InteropLibBridge::CreateGetStaticFieldCall(
-    Ptr<Expr> env, std::string typeSignature, std::string fieldName, std::string fieldSignature)
-{
-    auto curFile = env->curFile;
-    auto funcDecl = GetGetStaticFieldDecl();
-    auto jclassInitFuncDecl = GetJClassDecl();
-    auto parseSignatureFuncDecl = GetParseComponentSignatureDecl();
-    auto fieldIDFuncDecl = GetFieldIdConstrStatic();
-    if (!funcDecl || !jclassInitFuncDecl || !parseSignatureFuncDecl || !fieldIDFuncDecl) {
-        return nullptr;
-    }
-
-    auto entityTy = GetJavaEntityTy();
-    if (!entityTy) {
-        return nullptr;
-    }
-
-    CJC_ASSERT_WITH_MSG(!jclassInitFuncDecl->funcBody->paramLists.empty(), "paramLists cannot be empty");
-    CJC_ASSERT_WITH_MSG(jclassInitFuncDecl->funcBody->paramLists[0]->params.size() > 1,
-        "at least 2 parameters expected for classInit function");
-    CJC_ASSERT(jclassInitFuncDecl->funcBody->paramLists[0] && jclassInitFuncDecl->funcBody->paramLists[0]->params[1]);
-    auto strTy = jclassInitFuncDecl->funcBody->paramLists[0]->params[1]->GetTy();
-
-    auto tsigExpr = CreateLitConstExpr(LitConstKind::STRING, typeSignature, strTy);
-    auto fieldNameExpr = CreateLitConstExpr(LitConstKind::STRING, fieldName, strTy);
-    auto fsigExpr = CreateLitConstExpr(LitConstKind::STRING, fieldSignature, strTy);
-
-    auto jclass = CreateCall(jclassInitFuncDecl, curFile, ASTCloner::Clone(env), std::move(tsigExpr));
-    auto filedSignature = CreateCall(parseSignatureFuncDecl, curFile, std::move(fsigExpr));
-    auto fieldID = CreateCall(fieldIDFuncDecl, curFile, ASTCloner::Clone(env), ASTCloner::Clone(jclass.get()),
-        std::move(fieldNameExpr), std::move(filedSignature));
-
-    return CreateCall(funcDecl, curFile, ASTCloner::Clone(env), std::move(jclass), std::move(fieldID));
-}
-
-OwnedPtr<CallExpr> InteropLibBridge::CreateSetFieldCall(
-    Ptr<Expr> env, OwnedPtr<Expr> obj, const JavaMemberSignature& signature, OwnedPtr<Expr> value)
-{
-    auto curFile = value->curFile;
-    auto funcDecl = GetSetFieldDecl();
-    auto jclassInitFuncDecl = GetJClassDecl();
-    auto parseSignatureFuncDecl = GetParseComponentSignatureDecl();
-    auto fieldIDFuncDecl = GetFieldIdConstr();
-    if (!funcDecl || !jclassInitFuncDecl || !parseSignatureFuncDecl || !fieldIDFuncDecl) {
-        return nullptr;
-    }
-
-    CJC_ASSERT_WITH_MSG(!jclassInitFuncDecl->funcBody->paramLists.empty(), "paramLists cannot be empty");
-    CJC_ASSERT_WITH_MSG(jclassInitFuncDecl->funcBody->paramLists[0]->params.size() > 1,
-        "at least 2 parameters expected for classInit function");
-    CJC_ASSERT(jclassInitFuncDecl->funcBody->paramLists[0] && jclassInitFuncDecl->funcBody->paramLists[0]->params[1]);
-    auto strTy = jclassInitFuncDecl->funcBody->paramLists[0]->params[1]->GetTy();
-
-    auto tsigExpr = CreateLitConstExpr(LitConstKind::STRING, signature.classTypeSignature, strTy);
-    tsigExpr->curFile = curFile;
-    auto fieldNameExpr = CreateLitConstExpr(LitConstKind::STRING, signature.name, strTy);
-    fieldNameExpr->curFile = curFile;
-    auto fsigExpr = CreateLitConstExpr(LitConstKind::STRING, signature.signature, strTy);
-    fsigExpr->curFile = curFile;
-
-    auto jclass = CreateCall(jclassInitFuncDecl, curFile, ASTCloner::Clone(env), std::move(tsigExpr));
-    auto filedSignature = CreateCall(parseSignatureFuncDecl, curFile, std::move(fsigExpr));
-    auto fieldID = CreateCall(fieldIDFuncDecl, curFile, ASTCloner::Clone(env), std::move(jclass),
-        std::move(fieldNameExpr), std::move(filedSignature));
-
-    return CreateCall(funcDecl,
-        curFile, ASTCloner::Clone(env), std::move(obj), std::move(fieldID), WrapJavaEntity(std::move(value)));
-}
-
-OwnedPtr<CallExpr> InteropLibBridge::CreateSetStaticFieldCall(Ptr<Expr> env, std::string typeSignature,
-    std::string fieldName, std::string fieldSignature, OwnedPtr<Expr> value)
-{
-    auto curFile = value->curFile;
-    auto funcDecl = GetSetStaticFieldDecl();
-    auto jclassInitFuncDecl = GetJClassDecl();
-    auto parseSignatureFuncDecl = GetParseComponentSignatureDecl();
-    auto fieldIDFuncDecl = GetFieldIdConstrStatic();
-    if (!funcDecl || !jclassInitFuncDecl || !parseSignatureFuncDecl || !fieldIDFuncDecl) {
-        return nullptr;
-    }
-
-    CJC_ASSERT_WITH_MSG(!jclassInitFuncDecl->funcBody->paramLists.empty(), "paramLists cannot be empty");
-    CJC_ASSERT_WITH_MSG(jclassInitFuncDecl->funcBody->paramLists[0]->params.size() > 1,
-        "at least 2 parameters expected for classInit function");
-    CJC_ASSERT(jclassInitFuncDecl->funcBody->paramLists[0] && jclassInitFuncDecl->funcBody->paramLists[0]->params[1]);
-    auto strTy = jclassInitFuncDecl->funcBody->paramLists[0]->params[1]->GetTy();
-
-    auto tsigExpr = CreateLitConstExpr(LitConstKind::STRING, typeSignature, strTy);
-    tsigExpr->curFile = curFile;
-    auto fieldNameExpr = CreateLitConstExpr(LitConstKind::STRING, fieldName, strTy);
-    fieldNameExpr->curFile = curFile;
-    auto fsigExpr = CreateLitConstExpr(LitConstKind::STRING, fieldSignature, strTy);
-    fsigExpr->curFile = curFile;
-
-    auto jclass = CreateCall(jclassInitFuncDecl, curFile, ASTCloner::Clone(env), std::move(tsigExpr));
-    auto filedSignature = CreateCall(parseSignatureFuncDecl, curFile, std::move(fsigExpr));
-    auto fieldID = CreateCall(fieldIDFuncDecl, curFile, ASTCloner::Clone(env), ASTCloner::Clone(jclass.get()),
-        std::move(fieldNameExpr), std::move(filedSignature));
-    return CreateCall(funcDecl,
-        curFile, ASTCloner::Clone(env), std::move(jclass), std::move(fieldID), WrapJavaEntity(std::move(value)));
 }
 
 OwnedPtr<Expr> InteropLibBridge::WrapExceptionHandling(OwnedPtr<Expr> env, OwnedPtr<LambdaExpr> action)

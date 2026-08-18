@@ -26,13 +26,6 @@ namespace Cangjie::Interop::Java {
 using namespace AST;
 using namespace Cangjie::Native::FFI;
 
-enum class ArrayOperationKind: uint8_t {
-    CREATE,
-    GET,
-    SET,
-    GET_LENGTH
-};
-
 class Utils final {
 public:
     Utils(ImportManager& importManager, TypeManager& typeManager);
@@ -193,8 +186,6 @@ bool IsOptionOfString(Ptr<Ty> ty);
 bool IsMirror(const Ty& ty);
 
 bool IsImpl(const Ty& ty);
-
-ArrayOperationKind GetArrayOperationKind(Decl& decl);
 
 template <typename Ret = Node, typename... Args>
 std::vector<OwnedPtr<Ret>> Nodes(OwnedPtr<Args>&&... args)

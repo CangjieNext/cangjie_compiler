@@ -8,6 +8,7 @@
 #include "GenerateInJavaImplReferenceWrapper.h"
 #include "NativeFFI/Java/AfterTypeCheck/ASTFactory.h"
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
+#include "NativeFFI/Java/JavaMemberSignature.h"
 #include "NativeFFI/Utils.h"
 #include "Utils.h"
 #include "NativeFFI/Java/Utils.h"
@@ -262,10 +263,18 @@ void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorInitializa
     CJC_ASSERT(ctor.funcBody);
     CJC_ASSERT(ctor.funcBody->paramLists.size() == 1);
     auto& paramList = *ctor.funcBody->paramLists[0];
-
-    // No global reference is created here:
+    auto args = factory.CreateParamsUsage(paramList);
+    args.push_back(ilib.CreateJavaEntityNullCall(curFile)); // Marker parameter
+    
+    // NOTE: No global reference is created here:
     // it is wrapped into global reference in `super` constructors chain call: within `JObject`.
-    auto javaCtorExpr = factory.CreateNewJavaObjectCall(ctx, *curFile, *refWrapper.GetTy(), ctor, factory.CreateParamsUsage(paramList));
+    // NOTE: marker is used to distinguish between two types of `@JavaImpl` constructors
+    // running the same user-defined logics within it:
+    // 1. Constructor directly callable in cangjie code.
+    // 2. Constructor (with marker) callable in generated `@C` bridge functions callable by Java counterpart object.
+    auto javaCtorExpr = factory.CreateNewJavaObjectCall(ctx, *curFile,
+        JavaMemberSignature::FromConstructor(ctor, /* withMarker = */ true),
+        std::move(args));
     if (!javaCtorExpr) {
         ctor.EnableAttr(Attribute::IS_BROKEN);
         companion.EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
