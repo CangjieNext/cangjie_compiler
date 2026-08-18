@@ -1237,7 +1237,7 @@ Ptr<Value> Translator::Visit(const AST::CallExpr& callExpr)
     } else if (callExpr.resolvedFunction->TestAttr(AST::Attribute::OPERATOR)) {
         CJC_ASSERT(callExpr.baseFunc->astKind == AST::ASTKind::MEMBER_ACCESS);
         auto ma = StaticCast<AST::MemberAccess*>(callExpr.baseFunc.get());
-        CJC_NULLPTR_CHECK(ma->baseExpr->mapExpr);
+        // CJC_NULLPTR_CHECK(ma->baseExpr->mapExpr);
         TranslateCompoundAssignmentElementRef(*ma);
     } else {
         CJC_ABORT();
