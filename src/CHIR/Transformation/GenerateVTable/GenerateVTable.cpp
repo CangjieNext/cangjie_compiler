@@ -163,7 +163,7 @@ void GenerateVTable::UpdateFuncCall()
     Utils::ProfileRecorder recorder(passName, "UpdateFuncCall");
     auto preVisit = [this](Expression& e) {
         if (auto dyExpr = DynamicCast<DynamicDispatch*>(&e)) {
-            e.Set<VirMethodOffset>(dyExpr->GetVirtualMethodOffset(&builder));
+            e.Set<VirMethodOffset>(dyExpr->GetVirtualMethodOffset());
         } else if (auto apply = DynamicCast<ApplyBase*>(&e)) {
             auto callee = DynamicCast<Function*>(apply->GetCallee());
             if (CalleeIsMutFuncFromParent(apply->GetThisType(), callee, *e.GetTopLevelFunc())) {

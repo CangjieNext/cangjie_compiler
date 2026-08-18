@@ -736,7 +736,8 @@ bool IsInstanceVarInit(const Value& value);
 
 std::vector<ClassType*> GetSuperTypesRecusively(Type& subType, CHIRBuilder& builder);
 
-Type* GetInstParentCustomTypeForApplyCallee(const ApplyBase& expr, CHIRBuilder& builder);
+Type* GetInstParentCustomTyOfCallee(
+    const Value& value, const std::vector<Value*>& args, const Type* thisType, CHIRBuilder& builder);
 
 std::vector<VTableSearchRes> GetFuncIndexInVTable(
     Type& root, const FuncCallType& funcCallType, CHIRBuilder& builder);

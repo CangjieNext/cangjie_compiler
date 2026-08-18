@@ -130,6 +130,7 @@ std::pair<CHIR::Type*, FuncCallType> Translator::GetExactParentTypeAndFuncType(
         funcInstArgs.emplace_back(TranslateType(*ty));
     }
     auto thisDerefTy = thisType.StripAllRefs();
+    // Result parentType is the instantiated parent custom type used as InstCalleeInfo::instParentCustomTy.
     auto parentType = GetExactParentType(*thisDerefTy, funcDecl, *funcType, funcInstArgs, isVirtualFuncCall);
     /** we can't find a parent type in following case:
         interface I { func foo(): Unit }
@@ -196,7 +197,8 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromVarInit(const AST::R
         .thisType = parentType,
         .instParamTys = paramTys,
         .instRetTy = funcType->GetReturnType(),
-        .isVirtualFuncCall = false
+        .isVirtualFuncCall = false,
+        .originalFuncDecl = funcDecl
     };
 }
 
@@ -237,18 +239,24 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromRefExpr(const AST::R
     }
     auto isVirtualFuncCall = IsVirtualFuncCall(*caller, *funcDecl, false);
 
-    // 3. calculate parent type and func type
-    auto [parentType, funcCallType] = GetExactParentTypeAndFuncType(expr, *thisType, *funcDecl, isVirtualFuncCall);
+    // 3. real Invoke callee is the top-overridden virtual method
+    auto originalFuncDecl = typeManager.GetTopOverriddenFuncDecl(funcDecl);
+    CJC_NULLPTR_CHECK(originalFuncDecl);
+
+    // 4. calculate instantiated parent type from originalFuncDecl (vtable src parent of the real callee)
+    auto [parentType, funcCallType] =
+        GetExactParentTypeAndFuncType(expr, *thisType, *originalFuncDecl, isVirtualFuncCall);
     if (isVirtualFuncCall) {
         thisType = builder.GetType<RefType>(builder.GetType<ThisType>());
     }
     return InstCalleeInfo {
-        .instParentCustomTy = parentType,
+        .instParentCustomTy = parentType, // instantiated parent type for vtable / casting `this`
         .thisType = thisType,
         .instParamTys = funcCallType.funcType->GetParamTypes(),
         .instRetTy = funcCallType.funcType->GetReturnType(),
         .instantiatedTypeArgs = std::move(funcCallType.genericTypeArgs),
-        .isVirtualFuncCall = isVirtualFuncCall
+        .isVirtualFuncCall = isVirtualFuncCall,
+        .originalFuncDecl = originalFuncDecl.get()
     };
 }
 
@@ -281,15 +289,21 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromMemberAccess(const A
         }
     }
 
-    // 3. calculate parent type and func type
-    auto [parentType, funcCallType] = GetExactParentTypeAndFuncType(expr, *thisType, *funcDecl, isVirtualFuncCall);
+    // 3. real Invoke callee is the top-overridden virtual method
+    auto originalFuncDecl = typeManager.GetTopOverriddenFuncDecl(funcDecl);
+    CJC_NULLPTR_CHECK(originalFuncDecl);
+
+    // 4. calculate instantiated parent type from originalFuncDecl (vtable src parent of the real callee)
+    auto [parentType, funcCallType] =
+        GetExactParentTypeAndFuncType(expr, *thisType, *originalFuncDecl, isVirtualFuncCall);
     return InstCalleeInfo {
-        .instParentCustomTy = parentType,
+        .instParentCustomTy = parentType, // instantiated parent type for vtable / casting `this`
         .thisType = thisType,
         .instParamTys = funcCallType.funcType->GetParamTypes(),
         .instRetTy = funcCallType.funcType->GetReturnType(),
         .instantiatedTypeArgs = std::move(funcCallType.genericTypeArgs),
-        .isVirtualFuncCall = isVirtualFuncCall
+        .isVirtualFuncCall = isVirtualFuncCall,
+        .originalFuncDecl = originalFuncDecl.get()
     };
 }
 

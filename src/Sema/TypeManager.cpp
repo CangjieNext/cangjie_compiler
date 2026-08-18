@@ -2002,21 +2002,124 @@ void TypeManager::UpdateTopOverriddenFuncDeclMap(const AST::Decl* src, const AST
     }
 }
 
-Ptr<const AST::FuncDecl> TypeManager::GetTopOverriddenFuncDecl(const AST::FuncDecl* funcDecl) const
+namespace {
+Ptr<const FuncDecl> LookupTopOverriddenFromMap(
+    const std::unordered_map<Ptr<const FuncDecl>, std::vector<Ptr<const FuncDecl>>>& overrideMap,
+    const FuncDecl* funcDecl)
 {
-    const auto& decls = overrideMap.find(funcDecl);
+    const auto decls = overrideMap.find(funcDecl);
     if (decls == overrideMap.end() || decls->second.empty()) {
         return nullptr;
     }
     Ptr<const FuncDecl> ret = decls->second.front();
-    std::set<Ptr<const FuncDecl>> traversed;
-    while ((overrideMap.find(ret) != overrideMap.end()) && !(overrideMap.find(ret)->second.empty())) {
-        if (auto [_, succ] = traversed.emplace(ret); !succ) {
-            return nullptr; // cycle detected
+    std::set<Ptr<const FuncDecl>> traversed{funcDecl};
+    while (true) {
+        auto it = overrideMap.find(ret);
+        if (it == overrideMap.end() || it->second.empty()) {
+            return ret;
         }
-        ret = overrideMap.find(ret)->second.front();
+        if (auto [_, succ] = traversed.emplace(ret); !succ) {
+            // Cycle in overrideMap: keep the farthest parent visited so far.
+            return ret;
+        }
+        ret = it->second.front();
     }
-    return ret;
+}
+
+bool MayOverrideSameMethod(const FuncDecl& child, const FuncDecl& parent)
+{
+    if (&child == &parent) {
+        return false;
+    }
+    if (child.identifier != parent.identifier) {
+        return false;
+    }
+    if (child.TestAttr(Attribute::STATIC) != parent.TestAttr(Attribute::STATIC)) {
+        return false;
+    }
+    if (child.TestAttr(Attribute::OPERATOR) != parent.TestAttr(Attribute::OPERATOR)) {
+        return false;
+    }
+    auto childFt = DynamicCast<FuncTy*>(child.GetTy());
+    auto parentFt = DynamicCast<FuncTy*>(parent.GetTy());
+    // Avoid allocating type vars / mutating TypeManager: only compare arity here.
+    // Full signature checks already ran in Sema; this fallback is for cache misses.
+    if (childFt && parentFt && childFt->paramTys.size() != parentFt->paramTys.size()) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Walk @p func's outer inheritable decl supers and find the top-most function that
+ * @p func overrides. Used when overrideMap has no entry (e.g. imported Equatable.!=).
+ * Must not call IsOverrideOrShadow / PairIsOverrideOrImpl — those allocate ty vars and
+ * are unsafe once Sema has finished (e.g. during AST2CHIR).
+ */
+Ptr<const FuncDecl> FindTopOverriddenByInheritance(
+    const FuncDecl& func, std::set<Ptr<const FuncDecl>>& visited)
+{
+    if (auto [_, inserted] = visited.emplace(&func); !inserted) {
+        return nullptr;
+    }
+    auto outer = DynamicCast<InheritableDecl*>(func.outerDecl);
+    if (!outer) {
+        return nullptr;
+    }
+    Ptr<const FuncDecl> topMost = nullptr;
+    // GetAllSuperDecls is non-const but only reads the inheritance graph.
+    for (auto super : const_cast<InheritableDecl*>(outer)->GetAllSuperDecls()) {
+        if (super == outer) {
+            continue;
+        }
+        for (auto& member : super->GetMemberDecls()) {
+            auto parentFunc = DynamicCast<FuncDecl*>(member.get());
+            if (!parentFunc || !MayOverrideSameMethod(func, *parentFunc)) {
+                continue;
+            }
+            auto parentTop = FindTopOverriddenByInheritance(*parentFunc, visited);
+            Ptr<const FuncDecl> candidate = parentTop ? parentTop : Ptr<const FuncDecl>(parentFunc);
+            if (!topMost) {
+                topMost = candidate;
+            } else if (candidate->TestAttr(Attribute::ABSTRACT) && !topMost->TestAttr(Attribute::ABSTRACT)) {
+                // Prefer the abstract root declaration for vtable / Invoke callee.
+                topMost = candidate;
+            }
+        }
+    }
+    return topMost;
+}
+} // namespace
+
+Ptr<const AST::FuncDecl> TypeManager::GetTopOverriddenFuncDecl(const AST::FuncDecl* funcDecl) const
+{
+    CJC_NULLPTR_CHECK(funcDecl);
+
+    // 1) Walk overrideMap as far as it goes. The map is often incomplete for imported
+    //    decls (e.g. Expr.toTokens → Node.toTokens is recorded, but Node.toTokens →
+    //    ToTokens.toTokens is not), so do not return the map result immediately.
+    Ptr<const FuncDecl> fromMap = LookupTopOverriddenFromMap(overrideMap, funcDecl);
+    if (!fromMap && funcDecl->genericDecl) {
+        fromMap = LookupTopOverriddenFromMap(
+            overrideMap, StaticCast<const FuncDecl*>(funcDecl->genericDecl));
+    }
+
+    // 2) Continue via inheritance from the furthest known ancestor (map result, else
+    //    generic decl, else the input), so we still reach the true top (ToTokens.toTokens).
+    const FuncDecl* seed = fromMap.get();
+    if (!seed) {
+        seed = funcDecl->genericDecl ? StaticCast<const FuncDecl*>(funcDecl->genericDecl) : funcDecl;
+    }
+
+    std::set<Ptr<const FuncDecl>> visited;
+    if (auto top = FindTopOverriddenByInheritance(*seed, visited)) {
+        return top;
+    }
+    if (fromMap) {
+        return fromMap;
+    }
+    // Already the top-most function in the override chain.
+    return funcDecl;
 }
 
 Ptr<Decl> TypeManager::GetOverrideDeclInClassLike(

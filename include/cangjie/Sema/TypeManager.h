@@ -277,6 +277,13 @@ public:
         AST::Decl& baseDecl, const AST::FuncDecl& funcDecl, bool withAbstractOverrides = false);
 
     void UpdateTopOverriddenFuncDeclMap(const AST::Decl* src, const AST::Decl* target);
+    /**
+     * Return the top-most function in the override chain of @p funcDecl.
+     * If @p funcDecl is already the top-most (does not override anything), return itself.
+     * Walks overrideMap first, then continues on the inheritance chain so a partial
+     * map (e.g. Expr.toTokens → Node.toTokens without Node → ToTokens) still reaches
+     * the true top.
+     */
     Ptr<const AST::FuncDecl> GetTopOverriddenFuncDecl(const AST::FuncDecl* funcDecl) const;
     /**
      * whether the decl is override the funcDecl.
