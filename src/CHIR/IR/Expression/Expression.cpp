@@ -997,7 +997,7 @@ std::vector<Value*> ApplyBase::GetArgs() const
 
 Type* ApplyBase::GetInstParentCustomTyOfCallee(CHIRBuilder& builder) const
 {
-    return GetInstParentCustomTypeForApplyCallee(*this, builder);
+    return ::Cangjie::CHIR::GetInstParentCustomTyOfCallee(*GetCallee(), GetArgs(), GetThisType(), builder);
 }
 
 std::string ApplyBase::GetCalleeIdentifier() const
@@ -1062,52 +1062,42 @@ const std::vector<GenericType*>& DynamicDispatch::GetGenericTypeParams() const
     return GetCallee()->GetGenericTypeParams();
 }
 
-std::vector<VTableSearchRes> DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& builder) const
+size_t DynamicDispatch::GetVirtualMethodOffset() const
+{
+    auto offset = Get<VirMethodOffset>();
+    if (offset.has_value()) {
+        return offset.value();
+    }
+    auto callee = GetCallee();
+    auto def = callee->GetParentCustomTypeDef();
+    const auto& virtualMethods =
+        def->GetDefVTable().GetExpectedTypeVTable(*StaticCast<ClassType*>(def->GetType())).GetVirtualMethods();
+    // Overflow operators (`+` etc.) are split into multiple vtable slots (`&+`/`~+`/`%+`) that may share
+    // the same Function*. Matching only by callee would always hit the first slot, so also compare
+    // method name (GetMethodName() already includes OverflowStrategyPrefix).
+    for (size_t i = 0; i < virtualMethods.size(); i++) {
+        if (virtualMethods[i].GetVirtualMethod() == callee &&
+            virtualMethods[i].GetMethodName() == GetMethodName()) {
+            return i;
+        }
+    }
+    CJC_ABORT();
+    return 0;
+}
+
+ClassType* DynamicDispatch::GetInstSrcParentCustomTypeOfMethod(CHIRBuilder& builder) const
 {
     auto thisTypeDeref = thisType->StripAllRefs();
     if (thisTypeDeref->IsThis()) {
         thisTypeDeref = GetTopLevelFunc()->GetParentCustomTypeDef()->GetType();
     }
-    std::vector<Type*> instParamTypes;
-    for (auto arg : GetArgs()) {
-        instParamTypes.emplace_back(arg->GetType());
-    }
-    if (!Is<InvokeStaticBase>(*this)) {
-        instParamTypes.erase(instParamTypes.begin());
-    }
-    auto instFuncType = builder.GetType<FuncType>(instParamTypes, builder.GetUnitTy());
-    FuncCallType funcCallType{GetMethodName(), instFuncType, instantiatedTypeArgs};
-    auto res = GetFuncIndexInVTable(*thisTypeDeref, funcCallType, builder);
-    CJC_ASSERT(!res.empty());
-    return res;
-}
-
-size_t DynamicDispatch::GetVirtualMethodOffset(CHIRBuilder* builder) const
-{
-    auto offset = Get<VirMethodOffset>();
-    if (offset.has_value()) {
-        return offset.value();
-    } else {
-        CJC_NULLPTR_CHECK(builder);
-        return GetVirtualMethodInfo(*builder)[0].offset;
-    }
-}
-
-ClassType* DynamicDispatch::GetInstSrcParentCustomTypeOfMethod(CHIRBuilder& builder) const
-{
-    for (auto& r : GetVirtualMethodInfo(builder)) {
-        if (r.offset == GetVirtualMethodOffset()) {
-            auto def = r.instSrcParentType->GetClassDef();
-            const auto& parentFuncInfo = def->GetDefVTable().GetExpectedTypeVTable(*def->GetType());
-            auto originalType = parentFuncInfo.GetVirtualMethods()[r.offset].GetOriginalFuncType();
-            if (VirMethodTypeIsMatched(*originalType, *GetMethodType())) {
-                CJC_NULLPTR_CHECK(r.instSrcParentType);
-                return r.instSrcParentType;
-            }
-        }
-    }
-    CJC_ABORT();
-    return nullptr;
+    // May inherit the same parent interface more than once with different type args, e.g.
+    //   interface A<T> { func foo(a: T) {} }
+    //   class B <: A<Bool> & A<Int64> {}
+    //   B().foo(1)  // must pick A<Int64>, not A<Bool>
+    // GetInstParentCustomTyOfCallee disambiguates by matching callee args when multiple parents match.
+    return StaticCast<ClassType*>(
+        ::Cangjie::CHIR::GetInstParentCustomTyOfCallee(*GetCallee(), GetArgs(), thisTypeDeref, builder));
 }
 
 AttributeInfo DynamicDispatch::GetVirtualMethodAttr() const

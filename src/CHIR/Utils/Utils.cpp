@@ -1236,7 +1236,9 @@ std::vector<ClassType*> GetSuperTypesRecusively(Type& subType, CHIRBuilder& buil
     } else if (auto genericType = DynamicCast<GenericType*>(&subType)) {
         for (auto upperBound : genericType->GetUpperBounds()) {
             auto classType = StaticCast<ClassType*>(upperBound->StripAllRefs());
-            result.emplace_back(classType);
+            if (std::find(result.begin(), result.end(), classType) == result.end()) {
+                result.emplace_back(classType);
+            }
             auto tempParents = GetSuperTypesRecusively(*classType, builder);
             for (auto p : tempParents) {
                 if (std::find(result.begin(), result.end(), p) == result.end()) {
@@ -1366,6 +1368,40 @@ Type* GetInstParentCustomTyOfCallee(
         builtinType && builtinType->IsSameTypeKind(*calleeParentDef->GetType())) {
         // we should compare type pointer, but CPointer<T> is generic type, so we have to compare type kind
         return derefThisType;
+    } else if (auto genericType = DynamicCast<GenericType*>(derefThisType)) {
+        /**
+         * `thisType` is a generic type parameter, find parent type from its upper bounds.
+         *  interface I {
+         *      func foo() {}
+         *  }
+         *  func goo<T>(a: T) where T <: I {
+         *      a.foo()  // `thisType` is Generic-T, `foo`'s parent def is I, parent type is I
+         *  }
+         *
+         *  interface I<U> {
+         *      func foo() {}
+         *  }
+         *  func goo<T>(a: T) where T <: I<Bool> {
+         *      a.foo()  // `thisType` is Generic-T, parent type is I<Bool>
+         *  }
+         *
+         *  interface I<U> {
+         *      func foo(a: U) {}
+         *  }
+         *  func goo<T>(a: T) where T <: I<Bool> & I<Int64> {
+         *      a.foo(1)  // need to pick I<Int64> by argument types
+         *  }
+         */
+        CJC_ASSERT(!genericType->GetUpperBounds().empty());
+        auto parentTypes = GetSuperTypesRecusively(*genericType, builder);
+        std::vector<ClassType*> matchedTypes;
+        for (auto pType : parentTypes) {
+            if (typeAndDefIsEquivalent(*pType, *calleeParentDef)) {
+                matchedTypes.emplace_back(pType);
+            }
+        }
+        CJC_ASSERT(!matchedTypes.empty());
+        return GetInstParentType(matchedTypes, *callee, args, builder);
     } else {
         /**
          * a function declared in parent def, but called by sub type, then we need to compute instantiated parent type
@@ -1392,7 +1428,7 @@ Type* GetInstParentCustomTyOfCallee(
          *      func foo(a: T) {}
          *  }
          *  class B <: A<Bool> & A<Int64> {}
-         *  B().foo(1)  // `thisType` is B<Bool>, `foo`'s parent def is A<T>, then parent type is A<Int64>
+         *  B().foo(1)  // `thisType` is B, `foo`'s parent def is A<T>, then parent type is A<Int64>
          */
         auto parentTypes = GetSuperTypesRecusively(*derefThisType, builder);
         std::vector<ClassType*> matchedTypes;
@@ -1403,11 +1439,6 @@ Type* GetInstParentCustomTyOfCallee(
         }
         return GetInstParentType(matchedTypes, *callee, args, builder);
     }
-}
-
-Type* GetInstParentCustomTypeForApplyCallee(const ApplyBase& expr, CHIRBuilder& builder)
-{
-    return GetInstParentCustomTyOfCallee(*expr.GetCallee(), expr.GetArgs(), expr.GetThisType(), builder);
 }
 
 std::vector<VTableSearchRes> GetFuncIndexInVTable(Type& root, const FuncCallType& funcCallType, CHIRBuilder& builder)
@@ -1656,5 +1687,35 @@ std::vector<Expression*> GetNonDebugUsers(const Value& val)
         }
     }
     return res;
+}
+
+Function* GetCalleeInSrcParentType(
+    Function& callee, const std::string& methodName, std::optional<size_t> expectedOffset)
+{
+    auto def = callee.GetParentCustomTypeDef();
+    CJC_NULLPTR_CHECK(def);
+    ClassDef* srcParentDef = nullptr;
+    size_t offset = 0;
+    for (auto& typeVtable : def->GetDefVTable().GetTypeVTables()) {
+        auto virtualMethods = typeVtable.GetVirtualMethods();
+        for (size_t i = 0; i < virtualMethods.size(); ++i) {
+            auto& vtableItem = virtualMethods[i];
+            if (vtableItem.GetVirtualMethod() == &callee && vtableItem.GetMethodName() == methodName &&
+                (!expectedOffset.has_value() || i == expectedOffset.value())) {
+                srcParentDef = typeVtable.GetSrcParentType()->GetClassDef();
+                offset = i;
+                break;
+            }
+        }
+    }
+    CJC_NULLPTR_CHECK(srcParentDef);
+    if (def->IsClass() && srcParentDef == StaticCast<ClassType*>(def->GetType())->GetClassDef()) {
+        return &callee;
+    }
+    auto srcParentType = StaticCast<ClassType*>(srcParentDef->GetType());
+    const auto& virtualMethods =
+        srcParentDef->GetDefVTable().GetExpectedTypeVTable(*srcParentType).GetVirtualMethods();
+    CJC_ASSERT(offset < virtualMethods.size());
+    return virtualMethods[offset].GetVirtualMethod();
 }
 } // namespace Cangjie::CHIR
