@@ -90,6 +90,8 @@ std::string GetJavaMemberName(const AST::Decl& member);
 
 std::string NormalizeJavaSignature(const std::string& sig);
 
+void InjectBlock(AST::Block& into, AST::Block& from);
+
 } // namespace Cangjie::Native::FFI::Java
 
 #endif // CANGJIE_SEMA_NATIVE_FFI_JAVA_UTILS

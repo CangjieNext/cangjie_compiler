@@ -31,10 +31,11 @@ void PopulateJavaMirrorStubs::PopulateUserConstructor(AfterTypeCheckContext& ctx
     CJC_ASSERT(userCtor.TestAttr(Attribute::CONSTRUCTOR));
     userCtor.constructorCall = ConstructorCall::OTHER_INIT;
     auto thisCall = CreateThisCall(*userCtor.outerDecl, wrappingCtor, wrappingCtor.GetTy(), curFile);
-    CJC_ASSERT(wrappingCtor.funcBody);
-    CJC_ASSERT(wrappingCtor.funcBody->paramLists.size() == 1);
-    auto& body = wrappingCtor.funcBody->body->body;
-    auto& paramList = *wrappingCtor.funcBody->paramLists[0];
+    CJC_ASSERT(userCtor.funcBody);
+    CJC_ASSERT(userCtor.funcBody->paramLists.size() == 1);
+    auto& body = userCtor.funcBody->body->body;
+    auto& paramList = *userCtor.funcBody->paramLists[0];
+    // TODO: paramList.curFile is null!!!
     auto ctorSignature = JavaMemberSignature::FromConstructor(userCtor, /* withMarker = */ false);
     auto constructorExpr = factory.CreateNewJavaObjectCall(ctx, *curFile, ctorSignature,
         factory.CreateParamsUsage(paramList));
@@ -71,7 +72,7 @@ void PopulateJavaMirrorStubs::PopulateJArrayMethod(ClassDecl& jarray, FuncDecl& 
     if (!retTy->IsPrimitive()) {
         methodCall = ilib.CreateJavaEntityJobjectCall(std::move(methodCall));
     }
-    methodCall = ilib.ConvertJavaResultToCJ(std::move(methodCall), retTy, jarray);
+    methodCall = ilib.ConvertJavaResultToCJ(std::move(methodCall), retTy, &jarray);
     body.emplace_back(std::move(methodCall));
 }
     
@@ -109,7 +110,11 @@ void PopulateJavaMirrorStubs::PopulateUserMethod(AfterTypeCheckContext& ctx,
         userMethod.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
-    body.emplace_back(std::move(methodCall));
+    if (methodCall->astKind == ASTKind::BLOCK) {
+        InjectBlock(*userMethod.funcBody->body, StaticCast<Block&>(*methodCall));
+    } else {
+        body.emplace_back(std::move(methodCall));
+    }
 
     if (IsSyntheticMirrorWrapper(mirror)) {
         userMethod.DisableAttr(Attribute::ABSTRACT);
@@ -164,7 +169,7 @@ void PopulateJavaMirrorStubs::InsertPropGetter(AfterTypeCheckContext& ctx, Class
     auto outerDecl = As<ASTKind::CLASS_LIKE_DECL>(prop.outerDecl);
     OwnedPtr<Expr> unwrapJavaEntityCall = isArrayGetLength || !outerDecl
         ? std::move(callResRef)
-        : ilib.UnwrapJavaEntity(std::move(callResRef), prop.GetTy(), *outerDecl);
+        : ilib.UnwrapJavaEntity(std::move(callResRef), prop.GetTy(), outerDecl);
     if (!unwrapJavaEntityCall) {
         prop.EnableAttr(Attribute::IS_BROKEN);
         prop.outerDecl->EnableAttr(Attribute::HAS_BROKEN);

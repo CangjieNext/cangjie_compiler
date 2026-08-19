@@ -462,5 +462,12 @@ std::string NormalizeJavaSignature(const std::string& sig)
     return normalized;
 }
 
+void InjectBlock(AST::Block& into, AST::Block& from)
+{
+    for (auto& node : from.body) {
+        into.body.push_back(std::move(node));
+    }
+}
+
 
 } // namespace Cangjie::Native::FFI::Java

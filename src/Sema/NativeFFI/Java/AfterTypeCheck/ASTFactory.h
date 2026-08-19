@@ -13,7 +13,6 @@
 #include "NativeFFI/Java/CachingApi/JClassCache.h"
 #include "NativeFFI/Java/CachingApi/JFieldIdCache.h"
 #include "NativeFFI/Java/CachingApi/JMethodIdCache.h"
-#include "NativeFFI/Java/JavaClassSignature.h"
 #include "NativeFFI/Java/JavaMemberSignature.h"
 #include "cangjie/AST/Node.h"
 

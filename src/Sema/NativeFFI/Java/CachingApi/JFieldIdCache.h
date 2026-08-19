@@ -30,8 +30,7 @@ public:
     explicit JFieldIdCache(
         const ImportManager& importManager,
         TypeManager& typeManager,
-        InteropLibBridge& ilib,
-        JniBridge& jni);
+        InteropLibBridge& ilib);
 
     OwnedPtr<AST::Expr> CreateJFieldIdAccess(AfterTypeCheckContext& ctx,
        JavaMemberSignature method, Ptr<AST::Expr> jclass, Ptr<AST::Expr> envPtr);
@@ -41,7 +40,6 @@ private:
     const ImportManager& importManager;
     TypeManager& typeManager;
     InteropLibBridge& ilib;
-    JniBridge& jni;
 
     /**
      * For jfieldId-s, already presented in cache, just returns corresponding jfieldId variable.

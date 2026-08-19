@@ -19,9 +19,7 @@ using namespace Cangjie::AST;
 JFieldIdCache::JFieldIdCache(
     const ImportManager& importManager,
     TypeManager& typeManager,
-    InteropLibBridge& ilib,
-    JniBridge& jni) : importManager(importManager),
-    typeManager(typeManager), ilib(ilib), jni(jni)
+    InteropLibBridge& ilib) : importManager(importManager), typeManager(typeManager), ilib(ilib)
 {}
 
 std::string JFieldIdCache::GetNewAccessorName(const JavaMemberSignature& method) const
@@ -52,12 +50,11 @@ OwnedPtr<Expr> JFieldIdCache::CreateJFieldIdAccess(AfterTypeCheckContext& ctx,
 
     ifNull.push_back(
         CreateAssignExpr(WithinFile(CreateRefExpr(jmethodVar), &curFile),
-            jni.interface.CreateNewGlobalRefCall(envPtr,
-                ilib.CreateGetMethodIdCall(envPtr,
-                    ASTCloner::Clone(jclass),
-                    field.GetName(),
-                    field.GetSignature(),
-                    field.IsStatic())),
+            ilib.CreateGetMethodIdCall(envPtr,
+                ASTCloner::Clone(jclass),
+                field.GetName(),
+                field.GetSignature(),
+                field.IsStatic()),
             TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)));
     ifNull.push_back(WithinFile(CreateRefExpr(jmethodVar), &curFile));
 
@@ -84,6 +81,7 @@ VarDecl& JFieldIdCache::GetOrPut(AfterTypeCheckContext& ctx, JavaMemberSignature
     varDecl->EnableAttr(Attribute::INTERNAL, Attribute::GLOBAL, Attribute::INITIALIZED, Attribute::NO_REFLECT_INFO);
     varDecl->isVar = true;
     varDecl->curFile = &curFile;
+    varDecl->fullPackageName = curFile.GetFullPackageName();
 
     cache[method] = varDecl.get();
     auto& ret = *varDecl;

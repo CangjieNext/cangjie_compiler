@@ -82,6 +82,7 @@ VarDecl& JClassCache::GetOrPut(AfterTypeCheckContext& ctx, JavaClassSignature ja
     varDecl->EnableAttr(Attribute::INTERNAL, Attribute::GLOBAL, Attribute::INITIALIZED, Attribute::NO_REFLECT_INFO);
     varDecl->isVar = true;
     varDecl->curFile = &curFile;
+    varDecl->fullPackageName = curFile.GetFullPackageName();
 
     cache[javaClass] = varDecl.get();
     auto& ret = *varDecl;

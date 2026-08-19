@@ -16,7 +16,6 @@
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CheckUtils.h"
 
-
 namespace Cangjie::Native::FFI::Java {
 using namespace AST;
 
@@ -187,7 +186,7 @@ OwnedPtr<Expr> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx,
         if (!expectedTy.IsPrimitive()) {
             ret = ilib.CreateJavaEntityJobjectCall(std::move(ret));
         }
-        return ilib.ConvertJavaResultToCJ(std::move(ret), &expectedTy, *ilib.GetJobjectDecl()); // TODO: fix scope decl
+        return ilib.ConvertJavaResultToCJ(std::move(ret), &expectedTy);
     };
 
     auto jclass = jclassCache.CreateJClassAccess(ctx, method.GetClassSignature(), jniEnvPtr);
@@ -288,7 +287,7 @@ OwnedPtr<AST::Expr> ASTFactory::CreateJavaFieldGetCall(AfterTypeCheckContext& ct
         if (!expectedTy.IsPrimitive()) {
             ret = ilib.CreateJavaEntityJobjectCall(std::move(ret));
         }
-        return ilib.ConvertJavaResultToCJ(std::move(ret), &expectedTy, *ilib.GetJobjectDecl()); // TODO: fix scope decl
+        return ilib.ConvertJavaResultToCJ(std::move(ret), &expectedTy);
     };
     
     auto jclass = jclassCache.CreateJClassAccess(ctx, field.GetClassSignature(), jniEnvPtr);

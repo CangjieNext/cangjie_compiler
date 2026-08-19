@@ -15,11 +15,9 @@
 namespace Cangjie::Native::FFI::Java {
 using namespace Cangjie::AST;
 
-JMethodIdCache::JMethodIdCache( const ImportManager& importManager,
+JMethodIdCache::JMethodIdCache(const ImportManager& importManager,
     TypeManager& typeManager,
-    InteropLibBridge& ilib,
-    JniBridge& jni) : importManager(importManager),
-    typeManager(typeManager), ilib(ilib), jni(jni)
+    InteropLibBridge& ilib) : importManager(importManager), typeManager(typeManager), ilib(ilib)
 {}
 
 std::string JMethodIdCache::GetNewAccessorName(const JavaMemberSignature& method) const
@@ -50,12 +48,11 @@ OwnedPtr<Expr> JMethodIdCache::CreateJMethodIdAccess(AfterTypeCheckContext& ctx,
 
     ifNull.push_back(
         CreateAssignExpr(WithinFile(CreateRefExpr(jmethodVar), &curFile),
-            jni.interface.CreateNewGlobalRefCall(envPtr,
-                ilib.CreateGetMethodIdCall(envPtr,
-                    ASTCloner::Clone(jclass),
-                    method.GetName(),
-                    method.GetSignature(),
-                    method.IsStatic())),
+            ilib.CreateGetMethodIdCall(envPtr,
+                ASTCloner::Clone(jclass),
+                method.GetName(),
+                method.GetSignature(),
+                method.IsStatic()),
             TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)));
     ifNull.push_back(WithinFile(CreateRefExpr(jmethodVar), &curFile));
 
@@ -82,6 +79,7 @@ VarDecl& JMethodIdCache::GetOrPut(AfterTypeCheckContext& ctx, JavaMemberSignatur
     varDecl->EnableAttr(Attribute::INTERNAL, Attribute::GLOBAL, Attribute::INITIALIZED, Attribute::NO_REFLECT_INFO);
     varDecl->isVar = true;
     varDecl->curFile = &curFile;
+    varDecl->fullPackageName = curFile.GetFullPackageName();
 
     cache[method] = varDecl.get();
     auto& ret = *varDecl;

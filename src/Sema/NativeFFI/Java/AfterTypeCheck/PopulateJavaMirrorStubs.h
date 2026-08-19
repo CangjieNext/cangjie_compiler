@@ -20,7 +20,6 @@
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
-#include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie::Native::FFI::Java {
 using namespace Interop::Java;

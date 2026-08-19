@@ -129,7 +129,9 @@ void AfterTypeCheckContext::FlushGeneratedDecls()
         /*
          * Make the generated declaration visible and available via ImportManager/CjoManager.
          */
-        importManager.GetCjoManager()->AddGeneratedDeclToDeclMap(*generatedDecl);
+        if (generatedDecl->IsExportedDecl()) {
+            importManager.GetCjoManager()->AddGeneratedDeclToDeclMap(*generatedDecl);
+        }
         auto& fileDecls = generatedDecl->curFile->decls;
         fileDecls.push_back(std::move(generatedDecl));
     }

@@ -633,11 +633,11 @@ OwnedPtr<Expr> InteropLibBridge::SelectEntityWrapperByTypeKind(
 }
 
 OwnedPtr<Expr> InteropLibBridge::SelectEntityUnwrapperByTypeKind(
-    [[maybe_unused]] TypeKind kind, [[maybe_unused]] Ptr<Ty> ty, Ptr<Expr> entity, const ClassLikeDecl& mirror)
+    [[maybe_unused]] TypeKind kind, [[maybe_unused]] Ptr<Ty> ty, Ptr<Expr> entity, Ptr<const Decl> scope)
 {
     auto cEntity = ASTCloner::Clone(entity);
     cEntity->curFile = entity->curFile;
-    return CreateMatchWithTypeCast(UnwrapJavaEntity(std::move(cEntity), ty, mirror), ty);
+    return CreateMatchWithTypeCast(UnwrapJavaEntity(std::move(cEntity), ty, scope), ty);
 }
 
 std::map<std::string, OwnedPtr<Expr>> InteropLibBridge::GenerateTypeMappingWithSelector(
@@ -936,35 +936,7 @@ OwnedPtr<Expr> InteropLibBridge::CreateJValueExpr(OwnedPtr<Expr> expr)
     return call;
 }
 
-// OwnedPtr<VarDecl> InteropLibBridge::CreateJNIArgsVar(std::vector<OwnedPtr<Expr>> args, File& curFile)
-// {
-//     if (args.empty()) {
-//         return nullptr;
-//     }
-//     auto jvalueTy = GetJValueTy();
-//     CJC_NULLPTR_CHECK(jvalueTy);
-//     auto varrayTy = typeManager.GetVArrayTy(*jvalueTy, static_cast<int64_t>(args.size()));
-//     auto argsArray = CreateArrayLit(std::move(args), varrayTy);
-//     auto argsVar = CreateVarDecl("$argsPtr", std::move(argsArray), nullptr);
-//     argsVar->isVar = true;
-//     argsVar->SetTy(argsVar->initializer->GetTy());
-//     CopyBasicInfo(argsVar->initializer.get(), argsVar.get());
-//     argsVar->curFile = Ptr(&curFile);
-//     return argsVar;
-// }
-
-// std::vector<OwnedPtr<Expr>> InteropLibBridge::CreateJNIArgJValueExprs(FuncParamList& paramList, File& curFile)
-// {
-//     CJC_ASSERT_WITH_MSG(!paramList.params.empty(), "JNI argument list cannot be empty");
-//     std::vector<OwnedPtr<Expr>> args;
-//     args.reserve(paramList.params.size());
-//     for (auto& param : paramList.params) {
-//         args.emplace_back(CreateJValueExpr(WithinFile(CreateRefExpr(*param), Ptr(&curFile))));
-//     }
-//     return args;
-// }
-
-OwnedPtr<Expr> InteropLibBridge::ConvertJavaResultToCJ(OwnedPtr<Expr> result, Ptr<Ty> resultTy, Decl& scope)
+OwnedPtr<Expr> InteropLibBridge::ConvertJavaResultToCJ(OwnedPtr<Expr> result, Ptr<Ty> resultTy, const Ptr<Decl> scope)
 {
     CJC_NULLPTR_CHECK(result);
     CJC_NULLPTR_CHECK(resultTy);
@@ -1198,7 +1170,7 @@ FuncDecl& GetJavaImplWrappingConstructor(ClassDecl& refWrapper)
 } // namespace
 
 OwnedPtr<Expr> InteropLibBridge::UnwrapJavaMirrorOption(
-    OwnedPtr<Expr> entity, Ptr<Ty> ty, const ClassLikeDecl& mirror, bool toRaw)
+    OwnedPtr<Expr> entity, Ptr<Ty> ty, Ptr<const Decl> scope, bool toRaw)
 {
     CJC_ASSERT(ty->IsCoreOptionType());
     auto curFile = entity->curFile;
@@ -1212,8 +1184,8 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaMirrorOption(
 
     return utils.CreateOptionMatch(
         CreateGetJavaEntityOrNullCall(std::move(entity)),
-        [this, curFile, declTy, &mirror, toRaw](VarDecl& e) {
-            auto unwrapped = UnwrapJavaEntity(WithinFile(CreateRefExpr(e), curFile), declTy, mirror, toRaw);
+        [this, curFile, declTy, scope, toRaw](VarDecl& e) {
+            auto unwrapped = UnwrapJavaEntity(WithinFile(CreateRefExpr(e), curFile), declTy, scope, toRaw);
             return unwrapped;
         },
         [this, ty, toRaw]() { return toRaw ? CreateJobjectNull() : utils.CreateOptionNoneRef(ty->typeArgs[0]); },
@@ -1221,7 +1193,7 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaMirrorOption(
 }
 
 OwnedPtr<Expr> InteropLibBridge::UnwrapJavaImplOption(
-    OwnedPtr<Expr> env, OwnedPtr<Expr> entityOption, Ptr<Ty> ty, const ClassLikeDecl& mirror, bool toRaw)
+    OwnedPtr<Expr> env, OwnedPtr<Expr> entityOption, Ptr<Ty> ty, Ptr<const Decl> scope, bool toRaw)
 {
     CJC_ASSERT_WITH_MSG(!ty->typeArgs.empty(), "Option type must be generic");
     auto implTy = ty->typeArgs[0];
@@ -1231,10 +1203,10 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaImplOption(
 
     return utils.CreateOptionMatch(
         CreateGetJavaEntityOrNullCall(std::move(entityOption)),
-        [this, curFile, implTy, &env, &mirror, toRaw](VarDecl& e) {
+        [this, curFile, implTy, &env, scope, toRaw](VarDecl& e) {
             if (toRaw) {
                 // To @C CPointer appropriate for JNI
-                return UnwrapJavaEntity(WithinFile(CreateRefExpr(e), curFile), implTy, mirror, toRaw);
+                return UnwrapJavaEntity(WithinFile(CreateRefExpr(e), curFile), implTy, scope, toRaw);
             }
 
             // as impl reference wrapper
@@ -1300,7 +1272,7 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaArrayEntity(OwnedPtr<Expr> entity, Pt
 
     return CreateMatchByTypeArgument(genericParam,
         GenerateTypeMappingWithSelector([this, &entityPtr, &mirror](TypeKind kind, Ptr<Ty> ty) {
-            return SelectEntityUnwrapperByTypeKind(kind, ty, entityPtr, mirror);
+            return SelectEntityUnwrapperByTypeKind(kind, ty, entityPtr, Ptr<const Decl>(&mirror));
         }),
         ty, CreateMatchWithTypeCast(std::move(entity), ty));
 }
@@ -1330,9 +1302,8 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaPrimitiveEntity(OwnedPtr<Expr> entity
 /**
  * Lift Java boundary reference into a typed CJ value
  */
-OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty, const Decl& outerDecl, bool toRaw)
+OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty, Ptr<const Decl> scope, bool toRaw)
 {
-    CJC_ASSERT(!ty->IsGeneric()); // For unwrap within JArray - use `UnwrapJavaArrayEntity`
     auto curFile = entity->curFile;
     CJC_NULLPTR_CHECK(entity);
     CJC_NULLPTR_CHECK(ty);
@@ -1342,8 +1313,8 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty>
         return UnwrapJavaPrimitiveEntity(std::move(entity), ty);
     }
 
-    if (IsJArray(outerDecl) && ty->IsGeneric()) {
-        return UnwrapJavaArrayEntity(std::move(entity), ty, static_cast<const ClassLikeDecl&>(outerDecl));
+    if (scope && IsJArray(*scope) && ty->IsGeneric()) {
+        return UnwrapJavaArrayEntity(std::move(entity), ty, *StaticAs<ASTKind::CLASS_LIKE_DECL>(scope));
     } else if (ty == GetJavaEntityTy()) {
         return std::move(entity);
     }
@@ -1355,16 +1326,14 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty>
     }
 
     if (ty->IsCoreOptionType()) {
-        auto classLikeDecl = DynamicCast<const ClassLikeDecl*>(&outerDecl);
-        CJC_NULLPTR_CHECK(classLikeDecl);
         CJC_ASSERT_WITH_MSG(!ty->typeArgs.empty(), "Option type must be generic");
         auto actualTy = ty->typeArgs[0];
         auto actualDecl = Ty::GetDeclOfTy(actualTy);
         if (actualDecl->IsJavaMirror() || actualTy->IsString()) {
-            return UnwrapJavaMirrorOption(std::move(entity), ty, *classLikeDecl, toRaw);
+            return UnwrapJavaMirrorOption(std::move(entity), ty, scope, toRaw);
         }
 
-        return UnwrapJavaImplOption(CreateGetJniEnvCall(curFile), std::move(entity), ty, *classLikeDecl, toRaw);
+        return UnwrapJavaImplOption(CreateGetJniEnvCall(curFile), std::move(entity), ty, scope, toRaw);
     }
 
     if (ty->IsTuple()) {

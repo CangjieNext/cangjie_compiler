@@ -317,7 +317,7 @@ public:
      * (currently based on JavaEntity). JNI boolean results are normalized to
      * Cangjie Bool. Other primitive results are returned unchanged.
      */
-    OwnedPtr<Expr> ConvertJavaResultToCJ(OwnedPtr<Expr> result, Ptr<Ty> resultTy, Decl& scope);
+    OwnedPtr<Expr> ConvertJavaResultToCJ(OwnedPtr<Expr> result, Ptr<Ty> resultTy, const Ptr<Decl> scope = nullptr);
 
     /**
      * Java_CFFI_removeFromRegistry(registryId)
@@ -391,10 +391,10 @@ public:
      * If [toRaw] = `true`, then it returns java reference as CPointer<Unit> instead of an instance
      */
     OwnedPtr<Expr> UnwrapJavaMirrorOption(
-        OwnedPtr<Expr> entityOption, Ptr<Ty> ty, const ClassLikeDecl& mirror, bool toRaw = false);
+        OwnedPtr<Expr> entityOption, Ptr<Ty> ty, Ptr<const Decl> scope, bool toRaw = false);
 
     OwnedPtr<Expr> UnwrapJavaImplOption(OwnedPtr<Expr> env, OwnedPtr<Expr> entityOption, Ptr<Ty> ty,
-        const ClassLikeDecl& mirror, bool toRaw = false);
+        Ptr<const Decl> scope, bool toRaw = false);
 
     /**
      * Java_CFFI_JavaEntity -> reference wrapper
@@ -412,7 +412,7 @@ public:
      * Java_CFFI_getFromRegistry<T>(entity).
      * Else, if [toRaw] is `true` and T is @JavaMirror or @JavaImpl class, then it returns its CPointer<Unit> java ref
      */
-    OwnedPtr<Expr> UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty, const Decl& outerDecl, bool toRaw = false);
+    OwnedPtr<Expr> UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty, Ptr<const Decl> scope, bool toRaw = false);
 
     OwnedPtr<AST::MatchExpr> CreateMatchByTypeArgument(
         const Ptr<AST::GenericParamDecl> genericParam,
@@ -433,7 +433,7 @@ public:
     OwnedPtr<Expr> SelectJPrimitiveNameByTypeKind(TypeKind kind, Ptr<Ty> ty);
     OwnedPtr<Expr> SelectEntityWrapperByTypeKind(TypeKind kind, Ptr<Ty> ty, Ptr<FuncParam> param, Ptr<File> file);
     OwnedPtr<Expr> SelectEntityUnwrapperByTypeKind(
-        TypeKind kind, Ptr<Ty> ty, Ptr<Expr> entity, const ClassLikeDecl& mirror);
+        TypeKind kind, Ptr<Ty> ty, Ptr<Expr> entity, Ptr<const Decl> scope);
     std::map<std::string, OwnedPtr<Expr>> GenerateTypeMappingWithSelector(
         std::function<OwnedPtr<Expr>(TypeKind, Ptr<Ty>)> selector
     );
