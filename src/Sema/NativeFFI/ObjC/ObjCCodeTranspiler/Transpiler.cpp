@@ -469,18 +469,20 @@ struct EmittableObjCFuncMetainfo Transpiler::GetObjCCtorMetainfo(FuncDecl& funcD
 void Transpiler::WriteToFile()
 {
     WriteToHeader(
-        headerImport.str()          +
-        dependenciesStream.str()    +
-        headerBody.str()            +
+        Emitter::GENERATED_FILE_PREAMBULE   +
+        headerImport.str()                  +
+        dependenciesStream.str()            +
+        headerBody.str()                    +
         Emitter::END
     );
     WriteToSource(
-        sourceImport.str()      +
-        staticReferences.str()  +
-        sourceBody.str()        +
-        ctors.str()             +
-        initialize.str()        +
-        defaultFuncImpls.str()  +
+        Emitter::GENERATED_FILE_PREAMBULE   +
+        sourceImport.str()                  +
+        staticReferences.str()              +
+        sourceBody.str()                    +
+        ctors.str()                         +
+        initialize.str()                    +
+        defaultFuncImpls.str()              +
         Emitter::END
     );
 }
