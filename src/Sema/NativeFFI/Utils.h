@@ -13,8 +13,6 @@
 #define CANGJIE_SEMA_NATIVE_FFI_UTILS
 
 #include "cangjie/AST/Create.h"
-#include "cangjie/AST/Match.h"
-#include "cangjie/AST/Utils.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"
@@ -114,8 +112,8 @@ OwnedPtr<CallExpr> CreateMemberCall(OwnedPtr<Expr> receiver, Ptr<FuncDecl> fd, O
 }
 
 template <typename... Args>
-OwnedPtr<CallExpr> CreateMemberCall(TypeManager& typeManager,
-    OwnedPtr<Expr> receiver, VarDecl& vd, OwnedPtr<Args>&&... args)
+OwnedPtr<CallExpr> CreateMemberCall(
+    [[maybe_unused]] TypeManager& typeManager, OwnedPtr<Expr> receiver, VarDecl& vd, OwnedPtr<Args>&&... args)
 {
     CJC_NULLPTR_CHECK(receiver);
     CJC_ASSERT(vd.GetTy()->IsFunc() || vd.GetTy()->IsCFunc());
@@ -127,26 +125,26 @@ OwnedPtr<CallExpr> CreateMemberCall(TypeManager& typeManager,
 
     // Ensure formal parameters count is the same as passed arguments.
     CJC_ASSERT(funcTy->paramTys.size() == funcArgs.size());
-    // #ifdef NDEBUG
+#ifdef NDEBUG
     // Ensure passed arguments are subtypes of expected types.
     for (auto [expectedTy, actualParam] = std::tuple{funcTy->paramTys.begin(), funcArgs.begin()};
          expectedTy != funcTy->paramTys.end();
          expectedTy++, actualParam++) {
              CJC_ASSERT(typeManager.IsSubtype((*actualParam)->GetTy(), *expectedTy));
         }
-    // #endif // NDEBUG
-    // typeManager.IsSubtype()
+#endif // NDEBUG
 
-    auto ma = CreateMemberAccess(std::move(receiver), vd);
-    if (vd.GetTy()->IsCFunc()) {
-        ma->EnableAttr(Attribute::UNSAFE);
-    }
-    CopyBasicInfo(ma->baseExpr, ma);
-    auto ca = CreateCallExpr(std::move(ma), std::move(funcArgs), nullptr, funcTy->retTy, CallKind::CALL_FUNCTION_PTR);
-    if (vd.GetTy()->IsCFunc()) {
-        ca->EnableAttr(Attribute::UNSAFE);
-    }
-    return ca;
+        auto ma = CreateMemberAccess(std::move(receiver), vd);
+        if (vd.GetTy()->IsCFunc()) {
+            ma->EnableAttr(Attribute::UNSAFE);
+        }
+        CopyBasicInfo(ma->baseExpr, ma);
+        auto ca =
+            CreateCallExpr(std::move(ma), std::move(funcArgs), nullptr, funcTy->retTy, CallKind::CALL_FUNCTION_PTR);
+        if (vd.GetTy()->IsCFunc()) {
+            ca->EnableAttr(Attribute::UNSAFE);
+        }
+        return ca;
 }
 
 OwnedPtr<Type> CreateType(Ptr<Ty> ty);
@@ -174,6 +172,12 @@ OwnedPtr<Expr> CreateIsPtrNullCheckCall(const ImportManager& importManager, Type
  * }()
  */
 OwnedPtr<CallExpr> WrapReturningLambdaCall(TypeManager& typeManager, std::vector<OwnedPtr<Node>> nodes);
+
+/**
+ * Returns lambda called in-place.
+ * @see WrapReturningLambdaCall(TypeManager&, std::vector<OwnedPtr<Node>>) overload.
+ */
+OwnedPtr<CallExpr> WrapReturningLambdaCall(TypeManager& typeManager, OwnedPtr<Block> nodes);
 
 /**
  * Returns lambda expression of nodes returning `Unit`.

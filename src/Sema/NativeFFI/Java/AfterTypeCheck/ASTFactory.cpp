@@ -43,9 +43,8 @@ ASTFactory::ASTFactory(
 {
 }
 
-OwnedPtr<Expr> ASTFactory::CreateNewJavaObjectCall(
-    AfterTypeCheckContext& ctx,
-    Ptr<Expr> jniEnvPtr, JavaMemberSignature constructor, std::vector<OwnedPtr<Expr>> args) const
+OwnedPtr<Block> ASTFactory::CreateNewJavaObjectCall(AfterTypeCheckContext& ctx, Ptr<Expr> jniEnvPtr,
+    JavaMemberSignature constructor, std::vector<OwnedPtr<Expr>> args) const
 {
     CJC_NULLPTR_CHECK(jniEnvPtr->curFile);
     auto curFile = jniEnvPtr->curFile;
@@ -83,9 +82,8 @@ OwnedPtr<Expr> ASTFactory::CreateNewJavaObjectCall(
     return block;
 }
 
-OwnedPtr<Expr> ASTFactory::CreateNewJavaObjectCall(
-    AfterTypeCheckContext& ctx,
-    File& curFile, JavaMemberSignature constructor, std::vector<OwnedPtr<Expr>> args) const
+OwnedPtr<Block> ASTFactory::CreateNewJavaObjectCall(
+    AfterTypeCheckContext& ctx, File& curFile, JavaMemberSignature constructor, std::vector<OwnedPtr<Expr>> args) const
 {
     static auto jniEnvPtrDecl = ilib.GetJniEnvPtrDecl();
     auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, ilib.CreateGetJniEnvCall(&curFile));
@@ -100,79 +98,61 @@ OwnedPtr<Expr> ASTFactory::CreateNewJavaObjectCall(
     return newObjectCall;
 }
 
-OwnedPtr<Expr> ASTFactory::CreateNonvirtualJavaMethodCall(AfterTypeCheckContext& ctx,
-    Ptr<Expr> jniEnvPtr, Ptr<Expr> jobjectInstance,
-    JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> javaCompatibleArgs) const
+OwnedPtr<Block> ASTFactory::CreateNonvirtualJavaMethodCall(AfterTypeCheckContext& ctx, Ptr<Expr> jniEnvPtr,
+    Ptr<Expr> jobjectInstance, JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args) const
 {
     CJC_NULLPTR_CHECK(jobjectInstance);
     CJC_ASSERT(!method.IsStatic());
-    return CreateJavaMethodCall(ctx,
-        jniEnvPtr, jobjectInstance, method, retTy,
-        std::move(javaCompatibleArgs),
+    return CreateJavaMethodCall(ctx, jniEnvPtr, jobjectInstance, method, retTy, std::move(args),
         /* isVirtual = */ false);
 }
 
-OwnedPtr<Expr> ASTFactory::CreateNonvirtualJavaMethodCall(AfterTypeCheckContext& ctx,
-    File& curFile, Ptr<Expr> jobjectInstance,
-    JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> javaCompatibleArgs) const
+OwnedPtr<Block> ASTFactory::CreateNonvirtualJavaMethodCall(AfterTypeCheckContext& ctx, File& curFile,
+    Ptr<Expr> jobjectInstance, JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args) const
 {
     CJC_NULLPTR_CHECK(jobjectInstance);
     CJC_ASSERT(!method.IsStatic());
-    return CreateJavaMethodCall(ctx,
-        curFile, jobjectInstance, method, retTy,
-        std::move(javaCompatibleArgs),
+    return CreateJavaMethodCall(ctx, curFile, jobjectInstance, method, retTy, std::move(args),
         /* isVirtual = */ false);
 }
 
-OwnedPtr<Expr> ASTFactory::CreateStaticJavaMethodCall(AfterTypeCheckContext& ctx,
-    Ptr<Expr> jniEnvPtr,
-    JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> javaCompatibleArgs) const
+OwnedPtr<Block> ASTFactory::CreateStaticJavaMethodCall(AfterTypeCheckContext& ctx, Ptr<Expr> jniEnvPtr,
+    JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args) const
 {
     CJC_ASSERT(method.IsStatic());
-    return CreateJavaMethodCall(ctx,
-        jniEnvPtr, nullptr, method, retTy,
-        std::move(javaCompatibleArgs),
+    return CreateJavaMethodCall(ctx, jniEnvPtr, nullptr, method, retTy, std::move(args),
         /* isVirtual = */ false);
 }
 
-OwnedPtr<Expr> ASTFactory::CreateStaticJavaMethodCall(AfterTypeCheckContext& ctx,
-    File& curFile,
-    JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> javaCompatibleArgs) const
+OwnedPtr<Block> ASTFactory::CreateStaticJavaMethodCall(AfterTypeCheckContext& ctx, File& curFile,
+    JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args) const
 {
     CJC_ASSERT(method.IsStatic());
-    return CreateJavaMethodCall(ctx,
-        curFile, nullptr, method, retTy,
-        std::move(javaCompatibleArgs),
+    return CreateJavaMethodCall(ctx, curFile, nullptr, method, retTy, std::move(args),
         /* isVirtual = */ false);
 }
 
-OwnedPtr<Expr> ASTFactory::CreateVirtualJavaMethodCall(AfterTypeCheckContext& ctx,
-    Ptr<Expr> jniEnvPtr, Ptr<Expr> jobjectInstance,
-    JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> javaCompatibleArgs) const
+OwnedPtr<Block> ASTFactory::CreateVirtualJavaMethodCall(AfterTypeCheckContext& ctx, Ptr<Expr> jniEnvPtr,
+    Ptr<Expr> jobjectInstance, JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args) const
 {
     CJC_NULLPTR_CHECK(jobjectInstance);
     CJC_ASSERT(!method.IsStatic());
-    return CreateJavaMethodCall(ctx,
-        jniEnvPtr, jobjectInstance, method, retTy,
-        std::move(javaCompatibleArgs),
+    return CreateJavaMethodCall(ctx, jniEnvPtr, jobjectInstance, method, retTy, std::move(args),
         /* isVirtual = */ true);
 }
 
-OwnedPtr<Expr> ASTFactory::CreateVirtualJavaMethodCall(AfterTypeCheckContext& ctx,
-    File& curFile, Ptr<Expr> jobjectInstance,
-    JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> javaCompatibleArgs) const
+OwnedPtr<Block> ASTFactory::CreateVirtualJavaMethodCall(AfterTypeCheckContext& ctx, File& curFile,
+    Ptr<Expr> jobjectInstance, JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args) const
 {
     CJC_NULLPTR_CHECK(jobjectInstance);
     CJC_ASSERT(!method.IsStatic());
-    return CreateJavaMethodCall(ctx,
-        curFile, jobjectInstance, method, retTy,
-        std::move(javaCompatibleArgs),
+    return CreateJavaMethodCall(ctx, curFile, jobjectInstance, method, retTy, std::move(args),
         /* isVirtual = */ true);
 }
 
-OwnedPtr<Expr> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx,
-    Ptr<Expr> jniEnvPtr, Ptr<Expr> jobjectInstance,
-    JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args, bool isVirtual) const
+OwnedPtr<Block> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx, Ptr<Expr> jniEnvPtr,
+    Ptr<Expr> jobjectInstance, JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args,
+    bool isVirtual) const
 {
     auto curFile = jniEnvPtr->curFile;
     CJC_NULLPTR_CHECK(curFile);
@@ -229,8 +209,7 @@ OwnedPtr<Expr> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx,
     return block;
 }
 
-OwnedPtr<Expr> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx,
-    File& curFile, Ptr<Expr> jobjectInstance,
+OwnedPtr<Block> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx, File& curFile, Ptr<Expr> jobjectInstance,
     JavaMemberSignature method, Ty& retTy, std::vector<OwnedPtr<Expr>> args, bool isVirtual) const
 {
     static auto jniEnvPtrDecl = ilib.GetJniEnvPtrDecl();
@@ -245,37 +224,32 @@ OwnedPtr<Expr> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx,
     return methodCall;
 }
 
-OwnedPtr<AST::Expr> ASTFactory::CreateInstanceJavaFieldGetCall(AfterTypeCheckContext& ctx,
-    AST::File& curFile, Ptr<AST::Expr> jobjectInstance,
-    JavaMemberSignature field, AST::Ty& ty) const
+OwnedPtr<AST::Block> ASTFactory::CreateInstanceJavaFieldGetCall(AfterTypeCheckContext& ctx, AST::File& curFile,
+    Ptr<AST::Expr> jobjectInstance, JavaMemberSignature field, AST::Ty& ty) const
 {
     return CreateJavaFieldGetCall(ctx, curFile, jobjectInstance, field, ty);
 }
 
-OwnedPtr<AST::Expr> ASTFactory::CreateStaticJavaFieldGetCall(AfterTypeCheckContext& ctx,
-    AST::File& curFile,
-    JavaMemberSignature field, AST::Ty& ty) const
+OwnedPtr<AST::Block> ASTFactory::CreateStaticJavaFieldGetCall(
+    AfterTypeCheckContext& ctx, AST::File& curFile, JavaMemberSignature field, AST::Ty& ty) const
 {
     return CreateJavaFieldGetCall(ctx, curFile, nullptr, field, ty);
 }
 
-OwnedPtr<AST::Expr> ASTFactory::CreateInstanceJavaFieldSetCall(AfterTypeCheckContext& ctx,
-    AST::File& curFile, Ptr<AST::Expr> jobjectInstance,
-    JavaMemberSignature field, AST::Ty& ty, OwnedPtr<AST::Expr> value) const
+OwnedPtr<AST::Block> ASTFactory::CreateInstanceJavaFieldSetCall(AfterTypeCheckContext& ctx, AST::File& curFile,
+    Ptr<AST::Expr> jobjectInstance, JavaMemberSignature field, AST::Ty& ty, OwnedPtr<AST::Expr> value) const
 {
     return CreateJavaFieldSetCall(ctx, curFile, jobjectInstance, field, ty, std::move(value));
 }
 
-OwnedPtr<AST::Expr> ASTFactory::CreateStaticJavaFieldSetCall(AfterTypeCheckContext& ctx,
-    AST::File& curFile,
+OwnedPtr<AST::Block> ASTFactory::CreateStaticJavaFieldSetCall(AfterTypeCheckContext& ctx, AST::File& curFile,
     JavaMemberSignature field, AST::Ty& ty, OwnedPtr<AST::Expr> value) const
 {
     return CreateJavaFieldSetCall(ctx, curFile, nullptr, field, ty, std::move(value));
 }
 
-OwnedPtr<AST::Expr> ASTFactory::CreateJavaFieldGetCall(AfterTypeCheckContext& ctx,
-    Ptr<AST::Expr> jniEnvPtr, Ptr<Expr> jobjectInstance,
-    JavaMemberSignature field, AST::Ty& ty) const
+OwnedPtr<AST::Block> ASTFactory::CreateJavaFieldGetCall(AfterTypeCheckContext& ctx, Ptr<AST::Expr> jniEnvPtr,
+    Ptr<Expr> jobjectInstance, JavaMemberSignature field, AST::Ty& ty) const
 {
     auto curFile = jniEnvPtr->curFile;
     CJC_ASSERT(field.IsField());
@@ -308,9 +282,8 @@ OwnedPtr<AST::Expr> ASTFactory::CreateJavaFieldGetCall(AfterTypeCheckContext& ct
     return block;
 }
 
-OwnedPtr<AST::Expr> ASTFactory::CreateJavaFieldGetCall(AfterTypeCheckContext& ctx,
-    AST::File& curFile, Ptr<Expr> jobjectInstance,
-    JavaMemberSignature field, AST::Ty& ty) const
+OwnedPtr<AST::Block> ASTFactory::CreateJavaFieldGetCall(AfterTypeCheckContext& ctx, AST::File& curFile,
+    Ptr<Expr> jobjectInstance, JavaMemberSignature field, AST::Ty& ty) const
 {
     static auto jniEnvPtrDecl = ilib.GetJniEnvPtrDecl();
     auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, ilib.CreateGetJniEnvCall(&curFile));
@@ -324,9 +297,8 @@ OwnedPtr<AST::Expr> ASTFactory::CreateJavaFieldGetCall(AfterTypeCheckContext& ct
     return fieldGetCall;
 }
 
-OwnedPtr<AST::Expr> ASTFactory::CreateJavaFieldSetCall(AfterTypeCheckContext& ctx,
-    Ptr<AST::Expr> jniEnvPtr, Ptr<Expr> jobjectInstance,
-    JavaMemberSignature field, AST::Ty& ty, OwnedPtr<AST::Expr> value) const
+OwnedPtr<AST::Block> ASTFactory::CreateJavaFieldSetCall(AfterTypeCheckContext& ctx, Ptr<AST::Expr> jniEnvPtr,
+    Ptr<Expr> jobjectInstance, JavaMemberSignature field, AST::Ty& ty, OwnedPtr<AST::Expr> value) const
 {
     CJC_ASSERT(field.IsField());
     CJC_ASSERT(field.IsStatic() || jobjectInstance); // instance cannot be null if field is non-static.
@@ -343,13 +315,13 @@ OwnedPtr<AST::Expr> ASTFactory::CreateJavaFieldSetCall(AfterTypeCheckContext& ct
         : jni.CreateSetInstanceJavaFieldCall(ty, jniEnvPtr, jobjectInstance, jfield,
             ilib.CreateJValueExpr(std::move(value)));
     callResVar.initializer = std::move(jniFieldSetCall);
-    
+    callNodes.push_back(WithinFile(CreateRefExpr(callResVar), jniEnvPtr->curFile));
+
     return CreateBlockWithJniHandlePendingException(jniEnvPtr, std::move(callNodes));
 }
 
-OwnedPtr<AST::Expr> ASTFactory::CreateJavaFieldSetCall(AfterTypeCheckContext& ctx,
-    AST::File& curFile, Ptr<Expr> jobjectInstance,
-    JavaMemberSignature field, AST::Ty& ty, OwnedPtr<AST::Expr> value) const
+OwnedPtr<AST::Block> ASTFactory::CreateJavaFieldSetCall(AfterTypeCheckContext& ctx, AST::File& curFile,
+    Ptr<Expr> jobjectInstance, JavaMemberSignature field, AST::Ty& ty, OwnedPtr<AST::Expr> value) const
 {
     static auto jniEnvPtrDecl = ilib.GetJniEnvPtrDecl();
     auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, ilib.CreateGetJniEnvCall(&curFile));
@@ -407,50 +379,25 @@ std::vector<OwnedPtr<Expr>> ASTFactory::ExtractArgExprs(const std::vector<OwnedP
     return argExprs;
 }
 
-OwnedPtr<AST::Expr> ASTFactory::CreateBlockWithJniHandlePendingException(Ptr<Expr> jniEnvPtr,
-    std::vector<OwnedPtr<Node>> nodes) const
+OwnedPtr<AST::Block> ASTFactory::CreateBlockWithJniHandlePendingException(
+    Ptr<Expr> jniEnvPtr, std::vector<OwnedPtr<Node>> nodes) const
 {
     CJC_ASSERT(!nodes.empty()); // Expected at least 1 node - last node should be an expression.
     auto& lastNode = nodes.back();
     CJC_ASSERT(lastNode->IsExpr());
     auto& expr = StaticCast<Expr&>(*lastNode);
     CJC_NULLPTR_CHECK(expr.GetTy());
-    
-    auto block = CreateBlock(std::move(nodes));
-    auto resVar = CreateTmpVarDecl(nullptr, nullptr);
-    resVar->SetTy(expr.GetTy());
-    block->SetTy(expr.GetTy());
-    resVar->initializer = OwnedPtr<Expr>(StaticCast<Expr>(lastNode.release()));
-    
-    auto& resVarRef = *resVar;
-    lastNode = std::move(resVar);
-    CJC_ASSERT(lastNode->astKind == ASTKind::VAR_DECL);
-    
-    // 3. handlePendingException()
-    block->body.push_back(ilib.CreateJNIHandlePendingExceptionCall(jniEnvPtr));
-    // 4. return resVar
-    block->body.push_back(WithinFile(CreateRefExpr(resVarRef), jniEnvPtr->curFile));
-    return block;
-}
 
-OwnedPtr<AST::Expr> ASTFactory::CreateBlockWithJniHandlePendingException(Ptr<Expr> jniEnvPtr,
-    std::function<void(AST::Block&)> builder) const
-{
-    auto block = CreateBlock({});
-    builder(*block);
-    CJC_ASSERT(!block->body.empty()); // Expected at least 1 node - last node should be an expression.
-    auto& lastNode = block->body.back();
-    CJC_ASSERT(lastNode->IsExpr());
-    auto& expr = StaticCast<Expr&>(*lastNode);
-    CJC_NULLPTR_CHECK(expr.GetTy());
     auto resVar = CreateTmpVarDecl(nullptr, nullptr);
     resVar->SetTy(expr.GetTy());
-    block->SetTy(expr.GetTy());
     resVar->initializer = OwnedPtr<Expr>(StaticCast<Expr>(lastNode.release()));
-    
+
     auto& resVarRef = *resVar;
     lastNode = std::move(resVar);
     CJC_ASSERT(lastNode->astKind == ASTKind::VAR_DECL);
+
+    auto block = CreateBlock(std::move(nodes));
+    block->SetTy(expr.GetTy());
     
     // 3. handlePendingException()
     block->body.push_back(ilib.CreateJNIHandlePendingExceptionCall(jniEnvPtr));

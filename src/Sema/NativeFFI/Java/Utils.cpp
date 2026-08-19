@@ -462,11 +462,15 @@ std::string NormalizeJavaSignature(const std::string& sig)
     return normalized;
 }
 
-void InjectBlock(AST::Block& into, AST::Block& from)
+void InjectNodes(std::vector<OwnedPtr<Node>>& into, OwnedPtr<Node> from)
 {
-    for (auto& node : from.body) {
-        into.body.push_back(std::move(node));
+    if (auto block = As<ASTKind::BLOCK>(from)) {
+        for (auto& node : block->body) {
+            into.push_back(std::move(node));
+        }
+        return;
     }
+    into.push_back(std::move(from));
 }
 
 

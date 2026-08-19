@@ -910,6 +910,14 @@ OwnedPtr<Expr> InteropLibBridge::CreateJValueExpr(OwnedPtr<Expr> expr)
     auto ty = expr->GetTy();
     if (ty->IsPrimitive()) {
         switch (ty->kind) {
+            case TypeKind::TYPE_BOOLEAN: {
+                static auto jboolty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT8);
+                // Convert to jboolean (uint8)
+                return CreateIfExpr(std::move(expr),
+                    CreateBlock(Nodes(CreateLitConstExpr(LitConstKind::INTEGER, "1", jboolty)), jboolty),
+                    CreateBlock(Nodes(CreateLitConstExpr(LitConstKind::INTEGER, "0", jboolty)), jboolty),
+                    jboolty);
+            }
             case TypeKind::TYPE_FLOAT32:
                 return CreateBitCastExpr(std::move(expr),
                     typeManager.GetPrimitiveTy(TypeKind::TYPE_UINT32),

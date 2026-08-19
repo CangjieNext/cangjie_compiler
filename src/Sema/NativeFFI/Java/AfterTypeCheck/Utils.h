@@ -143,13 +143,10 @@ Ptr<FuncDecl> GetJavaMirrorWrappingConstructor(ClassDecl& mirror);
 
 std::string GetJavaJniClassName(const Ty& cjtype);
 
-
 /**
  * Returns true if has java fully-qualified name defined in annotation as a string literal
  */
 bool HasPredefinedJavaName(const ClassLikeDecl& decl);
-
-
 
 struct DestructedJavaClassName {
     /// Full package name

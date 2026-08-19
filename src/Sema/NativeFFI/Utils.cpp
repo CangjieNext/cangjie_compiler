@@ -201,6 +201,12 @@ OwnedPtr<Expr> CreateIsPtrNullCheckCall(const ImportManager& importManager, Type
     return addrCmpExpr;
 }
 
+OwnedPtr<CallExpr> WrapReturningLambdaCall(TypeManager& typeManager, OwnedPtr<Block> nodes)
+{
+    auto res = WrapReturningLambdaCall(typeManager, std::move(nodes->body));
+    nodes.reset();
+    return res;
+}
 
 OwnedPtr<CallExpr> WrapReturningLambdaCall(TypeManager& typeManager, std::vector<OwnedPtr<Node>> nodes)
 {

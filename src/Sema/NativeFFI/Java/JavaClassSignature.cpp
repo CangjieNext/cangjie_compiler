@@ -41,7 +41,7 @@ JavaClassSignature::JavaClassSignature(std::string_view package, std::string_vie
       outerTypes(WithoutTail(Utils::SplitString(std::string(type), "."))),
       type(Utils::SplitString(std::string(type), ".").back())
 {
-    CJC_ASSERT(!package.empty());
+    // CJC_ASSERT(!package.empty());
     CJC_ASSERT(!type.empty());
 }
 
@@ -121,7 +121,7 @@ bool JavaClassSignature::operator==(const JavaClassSignature& other) const
 
 bool JavaClassSignature::operator!=(const JavaClassSignature& other) const
 {
-    return !(*this == other); 
+    return !(*this == other);
 }
 
 

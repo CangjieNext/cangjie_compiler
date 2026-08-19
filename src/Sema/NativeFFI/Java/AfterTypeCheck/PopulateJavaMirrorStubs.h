@@ -29,7 +29,8 @@ using namespace Interop::Java;
  */
 class PopulateJavaMirrorStubs : public AfterTypeCheckStage {
 public:
-    explicit PopulateJavaMirrorStubs(InteropLibBridge& ilib, ASTFactory& factory);
+    explicit PopulateJavaMirrorStubs(TypeManager& typeManager, InteropLibBridge& ilib, ASTFactory& factory);
+
 protected:
     void Process(AfterTypeCheckContext& ctx) override;
 private:
@@ -99,6 +100,7 @@ private:
     void InsertPropGetter(AfterTypeCheckContext& ctx, AST::ClassLikeDecl& mirror, AST::PropDecl& prop) const;
     void InsertPropSetter(AfterTypeCheckContext& ctx, AST::ClassLikeDecl& mirror, AST::PropDecl& prop) const;
 
+    TypeManager& typeManager;
     InteropLibBridge& ilib;
     ASTFactory& factory;
 };

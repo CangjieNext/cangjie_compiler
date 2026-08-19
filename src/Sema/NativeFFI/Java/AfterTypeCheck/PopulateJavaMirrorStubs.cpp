@@ -35,7 +35,7 @@ void PopulateJavaMirrorStubs::PopulateUserConstructor(AfterTypeCheckContext& ctx
     CJC_ASSERT(userCtor.funcBody->paramLists.size() == 1);
     auto& body = userCtor.funcBody->body->body;
     auto& paramList = *userCtor.funcBody->paramLists[0];
-    // TODO: paramList.curFile is null!!!
+    paramList.curFile = userCtor.curFile;
     auto ctorSignature = JavaMemberSignature::FromConstructor(userCtor, /* withMarker = */ false);
     auto constructorExpr = factory.CreateNewJavaObjectCall(ctx, *curFile, ctorSignature,
         factory.CreateParamsUsage(paramList));
@@ -43,7 +43,7 @@ void PopulateJavaMirrorStubs::PopulateUserConstructor(AfterTypeCheckContext& ctx
         userCtor.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
-    thisCall->args.push_back(CreateFuncArg(std::move(constructorExpr)));
+    thisCall->args.push_back(CreateFuncArg(WrapReturningLambdaCall(typeManager, std::move(constructorExpr))));
     body.push_back(std::move(thisCall));
 }
 
@@ -52,7 +52,7 @@ void PopulateJavaMirrorStubs::PopulateJArrayMethod(ClassDecl& jarray, FuncDecl& 
     auto curFile = userMethod.curFile;
     CJC_ASSERT(IsJArray(jarray));
     CJC_ASSERT(!userMethod.TestAttr(Attribute::STATIC)); // There are no static methods in JArray yet.
-    
+
     CJC_ASSERT_WITH_MSG(!jarray.generic->typeParameters.empty(), "JArray ctor must be generic");
     auto genericParam = jarray.generic->typeParameters[0].get();
     CJC_NULLPTR_CHECK(genericParam);
@@ -65,7 +65,7 @@ void PopulateJavaMirrorStubs::PopulateJArrayMethod(ClassDecl& jarray, FuncDecl& 
     auto& paramList = *userMethod.funcBody->paramLists[0];
     auto& jniEnv = *StaticAs<ASTKind::VAR_DECL>(
         body.emplace_back(CreateTmpVarDecl(nullptr, ilib.CreateGetJniEnvCall(curFile))).get());
-    
+
     auto methodCall = ilib.CreateCFFICallArrayMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
         CreateJavaRefCall(jarray, curFile), paramList, genericParam, GetArrayOperationKind(userMethod));
 
@@ -75,7 +75,7 @@ void PopulateJavaMirrorStubs::PopulateJArrayMethod(ClassDecl& jarray, FuncDecl& 
     methodCall = ilib.ConvertJavaResultToCJ(std::move(methodCall), retTy, &jarray);
     body.emplace_back(std::move(methodCall));
 }
-    
+
 void PopulateJavaMirrorStubs::PopulateUserMethod(AfterTypeCheckContext& ctx,
     ClassLikeDecl& mirror, FuncDecl& userMethod) const
 {
@@ -110,11 +110,7 @@ void PopulateJavaMirrorStubs::PopulateUserMethod(AfterTypeCheckContext& ctx,
         userMethod.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
-    if (methodCall->astKind == ASTKind::BLOCK) {
-        InjectBlock(*userMethod.funcBody->body, StaticCast<Block&>(*methodCall));
-    } else {
-        body.emplace_back(std::move(methodCall));
-    }
+    InjectNodes(body, std::move(methodCall));
 
     if (IsSyntheticMirrorWrapper(mirror)) {
         userMethod.DisableAttr(Attribute::ABSTRACT);
@@ -143,23 +139,24 @@ void PopulateJavaMirrorStubs::InsertPropGetter(AfterTypeCheckContext& ctx, Class
 
     OwnedPtr<Expr> jniGetterCall;
     auto isArrayGetLength = IsJArray(*prop.outerDecl) && GetArrayOperationKind(prop) == ArrayOperationKind::GET_LENGTH;
-    
+
     auto fieldSignature = JavaMemberSignature::FromProperty(prop);
     if (isArrayGetLength) {
         jniGetterCall = ilib.CreateCFFIArrayLengthGetCall(CreateJavaRefCall(mirror, curFile), curFile);
     } else if (fieldSignature.IsStatic()) {
-        jniGetterCall = factory.CreateStaticJavaFieldGetCall(ctx, *curFile, fieldSignature, *prop.GetTy());
+        jniGetterCall = WrapReturningLambdaCall(typeManager,
+            factory.CreateStaticJavaFieldGetCall(ctx, *curFile, fieldSignature, *prop.GetTy()));
     } else {
-        jniGetterCall = factory.CreateInstanceJavaFieldGetCall(ctx, *curFile, 
+        jniGetterCall = WrapReturningLambdaCall(typeManager, factory.CreateInstanceJavaFieldGetCall(ctx, *curFile,
             ilib.CreateAsJniJobjectCall(CreateJavaRefCall(mirror, curFile)),
-            fieldSignature, *prop.GetTy());
+            fieldSignature, *prop.GetTy()));
     }
 
     auto& jniGetterCallRes = *StaticAs<ASTKind::VAR_DECL>(
         body.emplace_back(CreateTmpVarDecl(nullptr, std::move(jniGetterCall))).get());
     jniGetterCallRes.SetTy(jniGetterCallRes.initializer->GetTy());
     jniGetterCallRes.curFile = curFile;
-    
+
     CopyBasicInfo(jniGetterCallRes.initializer.get(), &jniGetterCallRes);
 
     auto callResRef = CreateRefExpr(jniGetterCallRes);
@@ -200,16 +197,16 @@ void PopulateJavaMirrorStubs::InsertPropSetter(AfterTypeCheckContext& ctx,
     OwnedPtr<Expr> jniSetterCall = fieldSignature.IsStatic()
         ? factory.CreateStaticJavaFieldSetCall(ctx, *curFile, fieldSignature, *prop.GetTy(),
             std::move(paramRef))
-        : factory.CreateInstanceJavaFieldSetCall(ctx, *curFile,  
+        : factory.CreateInstanceJavaFieldSetCall(ctx, *curFile,
             ilib.CreateAsJniJobjectCall(CreateJavaRefCall(mirror, curFile)),
             fieldSignature, *prop.GetTy(),
             std::move(paramRef));
-    body.emplace_back(std::move(jniSetterCall));
+    InjectNodes(body, std::move(jniSetterCall));
 }
 
 void PopulateJavaMirrorStubs::Process(AfterTypeCheckContext& ctx, ClassLikeDecl& mirror) const
 {
-    FuncDecl& wrappingCtor = *GetJavaMirrorWrappingConstructor(mirror);
+    Ptr<FuncDecl> wrappingCtor = Is<ClassDecl>(mirror) ? GetJavaMirrorWrappingConstructor(mirror) : nullptr;
     for (auto& member : mirror.GetMemberDeclPtrs()) {
         if (member->TestAttr(Attribute::IS_BROKEN)) {
             continue;
@@ -220,14 +217,14 @@ void PopulateJavaMirrorStubs::Process(AfterTypeCheckContext& ctx, ClassLikeDecl&
             }
 
             if (fd->TestAttr(Attribute::CONSTRUCTOR)) {
-                PopulateUserConstructor(ctx, *fd, wrappingCtor);
+                PopulateUserConstructor(ctx, *fd, *wrappingCtor);
             } else {
                 bool isStatic = member->TestAttr(Attribute::STATIC);
                 bool isDefault = member->TestAttr(Attribute::JAVA_HAS_DEFAULT);
                 if (mirror.IsInterfaceDecl() && !isStatic && !isDefault) {
                     continue;
                 }
-                
+
                 PopulateUserMethod(ctx, mirror, *fd);
             }
         } else if (auto prop = As<ASTKind::PROP_DECL>(member.get())) {
@@ -236,8 +233,8 @@ void PopulateJavaMirrorStubs::Process(AfterTypeCheckContext& ctx, ClassLikeDecl&
     }
 }
 
-PopulateJavaMirrorStubs::PopulateJavaMirrorStubs(InteropLibBridge& ilib,
-    ASTFactory& factory) : ilib(ilib), factory(factory)
+PopulateJavaMirrorStubs::PopulateJavaMirrorStubs(TypeManager& typeManager, InteropLibBridge& ilib, ASTFactory& factory)
+    : typeManager(typeManager), ilib(ilib), factory(factory)
 {
 }
 

@@ -90,7 +90,7 @@ std::string GetJavaMemberName(const AST::Decl& member);
 
 std::string NormalizeJavaSignature(const std::string& sig);
 
-void InjectBlock(AST::Block& into, AST::Block& from);
+void InjectNodes(std::vector<OwnedPtr<AST::Node>>& into, OwnedPtr<AST::Node> from);
 
 } // namespace Cangjie::Native::FFI::Java
 
