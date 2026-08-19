@@ -12,12 +12,14 @@
 
 #include "cangjie/Sema/TypeManager.h"
 
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "TypeCheckUtil.h"
 #include "LocalTypeArgumentSynthesis.h"
+#include "OverrideFunctionResolver.h"
+#include "TypeCheckUtil.h"
 
 #include "ExtraScopes.h"
 #include "cangjie/AST/Match.h"
@@ -2026,38 +2028,22 @@ Ptr<const FuncDecl> LookupTopOverriddenFromMap(
     }
 }
 
-bool MayOverrideSameMethod(const FuncDecl& child, const FuncDecl& parent)
-{
-    if (&child == &parent) {
-        return false;
-    }
-    if (child.identifier != parent.identifier) {
-        return false;
-    }
-    if (child.TestAttr(Attribute::STATIC) != parent.TestAttr(Attribute::STATIC)) {
-        return false;
-    }
-    if (child.TestAttr(Attribute::OPERATOR) != parent.TestAttr(Attribute::OPERATOR)) {
-        return false;
-    }
-    auto childFt = DynamicCast<FuncTy*>(child.GetTy());
-    auto parentFt = DynamicCast<FuncTy*>(parent.GetTy());
-    // Avoid allocating type vars / mutating TypeManager: only compare arity here.
-    // Full signature checks already ran in Sema; this fallback is for cache misses.
-    if (childFt && parentFt && childFt->paramTys.size() != parentFt->paramTys.size()) {
-        return false;
-    }
-    return true;
-}
-
 /**
  * Walk @p func's outer inheritable decl supers and find the top-most function that
  * @p func overrides. Used when overrideMap has no entry (e.g. imported Equatable.!=).
  * Must not call IsOverrideOrShadow / PairIsOverrideOrImpl — those allocate ty vars and
  * are unsafe once Sema has finished (e.g. during AST2CHIR).
  */
+
+// IsImplementationFunc is not a pure read: in the generic branch it calls GetInstantiatedTy,
+// whose TyInstantiator reaches TypeManager::GetTypeTy and writes the shared allocatedTys table
+// (find + insert). When GetTopOverriddenFuncDecl runs concurrently (e.g. AST2CHIR), multiple
+// threads could mutate allocatedTys at once. Serialize this call so the write is race-free.
+// The lock is held only across IsImplementationFunc itself; FindTopOverriddenByInheritance
+// recurses (line below the guarded call) outside the critical section, so no self-deadlock.
+std::mutex overrideResolverImplMutex;
 Ptr<const FuncDecl> FindTopOverriddenByInheritance(
-    const FuncDecl& func, std::set<Ptr<const FuncDecl>>& visited)
+    TypeManager& tm, const FuncDecl& func, std::set<Ptr<const FuncDecl>>& visited)
 {
     if (auto [_, inserted] = visited.emplace(&func); !inserted) {
         return nullptr;
@@ -2074,10 +2060,18 @@ Ptr<const FuncDecl> FindTopOverriddenByInheritance(
         }
         for (auto& member : super->GetMemberDecls()) {
             auto parentFunc = DynamicCast<FuncDecl*>(member.get());
-            if (!parentFunc || !MayOverrideSameMethod(func, *parentFunc)) {
+            if (!parentFunc) {
                 continue;
             }
-            auto parentTop = FindTopOverriddenByInheritance(*parentFunc, visited);
+            bool isImpl = false;
+            {
+                std::lock_guard<std::mutex> lock(overrideResolverImplMutex);
+                isImpl = OverrideFunctionResolver(tm).IsImplementationFunc(func, *parentFunc);
+            }
+            if (!isImpl) {
+                continue;
+            }
+            auto parentTop = FindTopOverriddenByInheritance(tm, *parentFunc, visited);
             Ptr<const FuncDecl> candidate = parentTop ? parentTop : Ptr<const FuncDecl>(parentFunc);
             if (!topMost) {
                 topMost = candidate;
@@ -2091,7 +2085,7 @@ Ptr<const FuncDecl> FindTopOverriddenByInheritance(
 }
 } // namespace
 
-Ptr<const AST::FuncDecl> TypeManager::GetTopOverriddenFuncDecl(const AST::FuncDecl* funcDecl) const
+Ptr<const AST::FuncDecl> TypeManager::GetTopOverriddenFuncDecl(const AST::FuncDecl* funcDecl)
 {
     CJC_NULLPTR_CHECK(funcDecl);
 
@@ -2112,7 +2106,7 @@ Ptr<const AST::FuncDecl> TypeManager::GetTopOverriddenFuncDecl(const AST::FuncDe
     }
 
     std::set<Ptr<const FuncDecl>> visited;
-    if (auto top = FindTopOverriddenByInheritance(*seed, visited)) {
+    if (auto top = FindTopOverriddenByInheritance(*this, *seed, visited)) {
         return top;
     }
     if (fromMap) {

@@ -1236,7 +1236,9 @@ std::vector<ClassType*> GetSuperTypesRecusively(Type& subType, CHIRBuilder& buil
     } else if (auto genericType = DynamicCast<GenericType*>(&subType)) {
         for (auto upperBound : genericType->GetUpperBounds()) {
             auto classType = StaticCast<ClassType*>(upperBound->StripAllRefs());
-            result.emplace_back(classType);
+            if (std::find(result.begin(), result.end(), classType) == result.end()) {
+                result.emplace_back(classType);
+            }
             auto tempParents = GetSuperTypesRecusively(*classType, builder);
             for (auto p : tempParents) {
                 if (std::find(result.begin(), result.end(), p) == result.end()) {
@@ -1685,5 +1687,35 @@ std::vector<Expression*> GetNonDebugUsers(const Value& val)
         }
     }
     return res;
+}
+
+Function* GetCalleeInSrcParentType(
+    Function& callee, const std::string& methodName, std::optional<size_t> expectedOffset)
+{
+    auto def = callee.GetParentCustomTypeDef();
+    CJC_NULLPTR_CHECK(def);
+    ClassDef* srcParentDef = nullptr;
+    size_t offset = 0;
+    for (auto& typeVtable : def->GetDefVTable().GetTypeVTables()) {
+        auto virtualMethods = typeVtable.GetVirtualMethods();
+        for (size_t i = 0; i < virtualMethods.size(); ++i) {
+            auto& vtableItem = virtualMethods[i];
+            if (vtableItem.GetVirtualMethod() == &callee && vtableItem.GetMethodName() == methodName &&
+                (!expectedOffset.has_value() || i == expectedOffset.value())) {
+                srcParentDef = typeVtable.GetSrcParentType()->GetClassDef();
+                offset = i;
+                break;
+            }
+        }
+    }
+    CJC_NULLPTR_CHECK(srcParentDef);
+    if (def->IsClass() && srcParentDef == StaticCast<ClassType*>(def->GetType())->GetClassDef()) {
+        return &callee;
+    }
+    auto srcParentType = StaticCast<ClassType*>(srcParentDef->GetType());
+    const auto& virtualMethods =
+        srcParentDef->GetDefVTable().GetExpectedTypeVTable(*srcParentType).GetVirtualMethods();
+    CJC_ASSERT(offset < virtualMethods.size());
+    return virtualMethods[offset].GetVirtualMethod();
 }
 } // namespace Cangjie::CHIR
