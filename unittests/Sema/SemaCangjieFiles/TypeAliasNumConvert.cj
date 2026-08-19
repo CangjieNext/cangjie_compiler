@@ -72,5 +72,18 @@ main(): Int64 {
     var p = myInt64(if (true) { 10 } else { 20 })
     if (p != 10) { return 16 }
 
+    // === Float literal → integer type alias conversion (truncation toward zero) ===
+    var q = word(20.05)
+    if (typeid(q) != typeid(UInt16)) { return 17 }
+    if (q != 20) { return 18 }
+
+    var r = myInt64(20.05)
+    if (typeid(r) != typeid(Int64)) { return 19 }
+    if (r != 20) { return 20 }
+
+    var s = myInt8(-3.9)
+    if (typeid(s) != typeid(Int8)) { return 21 }
+    if (s != -3) { return 22 }
+
     return 0
 }
