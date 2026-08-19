@@ -641,9 +641,9 @@ bool GlobalOptions::CheckLTOPkgVisibilityOptions() const
     }
 
     if (IsLTOPkgVisibilityEnabled()) {
-        bool validForDylib = (outputMode == OutputMode::SHARED_LIB && target.os == OSType::LINUX);
-        bool validForStaticLib = (outputMode == OutputMode::STATIC_LIB && target.os == OSType::IOS);
-        if (!validForDylib && !validForStaticLib) {
+        bool isValid = target.os == OSType::IOS ||
+                       (target.os == OSType::LINUX && outputMode == OutputMode::SHARED_LIB);
+        if (!isValid) {
             DiagnosticEngine diag;
             diag.DiagnoseRefactor(DiagKindRefactor::driver_ineffective_option, DEFAULT_POSITION,
                 "--lto-keep-pkg-visibility");
