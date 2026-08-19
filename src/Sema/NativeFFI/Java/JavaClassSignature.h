@@ -60,9 +60,9 @@ public:
 
 private:
     JavaClassSignature(std::string_view package, std::string_view type);
-    const std::vector<std::string_view> packageParts;
-    const std::vector<std::string_view> outerTypes;
-    const std::string_view type;
+    const std::vector<std::string> packageParts;
+    const std::vector<std::string> outerTypes;
+    const std::string type;
 };
 
 } // namespace Cangjie::Cangjie::Native::FFI::Java

@@ -611,7 +611,7 @@ bool IsJArray(const Decl& decl)
         return false;
     }
 
-    // TODO: GetJavaMirrorAnnoAttr
+    // TODO: GetJavaAnnotationForeignName
     auto attr = GetJavaFQName(*classLikeDecl);
     // if (!attr) {
         // return false;

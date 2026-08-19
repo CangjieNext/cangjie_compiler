@@ -6,7 +6,6 @@
 
 #include "InteropLibBridge.h"
 #include "Desugar/AfterTypeCheck.h"
-#include "JavaDesugarManager.h"
 #include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 #include "NativeFFI/Java/Utils.h"
 #include "NativeFFI/Utils.h"
@@ -86,6 +85,7 @@ using namespace Sema::Desugar::AfterTypeCheck;
 namespace Cangjie::Interop::Java {
 
 using namespace Cangjie::Native::FFI;
+using namespace Cangjie::Native::FFI::Java;
 
 // declarations
 
@@ -1279,6 +1279,8 @@ OwnedPtr<Expr> InteropLibBridge::CreateGetJavaEntityOrNullCall(OwnedPtr<Expr> en
 
 OwnedPtr<Expr> InteropLibBridge::UnwrapJavaArrayEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty, const ClassLikeDecl& mirror)
 {
+    CJC_ASSERT(ty->IsGeneric());
+    CJC_ASSERT(IsJArray(mirror));
     auto isSetOperation = ty == TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     if (isSetOperation) {
         return CreateUnitExpr();
@@ -1326,14 +1328,14 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaPrimitiveEntity(OwnedPtr<Expr> entity
 }
 
 /**
-  * Lift Java boundary reference (possibly null) into a typed CJ value
-  */
+ * Lift Java boundary reference into a typed CJ value
+ */
 OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty, const Decl& outerDecl, bool toRaw)
 {
+    CJC_ASSERT(!ty->IsGeneric()); // For unwrap within JArray - use `UnwrapJavaArrayEntity`
     auto curFile = entity->curFile;
-    if (!entity || !ty) {
-        return nullptr;
-    }
+    CJC_NULLPTR_CHECK(entity);
+    CJC_NULLPTR_CHECK(ty);
 
     auto isPrimitive = ty->IsPrimitive();
     if (isPrimitive || (toRaw && !ty->IsCoreOptionType())) {

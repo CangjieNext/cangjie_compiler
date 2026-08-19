@@ -44,7 +44,7 @@ OwnedPtr<AST::Expr> JClassCache::CreateJClassAccess(
     auto& curFile = *envPtr->curFile;
     auto& classVar = GetOrPut(ctx, javaClass, curFile);
 
-    static auto createGetClassCall = [this, envPtr, &curFile](JavaClassSignature javaClass) {
+    auto createGetClassCall = [this, envPtr, &curFile](JavaClassSignature javaClass) {
         return ilib.CreateGetClassCall(javaClass.GetJniClassName(), envPtr, curFile);
     };
 

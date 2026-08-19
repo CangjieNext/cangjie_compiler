@@ -204,7 +204,7 @@ std::string GetJavaFQNameFromExtendDecl(const ExtendDecl& extendDecl)
     return GetJavaFQName(*rt->ref.target);
 }
 
-Ptr<std::string> GetJavaMirrorAnnoAttr(const ClassLikeDecl& decl)
+Ptr<std::string> GetJavaAnnotationForeignName(const Decl& decl)
 {
     for (auto& anno : decl.annotations) {
         if (anno->kind != AnnotationKind::JAVA_MIRROR && anno->kind != AnnotationKind::JAVA_IMPL) {
@@ -322,7 +322,7 @@ std::string GetJniTypeSignature(const AST::Ty& javaCompatibleTy)
         if (IsJArray(*StaticCast<ClassLikeTy&>(javaCompatibleTy).commonDecl)) {
             return "[" + GetJniTypeSignature(*javaCompatibleTy.typeArgs[0]);
         } else {
-            WrapClassNameAsTypeSignature(
+            return WrapClassNameAsTypeSignature(
                 NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(javaCompatibleTy).commonDecl)));
         }
     }
@@ -359,7 +359,7 @@ std::string GetJavaFQName(const Decl& decl)
         return GetJavaFQNameFromExtendDecl(*extendDecl);
     }
     if (auto classlikeDecl = DynamicCast<const ClassLikeDecl*>(&decl)) {
-        auto attr = GetJavaMirrorAnnoAttr(*classlikeDecl);
+        auto attr = GetJavaAnnotationForeignName(*classlikeDecl);
         if (attr) {
             return GetFQNameJoinBy(*attr, "$");
         }
@@ -369,13 +369,13 @@ std::string GetJavaFQName(const Decl& decl)
 
 std::string GetJavaFQSourceCodeName(const ClassLikeDecl& decl)
 {
-    auto attr = GetJavaMirrorAnnoAttr(decl);
+    auto attr = GetJavaAnnotationForeignName(decl);
     return attr ? GetFQNameJoinBy(*attr, ".") : (decl.GetFullPackageName() + "." + decl.identifier);
 }
 
 std::string GetJavaTopLevelClassName(const ClassLikeDecl& decl)
 {
-    auto attr = GetJavaMirrorAnnoAttr(decl);
+    auto attr = GetJavaAnnotationForeignName(decl);
     if (!attr) {
         return decl.identifier;
     }
@@ -384,7 +384,7 @@ std::string GetJavaTopLevelClassName(const ClassLikeDecl& decl)
 
 std::string GetJavaUnqualifiedNestedTypeName(const ClassLikeDecl& decl, const std::string_view nestedSeparator)
 {
-    auto attr = GetJavaMirrorAnnoAttr(decl);
+    auto attr = GetJavaAnnotationForeignName(decl);
     if (!attr) {
         return decl.identifier;
     }
@@ -397,6 +397,23 @@ std::string GetJavaUnqualifiedNestedTypeName(const ClassLikeDecl& decl, const st
 
 std::string GetJavaPackage(const Decl& decl)
 {
+    if (IsJArray(decl)) {
+        return decl.fullPackageName; // no package info is encoded in annotation argument
+    }
+
+    // auto fqname = GetJavaAnnotationForeignName(decl);
+    // if (!fqname) {
+    // return decl.GetFullPackageName();
+    // }
+
+    // auto beforeClassNamePos = fqname->rfind(".");
+    // if (beforeClassNamePos != std::string::npos) {
+    //     fqname->erase(beforeClassNamePos);
+    // } else {
+    //     return "";
+    // }
+    // return *fqname;
+
     for (auto& anno : decl.annotations) {
         if (anno->kind != AnnotationKind::JAVA_MIRROR && anno->kind != AnnotationKind::JAVA_IMPL) {
             continue;

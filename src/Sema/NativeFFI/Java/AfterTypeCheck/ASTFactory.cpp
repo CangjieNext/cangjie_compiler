@@ -206,7 +206,7 @@ OwnedPtr<Expr> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx,
             : jni.CreateNonvirtualJavaMethodCall(retTy, jniEnvPtr, jobjectInstance, jclass, jmethod);
         callResVar.initializer = convertJniValueToJavaCompatible(std::move(jniMethodCall), retTy);
     } else {
-        static auto createInoutVArrayArg = [this, &curFile](VarDecl& varrayArg) {
+        auto createInoutVArrayArg = [this, &curFile](VarDecl& varrayArg) {
             return CreateInoutVArrayArg(WithinFile(CreateRefExpr(varrayArg), curFile), typeManager);
         };
         // 0. var jniArgs: VArray<jvalue, $x> = [args...]
@@ -237,8 +237,8 @@ OwnedPtr<Expr> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx,
     static auto jniEnvPtrDecl = ilib.GetJniEnvPtrDecl();
     auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, ilib.CreateGetJniEnvCall(&curFile));
 
-    auto methodCall = CreateJavaMethodCall(ctx,
-        WithinFile(CreateRefExpr(*jniEnvVar), &curFile), jobjectInstance, method, retTy, std::move(args), isVirtual);
+    auto jniEnvRef = WithinFile(CreateRefExpr(*jniEnvVar), &curFile);
+    auto methodCall = CreateJavaMethodCall(ctx, jniEnvRef, jobjectInstance, method, retTy, std::move(args), isVirtual);
 
     // Assume that CreateJavaMethodCall always returns block.
     auto block = StaticAs<ASTKind::BLOCK>(methodCall.get());

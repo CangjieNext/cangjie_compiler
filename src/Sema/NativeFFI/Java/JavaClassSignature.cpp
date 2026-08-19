@@ -12,6 +12,7 @@
 
 #include "NativeFFI/Java/JavaClassSignature.h"
 #include "NativeFFI/Java/Utils.h"
+#include "cangjie/Basic/Utils.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include <ostream>
 #include <string_view>
@@ -19,23 +20,6 @@
 namespace Cangjie::Native::FFI::Java {
 
 namespace {
-std::vector<std::string_view> Split(std::string_view str, std::string_view separator)
-{
-    std::vector<std::string_view> parts;
-    size_t prevPos = 0;
-    size_t startPos = 0;
-    while ((startPos = str.find(separator, startPos)) != std::string::npos) {
-        parts.push_back(str.substr(prevPos, startPos));
-        prevPos = startPos;
-    }
-    if (startPos != std::string::npos) {
-        parts.push_back(str.substr(startPos));
-    } else {
-        parts.push_back(str);
-    }
-    return parts;
-}
-
 template <typename T> std::vector<T> WithoutTail(std::vector<T> vec)
 {
     if (vec.size() < 2) {
@@ -45,19 +29,6 @@ template <typename T> std::vector<T> WithoutTail(std::vector<T> vec)
     std::vector<T> res(vec.begin(), vec.end() - 1);
     return res;
 }
-
-std::string Join(const std::vector<std::string_view>& vec, const std::string_view delimiter = "")
-{
-    std::string result;
-    for (size_t i = 0; i < vec.size(); ++i) {
-        result += vec[i];
-        if (i != vec.size() - 1) {
-            result += delimiter;
-        }
-    }
-    return result;
-}
-
 } // namespace
 
 JavaClassSignature JavaClassSignature::FromDecl(const AST::ClassLikeDecl& decl)
@@ -66,7 +37,9 @@ JavaClassSignature JavaClassSignature::FromDecl(const AST::ClassLikeDecl& decl)
 }
 
 JavaClassSignature::JavaClassSignature(std::string_view package, std::string_view type)
-: packageParts(Split(package, ".")), outerTypes(WithoutTail(Split(type, "."))), type(Split(type, ".").back())
+    : packageParts(Utils::SplitString(std::string(package), ".")),
+      outerTypes(WithoutTail(Utils::SplitString(std::string(type), "."))),
+      type(Utils::SplitString(std::string(type), ".").back())
 {
     CJC_ASSERT(!package.empty());
     CJC_ASSERT(!type.empty());
@@ -100,14 +73,14 @@ std::string JavaClassSignature::ToString() const
 
 std::string JavaClassSignature::GetJniClassName() const
 {
-    constexpr static std::string_view packageDelimiter = "/";
-    constexpr static std::string_view nestedTypeDelimiter = "$";
+    const static std::string& packageDelimiter = "/";
+    const static std::string& nestedTypeDelimiter = "$";
 
-    std::string str{Join(packageParts, packageDelimiter)};
+    std::string str{Utils::JoinStrings(packageParts, packageDelimiter)};
     str += packageDelimiter;
 
     if (IsNested()) {
-        str += Join(outerTypes, nestedTypeDelimiter);
+        str += Utils::JoinStrings(outerTypes, nestedTypeDelimiter);
         str += nestedTypeDelimiter;
     }
 
@@ -117,13 +90,13 @@ std::string JavaClassSignature::GetJniClassName() const
 
 std::string JavaClassSignature::GetFQName() const
 {
-    constexpr static std::string_view packageDelimiter = ".";
-    constexpr static std::string_view nestedTypeDelimiter = ".";
-    std::string str{Join(packageParts, packageDelimiter)};
+    const static std::string& packageDelimiter = ".";
+    const static std::string& nestedTypeDelimiter = ".";
+    std::string str{Utils::JoinStrings(packageParts, packageDelimiter)};
     str += packageDelimiter;
 
     if (IsNested()) {
-        str += Join(outerTypes, nestedTypeDelimiter);
+        str += Utils::JoinStrings(outerTypes, nestedTypeDelimiter);
         str += nestedTypeDelimiter;
     }
 
@@ -137,7 +110,8 @@ std::string JavaClassSignature::GetUnqualifiedTypeName(const std::string_view ne
         return std::string(type);
     }
 
-    return Join(outerTypes, nestedDelimiter) + std::string(nestedDelimiter) + std::string(type);
+    return Utils::JoinStrings(outerTypes, std::string(nestedDelimiter)) + std::string(nestedDelimiter) +
+        std::string(type);
 }
 
 bool JavaClassSignature::operator==(const JavaClassSignature& other) const

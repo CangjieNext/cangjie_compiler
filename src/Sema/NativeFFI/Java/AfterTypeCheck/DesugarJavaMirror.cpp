@@ -171,6 +171,7 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
     std::vector<OwnedPtr<FuncParam>> ctorParams;
     ctorParams.push_back(std::move(param));
     auto paramList = CreateFuncParamList(std::move(ctorParams));
+    paramList->curFile = curFile;
 
     std::vector<OwnedPtr<FuncParamList>> paramLists;
     paramLists.push_back(std::move(paramList));

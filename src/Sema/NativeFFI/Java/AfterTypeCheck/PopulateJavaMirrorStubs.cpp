@@ -78,6 +78,9 @@ void PopulateJavaMirrorStubs::PopulateJArrayMethod(ClassDecl& jarray, FuncDecl& 
 void PopulateJavaMirrorStubs::PopulateUserMethod(AfterTypeCheckContext& ctx,
     ClassLikeDecl& mirror, FuncDecl& userMethod) const
 {
+    if (IsJArray(mirror)) {
+        return PopulateJArrayMethod(StaticCast<ClassDecl&>(mirror), userMethod);
+    }
     if (userMethod.TestAttr(Attribute::ABSTRACT) && !IsSyntheticMirrorWrapper(mirror)) {
         return;
     }

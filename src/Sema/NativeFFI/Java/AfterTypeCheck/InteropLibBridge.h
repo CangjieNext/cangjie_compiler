@@ -483,6 +483,9 @@ private:
         TypeKind::TYPE_FLOAT32, TypeKind::TYPE_FLOAT64
     };
 
+    /**
+     * Unwraps value of generic type within JArray.
+     */
     OwnedPtr<Expr> UnwrapJavaArrayEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty, const ClassLikeDecl& mirror);
     OwnedPtr<Expr> UnwrapJavaPrimitiveEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty);
 
