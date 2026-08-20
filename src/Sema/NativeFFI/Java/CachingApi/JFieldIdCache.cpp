@@ -25,7 +25,7 @@ JFieldIdCache::JFieldIdCache(
 std::string JFieldIdCache::GetNewAccessorName(const JavaMemberSignature& method) const
 {
     static size_t unique_id = 0;
-    std::string mangledVarName = "jmethod$";
+    std::string mangledVarName = "jfield$";
 
     mangledVarName += method.GetClassSignature().GetUnqualifiedTypeName("$");
     mangledVarName += "$$";
@@ -50,11 +50,7 @@ OwnedPtr<Expr> JFieldIdCache::CreateJFieldIdAccess(AfterTypeCheckContext& ctx,
 
     ifNull.push_back(
         CreateAssignExpr(WithinFile(CreateRefExpr(jmethodVar), &curFile),
-            ilib.CreateGetMethodIdCall(envPtr,
-                ASTCloner::Clone(jclass),
-                field.GetName(),
-                field.GetSignature(),
-                field.IsStatic()),
+            ilib.CreateGetFieldIdCall(envPtr, ASTCloner::Clone(jclass), field),
             TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)));
     ifNull.push_back(WithinFile(CreateRefExpr(jmethodVar), &curFile));
 
