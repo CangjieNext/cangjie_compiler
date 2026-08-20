@@ -165,8 +165,8 @@ void PopulateJavaMirrorStubs::InsertPropGetter(AfterTypeCheckContext& ctx, Class
 
     auto outerDecl = As<ASTKind::CLASS_LIKE_DECL>(prop.outerDecl);
     OwnedPtr<Expr> unwrapJavaEntityCall = isArrayGetLength || !outerDecl
-        ? std::move(callResRef)
-        : ilib.UnwrapJavaEntity(std::move(callResRef), prop.GetTy(), outerDecl);
+        ? ilib.UnwrapJavaEntity(std::move(callResRef), prop.GetTy(), outerDecl)
+        : std::move(callResRef);
     if (!unwrapJavaEntityCall) {
         prop.EnableAttr(Attribute::IS_BROKEN);
         prop.outerDecl->EnableAttr(Attribute::HAS_BROKEN);

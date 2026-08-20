@@ -12,6 +12,8 @@
 #include "DesugarJavaImplSuperMethodCall.h"
 #include "GenerateInJavaImplReferenceWrapper.h"
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
+#include "NativeFFI/Java/AfterTypeCheck/GenerateJavaMirrorApiStub.h"
+#include "NativeFFI/Java/AfterTypeCheck/GenerateJavaReferenceFieldInJObject.h"
 #include "NativeFFI/Java/AfterTypeCheck/PopulateJavaMirrorStubs.h"
 #include "RewriteJavaImplReferenceWrapperFields.h"
 #include "GenerateNativeBridgeForJavaImpl.h"
@@ -25,14 +27,12 @@ namespace Cangjie::Interop::Java {
 void JavaDesugarManager::ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx,
     std::function<void(AST::Node&)> desugarPropRef)
 {
-    for (auto& file : ctx.pkg.files) {
-        GenerateInMirrors(*file, true);
-    }
-
+    Process<GenerateJavaReferenceFieldInJObject>(ctx, lib);
+    Process<GenerateJavaMirrorApiStub>(ctx, typeManager, lib, utils, memberMap);
     Process<GenerateJavaImplApiStub>(ctx, typeManager, lib, jniBridge);
 
     for (auto& file : ctx.pkg.files) {
-        GenerateInMirrors(*file, false);
+        GenerateInMirrors(*file);
     }
 
     Process<GenerateInJavaImplRegistryCompanion>(ctx, typeManager, lib);

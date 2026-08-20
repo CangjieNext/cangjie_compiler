@@ -174,8 +174,7 @@ OwnedPtr<Block> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx, Ptr
 
     // 1. let callRes: retTy
     auto& callResVar = StaticCast<VarDecl&>(*block->body.emplace_back(CreateTmpVarDecl(nullptr, nullptr)));
-    callResVar.SetTy(&retTy);
-
+    callResVar.curFile = curFile;
     if (args.empty()) {
         // 2. jniCallRes = Java_CFFI_JavaEntity((*jniEnv)->CallMethod(jclass/jobject, jmethod))
         auto jniMethodCall = method.IsStatic()
@@ -183,7 +182,8 @@ OwnedPtr<Block> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx, Ptr
         : isVirtual
             ? jni.CreateVirtualInstanceJavaMethodCall(retTy, jniEnvPtr, jobjectInstance, jmethod)
             : jni.CreateNonvirtualJavaMethodCall(retTy, jniEnvPtr, jobjectInstance, jclass, jmethod);
-        callResVar.initializer = convertJniValueToJavaCompatible(std::move(jniMethodCall), retTy);
+
+        callResVar.initializer = std::move(jniMethodCall);
     } else {
         auto createInoutVArrayArg = [this, &curFile](VarDecl& varrayArg) {
             return CreateInoutVArrayArg(WithinFile(CreateRefExpr(varrayArg), curFile), typeManager);
@@ -200,12 +200,15 @@ OwnedPtr<Block> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx, Ptr
                 createInoutVArrayArg(jniArgs))
             : jni.CreateNonvirtualJavaMethodCall(retTy, jniEnvPtr, jobjectInstance, jclass, jmethod,
                 createInoutVArrayArg(jniArgs));
-        callResVar.initializer = convertJniValueToJavaCompatible(std::move(jniMethodCall), retTy);
+        
+        callResVar.initializer = std::move(jniMethodCall);
     }
+    callResVar.SetTy(callResVar.initializer->GetTy());
     // 3. handlePendingException()
     block->body.push_back(ilib.CreateJNIHandlePendingExceptionCall(jniEnvPtr));
-    // 4. return jniCallRes
-    block->body.push_back(WithinFile(CreateRefExpr(callResVar), curFile));
+    // 4. return unwrapped jniCallRes
+    block->body.push_back(convertJniValueToJavaCompatible(WithinFile(CreateRefExpr(callResVar), curFile), retTy));
+    // block->body.push_back(WithinFile(CreateRefExpr(callResVar), curFile));
     return block;
 }
 
@@ -269,16 +272,18 @@ OwnedPtr<AST::Block> ASTFactory::CreateJavaFieldGetCall(AfterTypeCheckContext& c
     
     // 1. let callRes: retTy
     auto& callResVar = StaticCast<VarDecl&>(*block->body.emplace_back(CreateTmpVarDecl(nullptr, nullptr)));
-    callResVar.SetTy(&ty);
+    callResVar.curFile = curFile;
     auto jniFieldGetCall = field.IsStatic()
         ? jni.CreateGetStaticJavaFieldCall(ty, jniEnvPtr, jclass, jfield)
         : jni.CreateGetInstanceJavaFieldCall(ty, jniEnvPtr, jobjectInstance, jfield);
-    callResVar.initializer = convertJniValueToJavaCompatible(std::move(jniFieldGetCall), ty);
+    
+    callResVar.initializer = std::move(jniFieldGetCall);
+    callResVar.SetTy(callResVar.initializer->GetTy());
     
     // 3. handlePendingException()
     block->body.push_back(ilib.CreateJNIHandlePendingExceptionCall(jniEnvPtr));
     // 4. return jniCallRes
-    block->body.push_back(WithinFile(CreateRefExpr(callResVar), curFile));
+    block->body.push_back(convertJniValueToJavaCompatible(WithinFile(CreateRefExpr(callResVar), curFile), ty));
     return block;
 }
 

@@ -161,7 +161,8 @@ OwnedPtr<Expr> CreateReadPointerCall(const ImportManager& importManager, TypeMan
     static auto int64Ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64);
     auto zero = WithinFile(CreateLitConstExpr(LitConstKind::INTEGER, "0", int64Ty), ptr->curFile);
 
-    auto readCall = CreateCallExpr(std::move(fdref), {}, &fd, ptr->GetTy(), CallKind::CALL_INTRINSIC_FUNCTION);
+    auto readCall = CreateCallExpr(std::move(fdref), {}, &fd, ptr->GetTy()->typeArgs[0],
+        CallKind::CALL_INTRINSIC_FUNCTION);
     auto& args = readCall->args;
     args.push_back(CreateFuncArg(ASTCloner::Clone(ptr)));
     args.push_back(CreateFuncArg(std::move(zero)));
