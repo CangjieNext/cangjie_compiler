@@ -114,7 +114,6 @@ CHIR::Type* Translator::GetExactParentType(
             }
         }
     }
-<<<<<<< HEAD
     return result;
 }
 
@@ -166,9 +165,7 @@ Ptr<Value> Translator::InitArrayByCollection(const AST::ArrayExpr& array)
     };
     CreateAndAppendApplyCallFromArray(*initFn, funcCallContext, *instFuncTy, array);
     return rawArrayRef;
-=======
     return builder.WithModal(result, fuzzyParentType.GetModalInfo());
->>>>>>> 0c41e6d (feat: add local mode implementation)
 }
 
 Ptr<Value> Translator::InitVArrayByItem(const AST::ArrayExpr& vArray)
@@ -178,15 +175,10 @@ Ptr<Value> Translator::InitVArrayByItem(const AST::ArrayExpr& vArray)
     auto pureVArrayTy = StaticCast<VArrayType*>(vArrayTy->StripAllRefs());
     auto eleTy = pureVArrayTy->GetElementType();
 
-<<<<<<< HEAD
-    auto size = vArrayTy->GetSize();
+    auto size = pureVArrayTy->GetSize();
     auto sizeVal =
         CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, static_cast<uint64_t>(size))
             ->GetResult();
-=======
-    auto sizeVal = CreateAndAppendConstantExpression<IntLiteral>(
-        builder.GetInt64Ty(), *currentBlock, pureVArrayTy->GetSize())->GetResult();
->>>>>>> 0c41e6d (feat: add local mode implementation)
     auto valArg = vArray.args[0].get();
     auto val = TranslateExprArg(*valArg);
 
@@ -199,20 +191,11 @@ Ptr<Value> Translator::InitVArrayByItem(const AST::ArrayExpr& vArray)
 Ptr<Value> Translator::InitVArrayByLambda(const AST::ArrayExpr& vArray)
 {
     auto loc = TranslateLocation(vArray);
-<<<<<<< HEAD
-    auto vArrayTy = StaticCast<VArrayType*>(chirTy.TranslateType(*vArray.GetTy()));
-    auto eleTy = vArrayTy->GetElementType();
-    auto size = vArrayTy->GetSize();
-    auto sizeVal =
-        CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, static_cast<uint64_t>(size))
-            ->GetResult();
-=======
     auto vArrayTy = chirTy.TranslateType(vArray.GetTy());
     auto pureVArrayTy = StaticCast<VArrayType*>(vArrayTy->StripAllRefs());
     auto eleTy = pureVArrayTy->GetElementType();
     auto sizeVal = CreateAndAppendConstantExpression<IntLiteral>(
         builder.GetInt64Ty(), *currentBlock, pureVArrayTy->GetSize())->GetResult();
->>>>>>> 0c41e6d (feat: add local mode implementation)
     auto initFn = TranslateExprArg(*vArray.args[0]);
     auto nullItem = CreateAndAppendConstantExpression<NullLiteral>(eleTy, *currentBlock)->GetResult();
     return CreateAndAppendExpression<VArrayBuilder>(loc, vArrayTy, sizeVal, nullItem, initFn, currentBlock)

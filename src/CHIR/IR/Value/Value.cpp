@@ -545,7 +545,6 @@ Function* Block::GetTopLevelFunc() const
     return blockGroup->GetTopLevelFunc();
 }
 
-<<<<<<< HEAD
 BlockGroup* Block::GetFuncOrLambdaBody() const
 {
     auto blockGroup = GetParentBlockGroup();
@@ -554,9 +553,6 @@ BlockGroup* Block::GetFuncOrLambdaBody() const
 }
 
 Expression* Block::GetTerminator() const
-=======
-Terminator* Block::GetTerminator() const
->>>>>>> 0c41e6d (feat: add local mode implementation)
 {
     if (exprs.size() == 0) {
         return nullptr;
@@ -795,27 +791,9 @@ void BlockGroup::SetEntryBlock(Block* block)
 
 void BlockGroup::SetOwnerExpression(Expression& expr)
 {
-<<<<<<< HEAD
-#ifndef NDEBUG
-    // we can't move func or lambdas' body to other expression, vice versa
-    if (Is<Lambda>(expr)) {
-        CJC_ASSERT(ownerExpression == nullptr || Is<Lambda>(ownerExpression));
-    } else {
-        CJC_ASSERT(ownerFunc == nullptr && (ownerExpression == nullptr || !Is<Lambda>(ownerExpression)));
-    }
-#endif
-    if (Is<Lambda*>(&expr)) {
-        if (ownerFunc) {
-            ownerFunc->RemoveBody();
-            ownerFunc = nullptr;
-        } else if (auto lambdaExpr = DynamicCast<Lambda*>(ownerExpression)) {
-            lambdaExpr->RemoveBody();
-        }
-=======
     if (ownerFunc) {
         ownerFunc->RemoveBody();
         ownerFunc = nullptr;
->>>>>>> 0c41e6d (feat: add local mode implementation)
     }
     if (ownerExpression) {
         RemoveUserOnly(ownerExpression);

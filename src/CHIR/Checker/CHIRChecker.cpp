@@ -1613,20 +1613,6 @@ void CHIRChecker::CheckUnreachableGenericTypeInExpr(
                 " is unreachable, the type is element type in expression " + expr.ToString(0) + ".";
             ErrorInFunc(*expr.GetTopLevelFunc(), errMsg);
         }
-<<<<<<< HEAD
-=======
-    } else if (eKind == ExprKind::INTRINSIC || eKind == ExprKind::INTRINSIC_WITH_EXCEPTION) {
-        auto base = IntrinsicBase(&expr);
-        // 8. generic type in Intrinsic must be reachable
-        auto instantiatedTypeArgs = base.GetInstantiatedTypeArgs();
-        for (size_t i = 0; i < instantiatedTypeArgs.size(); ++i) {
-            if (!GenericTypeIsInContainer(*instantiatedTypeArgs[i], reachableGenericTypes)) {
-                auto errMsg = "generic type " + instantiatedTypeArgs[i]->ToString() + " is unreachable, the type is " +
-                    std::to_string(i) + "-th instantiated type args in expression " + expr.ToString(0) + ".";
-                ErrorInFunc(*expr.GetTopLevelFunc(), errMsg);
-            }
-        }
->>>>>>> 0c41e6d (feat: add local mode implementation)
     }
 }
 
@@ -1814,7 +1800,6 @@ void CHIRChecker::CheckTerminator(const Expression& expr, const Function& topLev
             CheckBranch(StaticCast<const Branch&>(expr), topLevelFunc); }},
         {ExprKind::MULTIBRANCH, [this, &expr, &topLevelFunc]() {
             CheckMultiBranch(StaticCast<const MultiBranch&>(expr), topLevelFunc); }},
-<<<<<<< HEAD
         {ExprKind::TRY_APPLY, [this, &expr, &topLevelFunc]() {
             CheckTryApply(StaticCast<const TryApply&>(expr), topLevelFunc); }},
         {ExprKind::TRY_INVOKE, [this, &expr, &topLevelFunc]() {
@@ -1849,29 +1834,8 @@ void CHIRChecker::CheckTerminator(const Expression& expr, const Function& topLev
             CheckTryAllocate(StaticCast<const TryAllocate&>(expr), topLevelFunc); }},
         {ExprKind::TRY_RAW_ARRAY_ALLOCATE, [this, &expr, &topLevelFunc]() {
             CheckTryRawArrayAllocate(StaticCast<const TryRawArrayAllocate&>(expr), topLevelFunc); }},
-=======
-        {ExprKind::APPLY_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
-            CheckApplyWithException(StaticCast<const ApplyWithException&>(expr), topLevelFunc); }},
-        {ExprKind::INVOKE_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
-            CheckInvokeWithException(StaticCast<const InvokeWithException&>(expr), topLevelFunc); }},
-        {ExprKind::INVOKESTATIC_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
-            CheckInvokeStaticWithException(StaticCast<const InvokeStaticWithException&>(expr), topLevelFunc); }},
-        {ExprKind::INT_OP_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
-            CheckIntOpWithException(StaticCast<const IntOpWithException&>(expr), topLevelFunc); }},
-        {ExprKind::SPAWN_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
-            CheckSpawnWithException(StaticCast<const SpawnWithException&>(expr), topLevelFunc); }},
-        {ExprKind::TYPECAST_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
-            CheckTypeCastWithException(StaticCast<const TypeCastWithException&>(expr), topLevelFunc); }},
-        {ExprKind::INTRINSIC_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
-            CheckIntrinsicWithException(StaticCast<const IntrinsicWithException&>(expr), topLevelFunc); }},
-        {ExprKind::ALLOCATE_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
-            CheckAllocateWithException(StaticCast<const AllocateWithException&>(expr), topLevelFunc); }},
-        {ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION, [this, &expr, &topLevelFunc]() {
-            CheckRawArrayAllocateWithException(
-                StaticCast<const RawArrayAllocateWithException&>(expr), topLevelFunc); }},
         {ExprKind::EXCLAVE, [this, &expr, &topLevelFunc]() {
             CheckExclave(StaticCast<const Exclave&>(expr), topLevelFunc); }},
->>>>>>> 0c41e6d (feat: add local mode implementation)
     };
     if (auto it = actionMap.find(expr.GetExprKind()); it != actionMap.end()) {
         it->second();
@@ -2996,13 +2960,8 @@ void CHIRChecker::CheckCompareExpression(const BinaryExpressionBase& expr, const
     }
 
     // 2. result type must be Bool
-<<<<<<< HEAD
-    if (!result->GetType()->IsBoolean()) {
-        TypeCheckError(expr, *result, "Bool", topLevelFunc);
-=======
     if (!result->GetType()->GetDataType(builder)->IsBoolean()) {
-        TypeCheckError(*expr.GetRawExpr(), *result, "Bool", topLevelFunc);
->>>>>>> 0c41e6d (feat: add local mode implementation)
+        TypeCheckError(expr, *result, "Bool", topLevelFunc);
     }
 }
 
@@ -3021,13 +2980,8 @@ void CHIRChecker::CheckLogicExpression(const BinaryExpressionBase& expr, const F
     }
     // 2. result type must be Bool
     auto result = expr.GetResult();
-<<<<<<< HEAD
     if (!result->GetType()->IsBoolean()) {
-        TypeCheckError(expr, *result, "Bool", topLevelFunc);
-=======
-    if (!result->GetType()->GetDataType(builder)->IsBoolean()) {
         TypeCheckError(*expr.GetRawExpr(), *result, "Bool", topLevelFunc);
->>>>>>> 0c41e6d (feat: add local mode implementation)
     }
 }
 

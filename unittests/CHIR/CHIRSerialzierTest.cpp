@@ -423,14 +423,10 @@ PackageFormat::CHIRExprKind Serialize(const ExprKind& kind)
         case ExprKind::EXIT:
             ret = CHIRExprKind_Exit;
             break;
-<<<<<<< HEAD
-        case ExprKind::TRY_APPLY:
-=======
         case ExprKind::EXCLAVE:
             ret = CHIRExprKind_Exclave;
             break;
-        case ExprKind::APPLY_WITH_EXCEPTION:
->>>>>>> 0c41e6d (feat: add local mode implementation)
+        case ExprKind::TRY_APPLY:
             ret = CHIRExprKind_TryApply;
             break;
         case ExprKind::TRY_INVOKE:

@@ -483,7 +483,22 @@ std::string Expression::AddExtraComment() const
     return "";
 }
 
-<<<<<<< HEAD
+bool Expression::IsInBlockGroupRecursively(const BlockGroup& target) const
+{
+    auto blockGroup = GetParentBlockGroup();
+    while (blockGroup != nullptr) {
+        if (blockGroup == &target) {
+            return true;
+        }
+        if (blockGroup->GetOwnerFunc()) {
+            return false;
+        } else if (auto ownerExpression = blockGroup->GetOwnerExpression()) {
+            blockGroup = ownerExpression->GetParentBlockGroup();
+        }
+    }
+    return false;
+}
+
 namespace {
 // (opKind, ExprKind, try ExprKind). ExprKind::INVALID means no try form.
 constexpr std::tuple<UnaryExprKind, ExprKind, ExprKind> UNARY_EXPR_KIND_TABLE[] = {
@@ -575,25 +590,6 @@ UnaryExpressionBase::UnaryExpressionBase(
 }
 
 Value* UnaryExpressionBase::GetOperand() const
-=======
-bool Expression::IsInBlockGroupRecursively(const BlockGroup& target) const
-{
-    auto blockGroup = GetParentBlockGroup();
-    while (blockGroup != nullptr) {
-        if (blockGroup == &target) {
-            return true;
-        }
-        if (blockGroup->GetOwnerFunc()) {
-            return false;
-        } else if (auto ownerExpression = blockGroup->GetOwnerExpression()) {
-            blockGroup = ownerExpression->GetParentBlockGroup();
-        }
-    }
-    return false;
-}
-
-Value* UnaryExpression::GetOperand() const
->>>>>>> 0c41e6d (feat: add local mode implementation)
 {
     return GetOperand(0);
 }
@@ -1095,12 +1091,6 @@ std::vector<VTableSearchRes> DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& 
     for (auto arg : GetArgs()) {
         instParamTypes.emplace_back(arg->GetType());
     }
-<<<<<<< HEAD
-    if (!Is<InvokeStaticBase>(*this)) {
-        instParamTypes.erase(instParamTypes.begin());
-    }
-=======
->>>>>>> 0c41e6d (feat: add local mode implementation)
     auto instFuncType = builder.GetType<FuncType>(instParamTypes, builder.GetUnitTy());
     FuncCallType funcCallType{GetMethodName(), instFuncType, instantiatedTypeArgs};
     auto res = GetFuncIndexInVTable(*thisTypeDeref, funcCallType, builder);
@@ -1589,16 +1579,6 @@ std::string IntrinsicBase::GetCalleeIdentifier() const
 Intrinsic::Intrinsic(const IntrisicCallContext& callContext, Block* parent)
     : IntrinsicBase(ExprKind::INTRINSIC, callContext, {}, parent)
 {
-<<<<<<< HEAD
-=======
-    std::stringstream ss;
-    ss << IntrinsicKindToString(intrinsicKind);
-    ss << TypeVecToString("<", instantiatedTypeArgs, ">");
-    if (auto opString = ValueIdVecToString("", operands, ""); !opString.empty()) {
-        ss << ", " << opString;
-    }
-    return ss.str();
->>>>>>> 0c41e6d (feat: add local mode implementation)
 }
 
 // ForIn

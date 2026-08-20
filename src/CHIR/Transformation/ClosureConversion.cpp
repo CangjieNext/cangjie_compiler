@@ -2253,34 +2253,12 @@ void ClosureConversion::ConvertApplyToInvoke(ApplyBase& apply)
             .thisType = instParentType
         }
     };
-<<<<<<< HEAD
     Expression* invoke = nullptr;
     if (apply.IsTerminator()) {
         auto& applyE = StaticCast<TryApply&>(apply);
         invoke = builder.CreateExpression<TryInvoke>(
             applyE.GetDebugLocation(), applyE.GetResult()->GetType(), invokeInfo,
             applyE.GetSuccessBlock(), applyE.GetErrorBlock(), applyE.GetParentBlock());
-=======
-    auto invoke = builder.CreateExpression<Invoke>(
-        apply.GetDebugLocation(), apply.GetResult()->GetType(), invokeInfo, apply.GetParentBlock());
-    invoke->Set<VirMethodOffset>(0);
-    apply.ReplaceWith(*invoke);
-}
-
-void ClosureConversion::ConvertApplyWithExceptionToInvokeWithException(ApplyWithException& apply)
-{
-    auto callee = apply.GetCallee();
-    ClassDef* autoEnvBaseDef = nullptr;
-    ClassType* instParentType = nullptr;
-    if (auto funcType = DynamicCast<FuncType*>(callee->GetType())) {
-        // callee is still func type; keep FuncType modal on AutoEnv ClassType, not in ClassDef name
-        auto modal = funcType->GetModalInfo();
-        auto& dataFuncType = *StaticCast<FuncType*>(funcType->GetDataType(builder));
-        autoEnvBaseDef = GetOrCreateAutoEnvBaseDef(dataFuncType);
-        instParentType = InstantiateAutoEnvBaseType(*autoEnvBaseDef, dataFuncType, builder);
-        instParentType = InstantiateAutoEnvGenericBaseType(*instParentType, apply, builder);
-        instParentType = StaticCast<ClassType*>(builder.WithModal(instParentType, modal));
->>>>>>> 0c41e6d (feat: add local mode implementation)
     } else {
         invoke = builder.CreateExpression<Invoke>(
             apply.GetDebugLocation(), apply.GetResult()->GetType(), invokeInfo, apply.GetParentBlock());

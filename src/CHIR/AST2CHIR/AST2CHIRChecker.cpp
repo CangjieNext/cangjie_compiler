@@ -175,15 +175,9 @@ bool CheckVArrayType(AST::ModalTy astTy, const Type& chirTy)
     if (astTy->kind != AST::TypeKind::TYPE_VARRAY) {
         return false;
     }
-<<<<<<< HEAD
-    auto astArray = Cangjie::StaticCast<const Cangjie::AST::VArrayTy&>(astTy);
-    auto& chirArray = Cangjie::StaticCast<const VArrayType&>(chirTy);
-    return astArray.size == chirArray.GetSize() && CheckType(*astTy.typeArgs[0], *chirTy.GetTypeArgs()[0]);
-=======
     auto astArray = StaticCast<const AST::VArrayTy&>(*astTy);
     auto& chirArray = StaticCast<const VArrayType&>(chirTy);
     return astArray.size == chirArray.GetSize() && CheckType(astTy->typeArgs[0], *chirTy.GetTypeArgs()[0]);
->>>>>>> 0c41e6d (feat: add local mode implementation)
 }
 
 bool CheckCPointerType(AST::ModalTy astTy, const Type& chirTy)

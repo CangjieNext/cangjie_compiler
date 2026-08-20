@@ -963,11 +963,7 @@ private:
     Value* WrapMemberMethodByLambda(const AST::FuncDecl& funcDecl, const InstCalleeInfo& instFuncType, Value* thisObj);
     bool IsVirtualFuncCall(
         const CustomTypeDef& obj, const AST::FuncDecl& funcDecl, bool baseExprIsSuper);
-<<<<<<< HEAD
-    InvokeCallContext GenerateInvokeCallContext(const InstCalleeInfo& instFuncInfo, Value& caller,
-=======
-    InvokeCallContext GenerateInvokeCallContext(const InstCalleeInfo& instFuncType, Value* caller,
->>>>>>> 0c41e6d (feat: add local mode implementation)
+    InvokeCallContext GenerateInvokeCallContext(const InstCalleeInfo& instFuncInfo, Value* caller,
         const AST::FuncDecl& callee, const std::vector<Value*>& args,
         const OverflowStrategy strategy = OverflowStrategy::THROWING);
     InstCalleeInfo GetInstCalleeInfoFromVarInit(const AST::RefExpr& expr);
@@ -1152,7 +1148,9 @@ private:
 
     void AddMemberMethodToCustomTypeDef(const AST::FuncDecl& decl, CustomTypeDef& def);
 
-<<<<<<< HEAD
+    Type* GetThisTypeWithModal(Type& thisType, const AST::FuncDecl& funcDecl);
+};
+
 static const std::unordered_map<Cangjie::TokenKind, BinaryExprKind> tokenKindToBinaryExprKind = {
     {Cangjie::TokenKind::ADD, BinaryExprKind::ADD},
     {Cangjie::TokenKind::SUB, BinaryExprKind::SUB},
@@ -1190,9 +1188,6 @@ const static std::unordered_map<std::string, const std::unordered_map<std::strin
 const static std::unordered_map<std::string, IntrinsicKind> headlessIntrinsics = {
     {GET_TYPE_FOR_TYPE_PARAMETER_NAME, IntrinsicKind::GET_TYPE_FOR_TYPE_PARAMETER},
     {IS_SUBTYPE_TYPES_NAME, IntrinsicKind::IS_SUBTYPE_TYPES},
-=======
-    Type* GetThisTypeWithModal(Type& thisType, const AST::FuncDecl& funcDecl);
->>>>>>> 0c41e6d (feat: add local mode implementation)
 };
 } // namespace Cangjie::CHIR
 

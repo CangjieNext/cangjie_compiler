@@ -618,15 +618,10 @@ template <> BlockGroup* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
         auto ownedExpression = GetExpression<Expression>(obj->ownedExpression());
         CJC_NULLPTR_CHECK(ownedExpression);
         blockGroup = builder.CreateBlockGroup(*ownedExpression->GetTopLevelFunc());
-<<<<<<< HEAD
         if (auto lambda = DynamicCast<Lambda*>(ownedExpression)) {
             lambda->InitBody(*blockGroup);
-=======
-        if (ownedExpression->IsLambda()) {
-            StaticCast<Lambda*>(ownedExpression)->InitBody(*blockGroup);
-        } else if (ownedExpression->GetExprKind() == ExprKind::EXCLAVE) {
-            StaticCast<Exclave*>(ownedExpression)->InitBody(*blockGroup);
->>>>>>> 0c41e6d (feat: add local mode implementation)
+        } else if (auto exclave = DynamicCast<Exclave*>(ownedExpression)) {
+            exclave->InitBody(*blockGroup);
         }
     }
     return blockGroup;
@@ -732,16 +727,10 @@ static std::pair<ExprKind, bool> CHIRExprKindToExprKind(PackageFormat::CHIRExprK
         case FK::CHIRExprKind_Branch:             return {ExprKind::BRANCH, false};
         case FK::CHIRExprKind_MultiBranch:        return {ExprKind::MULTIBRANCH, false};
         case FK::CHIRExprKind_Exit:               return {ExprKind::EXIT, false};
-<<<<<<< HEAD
+        case FK::CHIRExprKind_Exclave:            return {ExprKind::EXCLAVE, false};
         case FK::CHIRExprKind_TryApply:           return {ExprKind::TRY_APPLY, true};
         case FK::CHIRExprKind_TryInvoke:          return {ExprKind::TRY_INVOKE, true};
         case FK::CHIRExprKind_TryIntrinsic:       return {ExprKind::TRY_INTRINSIC, true};
-=======
-        case FK::CHIRExprKind_Exclave:            return {ExprKind::EXCLAVE, false};
-        case FK::CHIRExprKind_TryApply:           return {ExprKind::APPLY_WITH_EXCEPTION, true};
-        case FK::CHIRExprKind_TryInvoke:          return {ExprKind::INVOKE_WITH_EXCEPTION, true};
-        case FK::CHIRExprKind_TryIntrinsic:       return {ExprKind::INTRINSIC_WITH_EXCEPTION, true};
->>>>>>> 0c41e6d (feat: add local mode implementation)
         case FK::CHIRExprKind_RaiseException:     return {ExprKind::RAISE_EXCEPTION, false};
         case FK::CHIRExprKind_TrySpawn:           return {ExprKind::TRY_SPAWN, true};
         case FK::CHIRExprKind_TryNumericCast:     return {ExprKind::TRY_NUMERIC_CAST, true};

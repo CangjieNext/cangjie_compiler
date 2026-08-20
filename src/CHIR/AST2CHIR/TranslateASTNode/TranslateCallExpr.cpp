@@ -10,11 +10,8 @@
 #include "cangjie/AST/Walker.h"
 #include "cangjie/CHIR/Utils/ConstantUtils.h"
 #include "cangjie/CHIR/IR/IntrinsicKind.h"
-<<<<<<< HEAD
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
-=======
 #include "cangjie/Utils/ConstantsUtils.h"
->>>>>>> 0c41e6d (feat: add local mode implementation)
 
 namespace Cangjie::CHIR {
 static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
@@ -1181,15 +1178,7 @@ Value* Translator::TranslateMemberFuncCall(const AST::CallExpr& expr)
     if (!resolvedFunction->TestAttr(AST::Attribute::STATIC)) {
         // for virtual func call, we should calculate the correct this object type and store it in instParamTys[0]
         if (instCallInfo.isVirtualFuncCall) {
-<<<<<<< HEAD
             expectedThisObjTy = AddRefIfFuncIsMutOrClass(*instCallInfo.instParentCustomTy, *resolvedFunction, builder);
-=======
-            expectedThisObjTy = instCallInfo.instParentCustomTy;
-            if (expectedThisObjTy->IsReferenceType() ||
-                (expectedThisObjTy->IsStruct() && resolvedFunction->TestAttr(AST::Attribute::MUT))) {
-                expectedThisObjTy = builder.GetType<RefType>(expectedThisObjTy);
-            }
->>>>>>> 0c41e6d (feat: add local mode implementation)
         } else {
             expectedThisObjTy = expectedParamTys[0];
         }

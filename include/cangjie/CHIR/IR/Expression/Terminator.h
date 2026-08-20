@@ -139,7 +139,7 @@ private:
  * StartRegion/EndRegion pair is inserted to mark the scope at runtime. It does not exit the
  * surrounding function.
  */
-class Exclave : public Terminator {
+class Exclave : public Expression {
     friend class CHIRContext;
     friend class CHIRBuilder;
 public:
