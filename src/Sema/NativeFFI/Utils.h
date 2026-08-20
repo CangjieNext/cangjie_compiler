@@ -36,7 +36,7 @@ OwnedPtr<CallExpr> CreateThisCall(
 
 OwnedPtr<PrimitiveType> CreateUnitType(Ptr<File> curFile);
 
-std::vector<Ptr<Ty>> GetParamTys(FuncParamList& params);
+std::vector<ModalTy> GetParamTys(FuncParamList& params);
 
 OwnedPtr<RefExpr> CreateSuperRef(Ptr<Decl> target, Ptr<Ty> ty);
 
@@ -102,11 +102,11 @@ OwnedPtr<CallExpr> CreateMemberCall(OwnedPtr<Expr> receiver, Ptr<FuncDecl> fd, O
     return CreateCallExpr(std::move(ma), std::move(funcArgs), fd, funcTy->retTy, CallKind::CALL_DECLARED_FUNCTION);
 }
 
-OwnedPtr<Type> CreateType(Ptr<Ty> ty);
+OwnedPtr<Type> CreateType(ModalTy ty);
 OwnedPtr<Type> CreateFuncType(Ptr<FuncTy> ty);
 
 OwnedPtr<Expr> CreateBoolMatch(
-    OwnedPtr<Expr> selector, OwnedPtr<Expr> trueBranch, OwnedPtr<Expr> falseBranch, Ptr<Ty> ty);
+    OwnedPtr<Expr> selector, OwnedPtr<Expr> trueBranch, OwnedPtr<Expr> falseBranch, ModalTy ty);
 
 StructDecl& GetStringDecl(const ImportManager& importManager);
 
@@ -163,23 +163,6 @@ void SplitAndTrim(std::string str, std::vector<std::string>& types);
 
 std::string JoinVector(const std::vector<std::string>& vec, const std::string& delimiter = "");
 
-<<<<<<< HEAD
-=======
-void InitGenericConfigs(
-    const File& file, const AST::Decl* decl, std::vector<GenericConfigInfo*>& genericConfigs, bool& isGenericGlueCode);
-
-/**
- * If function param or return param is generic ty, replace it to instance ty by genericConfig.
- */
-void ReplaceGenericTyForFunc(Ptr<FuncDecl> funcDecl, GenericConfigInfo* genericConfig, TypeManager& typeManager);
-
-void ReplaceGenericTyForFuncTy(Ptr<Ty> ty, GenericConfigInfo* genericConfig, TypeManager& typeManager);
-
-void GetArgsAndRetGenericActualTyVector(const GenericConfigInfo* config, FuncDecl& ctor,
-    std::unordered_map<std::string, Ptr<Ty>>& actualTyArgMap, std::vector<ModalTy>& funcTyParams,
-    std::vector<OwnedPtr<Type>>& actualPrimitiveType, TypeManager& typeManager);
-
->>>>>>> 0c41e6d (feat: add local mode implementation)
 Ptr<Ty> GetInstantyForGenericTy(
     Decl& decl, const std::unordered_map<std::string, Ptr<Ty>>& actualTyArgMap, TypeManager& typeManager);
 

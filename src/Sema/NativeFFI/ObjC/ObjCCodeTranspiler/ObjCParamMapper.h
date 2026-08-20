@@ -70,7 +70,7 @@ public:
 
     static struct EmittableObjCFuncMetainfo GetSetterForProp(
         struct EmittableObjCPropMetainfo prop,
-        Ptr<AST::Ty> ty,
+        AST::ModalTy ty,
         std::string getterName,
         std::string getterWrapperName
     );

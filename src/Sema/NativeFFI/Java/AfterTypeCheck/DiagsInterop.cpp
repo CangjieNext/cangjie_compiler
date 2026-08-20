@@ -77,13 +77,8 @@ void DiagJavaDeclCannotInheritPureCangjieType(DiagnosticEngine& diag, ClassLikeD
     for (const auto& superType : decl.inheritedTypes) {
         auto superDecl = Ty::GetDeclOfTy(superType->GetTy());
         CJC_ASSERT(superDecl);
-<<<<<<< HEAD
         if (!superDecl->IsJavaMirror() && !superDecl->IsJavaImpl() && !superDecl->GetTy()->IsObject() &&
             !superDecl->GetTy()->IsAny()) {
-=======
-        if (!IsMirror(*superDecl) && !IsImpl(*superDecl) && !superDecl->DataTy()->IsObject() &&
-            !superDecl->DataTy()->IsAny()) {
->>>>>>> 0c41e6d (feat: add local mode implementation)
             builder.AddNote(*superType, "'" + superType->ToString() + "'" + " is not a java-compatible type");
         }
     }

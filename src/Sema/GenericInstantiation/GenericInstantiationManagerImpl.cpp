@@ -41,7 +41,6 @@
 #include "cangjie/AST/RecoverDesugar.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
-#include "cangjie/Sema/Desugar.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 
@@ -786,7 +785,7 @@ Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(
         return &fd;
     }
     OverrideFunctionResolver resolver(typeManager);
-    MemberFuncsWithInstTys funcs = resolver.GetInstMemberFuncWithInstTy(ty, fd.identifier);
+    MemberFuncsWithInstTys funcs = resolver.GetInstMemberFuncWithInstTy(ty.Ty(), fd.identifier);
     // The returned function list is matched only by identifier; functions in 'funcs' are not overrides
     // of each other, only possibly overloads.
     for (MemberFuncWithInstTys func : funcs) {
@@ -795,14 +794,14 @@ Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(
         }
         bool isInDiffDecl = func.first->outerDecl != GetGeneralDecl(*fd.outerDecl, true);
         // Query the type of the actually overridden version via the semantically resolved target.
-        auto matchedInstTy = resolver.GetMatchedFuncInstTyByGivenTarget(func, fd, targetBaseTy);
+        auto matchedInstTy = resolver.GetMatchedFuncInstTyByGivenTarget(func, fd, targetBaseTy.Ty());
         if (!isInDiffDecl || !Ty::IsTyCorrect(matchedInstTy)) {
             continue;
         }
         // Find the actually instantiated version (if any) via the matched function.
         // There is no need to instantiate the version of the function. Since virtual functions do not undergo
         // instantiation.
-        return FindFuncInGenericInstantiatedDecl(ty, fd, func.first, matchedInstTy);
+        return FindFuncInGenericInstantiatedDecl(*ty, fd, func.first, matchedInstTy);
     }
     return &fd;
 }

@@ -1850,7 +1850,7 @@ void TypeChecker::TypeCheckerImpl::PreCheckPropRedefinition(const ASTContext& ct
     if (ctx.curPackage->TestAnyAttr(Attribute::IMPORTED, Attribute::TOOL_ADD)) {
         return; // Redefinition check can be ignored for imported package.
     }
-    auto syms = GetSymsByASTKind(ctx, ASTKind::PROP_DECL);
+    auto syms = SearchSymbol::GetSymsByASTKind(ctx, ASTKind::PROP_DECL);
     // Group same-name, same-scope props together (consistent with function redefinition grouping).
     std::map<Names, std::vector<PropDecl*>> candidates;
     for (auto sym : syms) {

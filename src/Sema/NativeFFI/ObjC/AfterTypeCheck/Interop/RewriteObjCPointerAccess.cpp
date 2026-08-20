@@ -81,7 +81,6 @@ void HandleObjCPointerRead(InteropContext& ctx, CallExpr& callExpr)
     auto callArgs = std::vector<OwnedPtr<FuncArg>> {};
     callArgs.emplace_back(CreateFuncArg(std::move(ptrExpr)));
     callArgs.emplace_back(CreateFuncArg(CreateZero(int64Type)));
-<<<<<<< HEAD
     auto call = WithinFile(CreateCallExpr(
         std::move(readPointerRef),
         std::move(callArgs),
@@ -90,10 +89,6 @@ void HandleObjCPointerRead(InteropContext& ctx, CallExpr& callExpr)
         CallKind::CALL_INTRINSIC_FUNCTION), callExpr.curFile);
     // We use objc_retain here, because it's not a return value of any method
     auto wrappedCall = ctx.factory.WrapEntity(std::move(call), *elementType, Retain::RETAINED);
-=======
-    auto call = CreateCallExpr(
-        std::move(readPointerRef), std::move(callArgs), readPointerFunc, {rawCType}, CallKind::CALL_INTRINSIC_FUNCTION);
->>>>>>> 0c41e6d (feat: add local mode implementation)
     ctx.factory.SetDesugarExpr(
         &callExpr,
         std::move(wrappedCall)
@@ -149,17 +144,12 @@ void HandleObjCPointerWrite(InteropContext& ctx, CallExpr& callExpr)
     callArgs.emplace_back(CreateFuncArg(std::move(ptrExpr)));
     callArgs.emplace_back(CreateFuncArg(CreateZero(int64Type)));
     callArgs.emplace_back(CreateFuncArg(ctx.factory.UnwrapEntity(std::move(valueArg))));
-<<<<<<< HEAD
     auto call = WithinFile(CreateCallExpr(
         std::move(writePointerRef),
         std::move(callArgs),
         writePointerFunc,
         unitType,
         CallKind::CALL_INTRINSIC_FUNCTION), callExpr.curFile);
-=======
-    auto call = CreateCallExpr(std::move(writePointerRef), std::move(callArgs), writePointerFunc, {unitType},
-        CallKind::CALL_INTRINSIC_FUNCTION);
->>>>>>> 0c41e6d (feat: add local mode implementation)
     ctx.factory.SetDesugarExpr(&callExpr, std::move(call));
 }
 }

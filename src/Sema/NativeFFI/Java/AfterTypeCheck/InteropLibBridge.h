@@ -34,30 +34,8 @@ struct MemberJNISignature {
         : MemberJNISignature(utils, member, StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
     {
         auto& retTy = *member.funcBody->retType->GetTy();
-        std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
-<<<<<<< HEAD
+        std::vector<ModalTy> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
         signature = utils.GetJavaTypeSignature(retTy, paramTys);
-=======
-        signature = utils.GetJavaTypeSignature(retTy, paramTys, member.fullPackageName);
-    }
-
-    // Constructor added for using generic types in Java
-    MemberJNISignature(Utils& utils, FuncDecl& member, GenericConfigInfo* genericConfig)
-    {
-        auto jobject = StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl);
-        CJC_ASSERT(jobject);
-        Ptr<Ty> ty = jobject->DataTy();
-        classTypeSignature = utils.GetJavaClassNormalizeSignature(*ty);
-        // turn "cj/A" to "cj/A${type}"
-        classTypeSignature = ReplaceClassName(classTypeSignature, genericConfig->declInstName);
-        name = GetJavaMemberName(member);
-
-        CJC_ASSERT(member.astKind == ASTKind::FUNC_DECL);
-
-        auto& retTy = *member.funcBody->retType->GetTy();
-        std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
-        signature = utils.GetJavaTypeSignature(retTy, paramTys, member.fullPackageName);
->>>>>>> 0c41e6d (feat: add local mode implementation)
     }
 
     MemberJNISignature(Utils& utils, PropDecl& member)

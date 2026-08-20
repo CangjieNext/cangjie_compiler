@@ -1151,44 +1151,7 @@ private:
     Type* GetThisTypeWithModal(Type& thisType, const AST::FuncDecl& funcDecl);
 };
 
-static const std::unordered_map<Cangjie::TokenKind, BinaryExprKind> tokenKindToBinaryExprKind = {
-    {Cangjie::TokenKind::ADD, BinaryExprKind::ADD},
-    {Cangjie::TokenKind::SUB, BinaryExprKind::SUB},
-    {Cangjie::TokenKind::MUL, BinaryExprKind::MUL},
-    {Cangjie::TokenKind::DIV, BinaryExprKind::DIV},
-    {Cangjie::TokenKind::MOD, BinaryExprKind::MOD},
-    {Cangjie::TokenKind::EXP, BinaryExprKind::EXP},
-    {Cangjie::TokenKind::AND, BinaryExprKind::AND},
-    {Cangjie::TokenKind::OR, BinaryExprKind::OR},
-    {Cangjie::TokenKind::BITAND, BinaryExprKind::BITAND},
-    {Cangjie::TokenKind::BITOR, BinaryExprKind::BITOR},
-    {Cangjie::TokenKind::BITXOR, BinaryExprKind::BITXOR},
-    {Cangjie::TokenKind::LSHIFT, BinaryExprKind::LSHIFT},
-    {Cangjie::TokenKind::RSHIFT, BinaryExprKind::RSHIFT},
-    {Cangjie::TokenKind::LT, BinaryExprKind::LT},
-    {Cangjie::TokenKind::GT, BinaryExprKind::GT},
-    {Cangjie::TokenKind::LE, BinaryExprKind::LE},
-    {Cangjie::TokenKind::GE, BinaryExprKind::GE},
-    {Cangjie::TokenKind::NOTEQ, BinaryExprKind::NOTEQUAL},
-    {Cangjie::TokenKind::EQUAL, BinaryExprKind::EQUAL},
-};
-
-const static std::unordered_map<std::string, const std::unordered_map<std::string, IntrinsicKind>> packageMap = {
-    {CORE_PACKAGE_NAME, coreIntrinsicMap},
-    {SYNC_PACKAGE_NAME, cjnativeSyncIntrinsicMap},
-    {OVERFLOW_PACKAGE_NAME, overflowIntrinsicMap},
-    {RUNTIME_PACKAGE_NAME, runtimeIntrinsicMap},
-    {REFLECT_PACKAGE_NAME, reflectIntrinsicMap},
-    {MATH_PACKAGE_NAME, mathIntrinsicMap},
-    {INTEROP_PACKAGE_NAME, interOpIntrinsicMap},
-    {"ohos.ark_interop", ohosArkInteropIntrinsicMap}
-};
-
-// Below are instrinsics without a source-level declaration, their delcaration should be dinamically generated
-const static std::unordered_map<std::string, IntrinsicKind> headlessIntrinsics = {
-    {GET_TYPE_FOR_TYPE_PARAMETER_NAME, IntrinsicKind::GET_TYPE_FOR_TYPE_PARAMETER},
-    {IS_SUBTYPE_TYPES_NAME, IntrinsicKind::IS_SUBTYPE_TYPES},
-};
+extern const std::unordered_map<Cangjie::TokenKind, BinaryExprKind> tokenKindToBinaryExprKind;
 } // namespace Cangjie::CHIR
 
 #endif

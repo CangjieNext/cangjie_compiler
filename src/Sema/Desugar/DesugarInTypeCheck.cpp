@@ -12,7 +12,6 @@
 
 #include "DesugarInTypeCheck.h"
 
-#include <memory>
 #include <utility>
 #include <vector>
 
@@ -692,12 +691,12 @@ void DesugarPrimaryCtor(Decl& decl, PrimaryCtorDecl& fd)
 }
 
 OwnedPtr<MemberAccess> DesugarRef2MemberAccess(
-    TypeManager& typeManager, Ptr<Decl> target, Ptr<RefExpr> field, Ptr<Ty> curTopDeclTy)
+    TypeManager& typeManager, Ptr<Decl> target, Ptr<RefExpr> field, ModalTy curTopDeclTy)
 {
     auto baseExpr = MakeOwned<RefExpr>();
     baseExpr->ref.identifier = target->outerDecl->identifier;
     // Get inst decl ty where the target static function in.
-    auto targetOuterDeclTy = Promotion(typeManager).Promote(*curTopDeclTy, *target->outerDecl->GetTy());
+    auto targetOuterDeclTy = Promotion(typeManager).Promote(curTopDeclTy, target->outerDecl->DataTy());
     // Promote should not return an empty container. When there are multiple versions of the parent type, directly use
     // the first element for the non-implementation check, and the uniqueness of the candidate should be guaranteed by
     // other diagnostics.
@@ -729,7 +728,7 @@ OwnedPtr<MemberAccess> DesugarRef2MemberAccess(
     return baseFunc;
 }
 
-void TypeChecker::TypeCheckerImpl::DesugarStaticRefCall2MemberAccessInCFuncLam(LambdaExpr& le, Ptr<Ty> curTopDeclTy)
+void TypeChecker::TypeCheckerImpl::DesugarStaticRefCall2MemberAccessInCFuncLam(LambdaExpr& le, ModalTy curTopDeclTy)
 {
     if (!le.GetTy()->IsCFunc()) {
         return;

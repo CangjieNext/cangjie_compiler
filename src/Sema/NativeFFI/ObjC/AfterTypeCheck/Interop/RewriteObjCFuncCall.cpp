@@ -131,12 +131,8 @@ void RewriteObjCFuncCall::HandleImpl(InteropContext& ctx)
 
             auto call = ctx.factory.CreateFuncCallViaOpaquePointer(
                 CreateMemberCall(WithinFile(CreateRefExpr(*tmpVar), node->curFile), fptrAccessor),
-<<<<<<< HEAD
-                ctx.typeMapper.Cj2CType(callExpr->GetTy()), std::move(unwrappedArguments));
-            call->curFile = node->curFile;
-=======
                 ctx.typeMapper.Cj2CType(callExpr->DataTy()), std::move(unwrappedArguments));
->>>>>>> 0c41e6d (feat: add local mode implementation)
+            call->curFile = node->curFile;
             std::vector<OwnedPtr<Node>> block;
             block.emplace_back(std::move(tmpVar));
             // We use objc_retain here, because we don't know in advance if

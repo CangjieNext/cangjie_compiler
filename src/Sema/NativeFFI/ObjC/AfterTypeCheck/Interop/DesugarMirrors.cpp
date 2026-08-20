@@ -131,7 +131,6 @@ void DesugarMirrors::DesugarMethod(InteropContext& ctx, ClassLikeDecl& mirror, F
     std::transform(params.begin(), params.end(), std::back_inserter(msgSendArgs),
         [&ctx, curFile](auto& param) { return ctx.factory.UnwrapEntity(WithinFile(CreateRefExpr(*param), curFile)); });
 
-<<<<<<< HEAD
     auto methodCall = WithinFile(
         ctx.factory.CreateMethodCallViaMsgSend(method, ASTCloner::Clone(nativeHandle.get()), std::move(msgSendArgs)),
         curFile);
@@ -140,12 +139,6 @@ void DesugarMirrors::DesugarMethod(InteropContext& ctx, ClassLikeDecl& mirror, F
     // we assume that ARC applied objc_autoreleaseReturnValue to the result of the method
     auto wrappedMethodCall =
         ctx.factory.WrapEntity(std::move(methodCall), *methodTy->retTy, Retain::RETAIN_AUTORELEASED_RETURN_VALUE);
-=======
-    auto arpScopeCall = ctx.factory.CreateAutoreleasePoolScope(methodTy->retTy.Ty(),
-        Nodes(ctx.factory.CreateMethodCallViaMsgSend(
-            method, ASTCloner::Clone(nativeHandle.get()), std::move(msgSendArgs))));
-    arpScopeCall->curFile = curFile;
->>>>>>> 0c41e6d (feat: add local mode implementation)
 
     method.funcBody->body = CreateBlock({}, methodTy->retTy);
 
@@ -208,14 +201,9 @@ void DesugarMirrors::DesugarTopLevelFunc(InteropContext& ctx, FuncDecl& func)
         CallKind::CALL_DECLARED_FUNCTION);
     CopyBasicInfo(&func, call);
 
-<<<<<<< HEAD
     // We use objc_retain here, because we don't know in advance if
     // ARC applied objc_autoreleaseReturnValue to the result of the top level function
     auto wrappedCall = ctx.factory.WrapEntity(std::move(call), *methodTy->retTy, Retain::RETAINED);
-=======
-    auto arpScopeCall = ctx.factory.CreateAutoreleasePoolScope(methodTy->retTy.Ty(), Nodes(std::move(call)));
-    arpScopeCall->curFile = curFile;
->>>>>>> 0c41e6d (feat: add local mode implementation)
 
     func.funcBody->body = CreateBlock({}, methodTy->retTy);
     func.funcBody->body->body.emplace_back(std::move(wrappedCall));
@@ -238,7 +226,6 @@ void DesugarGetter(InteropContext& ctx, ClassLikeDecl& mirror, PropDecl& prop)
     }
 
     auto nativeHandle = ctx.factory.CreateNativeHandleExpr(mirror, prop.TestAttr(Attribute::STATIC), curFile);
-<<<<<<< HEAD
     auto propGetterCall =
         WithinFile(ctx.factory.CreatePropGetterCallViaMsgSend(prop, std::move(nativeHandle)), curFile);
 
@@ -246,11 +233,6 @@ void DesugarGetter(InteropContext& ctx, ClassLikeDecl& mirror, PropDecl& prop)
     // we assume that ARC applied objc_autoreleaseReturnValue to the result of the prop getter
     auto wrappedPropGetterCall =
         ctx.factory.WrapEntity(std::move(propGetterCall), *prop.GetTy(), Retain::RETAIN_AUTORELEASED_RETURN_VALUE);
-=======
-    auto arpScopeCall = ctx.factory.CreateAutoreleasePoolScope(
-        prop.DataTy(), Nodes(ctx.factory.CreatePropGetterCallViaMsgSend(prop, std::move(nativeHandle))));
-    arpScopeCall->curFile = curFile;
->>>>>>> 0c41e6d (feat: add local mode implementation)
 
     getter->funcBody->body = CreateBlock({}, prop.GetTy());
     getter->funcBody->body->body.emplace_back(std::move(wrappedPropGetterCall));

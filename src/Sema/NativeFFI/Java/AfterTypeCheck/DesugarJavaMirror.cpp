@@ -158,13 +158,8 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
         auto ctor = GetJavaMirrorWrappingConstructor(decl);
         CJC_NULLPTR_CHECK(ctor);
         auto actualParam = CreateFuncArg(WithinFile(CreateRefExpr(*ctor->funcBody->paramLists[0]->params[0]), curFile));
-<<<<<<< HEAD
         auto& superCtor = *GetJavaMirrorWrappingConstructor(*decl.GetSuperClassDecl());
-        auto superCall = CreateSuperCall(decl, superCtor, superCtor.GetTy());
-=======
-        auto& superCtor = *GetGeneratedJavaMirrorConstructor(*decl.GetSuperClassDecl());
         auto superCall = CreateSuperCall(decl, superCtor, superCtor.DataTy());
->>>>>>> 0c41e6d (feat: add local mode implementation)
         superCall->args.emplace_back(std::move(actualParam));
         ctor->funcBody->body->body.emplace_back(std::move(superCall));
         return;
@@ -200,25 +195,7 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
 
 void JavaDesugarManager::InsertJavaMirrorFinalizer(ClassDecl& mirror)
 {
-<<<<<<< HEAD
     mirror.body->decls.emplace_back(lib.CreateDeletingGlobalRefFinalizer(mirror));
-=======
-    static auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-    auto curFile = mirror.curFile;
-    auto fbody = CreateFuncBody({}, nullptr, CreateBlock({}, {unitTy}), {unitTy});
-    fbody->paramLists.emplace_back(MakeOwned<FuncParamList>());
-    auto delCall = lib.CreateDeleteGlobalRefCall(lib.CreateGetJniEnvCall(curFile), CreateJavaRefCall(mirror, curFile));
-    fbody->body->body.emplace_back(std::move(delCall));
-    auto fd = CreateFuncDecl("~init", std::move(fbody), {typeManager.GetFunctionTy({}, {unitTy})});
-    fd->EnableAttr(Attribute::PRIVATE, Attribute::FINALIZER, Attribute::IN_CLASSLIKE);
-    fd->linkage = Linkage::EXTERNAL;
-    fd->funcBody->funcDecl = fd.get();
-    fd->fullPackageName = mirror.fullPackageName;
-    fd->outerDecl = Ptr(&mirror);
-    fd->curFile = curFile;
-
-    mirror.body->decls.emplace_back(std::move(fd));
->>>>>>> 0c41e6d (feat: add local mode implementation)
 }
 
 void JavaDesugarManager::InsertJavaMirrorHasInited(ClassDecl& mirror)
@@ -309,17 +286,12 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
     auto curFile = ctor.curFile;
     CJC_ASSERT(ctor.TestAttr(Attribute::CONSTRUCTOR));
     ctor.constructorCall = ConstructorCall::OTHER_INIT;
-<<<<<<< HEAD
-    auto thisCall = CreateThisCall(*ctor.outerDecl, generatedCtor, generatedCtor.GetTy(), curFile);
-=======
     auto thisCall = CreateThisCall(*ctor.outerDecl, generatedCtor, generatedCtor.DataTy(), curFile);
-
->>>>>>> 0c41e6d (feat: add local mode implementation)
     CJC_ASSERT(ctor.funcBody);
     CJC_ASSERT(ctor.funcBody->paramLists.size() == 1);
     auto& body = ctor.funcBody->body->body;
         auto& paramList = *ctor.funcBody->paramLists[0];
-    auto constructorExpr = lib.CreateJavaConstructorBlock(ctor.outerDecl->GetTy(),
+    auto constructorExpr = lib.CreateJavaConstructorBlock(ctor.outerDecl->DataTy(),
         paramList, curFile, true);
     if (!constructorExpr) {
         ctor.EnableAttr(Attribute::IS_BROKEN);
@@ -338,7 +310,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(ClassLikeDecl& mirror, FuncDecl
     CJC_NULLPTR_CHECK(curFile);
 
     // For mirror method, syntactic return type has to be specified, so it's safe to use it after parser.
-    auto retTy = fun.funcBody->retType->GetTy();
+    auto retTy = fun.funcBody->retType->DataTy();
     fun.funcBody->body = CreateBlock({}, retTy);
     auto& body = fun.funcBody->body->body;
     CJC_ASSERT_WITH_MSG(!fun.funcBody->paramLists.empty(), "paramLists cannot be empty");
@@ -368,7 +340,6 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(ClassLikeDecl& mirror, FuncDecl
         return;
     }
 
-<<<<<<< HEAD
     auto& methodCallRes = *StaticAs<ASTKind::VAR_DECL>(
         body.emplace_back(CreateTmpVarDecl(nullptr, std::move(methodCall))).get());
     methodCallRes.SetTy(methodCallRes.initializer->GetTy());
@@ -377,54 +348,18 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(ClassLikeDecl& mirror, FuncDecl
     methodCallRes.curFile = curFile;
     auto callResRef = WithinFile(CreateRefExpr(methodCallRes), curFile);
     OwnedPtr<Expr> retCallExpr = lib.ConvertJavaResultToCJ(std::move(callResRef), retTy, mirror);
-=======
-    auto methodCallRes = CreateTmpVarDecl(nullptr, std::move(methodCall));
-    methodCallRes->SetTy(methodCallRes->initializer->GetTy());
-    CopyBasicInfo(methodCallRes->initializer.get(), methodCallRes.get());
-    methodCallRes->begin = fun.begin;
-    methodCallRes->curFile = fun.curFile;
-
-    auto callResRef = CreateRefExpr(*methodCallRes);
-    CopyBasicInfo(methodCallRes.get(), callResRef.get());
-
-    OwnedPtr<Expr> retCallExpr = nullptr;
-    // cjmapping interface return param support lambda.
-    if (fun.funcBody->retType->TyKind() == TypeKind::TYPE_FUNC &&
-        fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
-        retCallExpr = CreateGetCJLambdaCallExpr(std::move(callResRef), fun.funcBody->retType->DataTy(), mirror);
-    } else {
-        retCallExpr = lib.UnwrapJavaEntity(std::move(callResRef), fun.funcBody->retType->DataTy(), mirror);
-    }
-
->>>>>>> 0c41e6d (feat: add local mode implementation)
     if (!retCallExpr) {
         fun.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
-<<<<<<< HEAD
 
     auto& retExpr = *StaticAs<ASTKind::RETURN_EXPR>(
         body.emplace_back(CreateReturnExpr(std::move(retCallExpr), fun.funcBody.get())).get());
-    retExpr.SetTy(TypeManager::GetNothingTy());
+    retExpr.SetTy({TypeManager::GetNothingTy()});
     retExpr.refFuncBody = fun.funcBody.get();
 
-    fun.funcBody->SetTy(TypeManager::GetNothingTy());
-    if (IsSyntheticMirrorWrapper(mirror)) {
-=======
-    std::vector<OwnedPtr<Node>> blockNodes;
-    auto retExpr = CreateReturnExpr(std::move(retCallExpr), fun.funcBody.get());
-    retExpr->SetTy({TypeManager::GetNothingTy()});
-    retExpr->refFuncBody = fun.funcBody.get();
-    blockNodes.push_back(std::move(methodCallRes));
-    blockNodes.push_back(std::move(retExpr));
-    // Return type has to be specified, so it's safe to use it below
-    fun.funcBody->body = CreateBlock(std::move(blockNodes), fun.funcBody->retType->GetTy());
     fun.funcBody->SetTy({TypeManager::GetNothingTy()});
-    if (fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
-        fun.funcBody->parentClassLike = &mirror;
-    }
-    if (IsSynthetic(mirror)) {
->>>>>>> 0c41e6d (feat: add local mode implementation)
+    if (IsSyntheticMirrorWrapper(mirror)) {
         fun.DisableAttr(Attribute::ABSTRACT);
     }
 }
@@ -491,7 +426,7 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
 
     auto& setter = *prop.setters.begin();
     setter->funcBody->body = CreateBlock({}, prop.GetTy());
-    setter->funcBody->SetTy(unitTy);
+    setter->funcBody->SetTy({unitTy});
 
     auto& body = setter->funcBody->body->body;
     auto& jniEnv = *StaticAs<ASTKind::VAR_DECL>(
@@ -514,20 +449,7 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
             MemberJNISignature(utils, prop),
             std::move(paramRef));
     }
-<<<<<<< HEAD
     body.emplace_back(std::move(jniSetterCall));
-=======
-
-    auto block = CreateBlock({}, prop.GetTy());
-    auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-
-    auto& setter = *prop.setters.begin();
-    auto& setterBody = setter->funcBody;
-    setterBody->body = std::move(block);
-    setterBody->SetTy({unitTy});
-
-    setterBody->body->body.emplace_back(std::move(jniSetterCall));
->>>>>>> 0c41e6d (feat: add local mode implementation)
 }
 
 void JavaDesugarManager::DesugarJavaMirrorProp(PropDecl& prop)
@@ -621,102 +543,6 @@ void JavaDesugarManager::GenerateInSynthetic(ClassDecl& cd)
     }
 }
 
-<<<<<<< HEAD
-=======
-void JavaDesugarManager::ReplaceCallsWithArrayJavaEntityGet(File& file)
-{
-    Walker(&file, Walker::GetNextWalkerID(), [this, &file](auto node) {
-        if (!node->IsSamePackage(*file.curPackage)) {
-            return VisitAction::WALK_CHILDREN;
-        }
-
-        Ptr<CallExpr> callExpr = As<ASTKind::CALL_EXPR>(node);
-        if (!callExpr) {
-            return VisitAction::WALK_CHILDREN;
-        }
-
-        auto funcDecl = callExpr->resolvedFunction;
-        if (!funcDecl || !funcDecl->outerDecl || !IsJArray(*funcDecl->outerDecl) ||
-            funcDecl->identifier != "[]" || callExpr->args.size() != 1
-        ) {
-            return VisitAction::WALK_CHILDREN;
-        }
-
-        auto ma = As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc);
-        CJC_ASSERT_WITH_MSG(!ma->baseExpr->DataTy()->TyArgs().empty(), "JArray type must be generic");
-        auto arrayElementType = ma->baseExpr->DataTy()->TyArg(0);
-        if (!arrayElementType->IsClass() && !arrayElementType->IsCoreOptionType()) {
-            return VisitAction::WALK_CHILDREN;
-        }
-
-        static auto arrayJavaEntityGetDecl = lib.FindArrayJavaEntityGetDecl(
-            *As<ASTKind::CLASS_DECL>(funcDecl->outerDecl));
-        CJC_ASSERT(arrayJavaEntityGetDecl);
-        auto newCallExpr = ASTCloner::Clone(callExpr);
-        newCallExpr->resolvedFunction = arrayJavaEntityGetDecl;
-        auto base = As<ASTKind::MEMBER_ACCESS>(newCallExpr->baseFunc);
-        base->target = arrayJavaEntityGetDecl;
-        base->SetTy(arrayJavaEntityGetDecl->GetTy());
-        callExpr->desugarExpr = lib.UnwrapJavaEntity(
-            std::move(newCallExpr), arrayElementType, *As<ASTKind::CLASS_LIKE_DECL>(funcDecl->outerDecl));
-        callExpr->desugarArgs = std::nullopt;
-
-        return VisitAction::WALK_CHILDREN;
-    }).Walk();
-}
-
-void JavaDesugarManager::ReplaceCallsWithArrayJavaEntitySet(File& file)
-{
-    Walker(&file, Walker::GetNextWalkerID(), [this, &file](auto node) {
-        if (!node->IsSamePackage(*file.curPackage)) {
-            return VisitAction::WALK_CHILDREN;
-        }
-
-        Ptr<CallExpr> callExpr = As<ASTKind::CALL_EXPR>(node);
-        if (!callExpr) {
-            return VisitAction::WALK_CHILDREN;
-        }
-
-        auto funcDecl = callExpr->resolvedFunction;
-        if (!funcDecl || !funcDecl->outerDecl || !IsJArray(*funcDecl->outerDecl) ||
-            funcDecl->identifier != "[]" || callExpr->args.size() != 2 // index and value
-        ) {
-            // Only calls to correct array "set" should be desugared.
-            // For example, do not desugar if arguments count is wrong (in case difference from index and value)
-            return VisitAction::WALK_CHILDREN;
-        }
-
-        auto ma = As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc);
-        CJC_ASSERT_WITH_MSG(!ma->baseExpr->DataTy()->TyArgs().empty(), "JArray type must be generic");
-        auto arrayElementType = ma->baseExpr->DataTy()->TyArg(0);
-        if (!arrayElementType->IsClass() && !arrayElementType->IsCoreOptionType()) {
-            return VisitAction::WALK_CHILDREN;
-        }
-
-        static auto arrayJavaEntitySetDecl = lib.FindArrayJavaEntitySetDecl(
-            *As<ASTKind::CLASS_DECL>(funcDecl->outerDecl));
-        CJC_ASSERT(arrayJavaEntitySetDecl);
-        auto newCallExpr = ASTCloner::Clone(callExpr);
-        newCallExpr->resolvedFunction = arrayJavaEntitySetDecl;
-
-        newCallExpr->args[1] = ASTCloner::Clone(newCallExpr->args[1].get());
-        newCallExpr->args[1]->expr = lib.WrapJavaEntity(std::move(newCallExpr->args[1]->expr));
-        newCallExpr->desugarArgs = std::nullopt;
-        callExpr->desugarArgs = std::nullopt;
-        auto base = As<ASTKind::MEMBER_ACCESS>(newCallExpr->baseFunc);
-        base->target = arrayJavaEntitySetDecl;
-        base->SetTy(arrayJavaEntitySetDecl->GetTy());
-        callExpr->args[1] = ASTCloner::Clone(newCallExpr->args[1].get());
-
-        callExpr->baseFunc = ASTCloner::Clone(newCallExpr->baseFunc.get());
-        callExpr->resolvedFunction = newCallExpr->resolvedFunction;
-        callExpr->desugarExpr = std::move(newCallExpr);
-
-        return VisitAction::WALK_CHILDREN;
-    }).Walk();
-}
-
->>>>>>> 0c41e6d (feat: add local mode implementation)
 void JavaDesugarManager::GenerateInMirrors(File& file, bool doStub)
 {
     auto pkg = file.curPackage;

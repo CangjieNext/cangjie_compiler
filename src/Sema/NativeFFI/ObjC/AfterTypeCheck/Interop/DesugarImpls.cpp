@@ -112,13 +112,8 @@ void DesugarSuperCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
         return;
     }
 
-<<<<<<< HEAD
     auto withObjCSuper = WithinFile(
-        ctx.factory.CreateWithObjCSuperScope(std::move(objCSelf), impl, impl.GetTy(),
-=======
-    auto withMethodEnv = WithinFile(
-        ctx.factory.CreateWithMethodEnvScope(std::move(objCSelf), impl, impl.DataTy(),
->>>>>>> 0c41e6d (feat: add local mode implementation)
+        ctx.factory.CreateWithObjCSuperScope(std::move(objCSelf), impl, impl.DataTy(),
             [&](auto&& receiver, auto&& objCSuper) {
                 std::vector<OwnedPtr<Expr>> superInitArgs;
                 std::transform(ce->args.begin(), ce->args.end(), std::back_inserter(superInitArgs), [&](auto& arg) {
@@ -144,13 +139,8 @@ void DesugarSuperCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
     auto withObjCSuperRetained = ctx.factory.CreateObjCRetainAutoreleasedReturnValueCall(std::move(withObjCSuper));
     auto baseCtor = ctx.factory.GetGeneratedBaseCtor(impl);
     CJC_NULLPTR_CHECK(baseCtor);
-<<<<<<< HEAD
-    auto baseCtorCall = WithinFile(CreateSuperCall(*baseCtor->outerDecl, *baseCtor, baseCtor->GetTy()), curFile);
-    baseCtorCall->args.push_back(CreateFuncArg(std::move(withObjCSuperRetained)));
-=======
     auto baseCtorCall = WithinFile(CreateSuperCall(*baseCtor->outerDecl, *baseCtor, baseCtor->DataTy()), curFile);
-    baseCtorCall->args.push_back(CreateFuncArg(std::move(withMethodEnv)));
->>>>>>> 0c41e6d (feat: add local mode implementation)
+    baseCtorCall->args.push_back(CreateFuncArg(std::move(withObjCSuperRetained)));
     ce->desugarExpr = std::move(baseCtorCall);
 }
 
@@ -267,13 +257,8 @@ void DesugarImpls::DesugarCallExpr(InteropContext& ctx, ClassDecl& impl, CallExp
         [&](auto& arg) { return ctx.factory.UnwrapEntity(WithinFile(ASTCloner::Clone(arg->expr.get()), curFile)); });
 
     auto nativeHandle = ctx.factory.CreateNativeHandleExpr(impl, false, ce.curFile);
-<<<<<<< HEAD
     auto withObjCSuperCall = ctx.factory.CreateWithObjCSuperScope(
-        std::move(nativeHandle), impl, targetFdTy->retTy, [&](auto&& receiver, auto&& objCSuper) {
-=======
-    auto withMethodEnvCall = ctx.factory.CreateWithMethodEnvScope(
         std::move(nativeHandle), impl, targetFdTy->retTy.Ty(), [&](auto&& receiver, auto&& objCSuper) {
->>>>>>> 0c41e6d (feat: add local mode implementation)
             OwnedPtr<Expr> msgSendSuperCall;
             if (targetFd->propDecl) {
                 if (!msgSendSuperArgs.empty()) {
@@ -299,7 +284,6 @@ void DesugarImpls::DesugarCallExpr(InteropContext& ctx, ClassDecl& impl, CallExp
 
             return Nodes<Node>(std::move(msgSendSuperCall));
         });
-<<<<<<< HEAD
     withObjCSuperCall->curFile = curFile;
 
     // We use objc_retainAutoreleasedReturnValue instead of objc_retain here, because
@@ -307,10 +291,6 @@ void DesugarImpls::DesugarCallExpr(InteropContext& ctx, ClassDecl& impl, CallExp
     auto withObjCSuperCallWrapped = ctx.factory.WrapEntity(
         std::move(withObjCSuperCall), *targetFdTy->retTy, Retain::RETAIN_AUTORELEASED_RETURN_VALUE);
     ctx.factory.SetDesugarExpr(&ce, std::move(withObjCSuperCallWrapped));
-=======
-    withMethodEnvCall->curFile = curFile;
-    ce.desugarExpr = ctx.factory.WrapEntity(std::move(withMethodEnvCall), *targetFdTy->retTy.Ty());
->>>>>>> 0c41e6d (feat: add local mode implementation)
 }
 
 void DesugarImpls::DesugarGetForPropDecl(
@@ -339,19 +319,13 @@ void DesugarImpls::DesugarGetForPropDecl(
         return;
     }
     auto nativeHandle = ctx.factory.CreateNativeHandleExpr(impl, false, ma.curFile);
-<<<<<<< HEAD
     auto withObjCSuperCall = ctx.factory.CreateWithObjCSuperScope(
-        std::move(nativeHandle), impl, ma.GetTy(), [&](auto&& receiver, auto&& objCSuper) {
-=======
-    auto withMethodEnvCall = ctx.factory.CreateWithMethodEnvScope(
         std::move(nativeHandle), impl, ma.DataTy(), [&](auto&& receiver, auto&& objCSuper) {
->>>>>>> 0c41e6d (feat: add local mode implementation)
             auto msgSendSuperCall =
                 ctx.factory.CreatePropGetterCallViaMsgSendSuper(*pd, std::move(receiver), std::move(objCSuper));
 
             return Nodes<Node>(std::move(msgSendSuperCall));
         });
-<<<<<<< HEAD
     withObjCSuperCall->curFile = ma.curFile;
 
     // We use objc_retainAutoreleasedReturnValue instead of objc_retain here, because
@@ -359,9 +333,5 @@ void DesugarImpls::DesugarGetForPropDecl(
     auto withObjCSuperCallWrapped =
         ctx.factory.WrapEntity(std::move(withObjCSuperCall), *ma.GetTy(), Retain::RETAIN_AUTORELEASED_RETURN_VALUE);
     ctx.factory.SetDesugarExpr(&ma, std::move(withObjCSuperCallWrapped));
-=======
-    withMethodEnvCall->curFile = ma.curFile;
-    ma.desugarExpr = ctx.factory.WrapEntity(std::move(withMethodEnvCall), *ma.DataTy());
->>>>>>> 0c41e6d (feat: add local mode implementation)
 }
 } // namespace Cangjie::Interop::ObjC

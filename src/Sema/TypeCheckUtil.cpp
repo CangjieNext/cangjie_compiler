@@ -11,21 +11,17 @@
  */
 
 #include "TypeCheckUtil.h"
-#include "DiagSuppressor.h"
 #include "Promotion.h"
 
 #include <map>
 #include <set>
 
-#include "Diags.h"
-#include "TypeCheckerImpl.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/ScopeManagerApi.h"
 #include "cangjie/AST/Symbol.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
-#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Modules/ModulesUtils.h"
 #include "cangjie/Sema/TypeManager.h"
 
@@ -1010,7 +1006,7 @@ bool IsNeedRuntimeCheck(TypeManager& typeManager, DataTy srcTy, DataTy targetTy)
         return false;
     };
     // Nothing is a subtype of any other type; casting any Non-Nothing type to Nothing will always be false.
-    if (targetTy.IsNothing()) {
+    if (targetTy->IsNothing()) {
         return false;
     }
     if (isFinalType(srcTy) && isFinalType(targetTy)) {
@@ -1120,7 +1116,7 @@ std::vector<Ptr<GenericsTy>> GetDeclGenericParamVec(const Decl& d)
     std::vector<Ptr<GenericsTy>> res;
     if (auto generic = d.GetGeneric()) {
         for (auto& tp : generic->typeParameters) {
-            if (auto gTy = DynamicCast<GenericsTy*>(tp->GetTy())) {
+            if (auto gTy = DynamicCast<GenericsTy*>(tp->DataTy())) {
                 res.push_back(gTy);
             }
         }
@@ -1147,12 +1143,12 @@ void CollectMemberParamCoverage(
 void CollectMemberResultCoverage(
     const Decl& member, const std::set<Ptr<GenericsTy>>& ownerGps, std::set<Ptr<GenericsTy>>& covered)
 {
-    Ptr<Ty> resultTy = nullptr;
+    ModalTy resultTy;
     if (auto fd = DynamicCast<const FuncDecl*>(&member); fd && fd->funcBody && fd->funcBody->retType) {
         resultTy = fd->funcBody->retType->GetTy();
     }
-    if ((!resultTy || !Ty::IsTyCorrect(resultTy)) && member.GetTy() && member.GetTy()->IsFunc()) {
-        resultTy = RawStaticCast<FuncTy*>(member.GetTy())->retTy;
+    if ((!resultTy || !Ty::IsTyCorrect(resultTy.Ty())) && member.GetTy() && member.GetTy()->IsFunc()) {
+        resultTy = RawStaticCast<FuncTy*>(member.DataTy())->retTy;
     }
     if (!resultTy) {
         resultTy = member.GetTy();
@@ -1219,7 +1215,7 @@ void CollectExtendCoverage(const InheritableDecl& id, const std::vector<Ptr<Gene
             continue;
         }
         *ctx.anyMatch = true;
-        auto extTy = extend->extendedType ? extend->extendedType->GetTy() : nullptr;
+        auto extTy = extend->extendedType ? extend->extendedType->GetTy() : ModalTy{};
         if (!extTy) {
             continue;
         }
@@ -1244,7 +1240,7 @@ void CollectSuperCoverage(
     CoverageContext& ctx)
 {
     for (auto& inheritedType : id.inheritedTypes) {
-        auto superTy = inheritedType ? inheritedType->GetTy() : nullptr;
+        auto superTy = inheritedType ? inheritedType->GetTy() : ModalTy{};
         auto superDecl = Ty::GetDeclOfTy<InheritableDecl>(superTy);
         if (!superDecl || !visited.insert(superDecl).second) {
             continue;
@@ -1333,7 +1329,7 @@ void TryEnforceCandidate(
         std::set<Ptr<Ty>> sumTys;
         for (auto d : candidates) {
             if (CanDetermineCandidate(*d, memSigs, resultConstrainedMemSigs, tyMgr)) {
-                sumTys.emplace(d->GetTy());
+                sumTys.emplace(d->DataTy());
             }
         }
         if (sumTys.empty() && !resultConstrainedMemSigs.empty()) {

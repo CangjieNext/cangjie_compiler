@@ -402,12 +402,8 @@ void TypeChecker::TypeCheckerImpl::TryInferFromSyntaxInfo(ASTContext& ctx, const
     Walker(le.funcBody.get(), memberScanner).Walk();
 
     for (auto& [id, decls] : candidates) {
-<<<<<<< HEAD
-        TryEnforceCandidate(*StaticCast<TyVar*>(unsolvedParams[id]->GetTy()), decls, typeManager, memSigs[id],
+        TryEnforceCandidate(*StaticCast<TyVar>(unsolvedParams[id]->DataTy()), decls, typeManager, memSigs[id],
             resultConstrainedMemSigs[id]);
-=======
-        TryEnforceCandidate(*StaticCast<TyVar*>(unsolvedParams[id]->DataTy()), decls, typeManager);
->>>>>>> 0c41e6d (feat: add local mode implementation)
     }
 }
 

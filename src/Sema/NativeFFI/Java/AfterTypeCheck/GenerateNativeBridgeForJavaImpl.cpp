@@ -26,7 +26,7 @@ OwnedPtr<FuncParam> GenerateNativeBridgeForJavaImpl::ConvertJavaCompatibleToCTyp
 {
     auto& jniTy = jni.ConvertCangjieToJniTy(*sample.GetTy());
     OwnedPtr<FuncParam> param = WithinFile(
-        CreateFuncParam(sample.identifier.GetRawText(), nullptr, nullptr, &jniTy),
+        CreateFuncParam(sample.identifier.GetRawText(), nullptr, nullptr, {&jniTy}),
         &curFile);
     return param;
 }
@@ -118,7 +118,7 @@ OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateConstructorBridge(
                     refWrapperCtorArgs.push_back(CreateFuncArg(
                         UnwrapCTypeExprAsJavaCompatible(
                             WithinFile(CreateRefExpr(*ctypeParam->get()), &curFile),
-                            userParam->get()->GetTy(), &companion)
+                            userParam->get()->DataTy(), &companion)
                     ));
             }
 
@@ -150,7 +150,7 @@ OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateInstanceMethodBridge(A
     FuncDecl& refWrapperFunc, ClassDecl& companion) const
 {
     File& curFile = *companion.curFile;
-    Ptr<Ty> retTy = StaticCast<FuncTy*>(refWrapperFunc.GetTy())->retTy;
+    ModalTy retTy = StaticCast<FuncTy*>(refWrapperFunc.DataTy())->retTy;
     auto& userParams = refWrapperFunc.funcBody->paramLists[0]->params;
 
     auto ctypeParams = ConvertJavaCompatibleToCTypeParams(userParams, curFile);
@@ -181,7 +181,7 @@ OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateInstanceMethodBridge(A
                         methodCallArgs.push_back(CreateFuncArg(
                             UnwrapCTypeExprAsJavaCompatible(
                                 WithinFile(CreateRefExpr(*ctypeParam->get()), &curFile),
-                                (*userParam)->GetTy(), &companion)
+                                (*userParam)->DataTy(), &companion)
                         ));
                 }
 
@@ -221,7 +221,7 @@ OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateStaticMethodBridge(
     FuncDecl& refWrapperFunc, ClassDecl& companion) const
 {
     File& curFile = *companion.curFile;
-    Ptr<Ty> retTy = StaticCast<FuncTy*>(refWrapperFunc.GetTy())->retTy;
+    ModalTy retTy = StaticCast<FuncTy*>(refWrapperFunc.DataTy())->retTy;
     auto& userParams = refWrapperFunc.funcBody->paramLists[0]->params;
     auto nativeFuncName = jni.GetJniMethodName(refWrapperFunc);
 
@@ -247,7 +247,7 @@ OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateStaticMethodBridge(
                         methodCallArgs.push_back(CreateFuncArg(
                             UnwrapCTypeExprAsJavaCompatible(
                                 WithinFile(CreateRefExpr(*ctypeParam->get()), &curFile),
-                                (*userParam)->GetTy(), &companion)
+                                (*userParam)->DataTy(), &companion)
                         ));
                 }
 

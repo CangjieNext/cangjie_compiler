@@ -75,21 +75,6 @@ std::string FuncParamToString(const OwnedPtr<FuncParam>& p)
 {
     CJC_ASSERT(p && p->type && p->type->GetTy());
     std::string res = p->identifier.Val();
-<<<<<<< HEAD
-=======
-    if (auto ty = Ty::GetDeclOfTy(p->type->GetTy())) {
-        bool castToId = IsCJMapping(*ty) && !IsCJMappingInterface(*(p->type->GetTy()));
-        res += castToId ? ".self" : "";
-    } else if (p->type->DataTy()->IsFunc()) {
-        auto actualTy = p->type->DataTy()->HasGeneric()
-            ? GetGenericInstTy(genericConfig, p->type->DataTy(), typeManager)
-            : p->type->DataTy();
-        res = GetLambdaJavaClassName(actualTy) + ".box(" + res + ")";
-    }
-    if (p->type->DataTy()->IsTuple()) {
-        res += ".self";
-    }
->>>>>>> 0c41e6d (feat: add local mode implementation)
     return res;
 }
 
@@ -165,10 +150,10 @@ void JavaSourceCodeGenerator::AddHeaderWithPackageName(std::string& curPackageNa
 }
 
 std::string JavaSourceCodeGenerator::MapCJTypeToJavaType(
-    const Ptr<Ty> ty, std::set<std::string>* javaImports, const std::string* curPackageName, bool isNativeMethod)
+    ModalTy ty, std::set<std::string>* javaImports, const std::string* curPackageName, bool isNativeMethod)
 {
     if (ty->IsCoreOptionType()) {
-        return MapCJTypeToJavaType(ty->TyArg(0), javaImports, curPackageName, isNativeMethod);
+        return MapCJTypeToJavaType(ty->typeArgs[0], javaImports, curPackageName, isNativeMethod);
     }
 
     std::string javaType = "";
@@ -205,15 +190,9 @@ std::string JavaSourceCodeGenerator::MapCJTypeToJavaType(
         case TypeKind::TYPE_INTERFACE:
         case TypeKind::TYPE_CLASS:
             if (IsJArray(*declTy)) {
-<<<<<<< HEAD
                 return MapCJTypeToJavaType(ty->typeArgs[0], javaImports, curPackageName) + "[]";
-=======
-                return MapCJTypeToJavaType(ty->TyArg(0), javaImports, curPackageName) + "[]";
-            } else if (isNativeMethod && declTy && IsCJMapping(*declTy) && !IsCJMappingInterface(*ty)) {
-                return "long";
->>>>>>> 0c41e6d (feat: add local mode implementation)
             }
-            javaType = AddImport(ty, javaImports, curPackageName);
+            javaType = AddImport(ty.Ty(), javaImports, curPackageName);
             break;
         case TypeKind::TYPE_STRUCT:
         case TypeKind::TYPE_ENUM:
@@ -235,34 +214,14 @@ std::string JavaSourceCodeGenerator::MapCJTypeToJavaType(const OwnedPtr<Type>& t
     const std::string* curPackageName, bool isNativeMethod)
 {
     CJC_ASSERT(type && type->GetTy());
-<<<<<<< HEAD
     return MapCJTypeToJavaType(type->GetTy(), javaImports, curPackageName, isNativeMethod);
-=======
-    auto ty = type->DataTy();
-    if (IsGenericParam(ty, *decl, genericConfig)) {
-        // Current generic only support primitive type.
-        auto genericActualTy = GetGenericInstTy(genericConfig, ty, typeManager);
-        return MapCJTypeToJavaType(genericActualTy, javaImports, curPackageName, isNativeMethod);
-    }
-    return MapCJTypeToJavaType(ty, javaImports, curPackageName, isNativeMethod);
->>>>>>> 0c41e6d (feat: add local mode implementation)
 }
 
 std::string JavaSourceCodeGenerator::MapCJTypeToJavaType(const OwnedPtr<FuncParam>& param,
     std::set<std::string>* javaImports, const std::string* curPackageName, bool isNativeMethod)
 {
     CJC_ASSERT(param && param->type && param->type->GetTy());
-<<<<<<< HEAD
     return MapCJTypeToJavaType(param->type->GetTy(), javaImports, curPackageName, isNativeMethod);
-=======
-    auto paraTy = param->type->DataTy();
-    if (IsGenericParam(paraTy, *decl, genericConfig)) {
-        // Current generic only support primitive type.
-        auto genericActualTy = GetGenericInstTy(genericConfig, paraTy, typeManager);
-        return MapCJTypeToJavaType(genericActualTy, javaImports, curPackageName, isNativeMethod);
-    }
-    return MapCJTypeToJavaType(paraTy, javaImports, curPackageName, isNativeMethod);
->>>>>>> 0c41e6d (feat: add local mode implementation)
 }
 
 void JavaSourceCodeGenerator::AddClassDeclaration()
@@ -290,7 +249,7 @@ void JavaSourceCodeGenerator::AddClassDeclaration()
             std::set<std::string>* imp = &imports;
             const std::string* package = &classDecl->fullPackageName;
             const std::function<std::string(Ptr<InterfaceTy>)>& transformer = [this, imp, package](Ptr<InterfaceTy> p) {
-                return MapCJTypeToJavaType(p, imp, package);
+                return MapCJTypeToJavaType({p}, imp, package);
             };
             res += Join(implementedInterfacesPtrs, ", ", transformer);
         }
@@ -516,7 +475,7 @@ std::pair<std::string, std::string> JavaSourceCodeGenerator::GenNativeSuperArgCa
     std::vector<std::string> parts = Cangjie::Utils::SplitString(id.substr(keyword.length()), sep);
     std::vector<std::string> args;
     std::vector<std::string> nativeParams;
-    auto mpTy = [this](const Ptr<Ty> ty) { return MapCJTypeToJavaType(ty, &imports, &decl->fullPackageName); };
+    auto mpTy = [this](ModalTy ty) { return MapCJTypeToJavaType(ty, &imports, &decl->fullPackageName); };
     // Skip first part.
     for (size_t i = 1; i < parts.size(); i++) {
         auto pid = Cangjie::Stoi(parts[i]);
@@ -527,11 +486,7 @@ std::pair<std::string, std::string> JavaSourceCodeGenerator::GenNativeSuperArgCa
         nativeParams.push_back(mpTy(params[static_cast<size_t>(index)]->DataTy()) + " " + pname);
     }
     std::string superCall = id + "(" + Cangjie::Utils::JoinStrings(args, ", ") + ")";
-<<<<<<< HEAD
     std::string nativeFnDecl = "private static final native " + mpTy(arg.GetTy()) + " " + id + "(" +
-=======
-    std::string nativeFnDecl = "public static native " + mpTy(arg.DataTy()) + " " + id + "(" +
->>>>>>> 0c41e6d (feat: add local mode implementation)
         Cangjie::Utils::JoinStrings(nativeParams, ", ") + ");";
     return std::make_pair(superCall, nativeFnDecl);
 }
@@ -734,190 +689,6 @@ void JavaSourceCodeGenerator::AddMethods()
             } else {
                 AddInstanceMethod(funcDecl);
             }
-<<<<<<< HEAD
-=======
-            hasHashcodeMethod = GetJavaMemberName(funcDecl) == JAVA_OBJECT_HASHCODE_METHOD_NAME;
-            hasEqualsMethod = GetJavaMemberName(funcDecl) == JAVA_OBJECT_EQUALS_METHOD_NAME;
-            hasToStringMethod = GetJavaMemberName(funcDecl) == JAVA_OBJECT_TOSTRING_METHOD_NAME;
-        }
-    }
-    AddEqualOrIdentityMethod(hasHashcodeMethod, hasEqualsMethod, hasToStringMethod);
-}
-
-void JavaSourceCodeGenerator::AddEqualOrIdentityMethod(
-    bool hasHascodeMethod, bool hasEqualsMethod, bool hasToStringMethod)
-{
-    if (!hasEqualsMethod) {
-        AddWithIndent(TAB, "@Override");
-        AddWithIndent(TAB, "public boolean equals(Object obj) {");
-        AddWithIndent(
-            TAB2, "throw new UnsupportedOperationException(\"equals is not supported for java proxy object.\");");
-        AddWithIndent(TAB, "}");
-        AddWithIndent("", "");
-    }
-
-    if (!hasHascodeMethod) {
-        AddWithIndent(TAB, "@Override");
-        AddWithIndent(TAB, "public int hashCode() {");
-        AddWithIndent(
-            TAB2, "throw new UnsupportedOperationException(\"hashCode is not supported for java proxy object.\");");
-        AddWithIndent(TAB, "}");
-        AddWithIndent("", "");
-    }
-
-    if (!hasToStringMethod) {
-        AddWithIndent(TAB, "@Override");
-        AddWithIndent(TAB, "public String toString() {");
-        AddWithIndent(
-            TAB2, "throw new UnsupportedOperationException(\"toString is not supported for java proxy object.\");");
-        AddWithIndent(TAB, "}");
-        AddWithIndent("", "");
-    }
-}
-
-void JavaSourceCodeGenerator::AddInterfaceMethods()
-{
-    for (OwnedPtr<Decl>& declPtr : decl->GetMemberDecls()) {
-        if (IsCJMapping(*decl) && !declPtr->TestAttr(Attribute::PUBLIC)) {
-            continue;
-        }
-        if (!declPtr->TestAttr(Attribute::PRIVATE) && IsFuncDeclAndNotConstructor(declPtr)) {
-            const FuncDecl& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(declPtr.get());
-            if (!IsVisibalFunc(funcDecl, *decl, genericConfig)) {
-                continue;
-            }
-            if (funcDecl.funcBody && funcDecl.funcBody->retType) {
-                bool isDefault = declPtr->TestAttr(Attribute::DEFAULT);
-                std::string modifier = "";
-                if (isDefault) {
-                    modifier += JAVA_DEFAULT;
-                    modifier += JAVA_WHITESPACE;
-                }
-                auto funcIdentifier = GetJavaMemberName(funcDecl);
-                const std::string retType =
-                    MapCJTypeToJavaType(funcDecl.funcBody->retType, &imports, &decl->fullPackageName);
-                std::string methodSignature;
-                methodSignature += JAVA_PUBLIC;
-                methodSignature += JAVA_WHITESPACE;
-                methodSignature += modifier;
-                methodSignature += retType;
-                methodSignature += JAVA_WHITESPACE;
-                methodSignature += funcIdentifier + "(";
-                std::string argsWithTypes = GenerateFuncParamLists(funcDecl.funcBody->paramLists, false);
-                methodSignature += argsWithTypes;
-                methodSignature += isDefault ? ") {" : ");";
-                AddWithIndent(TAB, methodSignature);
-                if (isDefault) {
-                    auto& declParams = funcDecl.funcBody->paramLists[0]->params;
-                    auto defaultFuncIdentifier = funcIdentifier + JAVA_INTERFACE_FWD_CLASS_DEFAULT_METHOD_SUFFIX;
-                    auto mangledNativeName =
-                        GetMangledMethodName(mangler, declParams, defaultFuncIdentifier, typeManager, genericConfig);
-                    std::string interfaceName = genericConfig ? genericConfig->declInstName : decl->identifier.Val();
-                    std::string defaultCall = interfaceName + JAVA_FWD_CLASS_SUFFIX + "." + mangledNativeName + "(this";
-                    auto params =
-                        GenerateParamLists(funcDecl.funcBody->paramLists, [this](const OwnedPtr<FuncParam>& p) {
-                            return FuncParamToString(p, this->genericConfig, this->typeManager);
-                        });
-                    if (params != "") {
-                        defaultCall += ", " + params;
-                    }
-                    defaultCall += ");";
-                    if (retType != "void") {
-                        defaultCall = "return " + defaultCall;
-                    }
-                    AddWithIndent(TAB2, defaultCall);
-                    AddWithIndent(TAB, "}");
-                }
-            }
-        }
-    }
-}
-
-void JavaSourceCodeGenerator::AddTupleItemMethod()
-{
-    size_t i = 0;
-    for (auto& ty : tupleTy->TyArgs()) {
-        std::string funcIdentifier = "item" + std::to_string(i);
-        const std::string retType = MapCJTypeToJavaType(ty, &imports, &decl->fullPackageName);
-        std::string methodSignature;
-        methodSignature += JAVA_PUBLIC;
-        methodSignature += JAVA_WHITESPACE;
-        methodSignature += retType;
-        methodSignature += JAVA_WHITESPACE;
-        methodSignature += funcIdentifier + "() {";
-        AddWithIndent(TAB, methodSignature);
-        auto funcCall = "return " + funcIdentifier + "(this.self);";
-        AddWithIndent(TAB2, funcCall);
-        AddWithIndent(TAB, "}\n");
-        std::string nativeSignature;
-        nativeSignature += JAVA_PUBLIC;
-        nativeSignature += JAVA_WHITESPACE;
-        nativeSignature += JAVA_NATIVE;
-        nativeSignature += JAVA_WHITESPACE;
-        nativeSignature += retType;
-        nativeSignature += JAVA_WHITESPACE;
-        nativeSignature += funcIdentifier + "(long self);\n";
-        AddWithIndent(TAB, nativeSignature);
-        ++i;
-    }
-}
-
-void JavaSourceCodeGenerator::AddInterfaceFwdClass()
-{
-    std::string interfaceName = genericConfig ? genericConfig->declInstName : decl->identifier.Val();
-    auto className = interfaceName + JAVA_FWD_CLASS_SUFFIX;
-    res += "final class " + className + " {\n";
-    res += TAB;
-    res += JAVA_PRIVATE;
-    res += JAVA_WHITESPACE;
-    res += className + "() {}\n";
-    AddLoadLibrary();
-    AddInterfaceFwdClassNativeMethod();
-    AddEndClassParenthesis();
-}
-
-void JavaSourceCodeGenerator::AddInterfaceFwdClassNativeMethod()
-{
-    for (OwnedPtr<Decl>& declPtr : decl->GetMemberDecls()) {
-        if (IsCJMapping(*decl) && !declPtr->TestAttr(Attribute::PUBLIC)) {
-            continue;
-        }
-        if (!declPtr->TestAttr(Attribute::PRIVATE) && IsFuncDeclAndNotConstructor(declPtr)) {
-            const FuncDecl& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(declPtr.get());
-            if (!declPtr->TestAttr(Attribute::DEFAULT)) {
-                continue;
-            }
-            if (!IsVisibalFunc(funcDecl, *decl, genericConfig)) {
-                continue;
-            }
-            if (funcDecl.funcBody && funcDecl.funcBody->retType) {
-                auto& params = funcDecl.funcBody->paramLists[0]->params;
-                auto funcIdentifier = GetJavaMemberName(funcDecl) + JAVA_INTERFACE_FWD_CLASS_DEFAULT_METHOD_SUFFIX;
-                auto mangledNativeName =
-                    GetMangledMethodName(mangler, params, funcIdentifier, typeManager, genericConfig);
-                const std::string retType =
-                    MapCJTypeToJavaType(funcDecl.funcBody->retType, &imports, &decl->fullPackageName);
-                std::string methodSignature;
-                methodSignature += JAVA_PUBLIC;
-                methodSignature += JAVA_WHITESPACE;
-                methodSignature += JAVA_STATIC;
-                methodSignature += JAVA_WHITESPACE;
-                methodSignature += JAVA_NATIVE;
-                methodSignature += JAVA_WHITESPACE;
-                methodSignature += retType;
-                methodSignature += JAVA_WHITESPACE;
-                methodSignature += mangledNativeName;
-                methodSignature += "(";
-                std::string interfaceName = genericConfig ? genericConfig->declInstName : decl->identifier.Val();
-                methodSignature += interfaceName + JAVA_WHITESPACE + JAVA_SELF_OBJECT;
-                std::string argsWithTypes = GenerateFuncParamLists(funcDecl.funcBody->paramLists, true);
-                if (argsWithTypes != "") {
-                    methodSignature += ", " + argsWithTypes;
-                }
-                methodSignature += ");";
-                AddWithIndent(TAB, methodSignature);
-            }
->>>>>>> 0c41e6d (feat: add local mode implementation)
         }
     }
 }
