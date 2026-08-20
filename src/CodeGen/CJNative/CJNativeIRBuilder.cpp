@@ -616,16 +616,16 @@ llvm::Instruction* IRBuilder2::CreateStore(
     return CreateStore(CGValue(val, valCGType), CGValue(ptr, ptrCGType));
 }
 
-<<<<<<< HEAD
 namespace {
 // The parameters of the `CreateStore` overload below, together with everything the lowering
 // helpers derive from them.
 struct StoreLowering {
     StoreLowering(const IRBuilder2& irBuilder, const CGValue& cgVal, const CGValue& cgDestAddr,
-        CHIR::Type* boxType)
+        CHIR::Type* boxType, ModalWriteKind modalWrite)
         : cgVal(cgVal),
           cgDestAddr(cgDestAddr),
           boxType(boxType),
+          modalWrite(modalWrite),
           valType(cgVal.GetCGType()),
           destDerefType(cgDestAddr.GetCGType()->GetPointerElementType()),
           val(cgVal.GetRawValue()),
@@ -656,6 +656,7 @@ struct StoreLowering {
     const CGValue& cgVal;
     const CGValue& cgDestAddr;
     CHIR::Type* boxType;
+    ModalWriteKind modalWrite;
     const CGType* valType;
     const CGType* destDerefType;
     llvm::Value* val;
@@ -673,6 +674,20 @@ bool NeedsRuntimeRefnessDispatch(const StoreLowering& store)
     return !store.IsMemberWrite() && isUnsizedGeneric(store.valType) && isUnsizedGeneric(store.destDerefType);
 }
 
+// Emits the reference-field barrier selected by `modalWrite`.
+llvm::Instruction* EmitRefWriteBarrier(IRBuilder2& irBuilder, const StoreLowering& store)
+{
+    switch (store.modalWrite) {
+        case ModalWriteKind::MAYBE_LOCAL:
+            return irBuilder.CallMaybeLocalWrite({store.fieldOwnerPtr, store.destAddr, store.val});
+        case ModalWriteKind::DEMODE:
+            return irBuilder.CallDemodeWrite({store.fieldOwnerPtr, store.destAddr, store.val});
+        case ModalWriteKind::NONE:
+            break;
+    }
+    return irBuilder.CallGCWrite({store.val, store.fieldOwnerPtr, store.destAddr});
+};
+
 // Returns the buffer a non-reference value must be copied into: the caller-provided sret
 // buffer, or a freshly allocated one whose address is written back into \p destAddr.
 llvm::Value* AcquireBufferForNonRefValue(IRBuilder2& irBuilder, const StoreLowering& store,
@@ -680,50 +695,6 @@ llvm::Value* AcquireBufferForNonRefValue(IRBuilder2& irBuilder, const StoreLower
 {
     if (store.cgDestAddr.IsSRetArg()) {
         return irBuilder.CreateLoad(store.cgDestAddr);
-=======
-llvm::Instruction* IRBuilder2::CreateStore(
-    const CGValue& cgVal, const CGValue& cgDestAddr, CHIR::Type* boxType, ModalWriteKind modalWrite)
-{
-    bool isMemberWrite = GetCGContext().GetBasePtrOf(cgDestAddr.GetRawValue()) != nullptr;
-    bool isVolatile = false;
-    const CGType* valType = cgVal.GetCGType();
-    const CGType* destDerefType = cgDestAddr.GetCGType()->GetPointerElementType();
-    CJC_ASSERT(destDerefType != nullptr);
-    auto val = cgVal.GetRawValue();
-    auto destAddr = cgDestAddr.GetRawValue();
-    // GetTypeInfoIsReference
-    if (valType && valType->GetOriginal().IsGeneric() && !valType->GetSize() &&
-        destDerefType->GetOriginal().IsGeneric() && !destDerefType->GetSize() && !isMemberWrite) {
-        const auto& dstChirType = boxType != nullptr ? *boxType : destDerefType->GetOriginal();
-        auto dstTypeInfo = CreateTypeInfo(dstChirType);
-        // Check whether dstType is a reference.
-        auto [handleRefBB, handleNonRefBB, exitBB] = Vec2Tuple<3>(CreateAndInsertBasicBlocks(
-            {GenNameForBB("handle_store_ref"), GenNameForBB("handle_store_non_ref"), GenNameForBB("store_exit")}));
-        destAddr =
-            CreateBitCast(destAddr, getInt8PtrTy(1U)->getPointerTo(destAddr->getType()->getPointerAddressSpace()));
-        CreateCondBr(CreateTypeInfoIsReferenceCall(dstChirType),
-            handleRefBB, handleNonRefBB);
-
-        SetInsertPoint(handleRefBB);
-        LLVMIRBuilder2::CreateStore(val, destAddr, isVolatile);
-        CreateBr(exitBB);
-
-        SetInsertPoint(handleNonRefBB);
-        llvm::Value* tmpPtr = nullptr;
-        if (cgDestAddr.IsSRetArg()) {
-            tmpPtr = CreateLoad(cgDestAddr);
-        } else {
-            auto dstTypeSize = GetLayoutSize_32(dstChirType);
-            tmpPtr = CallIntrinsicAllocaGeneric({dstTypeInfo, dstTypeSize}, dstChirType.IsLocalRegion());
-            (void)CreateStore(tmpPtr, destAddr);
-        }
-        std::vector<llvm::Value*> copyGenericParams{tmpPtr, val, dstTypeInfo};
-        CallIntrinsicAssignGeneric(copyGenericParams);
-        CreateBr(exitBB);
-
-        SetInsertPoint(exitBB);
-        return nullptr;
->>>>>>> 0c41e6d (feat: add local mode implementation)
     }
     auto destTypeSize = irBuilder.GetLayoutSize_32(destChirType);
     auto buffer = irBuilder.CallIntrinsicAllocaGeneric({destTypeInfo, destTypeSize});
@@ -801,6 +772,7 @@ llvm::Instruction* EmitOpaqueFieldWriteBarrier(IRBuilder2& irBuilder, const Stor
 
     irBuilder.SetInsertPoint(gcwriteRefBB);
     irBuilder.CallGCWrite({store.val, store.fieldOwnerPtr, store.destAddr});
+    EmitRefWriteBarrier(irBuilder, store);
     irBuilder.CreateBr(gcwriteExitBB);
 
     irBuilder.SetInsertPoint(gcwriteNonRefBB);
@@ -867,7 +839,7 @@ llvm::Instruction* EmitFieldWriteBarrier(IRBuilder2& irBuilder, const StoreLower
         return EmitVArrayFieldWriteBarrier(irBuilder, store);
     }
     if (store.valType->IsReference() || store.valType->IsOptionLikeRef()) {
-        return irBuilder.CallGCWrite({store.val, store.fieldOwnerPtr, store.destAddr});
+        return EmitRefWriteBarrier(irBuilder, store);
     }
     return irBuilder.CreateStore(*store.cgVal, *store.cgDestAddr);
 }
@@ -920,10 +892,10 @@ llvm::Instruction* EmitFuncPtrStore(IRBuilder2& irBuilder, const StoreLowering& 
 }
 } // namespace
 
-llvm::Instruction* IRBuilder2::CreateStore(
-    const CGValue& cgVal, const CGValue& cgDestAddr, CHIR::Type* boxType)
+llvm::Instruction* IRBuilder2::CreateStore(const CGValue& cgVal, const CGValue& cgDestAddr,
+    CHIR::Type* boxType, ModalWriteKind modalWrite)
 {
-    const StoreLowering store(*this, cgVal, cgDestAddr, boxType);
+    const StoreLowering store(*this, cgVal, cgDestAddr, boxType, modalWrite);
     CJC_ASSERT(store.destDerefType != nullptr);
 
     if (NeedsRuntimeRefnessDispatch(store)) {
@@ -937,86 +909,6 @@ llvm::Instruction* IRBuilder2::CreateStore(
     if (IsGlobalVariableBasePtr(store.destAddr) && IsTypeContainsRef(store.destDerefType->GetLLVMType())) {
         return CreateWriteBarrierForGlobalVariable(cgVal, cgDestAddr);
     }
-<<<<<<< HEAD
-=======
-
-    // Emits the reference-field barrier selected by `modalWrite`.
-    auto callRefWriteBarrier = [this, &cgDestAddr, &cgVal, &modalWrite](llvm::Value* basePtr) -> llvm::Instruction* {
-        switch (modalWrite) {
-            case ModalWriteKind::MAYBE_LOCAL:
-                return CallMaybeLocalWrite({basePtr, cgDestAddr.GetRawValue(), cgVal.GetRawValue()});
-            case ModalWriteKind::DEMODE:
-                return CallDemodeWrite({basePtr, cgDestAddr.GetRawValue(), cgVal.GetRawValue()});
-            case ModalWriteKind::NONE:
-                break;
-        }
-        return CallGCWrite({cgVal.GetRawValue(), basePtr, cgDestAddr.GetRawValue()});
-    };
-
-    auto dealWithGCWriteBarrier =
-        [this, &cgDestAddr, &cgVal, &isMemberWrite, &isVolatile, &callRefWriteBarrier, modalWrite](
-                                      const CGType* cgValType, llvm::Value* basePtr) -> llvm::Instruction* {
-        if (auto elemType = cgDestAddr.GetCGType()->GetPointerElementType(); !elemType->GetSize()) {
-            CJC_ASSERT(isMemberWrite);
-            auto size = GetSize_32(cgValType->GetOriginal());
-            auto [gcwriteRefBB, gcwriteNonRefBB, gcwriteExitBB] = Vec2Tuple<3>(CreateAndInsertBasicBlocks(
-                {GenNameForBB("gcwrite_ref"), GenNameForBB("gcwrite_non_ref"), GenNameForBB("gcwrite_exit")}));
-            CreateCondBr(CreateTypeInfoIsReferenceCall(elemType->GetOriginal()), gcwriteRefBB, gcwriteNonRefBB);
-
-            SetInsertPoint(gcwriteRefBB);
-            callRefWriteBarrier(basePtr);
-            CreateBr(gcwriteExitBB);
-
-            SetInsertPoint(gcwriteNonRefBB);
-            auto genericWriteArgs = std::vector<llvm::Value*> {
-                basePtr, cgDestAddr.GetRawValue(), cgVal.GetRawValue(), size};
-            if (modalWrite == ModalWriteKind::NONE) {
-                CallIntrinsicGCWriteGeneric(genericWriteArgs);
-            } else {
-                CallIntrinsicMaybeLocalWriteGeneric(genericWriteArgs);
-            }
-            CreateBr(gcwriteExitBB);
-            SetInsertPoint(gcwriteExitBB);
-            return nullptr;
-        }
-        if (cgValType->IsStructPtrType()) {
-            auto structType = llvm::cast<llvm::StructType>(cgValType->GetPointerElementType()->GetLLVMType());
-            auto layOut = cgMod.GetLLVMModule()->getDataLayout().getStructLayout(structType);
-            CJC_NULLPTR_CHECK(layOut);
-            if (IsTypeContainsRef(cgValType->GetPointerElementType()->GetLLVMType())) {
-                if (cgVal.GetRawValue()->getType()->getPointerAddressSpace() == 1U) {
-                    auto base = GetCGContext().GetBasePtrOf(cgVal.GetRawValue());
-                    auto tempVal = CreateEntryAlloca(structType);
-                    auto heapLayout = cgMod.GetLLVMModule()->getDataLayout().getStructLayout(structType);
-                    auto size = getInt64(heapLayout->getSizeInBytes());
-                    CallGCReadAgg(structType, {tempVal, base, cgVal.GetRawValue(), size});
-                    return CallGCWriteAgg(structType, {basePtr, cgDestAddr.GetRawValue(), tempVal, size});
-                }
-                auto size = llvm::ConstantInt::get(llvm::Type::getInt64Ty(GetLLVMContext()), layOut->getSizeInBytes());
-                return CallGCWriteAgg(structType, {basePtr, cgDestAddr.GetRawValue(), cgVal.GetRawValue(), size});
-            }
-            auto align = layOut->getAlignment();
-            return CreateMemCpy(cgDestAddr.GetRawValue(), align, cgVal.GetRawValue(), align, layOut->getSizeInBytes());
-        } else if (cgValType->IsVArrayPtrType() && cgDestAddr.GetCGType()->IsVArrayPtrType()) {
-            auto valueType = cgValType->GetPointerElementType()->GetLLVMType();
-            auto layout = cgMod.GetLLVMModule()->getDataLayout();
-            auto size = getInt64(layout.getTypeAllocSize(valueType));
-            if (IsTypeContainsRef(cgValType->GetPointerElementType()->GetLLVMType())) {
-                return CallGCWriteAgg(cgValType->GetPointerElementType()->GetLayoutType(),
-                    {basePtr, cgDestAddr.GetRawValue(), cgVal.GetRawValue(), size});
-            }
-            auto align = llvm::Align(layout.getABITypeAlignment(valueType));
-            return CreateMemCpy(cgDestAddr.GetRawValue(), align, cgVal.GetRawValue(), align, size);
-        } else if (cgValType->IsReference() || cgValType->IsOptionLikeRef()) {
-            // A reference field of an object that may live in a local region: the runtime has to
-            // register the owner as a local GC root when the store creates a `region -> heap`
-            // edge. See CodeGen's ClassifyModalWrite (ModalWrite.h).
-            return callRefWriteBarrier(basePtr);
-        }
-        return LLVMIRBuilder2::CreateStore(*cgVal, *cgDestAddr, isVolatile);
-    };
-
->>>>>>> 0c41e6d (feat: add local mode implementation)
     // When writing to an object field, it need to use GC write barrier, i.e. llvm.cj.gcwrite intrinsic
     if (store.IsWriteToManagedField()) {
         return store.valType != nullptr ? EmitFieldWriteBarrier(*this, store)

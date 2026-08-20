@@ -142,7 +142,7 @@ ModalWriteKind CodeGen::ClassifyModalWrite(CHIRBuilder& builder, const Expressio
         // an owner whose modal is NONE is provably on the heap (a region object can only be
         // typed `local!`/`local?`, never `~local`), so `heap -> heap` needs no extra work.
         return member.ownerModal.Local() == CHIR::Mode::NONE ? ModalWriteKind::NONE
-                                                                   : ModalWriteKind::DEMODE;
+                                                             : ModalWriteKind::DEMODE;
     }
 
     // Keep all local-aware writes out of the ordinary MCC_WriteRefField hot path:
@@ -153,5 +153,5 @@ ModalWriteKind CodeGen::ClassifyModalWrite(CHIRBuilder& builder, const Expressio
     // Reusing maybe.local.write.ref for MUST avoids adding IsLocalObject checks to every
     // normal-mode field write and does not require another LLVM intrinsic.
     return memberDataType->GetModalInfo().Local() == CHIR::Mode::NONE ? ModalWriteKind::NONE
-                                                                            : ModalWriteKind::MAYBE_LOCAL;
+                                                                      : ModalWriteKind::MAYBE_LOCAL;
 }
