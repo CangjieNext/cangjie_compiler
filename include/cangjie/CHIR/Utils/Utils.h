@@ -826,5 +826,7 @@ std::string GetBinaryExprKindLiteral(BinaryExprKind kind);
  * @return The non-debug users of the value.
  */
 std::vector<Expression*> GetNonDebugUsers(const Value& val);
+
+bool LambdaIsUnused(const Lambda& lambda);
 } // namespace Cangjie::CHIR
 #endif

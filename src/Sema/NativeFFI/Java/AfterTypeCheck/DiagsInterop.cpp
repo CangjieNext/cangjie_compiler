@@ -51,9 +51,9 @@ void DiagJavaMirrorChildMustBeAnnotated(DiagnosticEngine& diag, const ClassLikeD
 
     for (auto& parentType : decl.inheritedTypes) {
         auto pty = parentType->GetTy();
-        if (auto parent = DynamicCast<ClassTy>(pty)) {
+        if (auto parent = DynamicCast<ClassTy>(pty.Ty())) {
             parentDecl = parent->decl;
-        } else if (auto parentI = DynamicCast<InterfaceTy>(pty)) {
+        } else if (auto parentI = DynamicCast<InterfaceTy>(pty.Ty())) {
             parentDecl = parentI->decl;
         }
         if (parentDecl && parentDecl->IsJavaMirror()) {
@@ -77,8 +77,13 @@ void DiagJavaDeclCannotInheritPureCangjieType(DiagnosticEngine& diag, ClassLikeD
     for (const auto& superType : decl.inheritedTypes) {
         auto superDecl = Ty::GetDeclOfTy(superType->GetTy());
         CJC_ASSERT(superDecl);
+<<<<<<< HEAD
         if (!superDecl->IsJavaMirror() && !superDecl->IsJavaImpl() && !superDecl->GetTy()->IsObject() &&
             !superDecl->GetTy()->IsAny()) {
+=======
+        if (!IsMirror(*superDecl) && !IsImpl(*superDecl) && !superDecl->DataTy()->IsObject() &&
+            !superDecl->DataTy()->IsAny()) {
+>>>>>>> 0c41e6d (feat: add local mode implementation)
             builder.AddNote(*superType, "'" + superType->ToString() + "'" + " is not a java-compatible type");
         }
     }

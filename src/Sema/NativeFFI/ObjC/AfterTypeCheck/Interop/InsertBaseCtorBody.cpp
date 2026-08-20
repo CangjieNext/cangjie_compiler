@@ -22,6 +22,28 @@ using namespace Cangjie::Native::FFI;
 
 void InsertBaseCtorBody::HandleImpl(InteropContext& ctx)
 {
+<<<<<<< HEAD
+=======
+    if (interopType == InteropType::Fwd_Class) {
+        for (auto& fwdClass : ctx.fwdClasses) {
+            if (fwdClass->TestAttr(Attribute::IS_BROKEN)) {
+                continue;
+            }
+
+            auto ctor = ctx.factory.GetGeneratedBaseCtor(*fwdClass);
+            CJC_NULLPTR_CHECK(ctor);
+            auto curFile = ctor->curFile;
+
+            auto handleParam = WithinFile(CreateRefExpr(*ctor->funcBody->paramLists[0]->params[0]), curFile);
+            auto lhs = ctx.factory.CreateNativeHandleFieldExpr(*fwdClass);
+            static auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+            auto nativeHandleAssignExpr = CreateAssignExpr(std::move(lhs), std::move(handleParam), {unitTy});
+            ctor->funcBody->body->body.emplace_back(std::move(nativeHandleAssignExpr));
+        }
+        return;
+    }
+
+>>>>>>> 0c41e6d (feat: add local mode implementation)
     for (auto& mirror : ctx.mirrors) {
         if (mirror->TestAttr(Attribute::IS_BROKEN)) {
             continue;
@@ -39,13 +61,13 @@ void InsertBaseCtorBody::HandleImpl(InteropContext& ctx)
 
         if (HasMirrorSuperClass(*mirrorClass)) {
             auto superCtor = ctx.factory.GetGeneratedBaseCtor(*mirrorClass->GetSuperClassDecl());
-            auto superCall = CreateSuperCall(*mirrorClass, *superCtor, superCtor->GetTy());
+            auto superCall = CreateSuperCall(*mirrorClass, *superCtor, superCtor->DataTy());
             superCall->args.emplace_back(CreateFuncArg(std::move(handleParam)));
             ctor->funcBody->body->body.emplace_back(std::move(superCall));
         } else {
             auto lhs = ctx.factory.CreateNativeHandleFieldExpr(*mirrorClass);
             static auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-            auto nativeHandleAssignExpr = CreateAssignExpr(std::move(lhs), std::move(handleParam), unitTy);
+            auto nativeHandleAssignExpr = CreateAssignExpr(std::move(lhs), std::move(handleParam), {unitTy});
             ctor->funcBody->body->body.emplace_back(std::move(nativeHandleAssignExpr));
         }
     }
@@ -61,7 +83,7 @@ void InsertBaseCtorBody::HandleImpl(InteropContext& ctx)
         auto handleParam = WithinFile(CreateRefExpr(*ctor->funcBody->paramLists[0]->params[0]), curFile);
         auto lhs = ctx.factory.CreateNativeHandleFieldExpr(*wrapper);
         static auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-        auto nativeHandleAssignExpr = CreateAssignExpr(std::move(lhs), std::move(handleParam), unitTy);
+        auto nativeHandleAssignExpr = CreateAssignExpr(std::move(lhs), std::move(handleParam), {unitTy});
         ctor->funcBody->body->body.emplace_back(std::move(nativeHandleAssignExpr));
     }
 
@@ -83,7 +105,7 @@ void InsertBaseCtorBody::HandleImpl(InteropContext& ctx)
         auto handleParam = WithinFile(CreateRefExpr(*ctor->funcBody->paramLists[0]->params[0]), curFile);
         auto lhs = ctx.factory.CreateNativeHandleFieldExpr(*impl);
         static auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-        auto nativeHandleAssignExpr = CreateAssignExpr(std::move(lhs), std::move(handleParam), unitTy);
+        auto nativeHandleAssignExpr = CreateAssignExpr(std::move(lhs), std::move(handleParam), {unitTy});
         ctor->funcBody->body->body.emplace_back(std::move(nativeHandleAssignExpr));
     }
 }

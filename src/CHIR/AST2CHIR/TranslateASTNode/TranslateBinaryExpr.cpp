@@ -43,7 +43,33 @@ Ptr<Value> Translator::Visit(const AST::BinaryExpr& binaryExpr)
 
 Ptr<Value> Translator::ProcessBinaryExpr(const AST::BinaryExpr& binaryExpr)
 {
+<<<<<<< HEAD
     const auto chirType = TranslateType(*binaryExpr.GetTy());
+=======
+    // BinaryExpression init func is (ExprKind, Value*, Value*, OverflowStrategy, Block*)
+    static const std::unordered_map<Cangjie::TokenKind, ExprKind> OP2_EXPR_KIND = {
+        {Cangjie::TokenKind::ADD, ExprKind::ADD},
+        {Cangjie::TokenKind::SUB, ExprKind::SUB},
+        {Cangjie::TokenKind::MUL, ExprKind::MUL},
+        {Cangjie::TokenKind::DIV, ExprKind::DIV},
+        {Cangjie::TokenKind::MOD, ExprKind::MOD},
+        {Cangjie::TokenKind::EXP, ExprKind::EXP},
+        {Cangjie::TokenKind::AND, ExprKind::AND},
+        {Cangjie::TokenKind::OR, ExprKind::OR},
+        {Cangjie::TokenKind::BITAND, ExprKind::BITAND},
+        {Cangjie::TokenKind::BITOR, ExprKind::BITOR},
+        {Cangjie::TokenKind::BITXOR, ExprKind::BITXOR},
+        {Cangjie::TokenKind::LSHIFT, ExprKind::LSHIFT},
+        {Cangjie::TokenKind::RSHIFT, ExprKind::RSHIFT},
+        {Cangjie::TokenKind::LT, ExprKind::LT},
+        {Cangjie::TokenKind::GT, ExprKind::GT},
+        {Cangjie::TokenKind::LE, ExprKind::LE},
+        {Cangjie::TokenKind::GE, ExprKind::GE},
+        {Cangjie::TokenKind::NOTEQ, ExprKind::NOTEQUAL},
+        {Cangjie::TokenKind::EQUAL, ExprKind::EQUAL},
+    };
+    const auto chirType = TranslateType(binaryExpr.GetTy());
+>>>>>>> 0c41e6d (feat: add local mode implementation)
     const auto& loc = TranslateLocation(binaryExpr);
     auto it = tokenKindToBinaryExprKind.find(binaryExpr.op);
     CJC_ASSERT(it != tokenKindToBinaryExprKind.end());

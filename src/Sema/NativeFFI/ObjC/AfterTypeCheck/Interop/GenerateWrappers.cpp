@@ -100,7 +100,20 @@ void GenerateWrappers::GenerateWrapper(InteropContext& ctx, VarDecl& field)
 
 void GenerateWrappers::GenerateSetterWrapper(InteropContext& ctx, VarDecl& field)
 {
+<<<<<<< HEAD
     auto wrapper = ctx.factory.CreateSetterWrapper(field);
     CJC_NULLPTR_CHECK(wrapper);
     ctx.genDecls.emplace_back(std::move(wrapper));
+=======
+    if (!SkipSetterForValueTypeDecl(*field.outerDecl.get())) {
+        auto wrapper = ctx.factory.CreateSetterWrapper(field);
+        CJC_NULLPTR_CHECK(wrapper);
+        ctx.genDecls.emplace_back(std::move(wrapper));
+    }
+}
+
+bool GenerateWrappers::SkipSetterForValueTypeDecl(Decl& decl) const
+{
+    return interopType == InteropType::CJ_Mapping && DynamicCast<StructTy*>(decl.DataTy()) != nullptr;
+>>>>>>> 0c41e6d (feat: add local mode implementation)
 }

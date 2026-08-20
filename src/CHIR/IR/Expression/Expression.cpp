@@ -242,6 +242,9 @@ void Expression::RemoveSelfFromBlock()
         parent->RemoveExprOnly(*this);
         parent = nullptr;
     }
+    for (auto blockGroup : blockGroups) {
+        blockGroup->ClearBlockGroup();
+    }
     EraseOperands();
 }
 
@@ -480,6 +483,7 @@ std::string Expression::AddExtraComment() const
     return "";
 }
 
+<<<<<<< HEAD
 namespace {
 // (opKind, ExprKind, try ExprKind). ExprKind::INVALID means no try form.
 constexpr std::tuple<UnaryExprKind, ExprKind, ExprKind> UNARY_EXPR_KIND_TABLE[] = {
@@ -571,6 +575,25 @@ UnaryExpressionBase::UnaryExpressionBase(
 }
 
 Value* UnaryExpressionBase::GetOperand() const
+=======
+bool Expression::IsInBlockGroupRecursively(const BlockGroup& target) const
+{
+    auto blockGroup = GetParentBlockGroup();
+    while (blockGroup != nullptr) {
+        if (blockGroup == &target) {
+            return true;
+        }
+        if (blockGroup->GetOwnerFunc()) {
+            return false;
+        } else if (auto ownerExpression = blockGroup->GetOwnerExpression()) {
+            blockGroup = ownerExpression->GetParentBlockGroup();
+        }
+    }
+    return false;
+}
+
+Value* UnaryExpression::GetOperand() const
+>>>>>>> 0c41e6d (feat: add local mode implementation)
 {
     return GetOperand(0);
 }
@@ -1072,9 +1095,12 @@ std::vector<VTableSearchRes> DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& 
     for (auto arg : GetArgs()) {
         instParamTypes.emplace_back(arg->GetType());
     }
+<<<<<<< HEAD
     if (!Is<InvokeStaticBase>(*this)) {
         instParamTypes.erase(instParamTypes.begin());
     }
+=======
+>>>>>>> 0c41e6d (feat: add local mode implementation)
     auto instFuncType = builder.GetType<FuncType>(instParamTypes, builder.GetUnitTy());
     FuncCallType funcCallType{GetMethodName(), instFuncType, instantiatedTypeArgs};
     auto res = GetFuncIndexInVTable(*thisTypeDeref, funcCallType, builder);
@@ -1563,6 +1589,16 @@ std::string IntrinsicBase::GetCalleeIdentifier() const
 Intrinsic::Intrinsic(const IntrisicCallContext& callContext, Block* parent)
     : IntrinsicBase(ExprKind::INTRINSIC, callContext, {}, parent)
 {
+<<<<<<< HEAD
+=======
+    std::stringstream ss;
+    ss << IntrinsicKindToString(intrinsicKind);
+    ss << TypeVecToString("<", instantiatedTypeArgs, ">");
+    if (auto opString = ValueIdVecToString("", operands, ""); !opString.empty()) {
+        ss << ", " << opString;
+    }
+    return ss.str();
+>>>>>>> 0c41e6d (feat: add local mode implementation)
 }
 
 // ForIn
@@ -1685,7 +1721,7 @@ std::vector<Value*> Lambda::GetCapturedVariables() const
             bool isEnv = false;
             if (op->IsLocalVar()) {
                 auto localVar = static_cast<LocalVar*>(op);
-                if (localVar != GetResult() && localVar->GetOwnerBlockGroup() != GetBody()) {
+                if (localVar != GetResult() && !localVar->GetExpr()->IsInBlockGroupRecursively(*GetBody())) {
                     isEnv = true;
                 }
             } else if (op->IsParameter()) {
@@ -2334,7 +2370,6 @@ Lambda* Lambda::GetParamDftValHostFunc() const
 void Lambda::RemoveSelfFromBlock()
 {
     if (body != nullptr) {
-        body->ClearBlockGroup();
         body = nullptr;
     }
 
@@ -2392,4 +2427,28 @@ GetRTTIStatic::GetRTTIStatic(Type* type, Block* parent)
 Type* GetRTTIStatic::GetRTTIType() const
 {
     return ty;
+}
+
+StartRegion::StartRegion(Block* parent) : Expression(ExprKind::START_REGION, {}, {}, parent)
+{
+}
+
+StartRegion* StartRegion::Clone(CHIRBuilder& builder, Block& parent) const
+{
+    auto newNode = builder.CreateExpression<StartRegion>(result->GetType(), &parent);
+    parent.AppendExpression(newNode);
+    newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
+    return newNode;
+}
+
+EndRegion::EndRegion(Block* parent) : Expression(ExprKind::END_REGION, {}, {}, parent)
+{
+}
+
+EndRegion* EndRegion::Clone(CHIRBuilder& builder, Block& parent) const
+{
+    auto newNode = builder.CreateExpression<EndRegion>(result->GetType(), &parent);
+    parent.AppendExpression(newNode);
+    newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
+    return newNode;
 }

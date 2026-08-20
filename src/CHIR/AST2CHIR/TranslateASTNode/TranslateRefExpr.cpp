@@ -22,7 +22,7 @@ Translator::LeftValueInfo Translator::TranslateThisOrSuperRefAsLeftValue(const A
     CJC_ASSERT(curFunc);
     auto thisParam = GetImplicitThisParam();
     if (refExpr.isSuper) {
-        auto superTy = TranslateType(*refExpr.GetTy());
+        auto superTy = TranslateType(refExpr.GetTy());
         auto loc = TranslateLocation(refExpr);
         thisParam = TypeCastOrBoxIfNeeded(*thisParam, *superTy, loc);
     }
@@ -63,7 +63,7 @@ Translator::LeftValueInfo Translator::TranslateEnumMemberVarRef(const AST::RefEx
     auto loc = TranslateLocation(refExpr);
 
     // polish here
-    auto enumTy = StaticCast<EnumTy*>(refExpr.GetTy());
+    auto enumTy = StaticCast<EnumTy*>(refExpr.DataTy());
     auto enumType = StaticCast<EnumType*>(chirTy.TranslateType(*enumTy));
     uint64_t enumId = GetEnumCtorId(*target);
     auto selectorTy = GetSelectorType(*enumTy);
@@ -201,11 +201,17 @@ Value* Translator::TranslateVarRef(const AST::RefExpr& refExpr)
     return varLeftValueBase;
 }
 
+<<<<<<< HEAD
 InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& instFuncInfo, Value& caller,
+=======
+InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& instFuncType, Value* caller,
+>>>>>>> 0c41e6d (feat: add local mode implementation)
     const AST::FuncDecl& callee, const std::vector<Value*>& args, const OverflowStrategy strategy)
 {
+    CJC_NULLPTR_CHECK(caller);
     auto tempDecl = typeManager.GetTopOverriddenFuncDecl(&callee);
     const AST::FuncDecl* originalFuncDecl = tempDecl ? tempDecl.get() : &callee;
+<<<<<<< HEAD
     auto method = StaticCast<Function*>(GetSymbolTable(*originalFuncDecl));
     // the overflow strategy is NA in mock case, of course, it's a wrong choice, we have to use SATURATING as default
     // we choose SATURATING because SATURATING and NA are same in `OverflowStrategyPrefix`
@@ -213,6 +219,39 @@ InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& in
     return InvokeCallContext {
         .method = method,
         .caller = &caller,
+=======
+    auto originalFuncType = StaticCast<FuncType*>(TranslateType(originalFuncDecl->GetTy()));
+    if (!originalFuncDecl->TestAttr(AST::Attribute::STATIC)) {
+        if (auto thisParam = originalFuncDecl->funcBody->paramLists[0]->thisParam.get()) {
+            auto expectedType = GetThisTypeWithModal(*caller->GetType(), *originalFuncDecl);
+            caller = TypeCastOrBoxIfNeeded(*caller, *expectedType);
+            auto paramTypes = originalFuncType->GetParamTypes();
+            paramTypes.insert(paramTypes.begin(), expectedType);
+            originalFuncType = builder.GetType<FuncType>(paramTypes, originalFuncType->GetReturnType());
+        } else {
+            auto outerDecl = originalFuncDecl->outerDecl;
+            CJC_NULLPTR_CHECK(outerDecl);
+            auto parentType = GetNominalSymbolTable(*outerDecl)->GetType();
+            parentType = GetThisTypeWithModal(*parentType, *originalFuncDecl);
+            auto paramTypes = originalFuncType->GetParamTypes();
+            paramTypes.insert(paramTypes.begin(), parentType);
+            originalFuncType = builder.GetType<FuncType>(paramTypes, originalFuncType->GetReturnType());
+        }
+    }
+    std::vector<GenericType*> originalGenericTypeParams;
+    if (originalFuncDecl->TestAttr(AST::Attribute::GENERIC)) {
+        for (const auto& genericTy : originalFuncDecl->funcBody->generic->typeParameters) {
+            originalGenericTypeParams.emplace_back(StaticCast<GenericType*>(TranslateType(genericTy->GetTy())));
+        }
+    }
+    auto funcName = originalFuncDecl->identifier.Val();
+    if (IsOverflowOpCall(*originalFuncDecl)) {
+        funcName = OverflowStrategyPrefix(strategy) + funcName;
+    }
+
+    auto invokeInfo = InvokeCallContext {
+        .caller = caller,
+>>>>>>> 0c41e6d (feat: add local mode implementation)
         .funcCallCtx = FuncCallContext {
             .args = args,
             .instTypeArgs = instFuncInfo.instantiatedTypeArgs,
@@ -267,18 +306,26 @@ Value* Translator::WrapMemberMethodByLambda(
             CJC_ASSERT(thisObj == nullptr);
             auto rtti = CreateAndAppendExpression<GetRTTIStatic>(
                 builder.GetUnitTy(), instFuncType.thisType->StripAllRefs(), currentBlock)->GetResult();
-            auto invokeInfo = GenerateInvokeCallContext(instFuncType, *rtti, funcDecl, args);
+            auto invokeInfo = GenerateInvokeCallContext(instFuncType, rtti, funcDecl, args);
             ret = CreateAndAppendExpression<InvokeStatic>(lambdaRetType, invokeInfo, currentBlock)->GetResult();
         } else {
             // Invoke
             CJC_NULLPTR_CHECK(thisObj);
-            auto invokeInfo = GenerateInvokeCallContext(instFuncType, *thisObj, funcDecl, args);
+            auto invokeInfo = GenerateInvokeCallContext(instFuncType, thisObj, funcDecl, args);
             ret = CreateAndAppendExpression<Invoke>(lambdaRetType, invokeInfo, currentBlock)->GetResult();
         }
     } else {
         // Apply
         if (thisObj != nullptr) {
+<<<<<<< HEAD
             auto objExpectedType = AddRefIfFuncIsMutOrClass(*instFuncType.instParentCustomTy, funcDecl, builder);
+=======
+            auto objExpectedType = instFuncType.instParentCustomTy;
+            if (objExpectedType->IsReferenceType() ||
+                (objExpectedType->IsStruct() && funcDecl.TestAttr(AST::Attribute::MUT))) {
+                objExpectedType = builder.GetType<RefType>(objExpectedType);
+            }
+>>>>>>> 0c41e6d (feat: add local mode implementation)
             args.insert(args.begin(), TransformThisType(*thisObj, *objExpectedType, *lambda));
         }
         CJC_ASSERT(args.size() == instFuncType.instParamTys.size());
@@ -374,7 +421,7 @@ Value* Translator::TranslateGlobalOrLocalFuncRef(const AST::RefExpr& refExpr, Va
     }
     // emplace back `Bool`
     for (auto ty : refExpr.instTys) {
-        instArgs.emplace_back(TranslateType(*ty));
+        instArgs.emplace_back(TranslateType(ty));
     }
 
     if (instArgs.empty()) {
@@ -382,7 +429,7 @@ Value* Translator::TranslateGlobalOrLocalFuncRef(const AST::RefExpr& refExpr, Va
     }
 
     // 3. create GetInstantiateValue
-    auto resTy = TranslateType(*refExpr.GetTy());
+    auto resTy = TranslateType(refExpr.GetTy());
     auto loc = TranslateLocation(refExpr);
     return CreateAndAppendExpression<GetInstantiateValue>(loc, resTy, &originalFunc, instArgs, currentBlock)
         ->GetResult();

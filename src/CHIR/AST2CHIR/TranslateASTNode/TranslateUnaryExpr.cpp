@@ -11,8 +11,13 @@ using namespace Cangjie;
 
 Ptr<Value> Translator::Visit(const AST::UnaryExpr& unaryExpr)
 {
+<<<<<<< HEAD
     auto chirType = TranslateType(*unaryExpr.GetTy());
     UnaryExprKind kd = UnaryExprKind::NEG;
+=======
+    auto chirType = TranslateType(unaryExpr.GetTy());
+    ExprKind kd = ExprKind::INVALID;
+>>>>>>> 0c41e6d (feat: add local mode implementation)
     if (unaryExpr.op == Cangjie::TokenKind::NOT) {
         kd = unaryExpr.GetTy()->IsBoolean() ? UnaryExprKind::NOT : UnaryExprKind::BITNOT;
     } else if (unaryExpr.op == Cangjie::TokenKind::SUB) {

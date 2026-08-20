@@ -44,7 +44,7 @@ OwnedPtr<Expr> CreateReceiverExpr(Ptr<Expr> expr)
         referencedExpr = ASTCloner::Clone(ma->baseExpr.get());
     } else if (Ptr<RefExpr> ref = As<ASTKind::REF_EXPR>(expr)) {
         auto owningDecl = ref->ref.target->outerDecl;
-        referencedExpr = CreateThisRef(owningDecl, owningDecl->GetTy(), expr->curFile);
+        referencedExpr = CreateThisRef(owningDecl, owningDecl->DataTy(), expr->curFile);
     }
     return referencedExpr;
 }
@@ -131,8 +131,12 @@ void RewriteObjCFuncCall::HandleImpl(InteropContext& ctx)
 
             auto call = ctx.factory.CreateFuncCallViaOpaquePointer(
                 CreateMemberCall(WithinFile(CreateRefExpr(*tmpVar), node->curFile), fptrAccessor),
+<<<<<<< HEAD
                 ctx.typeMapper.Cj2CType(callExpr->GetTy()), std::move(unwrappedArguments));
             call->curFile = node->curFile;
+=======
+                ctx.typeMapper.Cj2CType(callExpr->DataTy()), std::move(unwrappedArguments));
+>>>>>>> 0c41e6d (feat: add local mode implementation)
             std::vector<OwnedPtr<Node>> block;
             block.emplace_back(std::move(tmpVar));
             // We use objc_retain here, because we don't know in advance if

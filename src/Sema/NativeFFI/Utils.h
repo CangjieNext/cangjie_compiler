@@ -82,8 +82,7 @@ template <typename... Args> OwnedPtr<CallExpr> CreateCall(Ptr<FuncDecl> fd, Ptr<
 
     (Details::WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
 
-    auto funcTy = StaticCast<FuncTy*>(fd->GetTy());
-
+    auto funcTy = StaticCast<FuncTy*>(fd->DataTy());
     return CreateCallExpr(WithinFile(CreateRefExpr(*fd), curFile), std::move(funcArgs), fd, funcTy->retTy,
         CallKind::CALL_DECLARED_FUNCTION);
 }
@@ -97,7 +96,7 @@ OwnedPtr<CallExpr> CreateMemberCall(OwnedPtr<Expr> receiver, Ptr<FuncDecl> fd, O
 
     (Details::WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
 
-    auto funcTy = StaticCast<FuncTy*>(fd->GetTy());
+    auto funcTy = StaticCast<FuncTy*>(fd->DataTy());
     auto ma = CreateMemberAccess(std::move(receiver), *fd);
     CopyBasicInfo(ma->baseExpr, ma);
     return CreateCallExpr(std::move(ma), std::move(funcArgs), fd, funcTy->retTy, CallKind::CALL_DECLARED_FUNCTION);
@@ -164,6 +163,23 @@ void SplitAndTrim(std::string str, std::vector<std::string>& types);
 
 std::string JoinVector(const std::vector<std::string>& vec, const std::string& delimiter = "");
 
+<<<<<<< HEAD
+=======
+void InitGenericConfigs(
+    const File& file, const AST::Decl* decl, std::vector<GenericConfigInfo*>& genericConfigs, bool& isGenericGlueCode);
+
+/**
+ * If function param or return param is generic ty, replace it to instance ty by genericConfig.
+ */
+void ReplaceGenericTyForFunc(Ptr<FuncDecl> funcDecl, GenericConfigInfo* genericConfig, TypeManager& typeManager);
+
+void ReplaceGenericTyForFuncTy(Ptr<Ty> ty, GenericConfigInfo* genericConfig, TypeManager& typeManager);
+
+void GetArgsAndRetGenericActualTyVector(const GenericConfigInfo* config, FuncDecl& ctor,
+    std::unordered_map<std::string, Ptr<Ty>>& actualTyArgMap, std::vector<ModalTy>& funcTyParams,
+    std::vector<OwnedPtr<Type>>& actualPrimitiveType, TypeManager& typeManager);
+
+>>>>>>> 0c41e6d (feat: add local mode implementation)
 Ptr<Ty> GetInstantyForGenericTy(
     Decl& decl, const std::unordered_map<std::string, Ptr<Ty>>& actualTyArgMap, TypeManager& typeManager);
 

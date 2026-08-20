@@ -45,7 +45,7 @@ void DesugarIsExpr(InteropContext& ctx, IsExpr& expr)
         return;
     }
 
-    auto type = static_cast<ClassTy*>(expr.isType->GetTy().get());
+    auto type = StaticCast<ClassTy>(expr.isType->DataTy());
     auto targetName = ctx.nameGenerator.GetObjCDeclName(*type->decl);
     if (ctx.typeMapper.IsObjCId(*type->decl)) {
         return;
@@ -60,8 +60,8 @@ void DesugarIsExpr(InteropContext& ctx, IsExpr& expr)
     auto objCIdDecl = ctx.bridge.GetObjCIdDecl();
     CJC_ASSERT(objCIdDecl);
 
-    auto falseLit = CreateLitConstExpr(LitConstKind::BOOL, "false", BOOL_TY);
-    auto trueLit = CreateLitConstExpr(LitConstKind::BOOL, "true", BOOL_TY);
+    auto falseLit = CreateLitConstExpr(LitConstKind::BOOL, "false", {BOOL_TY});
+    auto trueLit = CreateLitConstExpr(LitConstKind::BOOL, "true", {BOOL_TY});
 
     // match (x)
     std::vector<OwnedPtr<MatchCase>> matchCases;
@@ -77,7 +77,7 @@ void DesugarIsExpr(InteropContext& ctx, IsExpr& expr)
     // case _ : ObjCId => isKindOfClass/conformsToProtocol
     auto checkVarPattern = WithinFile(CreateVarPattern(V_COMPILER, objCIdDecl->GetTy()), curFile);
     checkVarPattern->varDecl->curFile = curFile;
-    auto objCIdType = CreateType(objCIdDecl->GetTy());
+    auto objCIdType = CreateType(objCIdDecl->DataTy());
 
     OwnedPtr<Cangjie::AST::Expr> checkCall = nullptr;
     switch (expr.isType->TyKind()) {
@@ -108,7 +108,7 @@ void DesugarIsExpr(InteropContext& ctx, IsExpr& expr)
     auto wildCase = CreateMatchCase(MakeOwned<WildcardPattern>(), std::move(falseLit));
     matchCases.emplace_back(std::move(wildCase));
 
-    expr.desugarExpr = WithinFile(CreateMatchExpr(std::move(expr.leftExpr), std::move(matchCases), BOOL_TY), curFile);
+    expr.desugarExpr = WithinFile(CreateMatchExpr(std::move(expr.leftExpr), std::move(matchCases), {BOOL_TY}), curFile);
 }
 
 void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
@@ -122,7 +122,7 @@ void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
     CJC_ASSERT(!expr.desugarExpr);
 
     auto castTy = expr.asType->GetTy();
-    auto type = static_cast<ClassTy*>(expr.asType->GetTy().get());
+    auto type = StaticCast<ClassTy>(expr.asType->DataTy());
     if (ctx.typeMapper.IsObjCId(*type->decl)) {
         return;
     }
@@ -130,7 +130,7 @@ void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
     auto objCIdDecl = ctx.bridge.GetObjCIdDecl();
     CJC_ASSERT(objCIdDecl);
 
-    auto castResultTy = ctx.factory.GetOptionTy(castTy);
+    auto castResultTy = ctx.factory.GetOptionTy(castTy.Ty());
     auto targetName = ctx.nameGenerator.GetObjCDeclName(*type->decl);
 
     // match (x)
@@ -139,11 +139,9 @@ void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
     // case x: Class => Some(x)
     auto ogVarPattern = WithinFile(CreateVarPattern(V_COMPILER, castTy), curFile);
 
-    OwnedPtr<Expr> originalBranch = ctx.factory.CreateOptionSomeCall(
-        WithinFile(CreateRefExpr(*ogVarPattern->varDecl), curFile), castTy
-    );
-    auto originalTypePattern = CreateTypePattern(std::move(ogVarPattern),
-        CreateType(castTy), *expr.leftExpr);
+    OwnedPtr<Expr> originalBranch =
+        ctx.factory.CreateOptionSomeCall(WithinFile(CreateRefExpr(*ogVarPattern->varDecl), curFile), castTy.Ty());
+    auto originalTypePattern = CreateTypePattern(std::move(ogVarPattern), CreateType(castTy.Ty()), *expr.leftExpr);
     originalTypePattern->needRuntimeTypeCheck = true;
     originalTypePattern->matchBeforeRuntime = false;
     auto originalMatchCase = CreateMatchCase(std::move(originalTypePattern), std::move(originalBranch));
@@ -176,7 +174,7 @@ void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
         WithinFile(CreateRefExpr(*objCIdVarPattern->varDecl), curFile)
     );
 
-    auto objCIdType = CreateType(objCIdDecl->GetTy());
+    auto objCIdType = CreateType(objCIdDecl->DataTy());
     auto objCIdTypePattern = CreateTypePattern(std::move(objCIdVarPattern),
         std::move(objCIdType), *expr.leftExpr);
     objCIdTypePattern->needRuntimeTypeCheck = true;
@@ -194,9 +192,8 @@ void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
     auto wildcardMatchCase = CreateMatchCase(MakeOwned<WildcardPattern>(), ctx.factory.CreateOptionNoneRef(type));
     matchCases.emplace_back(std::move(wildcardMatchCase));
 
-    expr.desugarExpr = WithinFile(
-        CreateMatchExpr(std::move(expr.leftExpr), std::move(matchCases), castResultTy), curFile
-    );
+    expr.desugarExpr =
+        WithinFile(CreateMatchExpr(std::move(expr.leftExpr), std::move(matchCases), {castResultTy}), curFile);
 }
 
 std::vector<Ptr<TypePattern>> CollectTypePatternWithObjCClass(InteropContext& ctx, Ptr<Pattern> pat)
@@ -268,10 +265,15 @@ OwnedPtr<Block> CastAndSubstitudeVars(
         CJC_ASSERT(castDecl);
 
         auto nativeHandle = ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*varDecl), curFile));
+<<<<<<< HEAD
         // We use objc_retain here, because a successfull typecast creates a new @ObjCMirror object that will call
         // objCRelease in its finalizer.
         OwnedPtr<Expr> initializer = ctx.factory.WrapEntity(std::move(nativeHandle), *castTy, Retain::RETAINED);
         auto castedVar = WithinFile(CreateTmpVarDecl(CreateType(castDecl->GetTy()), std::move(initializer)), curFile);
+=======
+        OwnedPtr<Expr> initializer = ctx.factory.WrapEntity(std::move(nativeHandle), *castTy);
+        auto castedVar = WithinFile(CreateTmpVarDecl(CreateType(castDecl->DataTy()), std::move(initializer)), curFile);
+>>>>>>> 0c41e6d (feat: add local mode implementation)
         varsMapping[varDecl] = castedVar;
         varsBlock->body.emplace_back(std::move(castedVar));
     }
@@ -306,19 +308,19 @@ void DesugarMatchCaseExpr(InteropContext& ctx, MatchCase& expr)
     std::vector<std::tuple<Ptr<VarDecl>, Ptr<Ty>>> patternVars;
     for (auto pat : typePatterns) {
         if (DynamicCast<WildcardPattern>(pat->pattern.get())) {
-            pat->pattern = CreateTmpVarPattern(pat->type->GetTy());
+            pat->pattern = CreateTmpVarPattern(pat->type->DataTy());
             pat->pattern->curFile = expr.curFile;
         }
 
         auto varPat = DynamicCast<VarPattern>(pat->pattern.get());
         CJC_ASSERT(varPat);
-        auto originalTy = varPat->GetTy();
+        auto originalTy = varPat->GetTy().Ty();
         CJC_NULLPTR_CHECK(originalTy);
 
-        auto type = static_cast<ClassTy*>(originalTy.get());
+        auto type = StaticCast<ClassTy>(originalTy);
         auto targetName = ctx.nameGenerator.GetObjCDeclName(*type->decl);
 
-        pat->type = CreateType(objCIdDecl->GetTy());
+        pat->type = CreateType(objCIdDecl->DataTy());
         varPat->SetTy(objCIdDecl->GetTy());
         varPat->varDecl->SetTy(objCIdDecl->GetTy());
 
@@ -396,7 +398,7 @@ void DesugarLetDestructorExpr(InteropContext& ctx, IfExpr& expr)
         auto objCIdDecl = ctx.bridge.GetObjCIdDecl();
         CJC_ASSERT(objCIdDecl);
 
-        pat->type = CreateType(objCIdDecl->GetTy());
+        pat->type = CreateType(objCIdDecl->DataTy());
         pat->SetTy(objCIdDecl->GetTy());
         varPat->SetTy(objCIdDecl->GetTy());
         varPat->varDecl->SetTy(objCIdDecl->GetTy());
@@ -421,7 +423,7 @@ void DesugarLetDestructorExpr(InteropContext& ctx, IfExpr& expr)
         CJC_ASSERT(checkCall); // should not reach, safeguard
         
         auto varDecl = varPat->varDecl.get();
-        patternVars.emplace_back(varDecl, originalTy);
+        patternVars.emplace_back(varDecl, originalTy.Ty());
         auto bodyVarsBlock = CastAndSubstitudeVars(ctx, *expr.thenBody, patternVars);
         bodyVarsBlock->SetTy(expr.thenBody->GetTy());
         std::move(expr.thenBody->body.begin(), expr.thenBody->body.end(),
@@ -456,7 +458,7 @@ void DesugarWhileExpr(InteropContext& ctx, WhileExpr& expr)
         auto objCIdDecl = ctx.bridge.GetObjCIdDecl();
         CJC_ASSERT(objCIdDecl);
 
-        pat->type = CreateType(objCIdDecl->GetTy());
+        pat->type = CreateType(objCIdDecl->DataTy());
         pat->SetTy(objCIdDecl->GetTy());
         varPat->SetTy(objCIdDecl->GetTy());
         varPat->varDecl->SetTy(objCIdDecl->GetTy());
@@ -481,7 +483,7 @@ void DesugarWhileExpr(InteropContext& ctx, WhileExpr& expr)
         CJC_ASSERT(checkCall); // should not reach, safeguard
 
         auto varDecl = varPat->varDecl.get();
-        patternVars.emplace_back(varDecl, originalTy);
+        patternVars.emplace_back(varDecl, originalTy.Ty());
         auto bodyVarsBlock = CastAndSubstitudeVars(ctx, *expr.body, patternVars);
         bodyVarsBlock->SetTy(expr.body->GetTy());
         std::move(expr.body->body.begin(), expr.body->body.end(),

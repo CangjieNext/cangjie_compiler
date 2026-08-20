@@ -262,7 +262,7 @@ OwnedPtr<CallExpr> CreateCall(Ptr<FuncDecl> fd, Ptr<File> curFile, OwnedPtr<Args
 
     (Details::WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
 
-    auto funcTy = StaticCast<FuncTy*>(fd->GetTy());
+    auto funcTy = RawStaticCast<FuncTy*>(fd->DataTy());
 
     return CreateCallExpr(WithinFile(CreateRefExpr(*fd), curFile), std::move(funcArgs), fd, funcTy->retTy,
                           CallKind::CALL_DECLARED_FUNCTION);

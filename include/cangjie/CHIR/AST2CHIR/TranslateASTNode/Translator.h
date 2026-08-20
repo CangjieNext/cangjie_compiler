@@ -140,7 +140,12 @@ public:
      * @param ty The type in AST format.
      * @return The translated type.
      */
-    Ptr<Type> TranslateType(AST::Ty& ty);
+    Ptr<Type> TranslateType(AST::DataTy ty);
+
+    /**
+     * @brief Translates a type from AST to CHIR, applying AST modal via SubstituteModal.
+     */
+     Ptr<Type> TranslateType(AST::ModalTy ty);
     
     /**
      * @brief Retrieves the debug location information of a value.
@@ -372,7 +377,7 @@ public:
      * @param block The block to which the constant will be added.
      * @return A pointer to the translated constant.
      */
-    Ptr<Constant> TranslateLitConstant(const AST::LitConstExpr& expr, AST::Ty& realTy, Ptr<Block> block);
+    Ptr<Constant> TranslateLitConstant(const AST::LitConstExpr& expr, AST::ModalTy realTy, Ptr<Block> block);
     
     /**
      * @brief Translates a literal constant expression to a CHIR literal value.
@@ -381,7 +386,7 @@ public:
      * @param realTy The real type of the constant.
      * @return A pointer to the translated literal value.
      */
-    Ptr<LiteralValue> TranslateLitConstant(const AST::LitConstExpr& expr, AST::Ty& realTy);
+    Ptr<LiteralValue> TranslateLitConstant(const AST::LitConstExpr& expr, AST::ModalTy realTy);
     
     /**
      * @brief Creates annotation factory functions for a declaration.
@@ -708,7 +713,7 @@ private:
     std::vector<Type*> GetFuncInstArgs(const AST::CallExpr& expr);
 
     Expression* CreateAndAppendApplyCallFromCallExpr(
-        Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::CallExpr& expr);
+        Value& callee, FuncCallContext& context, Type& instRetType, const AST::CallExpr& expr);
     Expression* CreateAndAppendApplyCallFromArray(
         Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::Expr& array);
     Expression* CreateAndAppendGVInitFuncCall(Value& callee);
@@ -766,6 +771,7 @@ private:
     Ptr<Value> Visit(const AST::ClassDecl& decl);
     Ptr<Value> Visit(const AST::DoWhileExpr& doWhileExpr);
     Ptr<Value> Visit(const AST::EnumDecl& decl);
+    Ptr<Value> Visit(const AST::ExclaveExpr& exclaveExpr);
     Ptr<Value> Visit(const AST::ExtendDecl& decl);
     Ptr<Value> Visit(const AST::FuncArg& arg);
     Ptr<Value> Visit(const AST::FuncBody& funcBody);
@@ -875,6 +881,7 @@ private:
     int64_t CalculateDelayExitLevelForThrow();
     void UpdateDelayExitSignal(int64_t level);
     Ptr<Value> GetOuterBlockGroupReturnValLocation();
+    Value* GetReturnValueFromBlockGroup(const BlockGroup& blockGroup);
     void TranslateForInCondControlFlow(Ptr<Value>& condVar);
     void TranslateForInBodyBlockGroup(const AST::ForInExpr& forInExpr);
     friend class TranslateForInExpr;
@@ -892,7 +899,7 @@ private:
     Ptr<Value> TranslateForInIter(const AST::ForInExpr& forInExpr);
     /// Make a Option::None value of option type \param optionType.
     Ptr<Value> MakeNone(Type& optionType, const DebugLocation& loc);
-    Ptr<Value> TranslateForInIterCondition(Ptr<Value>& iterNextLocation, Ptr<AST::Ty> astTy);
+    Ptr<Value> TranslateForInIterCondition(Ptr<Value>& iterNextLocation, AST::ModalTy astTy);
     void TranslateForInIterPattern(const AST::ForInExpr& forInExpr, Ptr<Value>& iterNextLocation);
     void TranslateForInIterLatchBlockGroup(const AST::MatchExpr& matchExpr, Ptr<Value>& iterNextLocation);
     // ========End methods used for translating ForInExpr=========
@@ -907,7 +914,9 @@ private:
     // ====================call expr===============
     // ==================== global func or instance member func call===============
     Ptr<Value> TranslateIntrinsicCall(const AST::CallExpr& expr);
-    Ptr<Value> TranslateCStringCtorCall(const AST::CallExpr& expr);
+    Ptr<Value> TranslateRawArrayAllocate(const AST::CallExpr& expr);
+    Ptr<Value> TranslateRawArrayInitByValue(const AST::CallExpr& expr);
+    Value* TranslateCStringCtorCall(const AST::CallExpr& expr);
     Ptr<Value> TranslateForeignFuncCall(const AST::CallExpr& expr);
 
     Value* GenerateLoadIfNeccessary(Value& arg, bool isThis, bool isMut, bool isInOut, const DebugLocation& loc);
@@ -930,19 +939,20 @@ private:
     // ==================== lambda func call===============
     Ptr<Value> TranslateFuncTypeValueCall(const AST::CallExpr& expr);
     // ==================== constructor call===============
-    Ptr<Value> TranslateCFuncConstructorCall(const AST::CallExpr& expr);
+    Ptr<Value> TranslateCFuncCtorCall(const AST::CallExpr& expr);
     Ptr<Value> TranslateEnumCtorCall(const AST::CallExpr& expr);
     /// Translate common parts of struct/class ctor call of left value and right value versions.
     /// \returns translate this arg.
     std::pair<Value*, Type*> TranslateStructOrClassCtorCallCommon(const AST::CallExpr& expr);
     Value* TranslateStructOrClassCtorCall(const AST::CallExpr& expr);
     // ==================== func args===============
-    static bool IsOptimizableTy(Ptr<AST::Ty> ty);
-    static bool IsOptimizableEnumTy(Ptr<AST::Ty> ty);
+    static bool IsOptimizableTy(AST::ModalTy ty);
+    static bool IsOptimizableEnumTy(AST::ModalTy ty);
     static uint64_t GetJumpablePatternVal(const AST::Pattern& pattern);
     bool CanOptimizeMatchToSwitch(const AST::MatchExpr& matchExpr);
 
-    std::vector<Type*> TranslateASTTypes(const std::vector<Ptr<AST::Ty>>& genericInfos);
+    std::vector<Type*> TranslateASTTypes(const std::vector<AST::ModalTy>& genericInfos);
+    std::vector<Type*> TranslateASTTypes(const std::vector<AST::DataTy>& genericInfos);
     bool HasNothingTypeArg(std::vector<Value*>& args) const;
     // ============= memberaccess expr ====================
     Ptr<Value> TranslateStaticTargetOrPackageMemberAccess(const AST::MemberAccess& member);
@@ -953,7 +963,11 @@ private:
     Value* WrapMemberMethodByLambda(const AST::FuncDecl& funcDecl, const InstCalleeInfo& instFuncType, Value* thisObj);
     bool IsVirtualFuncCall(
         const CustomTypeDef& obj, const AST::FuncDecl& funcDecl, bool baseExprIsSuper);
+<<<<<<< HEAD
     InvokeCallContext GenerateInvokeCallContext(const InstCalleeInfo& instFuncInfo, Value& caller,
+=======
+    InvokeCallContext GenerateInvokeCallContext(const InstCalleeInfo& instFuncType, Value* caller,
+>>>>>>> 0c41e6d (feat: add local mode implementation)
         const AST::FuncDecl& callee, const std::vector<Value*>& args,
         const OverflowStrategy strategy = OverflowStrategy::THROWING);
     InstCalleeInfo GetInstCalleeInfoFromVarInit(const AST::RefExpr& expr);
@@ -980,7 +994,7 @@ private:
     std::pair<Ptr<Block>, Ptr<Block>> TranslateOrPattern(
         const std::vector<OwnedPtr<AST::Pattern>>& patterns, Ptr<Value> selectorVal, const DebugLocation& originLoc);
     std::pair<Ptr<Block>, Ptr<Block>> TranslateConstantMultiOr(const std::vector<uint64_t> values, Ptr<Value> value);
-    Ptr<Value> GetEnumIDValue(Ptr<AST::Ty> ty, Ptr<Value> selectorVal);
+    Ptr<Value> GetEnumIDValue(AST::ModalTy ty, Ptr<Value> selectorVal);
     /* Translate or patterns except constant and enum patterns. */
     std::pair<Ptr<Block>, Ptr<Block>> TranslateComplicatedOrPattern(
         const std::vector<OwnedPtr<AST::Pattern>>& patterns,
@@ -997,7 +1011,7 @@ private:
     // 'var pattern''s typecast should be generated in 'final matched block'.
     Ptr<Value> DispatchingPattern(std::queue<std::pair<Ptr<const AST::Pattern>, Ptr<Value>>>& queue,
         const std::pair<Ptr<Block>, Ptr<Block>>& blocks, const DebugLocation& originLoc);
-    void CollectingSubPatterns(const Ptr<AST::Ty>& patternTy, const std::vector<OwnedPtr<AST::Pattern>>& patterns,
+    void CollectingSubPatterns(AST::ModalTy patternTy, const std::vector<OwnedPtr<AST::Pattern>>& patterns,
         const Ptr<Value> value, std::queue<std::pair<Ptr<const AST::Pattern>, Ptr<Value>>>& queue, unsigned offset = 0);
     void HandleVarPattern(const AST::VarPattern& varPattern, const Ptr<Value> value, const Ptr<Block>& trueBlock);
     Ptr<Value> CastEnumValueToConstructorTupleType(Ptr<Value> enumValue, const AST::EnumPattern& enumPattern);
@@ -1117,10 +1131,6 @@ private:
     // => VArrayBuilder ( size, null, initFunc )
     Ptr<Value> InitVArrayByLambda(const AST::ArrayExpr& vArray);
 
-    Ptr<Value> InitArrayByCollection(const AST::ArrayExpr& array);
-    Ptr<Value> InitArrayByItem(const AST::ArrayExpr& array);
-    Ptr<Value> InitArrayByLambda(const AST::ArrayExpr& array);
-
     // ArrayLit - StructArray
     Ptr<Value> TranslateStructArray(const AST::ArrayLit& array);
     // ArrayLit - VArray
@@ -1141,8 +1151,8 @@ private:
     void BlackBoxModifyArgTypeToRef(std::vector<Value*>& args);
 
     void AddMemberMethodToCustomTypeDef(const AST::FuncDecl& decl, CustomTypeDef& def);
-};
 
+<<<<<<< HEAD
 static const std::unordered_map<Cangjie::TokenKind, BinaryExprKind> tokenKindToBinaryExprKind = {
     {Cangjie::TokenKind::ADD, BinaryExprKind::ADD},
     {Cangjie::TokenKind::SUB, BinaryExprKind::SUB},
@@ -1180,6 +1190,9 @@ const static std::unordered_map<std::string, const std::unordered_map<std::strin
 const static std::unordered_map<std::string, IntrinsicKind> headlessIntrinsics = {
     {GET_TYPE_FOR_TYPE_PARAMETER_NAME, IntrinsicKind::GET_TYPE_FOR_TYPE_PARAMETER},
     {IS_SUBTYPE_TYPES_NAME, IntrinsicKind::IS_SUBTYPE_TYPES},
+=======
+    Type* GetThisTypeWithModal(Type& thisType, const AST::FuncDecl& funcDecl);
+>>>>>>> 0c41e6d (feat: add local mode implementation)
 };
 } // namespace Cangjie::CHIR
 

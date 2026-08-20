@@ -127,6 +127,13 @@ public:
     void Dump() const;
 
     bool IsCompileTimeValue() const;
+
+    /**
+     * @brief Retrieves the function or lambda body which this value belongs to.
+     *
+     * @return The function or lambda body.
+     */
+     BlockGroup* GetFuncOrLambdaBody() const;
     
 protected:
     explicit Value(Type* ty, std::string identifier, ValueKind kind);
@@ -322,13 +329,6 @@ public:
     
     Function* GetTopLevelFunc() const;
 
-    /**
-     * @brief Retrieves the function or lambda body which this block belongs to.
-     *
-     * @return The function or lambda body.
-     */
-    BlockGroup* GetFuncOrLambdaBody() const;
-
     // ===--------------------------------------------------------------------===//
     // Modify Self
     // ===--------------------------------------------------------------------===//
@@ -376,8 +376,10 @@ class BlockGroup : public Value {
     friend class CHIRContext;
     friend class CHIRBuilder;
     friend class Block;
+    friend class Exclave;
     friend class Lambda;
     friend class ForIn;
+    friend class Expression;
 
 public:
     // ===--------------------------------------------------------------------===//
@@ -407,12 +409,6 @@ public:
      * the method will also continue looking up until ownerFunc is not empty.
      */
     Function* GetTopLevelFunc() const;
-    /**
-     * @brief Retrieves the function or lambda body which this block group belongs to.
-     *
-     * @return The function or lambda body.
-     */
-    BlockGroup* GetFuncOrLambdaBody() const;
 
     Function* GetOwnerFunc() const;
     void SetOwnerFunc(Function* func);
@@ -420,7 +416,7 @@ public:
     Expression* GetOwnerExpression() const;
 
     BlockGroup* Clone(CHIRBuilder& builder, Function& newFunc) const;
-    BlockGroup* Clone(CHIRBuilder& builder, Lambda& newLambda) const;
+    BlockGroup* Clone(CHIRBuilder& builder, Expression& newExpression) const;
 private:
     explicit BlockGroup(std::string identifier);
     ~BlockGroup() override = default;

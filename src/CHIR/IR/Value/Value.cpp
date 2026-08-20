@@ -191,6 +191,34 @@ void Value::ClearUsersOnly()
     users.clear();
 }
 
+BlockGroup* Value::GetFuncOrLambdaBody() const
+{
+    if (IsParameter()) {
+        auto param = StaticCast<const Parameter*>(this);
+        if (auto func = param->GetOwnerFunc()) {
+            return func->GetBody();
+        } else if (auto lambda = param->GetOwnerLambda()) {
+            return lambda->GetBody();
+        } else {
+            CJC_ABORT();
+        }
+    } else if (IsLocalVar()) {
+        return StaticCast<const LocalVar*>(this)->GetExpr()->GetParentBlock()->GetFuncOrLambdaBody();
+    } else if (IsBlock()) {
+        return StaticCast<const Block*>(this)->GetParentBlockGroup()->GetFuncOrLambdaBody();
+    } else if (IsBlockGroup()) {
+        auto bg = StaticCast<const BlockGroup*>(this);
+        if (auto func = bg->GetOwnerFunc()) {
+            return func->GetBody();
+        }
+        CJC_ASSERT(users.size() == 1);
+        return users[0]->GetFuncOrLambdaBody();
+    } else if (IsFunc()) {
+        return StaticCast<const Function*>(this)->GetBody();
+    }
+    return nullptr;
+}
+
 Parameter::Parameter(Type* ty, const std::string& id, Function* ownerFunc)
     : Value(ty, id, ValueKind::KIND_PARAMETER), ownerFunc(ownerFunc)
 {
@@ -517,6 +545,7 @@ Function* Block::GetTopLevelFunc() const
     return blockGroup->GetTopLevelFunc();
 }
 
+<<<<<<< HEAD
 BlockGroup* Block::GetFuncOrLambdaBody() const
 {
     auto blockGroup = GetParentBlockGroup();
@@ -525,6 +554,9 @@ BlockGroup* Block::GetFuncOrLambdaBody() const
 }
 
 Expression* Block::GetTerminator() const
+=======
+Terminator* Block::GetTerminator() const
+>>>>>>> 0c41e6d (feat: add local mode implementation)
 {
     if (exprs.size() == 0) {
         return nullptr;
@@ -710,15 +742,6 @@ Function* BlockGroup::GetTopLevelFunc() const
     return users[0]->GetTopLevelFunc();
 }
 
-BlockGroup* BlockGroup::GetFuncOrLambdaBody() const
-{
-    if (ownerFunc != nullptr) {
-        return ownerFunc->GetBody();
-    }
-    CJC_ASSERT(users.size() == 1);
-    return users[0]->GetFuncOrLambdaBody();
-}
-
 void BlockGroup::SetOwnerFunc(Function* func)
 {
     if (ownerFunc) {
@@ -772,6 +795,7 @@ void BlockGroup::SetEntryBlock(Block* block)
 
 void BlockGroup::SetOwnerExpression(Expression& expr)
 {
+<<<<<<< HEAD
 #ifndef NDEBUG
     // we can't move func or lambdas' body to other expression, vice versa
     if (Is<Lambda>(expr)) {
@@ -787,9 +811,18 @@ void BlockGroup::SetOwnerExpression(Expression& expr)
         } else if (auto lambdaExpr = DynamicCast<Lambda*>(ownerExpression)) {
             lambdaExpr->RemoveBody();
         }
+=======
+    if (ownerFunc) {
+        ownerFunc->RemoveBody();
+        ownerFunc = nullptr;
+>>>>>>> 0c41e6d (feat: add local mode implementation)
     }
     if (ownerExpression) {
         RemoveUserOnly(ownerExpression);
+        auto& subGroups = ownerExpression->blockGroups;
+        subGroups.erase(
+            std::remove(subGroups.begin(), subGroups.end(), this), subGroups.end());
+        ownerExpression = nullptr;
     }
     ownerExpression = &expr;
     AddUserOnly(&expr);
@@ -889,16 +922,17 @@ BlockGroup* BlockGroup::Clone(CHIRBuilder& builder, Function& newFunc) const
     return newGroup;
 }
 
-BlockGroup* BlockGroup::Clone(CHIRBuilder& builder, Lambda& newLambda) const
+BlockGroup* BlockGroup::Clone(CHIRBuilder& builder, Expression& newExpression) const
 {
-    auto parentFunc = newLambda.GetTopLevelFunc();
-    CJC_NULLPTR_CHECK(parentFunc);
-    auto newGroup = builder.CreateBlockGroup(*parentFunc);
-    if (newLambda.GetBody() == nullptr) {
-        newLambda.InitBody(*newGroup);
-    }
+    auto newGroup = builder.CreateBlockGroup(*newExpression.GetTopLevelFunc());
     newGroup->AppendAttributeInfo(GetAttributeInfo());
-
+    if (auto lambda = DynamicCast<Lambda*>(&newExpression)) {
+        lambda->InitBody(*newGroup);
+    } else if (auto exclave = DynamicCast<Exclave*>(&newExpression)) {
+        exclave->InitBody(*newGroup);
+    } else {
+        CJC_ABORT();
+    }
     CloneBlocks(builder, *newGroup);
     return newGroup;
 }
