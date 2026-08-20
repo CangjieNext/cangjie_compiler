@@ -48,7 +48,7 @@ public:
           diag(diag),
           mangler(mangler),
           lib(importManager, typeManager, diag, utils),
-          jniBridge(typeManager, importManager, mangler, utils, 
+          jniBridge(typeManager, importManager, mangler, utils,
               *lib.GetJniEnvPtrDecl(),
               *lib.GetJobjectDecl(),
               *lib.GetJNINativeInterfaceDecl()),
@@ -64,15 +64,11 @@ public:
     }
 
     /**
-     * Constructors generation and javaref field insertion.
-     * The first step: generate members in `JObject` and insert empty constructor in other mirrors. ([doStub] = `false`)
-     * The second step: fill pregenerated bodies ([doStub] = `false`)
+     * Fills bodies for previously generated stubs.
      */
-    void GenerateInMirrors(File& file, bool doStub);
+    void GenerateInMirrors(File& file);
 
-    void GenerateInMirror(ClassDecl& classDecl, bool doStub);
-
-    void GenerateInSynthetic(ClassDecl& cd);
+    void GenerateInMirror(ClassDecl& classDecl);
 
     void GenerateJavaSourceCode(AfterTypeCheckContext& ctx);
 
@@ -100,14 +96,13 @@ private:
     void InsertArrayJavaEntitySet(ClassDecl& decl);
 
     /**
-     * Generates and inserts constructor in java mirror:
+     * Generates and inserts constructor body in java mirror (other than JObject):
      *
      * public init($ref: Java_CFFI_JavaEntity) {
-     *     this.javaref = ref // for JObject
-     *     // super($ref) // for other mirrors
+     *     super($ref)
      * }
      */
-    void InsertJavaMirrorCtor(ClassDecl& decl, bool doStub);
+    void InsertJavaMirrorWrappingConstructorBody(ClassDecl& decl);
 
     /**
      * var $hasInited: Bool = false
@@ -122,15 +117,6 @@ private:
     void InsertJavaMirrorFinalizer(ClassDecl& mirror);
 
     /**
-     * Generates and inserts javaref getter as javaref field will be in synthetic class
-     * that implements current interface.
-     *
-     * abstract getter
-     * public func $getJavaRef(): Java_CFFI_JavaEntity
-     */
-    void InsertAbstractJavaRefGetter(ClassLikeDecl& decl);
-
-    /**
      * public override func $getJavaRef(): Java_CFFI_JavaEntity {
      *     return $javaref
      * }
@@ -138,16 +124,15 @@ private:
     void InsertJavaRefGetterWithBody(ClassDecl& decl);
 
     /**
-     * Inserts constructor of form `JString(String)`.
-     * The operation consists of two steps:
-     * 1) Insert constructor stub (constructor with empty body): [doStub] = `true`
-     * 2) Fills generated constructor with actual body: [doStub] = `false`
+     * Inserts constructor body for JString of form `JString(String)`.
+     * The operation consists of:
+     * - Fills generated constructor with actual body.
      *
      * public init(s: String) {
      *   super(Java_CFFI_CangjieStringToJava(env, s))
      * }
      */
-    void InsertJStringOfStringCtor(ClassDecl& decl, bool doStub);
+    void InsertJStringOfStringCtorBody(ClassDecl& decl);
 
     void GenerateNativeItemFunc(AfterTypeCheckContext& ctx, const Ptr<TupleTy>& tupleTy);
 

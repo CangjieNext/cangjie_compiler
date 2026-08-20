@@ -256,8 +256,6 @@ Ptr<MemberDecl> FindFirstMemberDecl(
  */
 Ptr<AST::FuncDecl> GetJavaImplRegistryCompanionConstructor(AST::ClassDecl& companion);
 
-void GenerateSyntheticClassMemberStubs(ClassDecl& synthetic, const MemberMap& members);
-
 } // namespace Cangjie::Interop::Java
 
 #endif // CANGJIE_SEMA_NATIVE_FFI_JAVA_AFTER_TYPE_CHECK_UTILS

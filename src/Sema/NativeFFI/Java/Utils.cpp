@@ -379,7 +379,13 @@ std::string GetJavaTopLevelClassName(const ClassLikeDecl& decl)
     if (!attr) {
         return decl.identifier;
     }
-    return GetFQNameParts(*attr).front();
+
+    auto leftmost = GetFQNameParts(*attr).front();
+    auto topLevelTypeIndex = leftmost.find_last_of('.');
+    if (topLevelTypeIndex == std::string::npos) {
+        return leftmost;
+    }
+    return leftmost.substr(topLevelTypeIndex + 1);
 }
 
 std::string GetJavaUnqualifiedNestedTypeName(const ClassLikeDecl& decl, const std::string_view nestedSeparator)
@@ -389,10 +395,16 @@ std::string GetJavaUnqualifiedNestedTypeName(const ClassLikeDecl& decl, const st
         return decl.identifier;
     }
 
-    auto fqnameParts = GetFQNameParts(*attr);
+    auto nameParts = GetFQNameParts(*attr);
+    if (!nameParts.empty()) {
+        auto typeit = nameParts[0].rfind(".");
+        if (typeit != std::string::npos) {
+            nameParts[0] = nameParts[0].substr(typeit + 1);
+        }
+    }
     // iterator pointing to outermost type (omitting package).
-    auto itype = fqnameParts.size() > 1 ? fqnameParts.begin() + 1 : fqnameParts.begin();
-    return StringJoin(itype, fqnameParts.end(), nestedSeparator);
+    auto itype = nameParts.size() > 1 ? nameParts.begin() + 1 : nameParts.begin();
+    return StringJoin(itype, nameParts.end(), nestedSeparator);
 }
 
 std::string GetJavaPackage(const Decl& decl)
