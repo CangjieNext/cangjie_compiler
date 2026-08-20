@@ -33,20 +33,6 @@ using namespace AST;
 using namespace TypeCheckUtil;
 
 namespace {
-void SyncMapExpr(Ptr<Expr> e, Ptr<Expr> mapExpr)
-{
-    if (e == nullptr) {
-        return;
-    }
-    e->mapExpr = mapExpr;
-    // When this expression is exported as source, only desugarExpr is exported while the original node is not.
-    // Therefore the side-effect (mapExpr) node must be synchronized onto desugarExpr as well, so that downstream
-    // packages behave correctly when consumed.
-    if (e->desugarExpr) {
-        SyncMapExpr(e->desugarExpr.get(), mapExpr);
-    }
-}
-
 OwnedPtr<AST::Expr> TryDesugarFunctionCallExpr(OwnedPtr<AST::Expr> base)
 {
     if (!Ty::IsInitialTy(base->GetTy()) && base->TyKind() != TypeKind::TYPE_FUNC) {
@@ -136,9 +122,13 @@ OwnedPtr<Expr> CreateArgumentForCompoundAssignOverload(
     // Set mapped expr node for later process for side effect.
     auto ce = RawStaticCast<CallExpr*>(binaryExpr->leftExpr.get());
     auto base = StaticCast<MemberAccess*>(ce->baseFunc.get());
-    SyncMapExpr(base->baseExpr.get(), basePtr);
+    base->baseExpr->mapExpr = basePtr;
+    if (base->baseExpr->desugarExpr) {
+        std::cout << "[zhanguozheng] CreateArgumentForCompoundAssignOverload update mapExpr but desugarExpr not. Expr: "
+                  << base->baseExpr->begin.ToString() << " " << ASTKIND_TO_STR.at(base->baseExpr->astKind) << std::endl;
+    }
     for (size_t i = 0; i < indexPtrs.size(); ++i) {
-        SyncMapExpr(ce->args[i]->expr.get(), indexPtrs[i]);
+        ce->args[i]->expr->mapExpr = indexPtrs[i];
     }
     binaryExpr->leftExpr->sourceExpr = &ae;
     binaryExpr->rightExpr = std::move(ae.rightExpr);
@@ -385,9 +375,6 @@ void DesugarOperatorOverloadExpr(ASTContext& ctx, SubscriptExpr& se)
         callExpr->args.push_back(std::move(funcArg));
     }
     callExpr->sourceExpr = &se;
-    // Store mapExpr pointer of SubscriptExpr node to CallExpr, because srouce export only export desugarExpr.
-    // If mapExpr point to SubscriptExpr, mapExpr will set to mapExpr's desugar node.
-    SyncMapExpr(callExpr, se.mapExpr);
     if (se.TestAttr(Attribute::UNSAFE)) {
         callExpr->EnableAttr(Attribute::UNSAFE);
     }
@@ -417,7 +404,7 @@ void DesugarSubscriptOverloadExpr(ASTContext& ctx, AssignExpr& ae)
     ctx.RemoveTypeCheckCache(*callBase);
     callBase->baseExpr = std::move(subscript->baseExpr);
     if (ae.isCompound) { // Store mapped expr node for later process for side effect.
-        SyncMapExpr(callBase->baseExpr.get(), basePtr);
+        callBase->baseExpr->mapExpr = basePtr;
     }
     callBase->field = "[]";
     callBase->field.SetPos(subscript->leftParenPos,
@@ -430,7 +417,7 @@ void DesugarSubscriptOverloadExpr(ASTContext& ctx, AssignExpr& ae)
         ctx.RemoveTypeCheckCache(*funcArg1);
         funcArg1->expr = std::move(subscript->indexExprs[i]);
         if (ae.isCompound) { // Store mapped expr node for later process for side effect.
-            SyncMapExpr(funcArg1->expr.get(), indexPtrs[i]);
+            funcArg1->expr->mapExpr = indexPtrs[i];
         }
         funcArg1->scopeName = funcArg1->expr->scopeName;
         callExpr->args.push_back(std::move(funcArg1));

@@ -59,6 +59,11 @@ Ptr<const Expr> ASTWriter::ASTWriterImpl::GetRealExpr(const Expr& expr)
 FormattedIndex ASTWriter::ASTWriterImpl::SaveExpr(const Expr& expr)
 {
     auto realExpr = GetRealExpr(expr);
+    if (expr.mapExpr != realExpr->mapExpr) {
+        std::cout << "[zhanguozheng] source export expr's desugarExpr, desugarExpr's mapExpr is missing, expr: "
+                  << ASTKIND_TO_STR.at(expr.astKind);
+        std::cout << ", desugarExpr: " << ASTKIND_TO_STR.at(realExpr->astKind) << std::endl;
+    }
     auto found = savedExprMap.find(realExpr);
     if (found != savedExprMap.end()) {
         return found->second;
