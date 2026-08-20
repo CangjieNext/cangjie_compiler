@@ -42,8 +42,7 @@ void InsertBaseCtorBody::HandleImpl(InteropContext& ctx)
             auto superCtor = ctx.factory.GetGeneratedBaseCtor(*mirrorClass->GetSuperClassDecl());
             auto superCall = CreateSuperCall(*mirrorClass, *superCtor, superCtor->GetTy());
             superCall->args.emplace_back(CreateFuncArg(std::move(handleParam)));
-            auto marker = ctx.factory.CreateNativeHandleMarker();
-            superCall->args.emplace_back(CreateFuncArg(std::move(marker)));
+            ctx.factory.AddMarkerToCallIfNeeded(*superCall);
             ctor->funcBody->body->body.emplace_back(std::move(superCall));
         } else {
             auto lhs = ctx.factory.CreateNativeHandleFieldExpr(*mirrorClass);

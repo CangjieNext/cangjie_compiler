@@ -132,8 +132,10 @@ public:
     bool IsGeneratedHasInitedField(const AST::Decl& decl) const;
     bool IsGeneratedCtor(const AST::Decl& decl) const;
     bool IsGeneratedBaseCtor(const AST::Decl& decl) const;
+    bool IsGeneratedLegacyBaseCtor(const AST::Decl& decl) const;
     bool IsGeneratedNativeHandleGetter(const AST::Decl& decl) const;
     Ptr<AST::FuncDecl> GetGeneratedBaseCtor(AST::Decl& decl);
+    void AddMarkerToCallIfNeeded(AST::CallExpr& callExpr);
     Ptr<AST::FuncDecl> GetGeneratedImplCtor(const AST::Decl& declArg, const AST::FuncDecl& origin);
     OwnedPtr<AST::CallExpr> CreateObjCMsgSendCall(OwnedPtr<AST::Expr> nativeHandle, const std::string& selector,
         Ptr<AST::Ty> retTy, std::vector<OwnedPtr<AST::Expr>> args);

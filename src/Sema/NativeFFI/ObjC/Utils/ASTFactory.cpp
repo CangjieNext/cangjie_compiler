@@ -195,8 +195,10 @@ OwnedPtr<Expr> ASTFactory::WrapEntity(OwnedPtr<Expr> expr, Ty& wrapTy, Retain wi
             default:
                 break;
         }
-        return CreateCallExpr(CreateRefExpr(*ctor), Nodes<FuncArg>(CreateFuncArg(std::move(expr)),
-            CreateFuncArg(CreateNativeHandleMarker())), ctor, classLikeTy, CallKind::CALL_OBJECT_CREATION);
+        auto ctorCall = CreateCallExpr(CreateRefExpr(*ctor), Nodes<FuncArg>(CreateFuncArg(std::move(expr))), ctor,
+            classLikeTy, CallKind::CALL_OBJECT_CREATION);
+        AddMarkerToCallIfNeeded(*ctorCall);
+        return ctorCall;
     }
 
     if (typeMapper.IsObjCImpl(wrapTy)) {
@@ -469,7 +471,8 @@ OwnedPtr<Expr> ASTFactory::CreateMirrorConstructorCall(OwnedPtr<Expr> entity, Pt
         auto mirrorCtor = GetGeneratedBaseCtor(*cld);
         CJC_NULLPTR_CHECK(mirrorCtor);
 
-        auto ctorCall = CreateCall(mirrorCtor, curFile, std::move(entity), CreateNativeHandleMarker());
+        auto ctorCall = CreateCall(mirrorCtor, curFile, std::move(entity));
+        AddMarkerToCallIfNeeded(*ctorCall);
         if (ctorCall) {
             ctorCall->callKind = CallKind::CALL_OBJECT_CREATION;
             ctorCall->SetTy(mirrorTy);
@@ -1437,6 +1440,29 @@ bool ASTFactory::IsGeneratedBaseCtor(const Decl& decl) const
     return params[0]->identifier == NATIVE_HANDLE_IDENT && params[1]->identifier == NATIVE_HANDLE_MARKER;
 }
 
+bool ASTFactory::IsGeneratedLegacyBaseCtor(const Decl& decl) const
+{
+    auto fd = DynamicCast<const FuncDecl*>(&decl);
+    if (!fd || !fd->TestAttr(Attribute::CONSTRUCTOR) || !fd->funcBody) {
+        return false;
+    }
+
+    auto& paramLists = fd->funcBody->paramLists;
+
+    if (paramLists.empty()) {
+        return false;
+    }
+
+    // taking first param list probably is not the best idea
+    auto& params = paramLists[0]->params;
+
+    if (params.size() != 1) {
+        return false;
+    }
+
+    return params[0]->identifier == NATIVE_HANDLE_IDENT;
+}
+
 bool ASTFactory::IsGeneratedCtor(const Decl& decl) const
 {
     auto fd = DynamicCast<const FuncDecl*>(&decl);
@@ -1453,11 +1479,14 @@ bool ASTFactory::IsGeneratedCtor(const Decl& decl) const
     // taking first param list probably is not the best idea
     auto& params = paramLists[0]->params;
 
-    if (params.size() < INTERNAL_CTOR_PARAMS) {
+    if (params.size() < 1) {
         return false;
     }
 
-    return params[0]->identifier == NATIVE_HANDLE_IDENT && params[1]->identifier == NATIVE_HANDLE_MARKER;
+    // Any constructor with $obj as first parameter is generated assuming user can't name first
+    // argument with a dollar sign. Partually BACKCOMPAT as we try to support possible compiled
+    // mirrors without $mrk as argument
+    return params[0]->identifier == NATIVE_HANDLE_IDENT;
 }
 
 bool ASTFactory::IsGeneratedNativeHandleGetter(const Decl& decl) const
@@ -1478,14 +1507,43 @@ Ptr<FuncDecl> ASTFactory::GetGeneratedBaseCtor(Decl& decl)
         return GetGeneratedBaseCtor(*super);
     }
 
+    // BACKCOMPAT: Try to find a base ctor, and if not found, use the legacy one if exists.
+    // This is needed to support compiled mirrors prior to CPointer support and marker
+    // introduction.
+    Ptr<FuncDecl> legacyBaseCtor;
     for (auto& member : decl.GetMemberDeclPtrs()) {
-        if (auto fd = As<ASTKind::FUNC_DECL>(member); fd && IsGeneratedBaseCtor(*fd)) {
-            return fd;
+        auto fd = As<ASTKind::FUNC_DECL>(member);
+        if (!fd) {
+            continue;
         }
+
+        if (IsGeneratedBaseCtor(*fd)) {
+            return fd;
+        } else if (IsGeneratedLegacyBaseCtor(*fd)) {
+            legacyBaseCtor = fd;
+        }
+    }
+
+    if (legacyBaseCtor) {
+        return legacyBaseCtor;
     }
 
     CJC_ABORT();
     return nullptr;
+}
+
+// BACKCOMPAT: Add marker struct constant only to new constructors, bypassing possible legacy ones
+// that could be left out in mirror libs compiled using previous versions.
+void ASTFactory::AddMarkerToCallIfNeeded(CallExpr& callExpr) {
+    auto& ctor = callExpr.resolvedFunction;
+    CJC_ASSERT(ctor->TestAttr(Attribute::CONSTRUCTOR));
+    CJC_ASSERT(ctor && ctor->funcBody && !ctor->funcBody->paramLists.empty());
+    auto& params = ctor->funcBody->paramLists[0]->params;
+    if (params.size() == INTERNAL_CTOR_PARAMS && params[0]->identifier == NATIVE_HANDLE_IDENT &&
+        params[1]->identifier == NATIVE_HANDLE_MARKER)
+    {
+        callExpr.args.push_back(CreateFuncArg(CreateNativeHandleMarker()));
+    }
 }
 
 Ptr<FuncDecl> ASTFactory::GetGeneratedImplCtor(const Decl& declArg, const FuncDecl& origin)
@@ -2302,7 +2360,10 @@ OwnedPtr<Expr> ASTFactory::CreateConvertToNSStringCall(OwnedPtr<Expr> id, ClassD
     ctorArgs.emplace_back(CreateFuncArg(CreateNativeHandleMarker()));
 
     auto realTarget = GetGeneratedBaseCtor(classDecl);
-    return CreateThisCall(classDecl, *realTarget, realTarget->GetTy(), curFile, std::move(ctorArgs));
+    auto thisCall = CreateThisCall(classDecl, *realTarget, realTarget->GetTy(), curFile, std::move(ctorArgs));
+    AddMarkerToCallIfNeeded(*thisCall);
+
+    return thisCall;
 }
 
 OwnedPtr<Expr> ASTFactory::CreateDescriptionAsStringCall(OwnedPtr<Expr> id)
