@@ -75,7 +75,7 @@ private:
     void RunOnFunc(const Function* func, CHIRBuilder& builder);
 
     std::pair<Function*, Type*> FindRealCallee(
-        CHIRBuilder& builder, const TypeValue* typeState, const FuncSig& method) const;
+        CHIRBuilder& builder, const TypeValue* typeState, const FuncSig& method, bool& needPrint) const;
 
     bool IsValidSubType(CHIRBuilder& builder, const Type* expected, Type* specific,
         std::unordered_map<const GenericType*, Type*>& replaceTable) const;
@@ -85,7 +85,7 @@ private:
     void InstantiateFuncIfPossible(CHIRBuilder& builder, std::vector<RewriteInfo>& rewriteInfoList);
 
     void CollectCandidates(
-        CHIRBuilder& builder, ClassType* specific, std::pair<Function*, Type*>& res, const FuncSig& method) const;
+        CHIRBuilder& builder, ClassType* specific, std::pair<Function*, Type*>& res, const FuncSig& method, bool& resBeenCleared) const;
 
     Function* GetCandidateFromSpecificType(
         CHIRBuilder& builder, ClassType& specific, const FuncSig& method) const;
