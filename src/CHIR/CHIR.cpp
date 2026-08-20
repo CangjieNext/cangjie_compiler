@@ -1129,6 +1129,7 @@ bool ToCHIR::Run()
 
     RecordCodeInfoAtTheBegin();
 
+    std::cout << "[kangyi] ToCHIR::Run begin" << std::endl;
     // 1. AST to CHIR
     if (!TranslateToCHIR({})) {
         return false;
