@@ -1127,10 +1127,6 @@ private:
     // => VArrayBuilder ( size, null, initFunc )
     Ptr<Value> InitVArrayByLambda(const AST::ArrayExpr& vArray);
 
-    Ptr<Value> InitArrayByCollection(const AST::ArrayExpr& array);
-    Ptr<Value> InitArrayByItem(const AST::ArrayExpr& array);
-    Ptr<Value> InitArrayByLambda(const AST::ArrayExpr& array);
-
     // ArrayLit - StructArray
     Ptr<Value> TranslateStructArray(const AST::ArrayLit& array);
     // ArrayLit - VArray

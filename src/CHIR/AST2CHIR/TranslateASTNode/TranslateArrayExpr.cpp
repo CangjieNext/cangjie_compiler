@@ -26,36 +26,8 @@ Ptr<Value> Translator::Visit(const AST::ArrayExpr& array)
             return InitVArrayByItem(array);
         }
     }
-
-    CJC_ASSERT(array.GetTy()->IsArray());
-
-    // Case A: "RawArray<T>()" which initialize an empty array.
-    if (array.args.empty()) {
-        auto loc = TranslateLocation(array);
-        auto arrayTy = chirTy.TranslateType(*array.GetTy());
-        CJC_ASSERT(arrayTy->IsRef());
-        auto eleTy = StaticCast<RawArrayType*>(StaticCast<CHIR::RefType*>(arrayTy)->GetBaseType())->GetElementType();
-        auto sizeVal = CreateAndAppendConstantExpression<IntLiteral>(
-            builder.GetInt64Ty(), *currentBlock, 0UL)->GetResult();
-        auto rawArrayRef = TryCreate<RawArrayAllocate>(currentBlock, loc, arrayTy, eleTy, sizeVal)->GetResult();
-        CreateAndAppendExpression<RawArrayLiteralInit>(
-            builder.GetUnitTy(), rawArrayRef, std::vector<Value*>{}, currentBlock);
-        return rawArrayRef;
-    }
-
-    // Case B: "RawArray<T>(collection)" which initialize an sized array with the `collection` content.
-    if (array.args.size() == 1) {
-        return InitArrayByCollection(array);
-    }
-
-    // Case C: "var x = RawArray<T>(size, val)" which initialize an sized array where the element is with `val`.
-    CJC_ASSERT(array.args.size() == ARGS_NUM_TWO);
-    if (array.initFunc == nullptr) {
-        return InitArrayByItem(array);
-    }
-
-    // Case D: "var x = RawArray<T>(size, initFunc)" which initialize an sized array by specified init func.
-    return InitArrayByLambda(array);
+    CJC_ABORT();
+    return nullptr;
 }
 
 Expression* Translator::CreateAndAppendApplyCallFromArray(
@@ -145,57 +117,6 @@ CHIR::Type* Translator::GetExactParentType(
     return result;
 }
 
-Ptr<Value> Translator::InitArrayByCollection(const AST::ArrayExpr& array)
-{
-    auto collection = TranslateExprArg(*array.args[0]);
-    auto sizeTy = builder.GetInt64Ty();
-    Type* originalObjType =
-        StaticCast<CustomType*>(collection->GetType()->StripAllRefs())->GetCustomTypeDef()->GetType();
-    originalObjType = builder.GetType<RefType>(originalObjType);
-    auto funcType = builder.GetType<FuncType>(std::vector<Type*>({originalObjType}), sizeTy);
-    auto collectionType = collection->GetType()->StripAllRefs();
-    std::vector<Type*> emptyInstTypeArgs;
-    auto sizeGetFunc = collectionType->GetExpectedFunc("$sizeget", *funcType, false, emptyInstTypeArgs, builder, true);
-    CJC_NULLPTR_CHECK(sizeGetFunc);
-    auto invokeInfo = InvokeCallContext {
-        .method = sizeGetFunc,
-        .caller = collection,
-        .funcCallCtx = FuncCallContext {
-            .thisType = collection->GetType()->StripAllRefs()
-        }
-    };
-    auto loc = TranslateLocation(array);
-    Value* sizeVal = TryCreate<Invoke>(currentBlock, loc, sizeTy, invokeInfo)->GetResult();
-
-    // Create the array `RawArrayAllocate(eleTy, collection.size)`
-    auto arrayTy = chirTy.TranslateType(*array.GetTy());
-    CJC_ASSERT(arrayTy->IsRef());
-    auto eleTy = StaticCast<RawArrayType*>(arrayTy->StripAllRefs())->GetElementType();
-    auto rawArrayRef =
-        CreateAndAppendExpression<RawArrayAllocate>(loc, arrayTy, eleTy, sizeVal, currentBlock)->GetResult();
-
-    // Call the `Core::arrayInitByCollection` to set the array element value
-    CJC_NULLPTR_CHECK(array.initFunc);
-    auto initFn = GetSymbolTable(*array.initFunc);
-    // what are the initFn here all normal constructor or the arrayInitByFunc/arrayInitByCollection
-    // check the thisType and instParentCustomDefTy
-    std::vector<Type*> instParamTys;
-    instParamTys.emplace_back(rawArrayRef->GetType());
-    instParamTys.emplace_back(collection->GetType());
-    auto instFuncTy = builder.GetType<FuncType>(instParamTys, arrayTy);
-    // if array init func is generic decl, then we will create `Apply` expr like: `Apply(init<xxx>, args)`
-    // if array init func is instantiated decl, then we will create `Apply` expr like: `Apply(init, args)`
-    auto funcCallContext = FuncCallContext {
-        .args = std::vector<Value*>{rawArrayRef, collection},
-        .instTypeArgs =
-            array.initFunc->TestAttr(AST::Attribute::GENERIC) ? std::vector<Type*>{eleTy} : std::vector<Type*>{},
-        .thisType = nullptr
-    };
-    CreateAndAppendApplyCallFromArray(*initFn, funcCallContext, *instFuncTy, array);
-    return rawArrayRef;
-    return builder.WithModal(result, fuzzyParentType.GetModalInfo());
-}
-
 Ptr<Value> Translator::InitVArrayByItem(const AST::ArrayExpr& vArray)
 {
     auto loc = TranslateLocation(vArray);
@@ -223,7 +144,7 @@ Ptr<Value> Translator::InitVArrayByLambda(const AST::ArrayExpr& vArray)
     auto pureVArrayTy = StaticCast<VArrayType*>(vArrayTy->StripAllRefs());
     auto eleTy = pureVArrayTy->GetElementType();
     auto sizeVal = CreateAndAppendConstantExpression<IntLiteral>(
-        builder.GetInt64Ty(), *currentBlock, pureVArrayTy->GetSize())->GetResult();
+        builder.GetInt64Ty(), *currentBlock, static_cast<uint64_t>(pureVArrayTy->GetSize()))->GetResult();
     auto initFn = TranslateExprArg(*vArray.args[0]);
     auto nullItem = CreateAndAppendConstantExpression<NullLiteral>(eleTy, *currentBlock)->GetResult();
     return CreateAndAppendExpression<VArrayBuilder>(loc, vArrayTy, sizeVal, nullItem, initFn, currentBlock)

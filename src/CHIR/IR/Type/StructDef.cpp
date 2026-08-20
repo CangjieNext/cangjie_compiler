@@ -41,7 +41,7 @@ std::string StructDef::AddExtraComment() const
 bool StructDef::IsCopyable() const
 {
     for (auto def : GetImplementedInterfaceDefs()) {
-        if (IsExpectedCustomType(*def->GetType(), CORE_PACKAGE_NAME, COPY_NAME)) {
+        if (IsExpectedCustomType(*def->GetType(), CORE_PACKAGE_NAME, std::string(COPY_NAME))) {
             return true;
         }
     }

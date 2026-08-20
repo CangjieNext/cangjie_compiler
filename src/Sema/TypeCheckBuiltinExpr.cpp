@@ -18,7 +18,6 @@
 
 #include "cangjie/AST/ASTCasting.h"
 #include "cangjie/AST/ASTContext.h"
-#include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
@@ -26,9 +25,6 @@
 #include "cangjie/AST/Symbol.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
-#include "cangjie/Basic/Match.h"
-#include "cangjie/Sema/Desugar.h"
-#include "cangjie/AST/ModalInfo.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 

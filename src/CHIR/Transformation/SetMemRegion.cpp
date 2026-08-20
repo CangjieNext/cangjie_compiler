@@ -53,27 +53,16 @@ std::unordered_set<BlockGroup*> SetMemRegion::CollectFunctionRegionBlockGroup(co
         if (Is<Exclave>(expr)) {
             return VisitResult::SKIP;
         }
-        if (Is<FuncCall>(expr) || Is<FuncCallWithException>(expr) ||
-            Is<Intrinsic>(expr) || Is<IntrinsicWithException>(expr)) {
+        if (Is<FuncCall>(expr)) {
             // 1. function call where the callee return type does not implement `Copyable` and has mode `local!` or `local?`
             if (expr.GetResult()->GetType()->StripAllRefs()->IsLocalRegion()) {
                 auto body = expr.GetFuncOrLambdaBody();
                 CJC_NULLPTR_CHECK(body);
                 scopeNeedsRegion.emplace(body);
-            } else if (auto apply = DynamicCast<Apply*>(&expr)) {
+            } else if (auto apply = DynamicCast<ApplyBase*>(&expr)) {
                 // 2. constructor call where the `this` argument type does not implement `Copyable` and
-                // has mode `local!` or `local?`
+                // has mode `local!` or `local?` (covers both `Apply` and its `TryApply` form)
                 if (auto func = DynamicCast<Function*>(apply->GetCallee());
-                    func && func->IsConstructor() && func->GetParentCustomTypeDef() != nullptr) {
-                    auto thisType = func->GetParam(0)->GetType()->StripAllRefs();
-                    if (thisType->IsLocalRegion()) {
-                        auto body = expr.GetFuncOrLambdaBody();
-                        CJC_NULLPTR_CHECK(body);
-                        scopeNeedsRegion.emplace(body);
-                    }
-                }
-            } else if (auto applyE = DynamicCast<ApplyWithException*>(&expr)) {
-                if (auto func = DynamicCast<Function*>(applyE->GetCallee());
                     func && func->IsConstructor() && func->GetParentCustomTypeDef() != nullptr) {
                     auto thisType = func->GetParam(0)->GetType()->StripAllRefs();
                     if (thisType->IsLocalRegion()) {
@@ -98,7 +87,7 @@ std::unordered_set<BlockGroup*> SetMemRegion::CollectFunctionRegionBlockGroup(co
                     }
                 }
             }
-        } else if (Is<Allocate>(expr) || Is<AllocateWithException>(expr)) {
+        } else if (Is<AllocateBase>(expr)) {
             // 4. allocate a non-trivial enum whose type has mode `local!` or `local?`
             auto resultType = expr.GetResult()->GetType()->StripAllRefs();
             if (resultType->IsLocalRegion() && resultType->IsEnum() &&

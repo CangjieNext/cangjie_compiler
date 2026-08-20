@@ -40,7 +40,7 @@ bool ResolveMemberStore(const Expression& expr, const Type*& objectType, const s
 {
     const Value* location = nullptr;
     if (auto storeElemRef = DynamicCast<const StoreElementRef*>(&expr)) {
-        location = storeElemRef->GetLocation();
+        location = storeElemRef->GetBase();
         path = &storeElemRef->GetPath();
     } else if (auto store = DynamicCast<const Store*>(&expr)) {
         auto localVar = DynamicCast<const LocalVar*>(store->GetLocation());
@@ -51,7 +51,7 @@ bool ResolveMemberStore(const Expression& expr, const Type*& objectType, const s
         if (getElemRef == nullptr) {
             return false;
         }
-        location = getElemRef->GetLocation();
+        location = getElemRef->GetBase();
         path = &getElemRef->GetPath();
     } else {
         return false;

@@ -127,7 +127,18 @@ public:
     void Dump() const;
 
     bool IsCompileTimeValue() const;
-    
+
+    /**
+     * @brief Retrieves the function or lambda body which this value belongs to.
+     *
+     * For a parameter/local-var/block/block-group/function, walks up to the owning
+     * function or lambda and returns its body. Returns nullptr for values that do
+     * not belong to a function or lambda body.
+     *
+     * @return The function or lambda body, or nullptr.
+     */
+    BlockGroup* GetFuncOrLambdaBody() const;
+
 protected:
     explicit Value(Type* ty, std::string identifier, ValueKind kind);
     virtual ~Value() = default;

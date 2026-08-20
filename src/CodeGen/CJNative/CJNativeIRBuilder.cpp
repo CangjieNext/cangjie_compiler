@@ -697,7 +697,7 @@ llvm::Value* AcquireBufferForNonRefValue(IRBuilder2& irBuilder, const StoreLower
         return irBuilder.CreateLoad(store.cgDestAddr);
     }
     auto destTypeSize = irBuilder.GetLayoutSize_32(destChirType);
-    auto buffer = irBuilder.CallIntrinsicAllocaGeneric({destTypeInfo, destTypeSize});
+    auto buffer = irBuilder.CallIntrinsicAllocaGeneric({destTypeInfo, destTypeSize}, destChirType.IsLocalRegion());
     (void)irBuilder.CreateStore(buffer, destAddr);
     return buffer;
 }

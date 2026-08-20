@@ -738,6 +738,15 @@ Function* BlockGroup::GetTopLevelFunc() const
     return users[0]->GetTopLevelFunc();
 }
 
+BlockGroup* BlockGroup::GetFuncOrLambdaBody() const
+{
+    if (ownerFunc != nullptr) {
+        return ownerFunc->GetBody();
+    }
+    CJC_ASSERT(users.size() == 1);
+    return users[0]->GetFuncOrLambdaBody();
+}
+
 void BlockGroup::SetOwnerFunc(Function* func)
 {
     if (ownerFunc) {

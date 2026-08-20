@@ -213,7 +213,7 @@ InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& in
     auto tempStrategy = strategy == OverflowStrategy::NA ? OverflowStrategy::SATURATING : strategy;
     return InvokeCallContext {
         .method = method,
-        .caller = &caller,
+        .caller = caller,
         .funcCallCtx = FuncCallContext {
             .args = args,
             .instTypeArgs = instFuncInfo.instantiatedTypeArgs,
