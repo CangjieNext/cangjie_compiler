@@ -2981,7 +2981,7 @@ void CHIRChecker::CheckLogicExpression(const BinaryExpressionBase& expr, const F
     // 2. result type must be Bool
     auto result = expr.GetResult();
     if (!result->GetType()->IsBoolean()) {
-        TypeCheckError(*expr.GetRawExpr(), *result, "Bool", topLevelFunc);
+        TypeCheckError(expr, *result, "Bool", topLevelFunc);
     }
 }
 

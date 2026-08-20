@@ -127,13 +127,6 @@ public:
     void Dump() const;
 
     bool IsCompileTimeValue() const;
-
-    /**
-     * @brief Retrieves the function or lambda body which this value belongs to.
-     *
-     * @return The function or lambda body.
-     */
-     BlockGroup* GetFuncOrLambdaBody() const;
     
 protected:
     explicit Value(Type* ty, std::string identifier, ValueKind kind);
@@ -329,6 +322,13 @@ public:
     
     Function* GetTopLevelFunc() const;
 
+    /**
+     * @brief Retrieves the function or lambda body which this block belongs to.
+     *
+     * @return The function or lambda body.
+     */
+     BlockGroup* GetFuncOrLambdaBody() const;
+
     // ===--------------------------------------------------------------------===//
     // Modify Self
     // ===--------------------------------------------------------------------===//
@@ -409,6 +409,12 @@ public:
      * the method will also continue looking up until ownerFunc is not empty.
      */
     Function* GetTopLevelFunc() const;
+    /**
+     * @brief Retrieves the function or lambda body which this block group belongs to.
+     *
+     * @return The function or lambda body.
+     */
+     BlockGroup* GetFuncOrLambdaBody() const;
 
     Function* GetOwnerFunc() const;
     void SetOwnerFunc(Function* func);

@@ -201,7 +201,7 @@ Value* Translator::TranslateVarRef(const AST::RefExpr& refExpr)
     return varLeftValueBase;
 }
 
-InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& instFuncInfo, Value& caller,
+InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& instFuncInfo, Value* caller,
     const AST::FuncDecl& callee, const std::vector<Value*>& args, const OverflowStrategy strategy)
 {
     CJC_NULLPTR_CHECK(caller);

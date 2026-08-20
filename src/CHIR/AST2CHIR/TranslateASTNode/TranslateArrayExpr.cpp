@@ -26,8 +26,36 @@ Ptr<Value> Translator::Visit(const AST::ArrayExpr& array)
             return InitVArrayByItem(array);
         }
     }
-    CJC_ABORT();
-    return nullptr;
+
+    CJC_ASSERT(array.GetTy()->IsArray());
+
+    // Case A: "RawArray<T>()" which initialize an empty array.
+    if (array.args.empty()) {
+        auto loc = TranslateLocation(array);
+        auto arrayTy = chirTy.TranslateType(*array.GetTy());
+        CJC_ASSERT(arrayTy->IsRef());
+        auto eleTy = StaticCast<RawArrayType*>(StaticCast<CHIR::RefType*>(arrayTy)->GetBaseType())->GetElementType();
+        auto sizeVal = CreateAndAppendConstantExpression<IntLiteral>(
+            builder.GetInt64Ty(), *currentBlock, 0UL)->GetResult();
+        auto rawArrayRef = TryCreate<RawArrayAllocate>(currentBlock, loc, arrayTy, eleTy, sizeVal)->GetResult();
+        CreateAndAppendExpression<RawArrayLiteralInit>(
+            builder.GetUnitTy(), rawArrayRef, std::vector<Value*>{}, currentBlock);
+        return rawArrayRef;
+    }
+
+    // Case B: "RawArray<T>(collection)" which initialize an sized array with the `collection` content.
+    if (array.args.size() == 1) {
+        return InitArrayByCollection(array);
+    }
+
+    // Case C: "var x = RawArray<T>(size, val)" which initialize an sized array where the element is with `val`.
+    CJC_ASSERT(array.args.size() == ARGS_NUM_TWO);
+    if (array.initFunc == nullptr) {
+        return InitArrayByItem(array);
+    }
+
+    // Case D: "var x = RawArray<T>(size, initFunc)" which initialize an sized array by specified init func.
+    return InitArrayByLambda(array);
 }
 
 Expression* Translator::CreateAndAppendApplyCallFromArray(

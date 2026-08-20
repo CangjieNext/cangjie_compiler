@@ -514,7 +514,7 @@ TryRawArrayAllocate* TryRawArrayAllocate::Clone(CHIRBuilder& builder, Block& par
     return newNode;
 }
 
-Exclave::Exclave(Block* parent) : Terminator(ExprKind::EXCLAVE, {}, {}, parent)
+Exclave::Exclave(Block* parent) : Expression(ExprKind::EXCLAVE, {}, {}, parent)
 {
     CJC_NULLPTR_CHECK(parent);
 }
