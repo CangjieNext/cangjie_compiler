@@ -4,7 +4,13 @@
 #
 # See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-add_executable(ConditionalCompilationTest ConditionalCompilationTest.cpp ${CANGJIE_SRC_OBJECTS})
+include_directories(${CMAKE_SOURCE_DIR}/src/ConditionalCompilation)
+
+add_executable(
+    ConditionalCompilationTest
+    ConditionalCompilationTest.cpp
+    ConditionalCompilationImplTest.cpp
+    ${CANGJIE_SRC_OBJECTS})
 
 target_link_libraries(
     ConditionalCompilationTest
