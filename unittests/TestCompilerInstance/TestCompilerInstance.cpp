@@ -60,8 +60,12 @@ bool TestCompilerInstance::Compile(CompileStage stage)
         return Utils::AllOf(cc, importRes, macroRes, modular);
     }
     auto semaRes = PerformSema();
-    if (stage == CompileStage::SEMA || stage == CompileStage::DESUGAR_AFTER_SEMA) {
+    if (stage == CompileStage::SEMA) {
         return Utils::AllOf(cc, importRes, macroRes, semaRes, modular);
+    }
+    auto desugarAfterSemaRes = PerformDesugarAfterSema();
+    if (stage == CompileStage::DESUGAR_AFTER_SEMA) {
+        return Utils::AllOf(cc, importRes, macroRes, semaRes, desugarAfterSemaRes, modular);
     }
     auto giRes = PerformGenericInstantiation();
     return Utils::AllOf(cc, importRes, macroRes, semaRes, giRes, modular);
