@@ -1,14 +1,16 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+#include <cstdio>
 #include <iostream>
 #include <string>
 
 #include "gtest/gtest.h"
 #include "TestCompilerInstance.h"
+#include "cangjie/Basic/Version.h"
 #include "cangjie/ConditionalCompilation/ConditionalCompilation.h"
 
 using namespace Cangjie;
@@ -265,5 +267,70 @@ TEST_F(ConditionalCompilationTest, cfg_path_ignored_for_lsp)
     instance->PerformConditionCompile();
 
     EXPECT_EQ(diag.GetWarningCount(), 1);
+}
+
+// Mirror the way ConditionalCompilationImpl parses CANGJIE_VERSION: extract the
+// leading major.minor.patch and compare to the literal version.cj anchors its ==
+// guard against. CANGJIE_VERSION may carry a suffix (e.g. a coverage build passes
+// -v <sdk-version>, possibly "0.0.1-git..."), while ParseVersion only keeps the
+// first three numeric groups, so use sscanf instead of a raw string compare.
+static bool VersionNormalizedEquals(const std::string& version, const char* expected)
+{
+    unsigned major = 0, minor = 0, patch = 0;
+    unsigned eMajor = 0, eMinor = 0, ePatch = 0;
+    if (sscanf(version.c_str(), "%u.%u.%u", &major, &minor, &patch) != 3 ||
+        sscanf(expected, "%u.%u.%u", &eMajor, &eMinor, &ePatch) != 3) {
+        return false;
+    }
+    return major == eMajor && minor == eMinor && patch == ePatch;
+}
+
+TEST_F(ConditionalCompilationTest, version_comparisons)
+{
+    // Exercises all six cjc_version comparison operators against the compile
+    // time CANGJIE_VERSION. The five non-== guards ( > "0.0.0", >= "0.0.0",
+    // < "99.0.0", <= "99.0.0", != "99.0.0") hold for any real SDK version and
+    // every build keeps them. The == guard is anchored to the "0.0.1" literal in
+    // version.cj: coverage/prebuilt builds may pass -v <sdk-version> instead of
+    // the CMake default "0.0.1", so derive the expected count from the same
+    // Cangjie::CANGJIE_VERSION global the evaluator reads instead of hard-coding
+    // a version that only holds for the plain CMake default build.
+    auto src = srcPath + "version.cj";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+
+    bool parseResult = instance->Compile(CompileStage::PARSE);
+    ASSERT_TRUE(parseResult);
+
+    bool ccResult = instance->PerformConditionCompile();
+    EXPECT_TRUE(ccResult);
+    // 5 always-kept guarded funcs + main, plus the == guard iff the normalized
+    // CANGJIE_VERSION is exactly what version.cj compares against.
+    size_t expectedDecls = 6;
+    if (VersionNormalizedEquals(Cangjie::CANGJIE_VERSION, "0.0.1")) {
+        expectedDecls += 1;
+    }
+    EXPECT_EQ(instance->GetSourcePackages()[0]->files[0]->decls.size(), expectedDecls);
+}
+
+TEST_F(ConditionalCompilationTest, container_kinds_filtered)
+{
+    // Exercises the Walker dispatch over class/struct/interface/enum/extend/
+    // prop/func-params bodies. The `@When[!test]` guards keep every node,
+    // so all child containers are walked.
+    auto src = srcPath + "container_kinds.cj";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    ASSERT_TRUE(instance->Compile(CompileStage::PARSE));
+
+    auto& file = instance->GetSourcePackages()[0]->files[0];
+    ASSERT_GT(file->decls.size(), 1);
+
+    bool ccResult = instance->PerformConditionCompile();
+    EXPECT_TRUE(ccResult);
+    // 10 decls: 7 guarded by @When[!test] (kept) + 3 unguarded.
+    EXPECT_EQ(file->decls.size(), 10);
 }
 #endif
