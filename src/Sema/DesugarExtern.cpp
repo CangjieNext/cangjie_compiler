@@ -103,7 +103,7 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ty& targetTy,
     // pin its type argument to `R` and give the member access the instantiated function type
     // `(R) -> Extern<T>`.
     Ptr<FuncDecl> toExternDecl = nullptr;
-    auto toExtern = CreateRuntimeMemberAccess(nodeExpr, info, EXTERN_TO_EXTERN, toExternDecl);
+    auto toExtern = CreateRuntimeMemberAccess(ctx, nodeExpr, info, EXTERN_TO_EXTERN, toExternDecl);
     toExtern->instTys.clear();
     toExtern->instTys.emplace_back(sourceTy);
     toExtern->SetTy(typeManager.GetFunctionTy({sourceTy}, &targetTy));
@@ -123,7 +123,7 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ty& targetTy,
 // picks up that desugared form as the base, producing nested `T.memberAccess` calls.
 // `e.foo = v` (left value) is the target of an assignment and is desugared into `T.memberUpdate(...)`
 // by `TryDesugarExternMemberUpdate`, so that case is deferred here.
-bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(MemberAccess& ma)
+bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(const ASTContext& ctx, MemberAccess& ma)
 {
     CJC_NULLPTR_CHECK(ma.baseExpr);
     auto sourceExternTy = ma.baseExpr->GetTy();
@@ -151,7 +151,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(MemberAccess& ma
     auto info = ResolveExternRuntime(*sourceExternTy);
 
     Ptr<FuncDecl> memberAccessDecl = nullptr;
-    auto memberAccess = CreateRuntimeMemberAccess(ma, info, EXTERN_MEMBER_ACCESS, memberAccessDecl);
+    auto memberAccess = CreateRuntimeMemberAccess(ctx, ma, info, EXTERN_MEMBER_ACCESS, memberAccessDecl);
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(*ma.baseExpr)));
@@ -176,7 +176,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(MemberAccess& ma
 // desugaring still runs for the read part and the enclosing rule reuses the desugared form.
 // Multiple indices `e[i1, i2, ...]` are chained into nested `indexedAccess` calls, matching the
 // handling in `TryDesugarExternIndexUpdate`.
-bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(SubscriptExpr& se)
+bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(const ASTContext& ctx, SubscriptExpr& se)
 {
     if (!se.baseExpr || se.indexExprs.empty()) {
         return false;
@@ -205,7 +205,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(SubscriptExpr& se
     // Build `T.indexedAccess(base, idx)` once per index, chaining when there is more than one.
     OwnedPtr<Expr> accessExpr = CloneEffectiveExpr(*se.baseExpr);
     for (auto& indexExpr : se.indexExprs) {
-        accessExpr = CreateRuntimeIndexAccess(se, info, std::move(accessExpr), *indexExpr, *sourceExternTy);
+        accessExpr = CreateRuntimeIndexAccess(ctx, se, info, std::move(accessExpr), *indexExpr, *sourceExternTy);
     }
 
     se.SetTy(sourceExternTy);
@@ -251,7 +251,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
     auto info = ResolveExternRuntime(*sourceExternTy);
 
     Ptr<FuncDecl> memberUpdateDecl = nullptr;
-    auto memberUpdate = CreateRuntimeMemberAccess(ae, info, EXTERN_MEMBER_UPDATE, memberUpdateDecl);
+    auto memberUpdate = CreateRuntimeMemberAccess(ctx, ae, info, EXTERN_MEMBER_UPDATE, memberUpdateDecl);
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(*ma->baseExpr)));
@@ -331,13 +331,13 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, 
     // `T.indexedAccess(base, idx)` (the read part of the chain).
     OwnedPtr<Expr> receiver = CloneEffectiveExpr(*se->baseExpr);
     for (size_t i = 0; i + 1 < se->indexExprs.size(); ++i) {
-        receiver = CreateRuntimeIndexAccess(*se, info, std::move(receiver), *se->indexExprs[i], *sourceExternTy);
+        receiver = CreateRuntimeIndexAccess(ctx, *se, info, std::move(receiver), *se->indexExprs[i], *sourceExternTy);
     }
 
     auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
 
     Ptr<FuncDecl> indexedUpdateDecl = nullptr;
-    auto indexedUpdate = CreateRuntimeMemberAccess(ae, info, EXTERN_INDEXED_UPDATE, indexedUpdateDecl);
+    auto indexedUpdate = CreateRuntimeMemberAccess(ctx, ae, info, EXTERN_INDEXED_UPDATE, indexedUpdateDecl);
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateExternDesugarArg(std::move(receiver)));
@@ -413,7 +413,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, CallE
 
     // Build `T.functionCall(callee, argsArray)`.
     Ptr<FuncDecl> functionCallDecl = nullptr;
-    auto functionCall = CreateRuntimeMemberAccess(ce, info, EXTERN_FUNCTION_CALL, functionCallDecl);
+    auto functionCall = CreateRuntimeMemberAccess(ctx, ce, info, EXTERN_FUNCTION_CALL, functionCallDecl);
 
     OwnedPtr<Expr> calleeExpr = CloneEffectiveExpr(*base);
 
@@ -480,31 +480,60 @@ OwnedPtr<RefExpr> TypeChecker::TypeCheckerImpl::CreateExternRuntimeRef(
     return runtimeRef;
 }
 
-OwnedPtr<MemberAccess> TypeChecker::TypeCheckerImpl::CreateRuntimeMemberAccess(
+Ptr<FuncDecl> TypeChecker::TypeCheckerImpl::LookupRuntimeFuncImpl(
+    const ASTContext& ctx, const Node& srcNode, const ExternRuntimeInfo& info, const std::string& runtimeFuncName)
+{
+    // Resolving through the inheritance chain (rather than scanning only the members `T` declares)
+    // is what makes an inherited implementation visible, e.g. when `T` is a class picking up the
+    // default implementations of an interface that extends `ForeignRuntime<T>`.
+    LookupInfo lookupInfo{info.runtimeTy, srcNode.curFile, true, true, false};
+    Ptr<FuncDecl> implDecl = nullptr;
+    for (auto target : FieldLookup(ctx, info.runtimeDecl, runtimeFuncName, lookupInfo)) {
+        auto fd = DynamicCast<FuncDecl*>(target);
+        // An abstract declaration is not an implementation; it is only reached when nothing
+        // implements the runtime function, and the caller reports that against `ForeignRuntime`.
+        if (fd && fd->TestAttr(Attribute::STATIC) && !fd->TestAttr(Attribute::ABSTRACT)) {
+            implDecl = fd;
+            break;
+        }
+    }
+    return implDecl;
+}
+
+OwnedPtr<MemberAccess> TypeChecker::TypeCheckerImpl::CreateRuntimeMemberAccess(const ASTContext& ctx,
     const Node& srcNode, const ExternRuntimeInfo& info, const std::string& runtimeFuncName, Ptr<FuncDecl>& outDecl)
 {
-    auto runtimeRef = CreateExternRuntimeRef(srcNode, info);
+    auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>(EXTERN_TYPE_RUNTIME);
+    CJC_ASSERT(runtimeInterfaceDecl);
+    Ptr<FuncDecl> decl = GetRuntimeFuncDecl(runtimeFuncName);
+    CJC_ASSERT(decl);
+    // Implementing `ForeignRuntime<T>` means providing exactly the signature `ForeignRuntime`
+    // declares, so instantiating that declaration at `T` gives the callee type whichever
+    // declaration ends up being the target.
+    auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {info.runtimeTy});
+    auto memberTy = typeManager.GetInstantiatedTy(decl->GetTy(), typeMapping);
 
-    OwnedPtr<MemberAccess> member;
-    Ptr<FuncDecl> decl = nullptr;
-    if (info.isGeneric) {
-        member = MakeOwned<MemberAccess>();
-        member->baseExpr = std::move(runtimeRef);
-        member->field = runtimeFuncName;
-        decl = GetRuntimeFuncDecl(runtimeFuncName);
-        auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>(EXTERN_TYPE_RUNTIME);
-        CJC_ASSERT(runtimeInterfaceDecl);
-        CJC_ASSERT(decl);
-        auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {info.runtimeTy});
-        member->SetTy(typeManager.GetInstantiatedTy(decl->GetTy(), typeMapping));
-    } else {
-        member = CreateMemberAccess(std::move(runtimeRef), runtimeFuncName);
-        decl = DynamicCast<FuncDecl*>(member->target);
+    // For a concrete runtime type, bind the call to the implementation `T` provides. Otherwise the
+    // abstract `ForeignRuntime` declaration stays the target: for a generic `T` it is dispatched
+    // once `T` is instantiated, and for a `T` that implements nothing the ordinary legality check
+    // reports it as an unimplemented static function.
+    if (!info.isGeneric) {
+        if (auto implDecl = LookupRuntimeFuncImpl(ctx, srcNode, info, runtimeFuncName)) {
+            decl = implDecl;
+        }
     }
+
+    auto member = MakeOwned<MemberAccess>();
+    member->baseExpr = CreateExternRuntimeRef(srcNode, info);
+    member->field = runtimeFuncName;
+    member->SetTy(memberTy);
     member->isAlone = false;
     member->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
     CopyBasicInfo(&srcNode, member.get());
-    CJC_ASSERT(decl);
+    // The field name is synthesized, so it carries no position of its own. Point it at the source
+    // expression this desugaring stands for: diagnostics reported against the runtime member (e.g.
+    // an unimplemented runtime function) require a non-zero range and should refer to the user code.
+    member->field.SetPos(srcNode.begin, srcNode.end);
     member->target = decl;
     member->targets.emplace_back(decl);
     outDecl = decl;
@@ -543,11 +572,11 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CreateRuntimeCall(const Expr& s
     return call;
 }
 
-OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CreateRuntimeIndexAccess(
+OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CreateRuntimeIndexAccess(const ASTContext& ctx,
     const Expr& srcNode, const ExternRuntimeInfo& info, OwnedPtr<Expr> baseExpr, Expr& indexExpr, Ty& ty)
 {
     Ptr<FuncDecl> indexAccessDecl = nullptr;
-    auto indexedAccess = CreateRuntimeMemberAccess(srcNode, info, EXTERN_INDEXED_ACCESS, indexAccessDecl);
+    auto indexedAccess = CreateRuntimeMemberAccess(ctx, srcNode, info, EXTERN_INDEXED_ACCESS, indexAccessDecl);
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateExternDesugarArg(std::move(baseExpr)));
@@ -561,11 +590,11 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CreateRuntimeIndexAccess(
 // Desugar a forced cast to `R.fromExtern<U>(operand)`. The operand is moved in (no
 // clone) so nested casts stay linear.
 OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::BuildForcedCastCall(
-    AmbiguousForcedCastExpr& afce, Ptr<Ty> targetTy, Ptr<Ty> operandTy)
+    const ASTContext& ctx, AmbiguousForcedCastExpr& afce, Ptr<Ty> targetTy, Ptr<Ty> operandTy)
 {
     auto info = ResolveExternRuntime(*operandTy);
     Ptr<FuncDecl> decl = nullptr;
-    auto member = CreateRuntimeMemberAccess(afce, info, EXTERN_FROM_EXTERN, decl);
+    auto member = CreateRuntimeMemberAccess(ctx, afce, info, EXTERN_FROM_EXTERN, decl);
     if (!decl) {
         return nullptr;
     }
@@ -687,7 +716,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAmbiguousForcedCastExpr(
     if (typeValid) {
         auto operandTy = Synthesize(ctx, afce.rightExpr.get());
         if (Ty::IsTyCorrect(operandTy) && TypeIsExtern(*operandTy)) {
-            if (auto call = BuildForcedCastCall(afce, targetTy, operandTy)) {
+            if (auto call = BuildForcedCastCall(ctx.Ctx(), afce, targetTy, operandTy)) {
                 afce.desugarExpr = std::move(call);
                 afce.SetTy(targetTy);
                 return targetTy;

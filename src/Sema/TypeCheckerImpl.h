@@ -792,8 +792,8 @@ private:
     bool ChkParenExpr(ASTContext& ctx, AST::Ty& target, AST::ParenExpr& pe);
     Ptr<AST::Ty> SynAmbiguousForcedCastExpr(const CheckerContext& ctx, AST::AmbiguousForcedCastExpr& afce);
     bool ChkAmbiguousForcedCastExpr(ASTContext& ctx, AST::Ty& target, AST::AmbiguousForcedCastExpr& afce);
-    OwnedPtr<AST::CallExpr> BuildForcedCastCall(
-        AST::AmbiguousForcedCastExpr& afce, Ptr<AST::Ty> targetTy, Ptr<AST::Ty> operandTy);
+    OwnedPtr<AST::CallExpr> BuildForcedCastCall(const ASTContext& ctx, AST::AmbiguousForcedCastExpr& afce,
+        Ptr<AST::Ty> targetTy, Ptr<AST::Ty> operandTy);
     Ptr<AST::Ty> DesugarAmbiguousOrdinaryCall(
         const CheckerContext& ctx, AST::AmbiguousForcedCastExpr& afce, bool typeValid);
     void PreCheckAmbiguousForcedCastType(ASTContext& ctx, AST::AmbiguousForcedCastExpr& afce, unsigned walkerID);
@@ -1790,9 +1790,9 @@ private:
     /** @brief Desugar `e[idx] = v` (for `e: Extern<T>`) into `T.indexedUpdate(e, idx, v)`. */
     bool TryDesugarExternIndexUpdate(ASTContext& ctx, AST::AssignExpr& ae);
     /** @brief Desugar a read `e.foo` (for `e: Extern<T>`) into `T.memberAccess(e, "foo")`. */
-    bool TryDesugarExternMemberAccess(AST::MemberAccess& ma);
+    bool TryDesugarExternMemberAccess(const ASTContext& ctx, AST::MemberAccess& ma);
     /** @brief Desugar a read `e[idx]` (for `e: Extern<T>`) into `T.indexedAccess(e, idx)`. */
-    bool TryDesugarExternIndexAccess(AST::SubscriptExpr& se);
+    bool TryDesugarExternIndexAccess(const ASTContext& ctx, AST::SubscriptExpr& se);
     /** @brief Desugar a call `e(args...)` (for `e: Extern<T>`) into `T.functionCall(e, [args...])`. */
     bool TryDesugarFunctionCall(ASTContext& ctx, AST::CallExpr& ce);
     /** @brief Whether @p ty is the `Extern<T>` struct type (with exactly one type argument). */
@@ -1814,13 +1814,19 @@ private:
     /** @brief Create a reference to the runtime type `T`, tagged as compiler-added extern desugar. */
     OwnedPtr<AST::RefExpr> CreateExternRuntimeRef(const AST::Node& srcNode, const ExternRuntimeInfo& info);
     /**
+     * @brief Resolve the implementation of runtime function @p runtimeFuncName provided by a concrete
+     * runtime type `T`, following inheritance the same way a hand-written `T.<name>(...)` does.
+     * Returns nullptr when `T` provides no implementation.
+     */
+    Ptr<AST::FuncDecl> LookupRuntimeFuncImpl(const ASTContext& ctx, const AST::Node& srcNode,
+        const ExternRuntimeInfo& info, const std::string& runtimeFuncName);
+    /**
      * @brief Build the `T.<runtimeFuncName>` member access used as the callee of a runtime desugaring
      * (e.g. `memberAccess`, `memberUpdate`, `indexedAccess`, `indexedUpdate`, `functionCall`).
      * @c outDecl receives the resolved runtime @c FuncDecl.
      */
-    OwnedPtr<AST::MemberAccess> CreateRuntimeMemberAccess(
-        const AST::Node& srcNode, const ExternRuntimeInfo& info, const std::string& runtimeFuncName,
-        Ptr<AST::FuncDecl>& outDecl);
+    OwnedPtr<AST::MemberAccess> CreateRuntimeMemberAccess(const ASTContext& ctx, const AST::Node& srcNode,
+        const ExternRuntimeInfo& info, const std::string& runtimeFuncName, Ptr<AST::FuncDecl>& outDecl);
     /** @brief Wrap @p expr in a @c FuncArg tagged as extern desugar; defaults @p ty to the expr's type. */
     OwnedPtr<AST::FuncArg> CreateExternDesugarArg(OwnedPtr<AST::Expr> expr, Ptr<AST::Ty> ty = nullptr);
     /** @brief Build the runtime @c CallExpr `T.<member>(args)` from a member access produced above. */
@@ -1831,8 +1837,8 @@ private:
      * @brief Build a single runtime index read `T.indexedAccess(base, index)` of type @p ty. Used to
      * chain the read part of both `e[i...]` and `e[i...] = v` desugarings.
      */
-    OwnedPtr<AST::CallExpr> CreateRuntimeIndexAccess(const AST::Expr& srcNode, const ExternRuntimeInfo& info,
-        OwnedPtr<AST::Expr> baseExpr, AST::Expr& indexExpr, AST::Ty& ty);
+    OwnedPtr<AST::CallExpr> CreateRuntimeIndexAccess(const ASTContext& ctx, const AST::Expr& srcNode,
+        const ExternRuntimeInfo& info, OwnedPtr<AST::Expr> baseExpr, AST::Expr& indexExpr, AST::Ty& ty);
 
     /** Members */
     Promotion promotion;
