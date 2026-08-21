@@ -2028,22 +2028,16 @@ Ptr<const FuncDecl> LookupTopOverriddenFromMap(
     }
 }
 
-/**
- * Walk @p func's outer inheritable decl supers and find the top-most function that
- * @p func overrides. Used when overrideMap has no entry (e.g. imported Equatable.!=).
- * Must not call IsOverrideOrShadow / PairIsOverrideOrImpl — those allocate ty vars and
- * are unsafe once Sema has finished (e.g. during AST2CHIR).
- */
+} // namespace
 
 // IsImplementationFunc is not a pure read: in the generic branch it calls GetInstantiatedTy,
 // whose TyInstantiator reaches TypeManager::GetTypeTy and writes the shared allocatedTys table
 // (find + insert). When GetTopOverriddenFuncDecl runs concurrently (e.g. AST2CHIR), multiple
-// threads could mutate allocatedTys at once. Serialize this call so the write is race-free.
-// The lock is held only across IsImplementationFunc itself; FindTopOverriddenByInheritance
-// recurses (line below the guarded call) outside the critical section, so no self-deadlock.
-std::mutex overrideResolverImplMutex;
-Ptr<const FuncDecl> FindTopOverriddenByInheritance(
-    TypeManager& tm, const FuncDecl& func, std::set<Ptr<const FuncDecl>>& visited)
+// threads could mutate allocatedTys at once. The serialization mutex overrideResolverImplMutex
+// (a member of TypeManager) is held only across the IsImplementationFunc call itself, never
+// across the recursive inheritance walk below, so there is no self-deadlock.
+Ptr<const FuncDecl> TypeManager::FindTopOverriddenByInheritance(
+    const FuncDecl& func, std::set<Ptr<const FuncDecl>>& visited)
 {
     if (auto [_, inserted] = visited.emplace(&func); !inserted) {
         return nullptr;
@@ -2066,12 +2060,12 @@ Ptr<const FuncDecl> FindTopOverriddenByInheritance(
             bool isImpl = false;
             {
                 std::lock_guard<std::mutex> lock(overrideResolverImplMutex);
-                isImpl = OverrideFunctionResolver(tm).IsImplementationFunc(func, *parentFunc);
+                isImpl = OverrideFunctionResolver(*this).IsImplementationFunc(func, *parentFunc);
             }
             if (!isImpl) {
                 continue;
             }
-            auto parentTop = FindTopOverriddenByInheritance(tm, *parentFunc, visited);
+            auto parentTop = FindTopOverriddenByInheritance(*parentFunc, visited);
             Ptr<const FuncDecl> candidate = parentTop ? parentTop : Ptr<const FuncDecl>(parentFunc);
             if (!topMost) {
                 topMost = candidate;
@@ -2083,7 +2077,6 @@ Ptr<const FuncDecl> FindTopOverriddenByInheritance(
     }
     return topMost;
 }
-} // namespace
 
 Ptr<const AST::FuncDecl> TypeManager::GetTopOverriddenFuncDecl(const AST::FuncDecl* funcDecl)
 {
@@ -2106,7 +2099,7 @@ Ptr<const AST::FuncDecl> TypeManager::GetTopOverriddenFuncDecl(const AST::FuncDe
     }
 
     std::set<Ptr<const FuncDecl>> visited;
-    if (auto top = FindTopOverriddenByInheritance(*this, *seed, visited)) {
+    if (auto top = FindTopOverriddenByInheritance(*seed, visited)) {
         return top;
     }
     if (fromMap) {
