@@ -814,8 +814,12 @@ void StructInheritanceChecker::DiagnoseForConflictInheritance(
         for (auto it = found.first; it != found.second; ++it) {
             auto member = it->second;
             if (!member.inconsistentTypes.empty() && member.decl->astKind == ASTKind::PROP_DECL) {
-                // prop overload by mode
-                if (decl.astKind == ASTKind::PROP_DECL && member.decl->DataTy() == decl.DataTy()) {
+                // when all conflict types of prop have the same data type, no error need report.
+                std::set<DataTy> conflictTypes{};
+                for (auto propTy: member.inconsistentTypes) {
+                    conflictTypes.insert(propTy.Ty());
+                }
+                if (conflictTypes.size() == 1) {
                     continue;
                 }
                 DiagnoseInheritedInsconsistType(member, decl);

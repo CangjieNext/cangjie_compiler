@@ -510,6 +510,7 @@ bool TypeChecker::TypeCheckerImpl::ChkRefExpr(ASTContext& ctx, ModalTy target, N
 
     TypeSubst resultMapping;
     Ptr<FuncDecl> matchedFd = nullptr;
+    int matched{0};
     ModalTy validCandidateTy{};
     for (auto [fd, fdTy, mapping] : candidates) {
         if (!typeManager.IsSubtype(fdTy, target) || !CheckThisTypeForFunRef(ctx, *fd, refNode)) {
@@ -518,6 +519,7 @@ bool TypeChecker::TypeCheckerImpl::ChkRefExpr(ASTContext& ctx, ModalTy target, N
             }
             continue;
         }
+        ++matched;
         ReplaceTarget(&refNode, fd);
         matchedFd = fd;
         refNode.SetTy(fdTy);
@@ -527,9 +529,9 @@ bool TypeChecker::TypeCheckerImpl::ChkRefExpr(ASTContext& ctx, ModalTy target, N
     if (refNode.GetTy()->IsQuest()) {
         refNode.SetTy({TypeManager::GetInvalidTy()});
     }
-    if (candidates.size() > 1) {
+    if (matched > 1) {
         diag.Diagnose(refNode, DiagKind::sema_ambiguous_func_ref, targets[0]->identifier.Val());
-    } else if (candidates.size() == 0) {
+    } else if (matched == 0) {
         if (refNode.GetTy().IsCorrect() && refNode.GetTy()->HasQuestTy()) {
             CJC_ASSERT(refNode.GetTarget());
             DiagUnableToInferReturnType(diag, *targets[0], refNode);
@@ -543,7 +545,7 @@ bool TypeChecker::TypeCheckerImpl::ChkRefExpr(ASTContext& ctx, ModalTy target, N
         if (targets.size() > 1) {
             ReplaceTarget(&refNode, nullptr);
         }
-    } else if (matchedFd) {
+    } else {
         if (IsGenericUpperBoundCall(refNode, *matchedFd)) {
             auto& ref = static_cast<NameReferenceExpr&>(refNode);
             ref.matchedParentTy = typeManager.GetInstantiatedTy(matchedFd->outerDecl->GetTy(), resultMapping);

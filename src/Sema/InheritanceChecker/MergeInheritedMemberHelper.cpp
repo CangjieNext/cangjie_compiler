@@ -9,7 +9,6 @@
  *
  * This file implements how to merge inherited parent member to child member.
  */
-#include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Utils.h"
@@ -126,7 +125,7 @@ void StructInheritanceChecker::ComputeInconsistentPropTypes(const MemberSignatur
     if (!Ty::IsTyCorrect(parentTy) || !Ty::IsTyCorrect(childTy)) {
         return;
     }
-    if (parentTy != childTy) {
+    if (!typeManager.IsTyEqual(parentTy, childTy)) {
         inconsistentTypes.emplace_back(parent.ty, parent.thisMode);
         inconsistentTypes.emplace_back(child.ty, child.thisMode);
     }
@@ -182,6 +181,9 @@ MemberSignature StructInheritanceChecker::UpdateInheritedMemberIfNeeded(
         } else if (parent.decl->astKind == ASTKind::PROP_DECL) {
             ComputeInconsistentPropTypes(child, parent, inconsistentTypes);
             shouldUpdate = parent.ty == child.ty && parent.thisMode == child.thisMode;
+            if (!inconsistentTypes.empty()) {
+                UpdateInconsistentTypes(it->second, parent, inconsistentTypes);
+            }
         } else if (inconsistentType) {
             SetPossibleInconsistentType(parent, child, inconsistentTypes);
         }
