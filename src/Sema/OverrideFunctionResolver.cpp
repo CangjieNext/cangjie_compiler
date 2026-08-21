@@ -291,3 +291,42 @@ bool OverrideFunctionResolver::IsImplementationFunc(const AST::FuncDecl& srcFunc
     }
     return false;
 }
+
+MemberFuncSet OverrideFunctionResolver::GetTopOverriddenFuncs(AST::Ty& instBaseTy, const AST::FuncDecl& funcDecl)
+{
+    CJC_NULLPTR_CHECK(typeManager);
+    auto baseDecl = AST::Ty::GetDeclPtrOfTy<AST::InheritableDecl>(&instBaseTy);
+    std::set<Ptr<ClassLikeDecl>> superDecls;
+    std::set<Ptr<AST::ExtendDecl>> extendDecls;
+    MemberFuncSet result;
+    if (baseDecl) {
+        auto superDeclsVec = baseDecl->GetAllSuperDecls();
+        superDecls.insert(superDeclsVec.begin(), superDeclsVec.end());
+        extendDecls = typeManager->GetDeclExtends(*baseDecl);
+    } else {
+        extendDecls = typeManager->GetAllExtendsByTy(instBaseTy);
+    }
+    for (auto extendDecl : extendDecls) {
+        auto superDeclsVec = extendDecl->GetAllSuperDecls();
+        superDecls.insert(superDeclsVec.begin(), superDeclsVec.end());
+    }
+    for (auto superDecl : superDecls) {
+        if (superDecl == baseDecl) {
+            continue;
+        }
+        auto visit = [this, &funcDecl, &superDecl, &result](AST::Decl& memberFunc) {
+            auto parentFunc = DynamicCast<FuncDecl>(&memberFunc);
+            if (!parentFunc || parentFunc == &funcDecl || !IsImplementationFunc(funcDecl, *parentFunc)) {
+                return;
+            }
+            auto parentTops = GetTopOverriddenFuncs(*superDecl->GetTy(), *parentFunc);
+            if (parentTops.empty()) {
+                result.emplace(parentFunc);
+            } else {
+                result.insert(parentTops.begin(), parentTops.end());
+            }
+        };
+        TypeCheckUtil::WorkForMembersOfDecl(*superDecl, visit);
+    }
+    return result;
+}
