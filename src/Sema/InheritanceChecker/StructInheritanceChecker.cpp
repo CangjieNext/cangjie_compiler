@@ -1071,7 +1071,8 @@ bool StructInheritanceChecker::IsExtendedDefaultImpl(const MemberSignature& pare
         child.outerDecl->astKind == ASTKind::EXTEND_DECL) {
         return false;
     }
-    if (TypeManager::GetThisParamMode(child) != TypeManager::GetThisParamMode(*parent.decl)) {
+    if (TypeManager::HasThisParam(child) && TypeManager::HasThisParam(*parent.decl) &&
+        TypeManager::GetThisParamMode(child) != TypeManager::GetThisParamMode(*parent.decl)) {
         return false;
     }
     return typeManager.HasExtensionRelation(*child.outerDecl->GetTy(), *parent.decl->outerDecl->GetTy());

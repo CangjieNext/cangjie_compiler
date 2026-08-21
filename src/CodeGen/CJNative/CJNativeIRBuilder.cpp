@@ -688,20 +688,6 @@ llvm::Instruction* EmitRefWriteBarrier(IRBuilder2& irBuilder, const StoreLowerin
     return irBuilder.CallGCWrite({store.val, store.fieldOwnerPtr, store.destAddr});
 };
 
-// Emits the non-field barrier selected by `modalWrite`.
-llvm::Instruction* EmitNonRefWriteBarrier(IRBuilder2& irBuilder, const StoreLowering& store)
-{
-    switch (store.modalWrite) {
-        case ModalWriteKind::MAYBE_LOCAL:
-            return irBuilder.CallMaybeLocalWrite({store.fieldOwnerPtr, store.destAddr, store.val});
-        case ModalWriteKind::DEMODE:
-            return irBuilder.CallDemodeWrite({store.fieldOwnerPtr, store.destAddr, store.val});
-        case ModalWriteKind::NONE:
-            break;
-    }
-    return irBuilder.CallGCWrite({store.val, store.fieldOwnerPtr, store.destAddr});
-};
-
 // Returns the buffer a non-reference value must be copied into: the caller-provided sret
 // buffer, or a freshly allocated one whose address is written back into \p destAddr.
 llvm::Value* AcquireBufferForNonRefValue(IRBuilder2& irBuilder, const StoreLowering& store,

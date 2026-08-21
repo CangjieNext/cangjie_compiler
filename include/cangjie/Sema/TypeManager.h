@@ -188,6 +188,7 @@ public:
     bool IsFuncParameterTypesIdentical(const std::vector<AST::ModalTy>& paramTys1,
         const std::vector<AST::ModalTy>& paramTys2, const TypeSubst& typeMapping = {});
     static bool HasThisParam(const AST::FuncDecl& fd);
+    static bool HasThisParam(const AST::Decl& decl);
     static AST::ModalTy GetThisParamTy(const AST::FuncDecl& fd);
     static ModalInfo GetThisParamMode(const AST::Decl& decl);
     /// Get modal of this param of prop accessor

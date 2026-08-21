@@ -16,13 +16,10 @@
 #include <utility>
 #include <vector>
 
-#include "JoinAndMeet.h"
+#include "ExtraScopes.h"
 #include "TypeCheckUtil.h"
 #include "LocalTypeArgumentSynthesis.h"
 
-#include "ExtraScopes.h"
-#include "cangjie/AST/Match.h"
-#include "cangjie/AST/ScopeManagerApi.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Utils/CheckUtils.h"
 
@@ -1308,14 +1305,28 @@ bool TypeManager::HasThisParam(const FuncDecl& fd)
     // Accessor (getter/setter) of an instance property has an implicit `this` whose modal is
     // taken from the property's type. The parser no longer emits an explicit `this` parameter
     // for accessors, so the `funcBody`/`paramLists` checks below are not applicable for them.
-    if (fd.propDecl != nullptr) {
+    if (fd.propDecl) {
         return !fd.TestAttr(Attribute::STATIC);
+    }
+    if (fd.ownerFunc) {
+        return HasThisParam(*fd.ownerFunc);
     }
     if (!fd.funcBody || fd.funcBody->paramLists.empty()) {
         return false;
     }
     return (Is<InheritableDecl>(fd.outerDecl) || (fd.outerDecl && fd.outerDecl->IsBuiltIn())) &&
         !fd.TestAnyAttr(Attribute::STATIC, Attribute::ENUM_CONSTRUCTOR);
+}
+
+bool TypeManager::HasThisParam(const AST::Decl& decl)
+{
+    if (decl.TestAttr(Attribute::STATIC)) {
+        return false;
+    }
+    if (auto fd = DynamicCast<FuncDecl>(&decl)) {
+        return HasThisParam(*fd);
+    }
+    return false;
 }
 
 ModalTy TypeManager::GetThisParamTy(const FuncDecl& fd)
