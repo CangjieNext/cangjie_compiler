@@ -688,6 +688,20 @@ llvm::Instruction* EmitRefWriteBarrier(IRBuilder2& irBuilder, const StoreLowerin
     return irBuilder.CallGCWrite({store.val, store.fieldOwnerPtr, store.destAddr});
 };
 
+// Emits the non-field barrier selected by `modalWrite`.
+llvm::Instruction* EmitNonRefWriteBarrier(IRBuilder2& irBuilder, const StoreLowering& store)
+{
+    switch (store.modalWrite) {
+        case ModalWriteKind::MAYBE_LOCAL:
+            return irBuilder.CallMaybeLocalWrite({store.fieldOwnerPtr, store.destAddr, store.val});
+        case ModalWriteKind::DEMODE:
+            return irBuilder.CallDemodeWrite({store.fieldOwnerPtr, store.destAddr, store.val});
+        case ModalWriteKind::NONE:
+            break;
+    }
+    return irBuilder.CallGCWrite({store.val, store.fieldOwnerPtr, store.destAddr});
+};
+
 // Returns the buffer a non-reference value must be copied into: the caller-provided sret
 // buffer, or a freshly allocated one whose address is written back into \p destAddr.
 llvm::Value* AcquireBufferForNonRefValue(IRBuilder2& irBuilder, const StoreLowering& store,
@@ -776,7 +790,11 @@ llvm::Instruction* EmitOpaqueFieldWriteBarrier(IRBuilder2& irBuilder, const Stor
     irBuilder.CreateBr(gcwriteExitBB);
 
     irBuilder.SetInsertPoint(gcwriteNonRefBB);
-    irBuilder.CallIntrinsicGCWriteGeneric({store.fieldOwnerPtr, store.destAddr, store.val, size});
+    if (store.modalWrite == ModalWriteKind::NONE) {
+        irBuilder.CallIntrinsicGCWriteGeneric({store.fieldOwnerPtr, store.destAddr, store.val, size});
+    } else {
+        irBuilder.CallIntrinsicMaybeLocalWriteGeneric({store.fieldOwnerPtr, store.destAddr, store.val, size});
+    }
     irBuilder.CreateBr(gcwriteExitBB);
     irBuilder.SetInsertPoint(gcwriteExitBB);
     return nullptr;
