@@ -1,0 +1,3 @@
+# Macro dylibs produced by `cjc --compile-macro` during macro unit tests.
+**/lib-macro_*.dylib
+**/lib-macro_*.so
