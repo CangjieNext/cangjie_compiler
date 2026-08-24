@@ -107,7 +107,6 @@ ModalTy TypeChecker::TypeCheckerImpl::SynRangeExpr(ASTContext& ctx, RangeExpr& r
         return re.GetTy();
     }
     ModalTy elemTy = SynRangeExprInferElemTy(re, ctx);
-
     if (Ty::IsTyCorrect(elemTy) && elemTy->IsIdeal() && elemTy->IsInteger()) {
         elemTy = ModalTy{TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64)};
     }
