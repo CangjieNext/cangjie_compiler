@@ -137,12 +137,7 @@ public:
      * @see PrepareTypeCheck
      * @see TypeCheck
      */
-    void TypeCheckForPackages(const std::vector<Ptr<AST::Package>>& pkgs)
-    {
-        auto contexts = PreTypeCheck(pkgs);
-        DoTypeCheck(contexts);
-        PostTypeCheck(contexts);
-    }
+    void TypeCheckForPackages(const std::vector<Ptr<AST::Package>>& pkgs);
     /**
      * Perform auto boxing and recursive type resolving of enum.
      */

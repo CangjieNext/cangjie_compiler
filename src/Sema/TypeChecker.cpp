@@ -2004,6 +2004,19 @@ void TypeChecker::TypeCheckForPackages(const std::vector<Ptr<Package>>& pkgs) co
     impl->TypeCheckForPackages(pkgs);
 }
 
+void TypeChecker::TypeCheckerImpl::TypeCheckForPackages(const std::vector<Ptr<AST::Package>>& pkgs)
+{
+    auto contexts = PreTypeCheck(pkgs);
+    ci->RecordASTNodeCount("sema pre typecheck");
+    ci->DumpASTAtStage("sema-pre-typecheck");
+    DoTypeCheck(contexts);
+    ci->RecordASTNodeCount("sema typecheck");
+    ci->DumpASTAtStage("sema-typecheck");
+    PostTypeCheck(contexts);
+    ci->RecordASTNodeCount("sema post typecheck");
+    ci->DumpASTAtStage("sema-post-typecheck");
+}
+
 std::vector<Ptr<ASTContext>> TypeChecker::TypeCheckerImpl::PreTypeCheck(const std::vector<Ptr<AST::Package>>& pkgs)
 {
     Utils::ProfileRecorder recorder("Semantic", "Pre TypeCheck");

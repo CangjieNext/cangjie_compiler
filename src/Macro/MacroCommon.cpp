@@ -14,6 +14,7 @@
 
 #include <fstream>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "cangjie/Basic/Print.h"
@@ -281,6 +282,20 @@ std::vector<Token> GetTokensFromString(const std::string& source, DiagnosticEngi
     }
     Lexer lexer(pos.fileID, source, diag, diag.GetSourceManager(), pos);
     return lexer.GetTokens();
+}
+
+int64_t CountEffectiveCodeLines(const std::string& source, DiagnosticEngine& diag)
+{
+    std::unordered_set<int64_t> lines;
+    for (const auto& token : GetTokensFromString(source, diag)) {
+        if (token.kind == TokenKind::COMMENT || token.kind == TokenKind::NL || token.kind == TokenKind::END) {
+            continue;
+        }
+        for (int64_t line = token.Begin().line; line <= token.End().line; ++line) {
+            lines.emplace(line);
+        }
+    }
+    return static_cast<int64_t>(lines.size());
 }
 
 bool IsCurFile(const SourceManager& sm, const Token& tk, unsigned int fileID)

@@ -15,6 +15,7 @@
 #include <mutex>
 #include <deque>
 #include <sstream>
+#include <unordered_set>
 
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
@@ -27,6 +28,56 @@
 #include "cangjie/Utils/Utils.h"
 
 namespace Cangjie::AST {
+ASTNodeCount CountASTNodes(
+    const std::vector<Ptr<Package>>& sourcePackages, const std::vector<Ptr<Package>>& importedPackages)
+{
+    std::unordered_set<Ptr<const Package>> importedSet(importedPackages.begin(), importedPackages.end());
+    ASTNodeCount count;
+    const auto walkerID = ConstWalker::GetNextWalkerID();
+
+    auto countPackage = [&](Ptr<const Package> root, bool rootIsImported) {
+        if (!root) {
+            return;
+        }
+        std::vector<Ptr<const Package>> ownerStack;
+        auto preVisit = [&](Ptr<const Node> node) {
+            Ptr<const Package> owner = ownerStack.empty() ? root : ownerStack.back();
+            if (node->astKind == ASTKind::PACKAGE) {
+                owner = RawStaticCast<const Package*>(node);
+            } else if (node->curFile && node->curFile->curPackage) {
+                owner = node->curFile->curPackage;
+            }
+            ownerStack.emplace_back(owner);
+            if ((owner && (owner->TestAttr(Attribute::IMPORTED) || importedSet.count(owner) != 0)) ||
+                (!owner && rootIsImported)) {
+                ++count.imported;
+            } else {
+                ++count.source;
+            }
+            return VisitAction::WALK_CHILDREN;
+        };
+        auto postVisit = [&](Ptr<const Node>) {
+            CJC_ASSERT(!ownerStack.empty());
+            ownerStack.pop_back();
+            return VisitAction::KEEP_DECISION;
+        };
+        ConstWalker(root, walkerID, preVisit, postVisit).Walk();
+    };
+
+    std::unordered_set<Ptr<const Package>> roots;
+    for (auto package : sourcePackages) {
+        if (package && roots.emplace(package).second) {
+            countPackage(package, false);
+        }
+    }
+    for (auto package : importedPackages) {
+        if (package && roots.emplace(package).second) {
+            countPackage(package, true);
+        }
+    }
+    return count;
+}
+
 void AddCurFile(Node& root, Ptr<File> file)
 {
     Ptr<File> curFile = file;

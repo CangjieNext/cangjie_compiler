@@ -9,7 +9,7 @@
 
 #define private public
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/PrintNode.h"
+#include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Parse/Parser.h"
 
@@ -139,6 +139,54 @@ TEST_F(WalkerTest, GetDeclsPost)
     for (size_t i = 0; i < identifiers.size(); i++) {
         EXPECT_EQ(expectedIdentifiers[i], identifiers[i]);
     }
+}
+
+TEST_F(WalkerTest, CountASTNodesClassifiesSharedImportedNodesOnce)
+{
+    auto sourcePackage = MakeOwned<Package>("source.pkg");
+    auto sourceFile = MakeOwned<File>();
+    sourceFile->curPackage = sourcePackage.get();
+    sourceFile->decls.emplace_back(MakeOwned<VarDecl>());
+    sourcePackage->files.emplace_back(std::move(sourceFile));
+    AddCurFile(*sourcePackage);
+
+    auto importedPackage = MakeOwned<Package>("imported.pkg");
+    importedPackage->EnableAttr(Attribute::IMPORTED);
+    auto importedFile = MakeOwned<File>();
+    importedFile->curPackage = importedPackage.get();
+    importedFile->decls.emplace_back(MakeOwned<VarDecl>());
+    auto importedDecl = importedFile->decls.front().get();
+    importedPackage->files.emplace_back(std::move(importedFile));
+    AddCurFile(*importedPackage);
+
+    sourcePackage->srcImportedNonGenericDecls.emplace_back(importedDecl);
+    auto count = CountASTNodes({sourcePackage.get()}, {importedPackage.get()});
+
+    EXPECT_EQ(count.source, 3);
+    EXPECT_EQ(count.imported, 3);
+    EXPECT_EQ(count.Total(), 6);
+
+    auto reachableCount = CountASTNodes({sourcePackage.get()});
+    EXPECT_EQ(reachableCount.source, 3);
+    EXPECT_EQ(reachableCount.imported, 1);
+}
+
+TEST_F(WalkerTest, CountASTNodesIncludesDesugaredExpression)
+{
+    auto package = MakeOwned<Package>("source.pkg");
+    auto file = MakeOwned<File>();
+    file->curPackage = package.get();
+    auto varDecl = MakeOwned<VarDecl>();
+    varDecl->initializer = MakeOwned<LitConstExpr>();
+    varDecl->initializer->desugarExpr = MakeOwned<LitConstExpr>();
+    file->decls.emplace_back(std::move(varDecl));
+    package->files.emplace_back(std::move(file));
+    AddCurFile(*package);
+
+    auto count = CountASTNodes({package.get()});
+
+    EXPECT_EQ(count.source, 5);
+    EXPECT_EQ(count.imported, 0);
 }
 
 TEST_F(WalkerTest, GetCallExprs)

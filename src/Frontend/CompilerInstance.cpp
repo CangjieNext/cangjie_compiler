@@ -12,9 +12,13 @@
 
 #include "cangjie/Frontend/CompilerInstance.h"
 
+#include <algorithm>
 #include <fstream>
+#include <iostream>
+#include <unordered_set>
 
 #include "PrintSymbolTable.h"
+#include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Basic/Print.h"
@@ -29,6 +33,7 @@
 #include "cangjie/IncrementalCompilation/ASTCacheCalculator.h"
 #include "cangjie/IncrementalCompilation/IncrementalCompilationLogger.h"
 #include "cangjie/Macro/MacroExpansion.h"
+#include "cangjie/Macro/MacroCommon.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Modules/PackageManager.h"
@@ -206,61 +211,90 @@ bool CompilerInstance::InitCompilerInstance()
 }
 
 namespace {
-void DumpASTToScreen(const std::vector<Ptr<Package>>& srcPkgs)
+std::vector<Ptr<Package>> GetLoadedImportedPackages(const ImportManager& importManager)
 {
-    if (srcPkgs.empty()) {
-        return;
+    std::vector<Ptr<Package>> packages;
+    std::unordered_set<Ptr<Package>> seen;
+    for (auto packageDecl : importManager.GetAllImportedPackages(true)) {
+        if (!packageDecl || !packageDecl->srcPackage ||
+            !packageDecl->srcPackage->TestAttr(Attribute::IMPORTED) ||
+            !seen.emplace(packageDecl->srcPackage).second) {
+            continue;
+        }
+        packages.emplace_back(packageDecl->srcPackage);
     }
-    for (auto& srcPkg : srcPkgs) {
-        PrintNode(srcPkg.get());
+    std::sort(packages.begin(), packages.end(), [](auto lhs, auto rhs) {
+        return lhs->fullPackageName < rhs->fullPackageName;
+    });
+    return packages;
+}
+
+void PrintPackages(const std::vector<Ptr<Package>>& sourcePackages,
+    const std::vector<Ptr<Package>>& importedPackages, const std::string& stage, std::ostream& stream)
+{
+    stream << "// AST after " << stage << '\n';
+    for (auto package : sourcePackages) {
+        stream << "// source package: " << package->fullPackageName << '\n';
+        PrintNode(package, 0, "", stream);
+    }
+    for (auto package : importedPackages) {
+        stream << "// imported package (loaded AST): " << package->fullPackageName << '\n';
+        PrintNode(package, 0, "", stream);
     }
 }
-void DumpAST(const std::vector<Ptr<Package>>& srcPkgs, const std::string& outputOfProduct = "",
-    const std::string& prefix = "", bool dumpToScreen = false)
+} // namespace
+
+void CompilerInstance::RecordASTNodeCount(const std::string& stage)
 {
-    if (srcPkgs.empty()) {
+    Utils::ProfileRecorder::RecordCodeInfo("ast node total after " + stage, [this, stage]() {
+        auto count = AST::CountASTNodes(GetSourcePackages(), GetLoadedImportedPackages(*importManager));
+        Utils::ProfileRecorder::RecordCodeInfo("ast node source after " + stage, count.source);
+        Utils::ProfileRecorder::RecordCodeInfo("ast node imported after " + stage, count.imported);
+        return count.Total();
+    });
+}
+
+void CompilerInstance::DumpASTAtStage(const std::string& stage)
+{
+    const auto& options = invocation.globalOptions;
+    if (!options.NeedDumpAST() || srcPkgs.empty()) {
         return;
     }
-    CJC_ASSERT(srcPkgs.size() == 1);
-    const std::string& pkgName = srcPkgs[0]->fullPackageName;
-    if (dumpToScreen) {
-        DumpASTToScreen(srcPkgs);
+    auto sourcePackages = GetSourcePackages();
+    std::sort(sourcePackages.begin(), sourcePackages.end(), [](auto lhs, auto rhs) {
+        return lhs->fullPackageName < rhs->fullPackageName;
+    });
+    auto importedPackages = GetLoadedImportedPackages(*importManager);
+    if (options.NeedDumpASTToScreen()) {
+        PrintPackages(sourcePackages, importedPackages, stage, std::cout);
         return;
     }
-    static std::string dumpDir;
-    static bool checkDumpDir = false;
-    static size_t fileNum = 0;
-    if (!checkDumpDir) {
-        if (FileUtil::IsDir(outputOfProduct)) {
-            dumpDir = FileUtil::JoinPath(outputOfProduct, pkgName + "_AST");
-        } else {
-            dumpDir = FileUtil::GetFileBase(outputOfProduct) + "_AST";
+    if (!astDumpDirInitialized) {
+        const auto& packageName = sourcePackages.front()->fullPackageName;
+        astDumpDir = FileUtil::IsDir(options.output)
+            ? FileUtil::JoinPath(options.output, packageName + "_AST")
+            : FileUtil::GetFileBase(options.output) + "_AST";
+        if (FileUtil::FileExist(astDumpDir)) {
+            FileUtil::RemoveDirectoryRecursively(astDumpDir);
         }
-        if (FileUtil::FileExist(dumpDir)) {
-            FileUtil::RemoveDirectoryRecursively(dumpDir);
-        }
-        FileUtil::CreateDirs(dumpDir + DIR_SEPARATOR);
-        checkDumpDir = true;
+        FileUtil::CreateDirs(astDumpDir + DIR_SEPARATOR);
+        astDumpDirInitialized = true;
     }
-    auto realDirPath = Cangjie::FileUtil::GetAbsPath(dumpDir);
+    auto realDirPath = FileUtil::GetAbsPath(astDumpDir);
     if (!realDirPath.has_value()) {
-        Errorln("Cannot get absolute path of dump directory: " + dumpDir, ", not dump ", prefix, " AST");
+        Errorln("Cannot get absolute path of dump directory: " + astDumpDir, ", not dump ", stage, " AST");
         return;
     }
-    std::string dumpPath =
-        FileUtil::JoinPath(realDirPath.value(), std::to_string(fileNum) + "_" + prefix + "_ast" + ".txt");
+    auto dumpPath = FileUtil::JoinPath(
+        realDirPath.value(), std::to_string(astDumpFileNum) + "_" + stage + "_ast.txt");
     std::ofstream ofs(dumpPath);
     if (!ofs) {
         Errorln("Cannot open file to dump AST: " + dumpPath);
         return;
     }
-    for (auto& srcPkg : srcPkgs) {
-        PrintNode(srcPkg.get(), 0, "", ofs);
-    }
-    ofs.close();
-    fileNum++;
+    PrintPackages(sourcePackages, importedPackages, stage, ofs);
+    ++astDumpFileNum;
 }
-} // namespace
 
 bool CompilerInstance::Compile(CompileStage stage)
 {
@@ -277,10 +311,6 @@ bool CompilerInstance::Compile(CompileStage stage)
             success = false;
             break;
         }
-    }
-    // Dump AST to screen if needed before mangling stage.
-    if (invocation.globalOptions.NeedDumpASTToScreen() && i < static_cast<int>(CompileStage::MANGLING)) {
-        DumpASTToScreen(GetSourcePackages());
     }
     diag.ReportErrorAndWarningCount();
     return success;
@@ -455,9 +485,8 @@ bool CompilerInstance::PerformParse()
             IncrementalCompilationLogger::GetInstance().InitLogFile(incrLogPath);
             IncrementalCompilationLogger::GetInstance().WriteBuffToFile();
         }
-        if (globalOpts.NeedDumpASTToFile()) {
-            DumpAST(GetSourcePackages(), globalOpts.output, "parse");
-        }
+        RecordASTNodeCount("parse");
+        DumpASTAtStage("parse");
     }
     return ret;
 }
@@ -465,15 +494,25 @@ bool CompilerInstance::PerformParse()
 bool CompilerInstance::PerformConditionCompile()
 {
     auto ret = compileStrategy->ConditionCompile();
-    if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
-        DumpAST(GetSourcePackages(), invocation.globalOptions.output, "condcomp");
-    }
+    RecordASTNodeCount("condition compile");
+    DumpASTAtStage("condition-compile");
     return ret;
 }
 
 bool CompilerInstance::PerformMacroExpand()
 {
     auto ret = compileStrategy->MacroExpand();
+
+    Utils::ProfileRecorder::RecordCodeInfo("macro generated code line", [this]() {
+        DiagnosticEngine codeInfoDiag;
+        SourceManager codeInfoSourceManager;
+        codeInfoDiag.SetSourceManager(&codeInfoSourceManager);
+        int64_t lines = 0;
+        for (const auto& generatedCode : tokensEvalInMacro) {
+            lines += CountEffectiveCodeLines(generatedCode, codeInfoDiag);
+        }
+        return lines;
+    });
 
     // Constant evaluation and the interpreter needs to load bchir, which requires an AST loader.
     if (!invocation.globalOptions.IsConstEvalEnabled() && !invocation.globalOptions.interpreter) {
@@ -490,9 +529,8 @@ bool CompilerInstance::PerformMacroExpand()
         }
         Println("}");
     }
-    if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
-        DumpAST(GetSourcePackages(), invocation.globalOptions.output, "macroexp");
-    }
+    RecordASTNodeCount("macro expand");
+    DumpASTAtStage("macro-expand");
     return ret;
 }
 
@@ -676,36 +714,35 @@ bool CompilerInstance::PerformIncrementalScopeAnalysis()
     Utils::ProfileRecorder recorder("Main Stage", "AST Diff");
     CalculateASTCache();
 #endif
+    RecordASTNodeCount("ast diff");
+    DumpASTAtStage("ast-diff");
     return true;
 }
 
 bool CompilerInstance::PerformImportPackage()
 {
     auto ret = compileStrategy->ImportPackages();
-    if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
-        DumpAST(GetSourcePackages(), invocation.globalOptions.output, "import");
-    }
+    RecordASTNodeCount("import");
+    DumpASTAtStage("import");
     return ret;
 }
 
 bool CompilerInstance::PerformSema()
 {
     auto ret = compileStrategy->Sema();
-    if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
-        DumpAST(GetSourcePackages(), invocation.globalOptions.output, "sema");
-    }
     return ret;
 }
 
 bool CompilerInstance::PerformOverflowStrategy()
 {
     if (invocation.globalOptions.overflowStrategy == OverflowStrategy::NA) {
+        RecordASTNodeCount("overflow strategy");
+        DumpASTAtStage("overflow-strategy");
         return true;
     }
     compileStrategy->OverflowStrategy();
-    if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
-        DumpAST(GetSourcePackages(), invocation.globalOptions.output, "overflow");
-    }
+    RecordASTNodeCount("overflow strategy");
+    DumpASTAtStage("overflow-strategy");
     return true;
 }
 
@@ -716,9 +753,8 @@ bool CompilerInstance::PerformDesugarAfterSema()
     if (!invocation.globalOptions.enIncrementalCompilation) {
         testManager->PrepareToMock(GetSourcePackages());
     }
-    if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
-        DumpAST(GetSourcePackages(), invocation.globalOptions.output, "desugar");
-    }
+    RecordASTNodeCount("desugar after sema");
+    DumpASTAtStage("desugar-after-sema");
     return true;
 }
 
@@ -756,9 +792,8 @@ bool CompilerInstance::PerformGenericInstantiation()
         CJC_ASSERT(astCtx);
         typeChecker->PerformDesugarAfterInstantiation(*astCtx, *srcPkg);
     }
-    if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
-        DumpAST(GetSourcePackages(), invocation.globalOptions.output, "genericinst");
-    }
+    RecordASTNodeCount("generic instantiation");
+    DumpASTAtStage("generic-instantiation");
     return true;
 }
 #endif
@@ -954,10 +989,8 @@ bool CompilerInstance::PerformMangling()
     mangler->lambdaCounter = cachedInfo.lambdaCounter;
     ManglingHelpFunction(*mangler);
     cachedInfo.lambdaCounter = mangler->lambdaCounter;
-    // when dump to screen, only dump once and dump the ast immediately after mangling
-    if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpAST()) {
-        DumpAST(GetSourcePackages(), invocation.globalOptions.output, "mangle", invocation.globalOptions.dumpToScreen);
-    }
+    RecordASTNodeCount("mangle");
+    DumpASTAtStage("mangle");
     return true;
 }
 

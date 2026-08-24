@@ -11,6 +11,7 @@
 #include "TestCompilerInstance.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
+#include "cangjie/Macro/MacroCommon.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -45,6 +46,25 @@ std::unordered_map<std::string, std::string> GetEnvironmentVars()
     }
     return envVars;
 }
+}
+
+TEST(MacroCodeInfoTest, CountEffectiveCodeLinesSkipsBlankAndCommentOnlyLines)
+{
+    DiagnosticEngine diag;
+    SourceManager sm;
+    diag.SetSourceManager(&sm);
+    const std::string generated = R"(
+// comment
+let a = 1
+
+/* block
+ * comment
+ */
+let b = 2 // trailing comment
+)";
+
+    EXPECT_EQ(CountEffectiveCodeLines(generated, diag), 2);
+    EXPECT_EQ(CountEffectiveCodeLines("\n// comment only\n/* block comment */\n", diag), 0);
 }
 
 class MacroTest : public testing::Test {

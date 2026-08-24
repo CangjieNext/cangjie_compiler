@@ -49,6 +49,9 @@ struct MacroCollector {
 std::vector<Token> GetTokensFromString(
     const std::string& source, DiagnosticEngine& diag, const Position pos = INVALID_POSITION);
 
+/** Count physical lines containing generated code, excluding blank and comment-only lines. */
+int64_t CountEffectiveCodeLines(const std::string& source, DiagnosticEngine& diag);
+
 bool IsCurFile(const SourceManager& sm, const Token& tk, unsigned int fileID = 0);
 
 // Convert Tokens into string representation in source code.

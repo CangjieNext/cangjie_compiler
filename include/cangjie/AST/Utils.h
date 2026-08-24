@@ -13,13 +13,33 @@
 #ifndef CANGJIE_AST_UTILS_H
 #define CANGJIE_AST_UTILS_H
 
+#include <cstdint>
 #include <functional>
+#include <vector>
 
 #include "cangjie/Utils/ConstantsUtils.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/Utils/CastingTemplate.h"
 
 namespace Cangjie::AST {
+struct ASTNodeCount {
+    int64_t source{0};
+    int64_t imported{0};
+
+    int64_t Total() const
+    {
+        return source + imported;
+    }
+};
+
+/**
+ * Count every AST node reachable from the given package roots exactly once.
+ * Nodes are classified by their owning package instead of the root through which they are reached.
+ */
+ASTNodeCount CountASTNodes(
+    const std::vector<Ptr<AST::Package>>& sourcePackages,
+    const std::vector<Ptr<AST::Package>>& importedPackages = {});
+
 /**
  * Add Attribute and curfile in macro expanded node.
  */

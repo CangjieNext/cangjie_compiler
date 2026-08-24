@@ -274,6 +274,12 @@ public:
      */
     std::vector<Ptr<AST::Package>> GetSourcePackages();
 
+    /** Record source, imported and total AST node counts at the given compilation stage. */
+    void RecordASTNodeCount(const std::string& stage);
+
+    /** Dump source and currently loaded imported ASTs at the given compilation stage. */
+    void DumpASTAtStage(const std::string& stage);
+
     /**
      * Get Source Manager.
      */
@@ -550,6 +556,10 @@ protected:
     bool buildTrie = true;
 
     std::unordered_map<unsigned int, std::string> fileNameMap;
+
+    std::string astDumpDir;
+    size_t astDumpFileNum{0};
+    bool astDumpDirInitialized{false};
 
     // Merge source packages and imported packages, also init ASTContext here.
     void MergePackages();

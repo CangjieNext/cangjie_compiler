@@ -306,19 +306,38 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterSema(std::vector<Ptr<AST::
 {
     TyVarScope ts(typeManager);
     for (auto& pkg : pkgs) {
-        PerformDesugarAfterTypeCheck(*ci->pkgCtxMap[pkg], *pkg);
-        TryDesugarForCoalescing(*pkg);
-        AutoBoxing autoBox(typeManager);
-        autoBox.AddOptionBox(*pkg);
+        const auto packageSuffix = " [" + pkg->fullPackageName + "]";
+        {
+            Utils::ProfileRecorder recorder("Desugar after Sema", "After TypeCheck Desugar" + packageSuffix);
+            PerformDesugarAfterTypeCheck(*ci->pkgCtxMap[pkg], *pkg);
+        }
+        {
+            Utils::ProfileRecorder recorder("Desugar after Sema", "Coalescing Desugar" + packageSuffix);
+            TryDesugarForCoalescing(*pkg);
+        }
+        {
+            Utils::ProfileRecorder recorder("Desugar after Sema", "Option Boxing" + packageSuffix);
+            AutoBoxing autoBox(typeManager);
+            autoBox.AddOptionBox(*pkg);
+        }
     }
     if (ci->invocation.globalOptions.enIncrementalCompilation) {
+        Utils::ProfileRecorder recorder("Desugar after Sema", "Semantic Usage Cache");
         ci->CacheSemaUsage(GetSemanticUsage(typeManager, pkgs));
     }
-    GenerateMainInvoke();
+    {
+        Utils::ProfileRecorder recorder("Desugar after Sema", "Main Invoke Generation");
+        GenerateMainInvoke();
+    }
     // Inline checking needs to process source package and imported packages which has source imported decls.
-    CheckInlineFunctions(ci->GetPackages());
+    {
+        Utils::ProfileRecorder recorder("Desugar after Sema", "Inline Check");
+        CheckInlineFunctions(ci->GetPackages());
+    }
     // Since the inlined function will affect decls' visibility, analyze linkage after inline decl checking.
     for (auto& pkg : pkgs) {
+        Utils::ProfileRecorder recorder(
+            "Desugar after Sema", "Linkage Analysis [" + pkg->fullPackageName + "]");
         AnalyzeFunctionLinkage(*pkg);
     }
     // If compiled with the `-g` or '--coverage', files should be saved with absolute paths.
@@ -327,6 +346,8 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterSema(std::vector<Ptr<AST::
     bool saveFileWithAbsPath =
         ci->invocation.globalOptions.enableCompileDebug || ci->invocation.globalOptions.enableCoverage;
     for (auto& pkg : pkgs) {
+        Utils::ProfileRecorder recorder(
+            "Desugar after Sema", "Export Decl Content [" + pkg->fullPackageName + "]");
         bool saveAbsPath = STANDARD_LIBS.find(pkg->fullPackageName) != STANDARD_LIBS.end()
             ? ci->invocation.globalOptions.enableCoverage
             : saveFileWithAbsPath;
@@ -335,6 +356,7 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterSema(std::vector<Ptr<AST::
     // Update positions of macro-expanded nodes for user-facing locations.
     // Affects exception stack line numbers, coverage hit lines, and cjdb jump/source locations.
     if (ci->invocation.globalOptions.enableCompileDebug || ci->invocation.globalOptions.displayLineInfo) {
+        Utils::ProfileRecorder recorder("Desugar after Sema", "Macro Position Update");
         UpdatePosForMacroExpandedNodes(pkgs);
     }
 }
