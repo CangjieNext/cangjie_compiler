@@ -2687,11 +2687,11 @@ static void RemoveMismatchedThisModeForCtorCall(const CallExpr& ce, std::vector<
     /* When call ctor with explicit mode, remove ctor of mismatching mode. This is to avoid such err msg.
     error: mismatched types
      ==> nolocalinit.cj:6:13:
-      | 
+      |
     6 |     let d = Dog() @local!
       |             ^^^ expected 'Class-Dog @local!', found 'Class-Dog'
-      | 
-    
+      |
+
     1 error generated, 1 error printed.
     */
     for (auto it = candidates.begin(); it != candidates.end();) {
