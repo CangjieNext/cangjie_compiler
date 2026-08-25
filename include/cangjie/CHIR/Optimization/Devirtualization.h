@@ -12,9 +12,12 @@
 #include "cangjie/CHIR/Analysis/TypeAnalysis.h"
 #include "cangjie/CHIR/IR/Package.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
+#include "cangjie/Option/Option.h"
 #include <unordered_map>
 
 namespace Cangjie::CHIR {
+struct FuncCallContext;
+
 class Devirtualization {
 public:
     /**
@@ -26,11 +29,9 @@ public:
      * @brief rewrite info if a invoke can be de-virtualize.
      */
     struct RewriteInfo {
-        Invoke* invoke;
+        InvokeBase* invoke;  // Invoke or TryInvoke
         Function* realCallee;
         Type* thisType;
-        std::vector<Type*> typeArgs;
-        Apply* newApply = nullptr;
     };
 
     Devirtualization() = delete;
@@ -38,24 +39,19 @@ public:
     /**
      * @brief constructor for Devirtualization pass.
      * @param typeAnalysisWrapper
-     * @param devirtFuncInfo
+     * @param devirtFuncInfo collected facts (subtype map, etc.)
+     * @param builder CHIR builder for generating IR.
+     * @param package current package (for closed-world package relation).
+     * @param opts compilation options (output mode, noSubPkg, ...).
      */
-    explicit Devirtualization(TypeAnalysisWrapper* typeAnalysisWrapper, DevirtualizationInfo& devirtFuncInfo);
+    explicit Devirtualization(TypeAnalysisWrapper* typeAnalysisWrapper, DevirtualizationInfo& devirtFuncInfo,
+        CHIRBuilder& builder, const Package& package, const GlobalOptions& opts);
 
     /**
      * @brief main optimization pass entry.
      * @param funcs funcs to devirtualization.
-     * @param builder CHIR builder for generating IR.
-     * @param isDebug flag whether print debug log.
      */
-    void RunOnFuncs(const std::vector<Function*>& funcs, CHIRBuilder& builder, bool isDebug);
-
-    /**
-     * @brief get functions containing invoke expression.
-     * @param package user package to optimization.
-     * @return return functions containing invoke expression.
-     */
-    static std::vector<Function*> CollectContainInvokeExprFuncs(const Ptr<const Package>& package);
+    void RunOnFuncs(const std::vector<Function*>& funcs);
 
     /// get optimized functions which are marked frozen.
     const std::vector<Function*>& GetFrozenInstFuns() const;
@@ -64,46 +60,30 @@ public:
     /// this function mainly get results from second type analysis.
     void AppendFrozenFuncState(const Function* func, std::unique_ptr<Results<TypeDomain>> analysisRes);
 
-    /// function signature to determine a certain function.
-    struct FuncSig {
-        std::string name;
-        std::vector<Type*> types;
-        std::vector<Type*> typeArgs;
-    };
-
 private:
-    void RunOnFunc(const Function* func, CHIRBuilder& builder);
+    void RunOnFunc(const Function* func);
 
-    std::pair<Function*, Type*> FindRealCallee(
-        CHIRBuilder& builder, const TypeValue* typeState, const FuncSig& method) const;
+    std::pair<Function*, Type*> FindFinalCalleeAndThisType(const TypeValue* typeState, const InvokeBase& invoke) const;
 
-    bool IsValidSubType(CHIRBuilder& builder, const Type* expected, Type* specific,
-        std::unordered_map<const GenericType*, Type*>& replaceTable) const;
+    /// Whether subtypeMap[@p def] is a complete subtype set (closed world).
+    bool IsSubtypeSetComplete(const CustomTypeDef& def) const;
 
-    bool IsInstantiationOf(CHIRBuilder& builder, const GenericType* generic, const Type* instantiated) const;
+    /// Collect transitive subtypes of @p specific when the set is closed-world;
+    /// otherwise return an empty vector.
+    std::vector<Type*> CollectAllSubTypes(ClassType& specific) const;
 
-    void InstantiateFuncIfPossible(CHIRBuilder& builder, std::vector<RewriteInfo>& rewriteInfoList);
+    /// Create an instantiated function for @p func if possible; may clear @p context.instTypeArgs.
+    Function* CreateInstFuncIfPossible(Function* func, FuncCallContext& context);
 
-    void CollectCandidates(
-        CHIRBuilder& builder, ClassType* specific, std::pair<Function*, Type*>& res, const FuncSig& method) const;
+    void RewriteToApply(std::vector<RewriteInfo>& rewriteInfos);
 
-    Function* GetCandidateFromSpecificType(
-        CHIRBuilder& builder, ClassType& specific, const FuncSig& method) const;
-
-    static void RewriteToApply(CHIRBuilder& builder, std::vector<RewriteInfo>& rewriteInfos, bool isDebug);
-
-    static bool RewriteToBuiltinOp(CHIRBuilder& builder, const RewriteInfo& info, bool isDebug);
-
-    /**
-     * check func whether has invoke expression, implement func for CollectContainInvokeExprFuncs
-     */
-    static bool CheckFuncHasInvoke(const BlockGroup& bg);
-
-    static bool CheckAllGenericTypeVisible(
-        const Type& thisType, const std::unordered_set<const GenericType*>& visibleSet);
+    bool RewriteToBuiltinOp(const RewriteInfo& info);
 
     TypeAnalysisWrapper* analysisWrapper;
     DevirtualizationInfo& devirtFuncInfo;
+    CHIRBuilder& builder;
+    const Package& package;
+    const GlobalOptions& opts;
     std::vector<RewriteInfo> rewriteInfos{};
 
     // frozen inst functions after devirt, these func need a devirt optimization too after first devirt opt

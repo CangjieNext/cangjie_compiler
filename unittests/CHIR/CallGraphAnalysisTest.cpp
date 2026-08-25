@@ -11,13 +11,11 @@
 #include <gtest/gtest.h>
 
 #include "cangjie/CHIR/Analysis/CallGraphAnalysis.h"
-#include "cangjie/CHIR/Analysis/DevirtualizationInfo.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/DebugLocation.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Package.h"
 #include "cangjie/CHIR/IR/Type/CustomTypeDef.h"
-#include "cangjie/Option/Option.h"
 
 using namespace Cangjie;
 using namespace Cangjie::CHIR;
@@ -93,16 +91,12 @@ protected:
         cctx = std::make_unique<CHIRContext>(nameMap.get());
         builder = std::make_unique<CHIRBuilder>(*cctx);
         package = builder->CreatePackage("default");
-        opts = std::make_unique<GlobalOptions>();
-        devirtInfo = std::make_unique<DevirtualizationInfo>(package, *opts);
     }
 
     std::unique_ptr<std::unordered_map<unsigned int, std::string>> nameMap;
     std::unique_ptr<CHIRContext> cctx;
     std::unique_ptr<CHIRBuilder> builder;
     Package* package{nullptr};
-    std::unique_ptr<GlobalOptions> opts;
-    std::unique_ptr<DevirtualizationInfo> devirtInfo;
 };
 
 TEST_F(CallGraphAnalysisTest, DirectCallChainPostOrder)
@@ -112,7 +106,7 @@ TEST_F(CallGraphAnalysisTest, DirectCallChainPostOrder)
     auto* a = CreateCaller(*builder, "a", {b});
     (void)a;
 
-    CallGraphAnalysis analysis(package, *devirtInfo);
+    CallGraphAnalysis analysis(package);
     analysis.DoCallGraphAnalysis(true);
 
     auto names = CollectNonNullNames(analysis.postOrderSCCFunctionlist);
@@ -143,7 +137,7 @@ TEST_F(CallGraphAnalysisTest, MutualRecursionFormsOneSCC)
     auto* r = CreateCaller(*builder, "r", {a});
     (void)r;
 
-    CallGraphAnalysis analysis(package, *devirtInfo);
+    CallGraphAnalysis analysis(package);
     analysis.DoCallGraphAnalysis(true);
 
     auto names = CollectNonNullNames(analysis.postOrderSCCFunctionlist);
@@ -161,7 +155,7 @@ TEST_F(CallGraphAnalysisTest, IndependentRootsReachableFromEntry)
     (void)leaf1;
     (void)leaf2;
 
-    CallGraphAnalysis analysis(package, *devirtInfo);
+    CallGraphAnalysis analysis(package);
     analysis.DoCallGraphAnalysis(false);
 
     auto names = CollectNonNullNames(analysis.postOrderSCCFunctionlist);
@@ -175,7 +169,7 @@ TEST_F(CallGraphAnalysisTest, ApplyToDeclWithoutBodyGoesToExit)
     auto* caller = CreateCaller(*builder, "caller", {external});
     (void)caller;
 
-    CallGraphAnalysis analysis(package, *devirtInfo);
+    CallGraphAnalysis analysis(package);
     analysis.DoCallGraphAnalysis(true);
 
     auto names = CollectNonNullNames(analysis.postOrderSCCFunctionlist);
@@ -223,7 +217,7 @@ TEST_F(CallGraphAnalysisTest, InvokeOnClassTypeEntersVirtualEdgePath)
     block->AppendExpression(invoke);
     block->AppendExpression(builder->CreateTerminator<Exit>(block));
 
-    CallGraph cg(package, *devirtInfo);
+    CallGraph cg(package);
     auto callees = cg.GetAllPossibleCalleeOfInvoke(std::make_pair(std::string("m"), std::vector<Type*>{}));
     EXPECT_TRUE(callees.empty());
 
@@ -240,7 +234,7 @@ TEST_F(CallGraphAnalysisTest, InvokeOnClassTypeEntersVirtualEdgePath)
     node->DeleteCalledEdge(e2); // erase by node equality
     node->DeleteCalledEdge(CallGraph::Edge(cg.GetEntryNode(), CallGraph::Edge::Kind::VIRTUAL)); // no-op erase
 
-    CallGraphAnalysis analysis(package, *devirtInfo);
+    CallGraphAnalysis analysis(package);
     analysis.DoCallGraphAnalysis(true);
     auto names = CollectNonNullNames(analysis.postOrderSCCFunctionlist);
     EXPECT_NE(std::find(names.begin(), names.end(), "invoker"), names.end());
@@ -274,7 +268,7 @@ TEST_F(CallGraphAnalysisTest, DiamondCallGraphAndBackEdge)
     Init(root, {left, right});
     Init(entryRoot, {root});
 
-    CallGraphAnalysis analysis(package, *devirtInfo);
+    CallGraphAnalysis analysis(package);
     analysis.DoCallGraphAnalysis(false);
     auto names = CollectNonNullNames(analysis.postOrderSCCFunctionlist);
     EXPECT_NE(std::find(names.begin(), names.end(), "root"), names.end());

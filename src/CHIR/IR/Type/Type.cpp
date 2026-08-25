@@ -1627,4 +1627,13 @@ bool Type::SatisfyGenericConstraints(const GenericType& type, CHIRBuilder& build
     }
     return true;
 }
+
+bool Type::CanBeInherited() const
+{
+    auto customType = DynamicCast<CustomType*>(this);
+    if (customType == nullptr) {
+        return false;
+    }
+    return customType->GetCustomTypeDef()->CanBeInherited();
+}
 } // namespace Cangjie::CHIR

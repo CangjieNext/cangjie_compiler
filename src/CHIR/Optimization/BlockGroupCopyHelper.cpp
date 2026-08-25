@@ -132,7 +132,7 @@ void BlockGroupCopyHelper::GetInstMapFromApply(const Apply& apply, const Functio
     if (apply.GetCallee()->IsLocalVar()) {
         auto lambda = DynamicCast<Lambda*>(StaticCast<LocalVar*>(apply.GetCallee())->GetExpr());
         CJC_NULLPTR_CHECK(lambda);
-        // get inst map from function
+        // get inst map from lambda
         size_t index = 0;
         for (auto& genericType : lambda->GetGenericTypeParams()) {
             instMap.emplace(genericType, apply.GetInstantiatedTypeArgs()[index]);
@@ -175,6 +175,35 @@ void BlockGroupCopyHelper::GetInstMapFromApply(const Apply& apply, const Functio
             thisType = apply.GetThisType();
         }
     }
+}
+
+void BlockGroupCopyHelper::GetInstMapFromFuncCall(Function& func, Type* thisTy,
+    const std::vector<Type*>& instTypeArgs, const std::vector<Value*>& args)
+{
+    instMap.clear();
+    auto customDef = func.GetParentCustomTypeDef();
+    if (customDef != nullptr && customDef->IsGenericDef()) {
+        auto instParentCustomType = GetInstParentCustomTyOfCallee(func, args, thisTy, builder);
+        if (instParentCustomType == nullptr) {
+            instParentCustomType = customDef->IsExtend()
+                ? StaticCast<ExtendDef*>(customDef)->GetExtendedType()
+                : customDef->GetType();
+        }
+        instParentCustomType = instParentCustomType->StripAllRefs();
+        if (auto exDef = DynamicCast<const ExtendDef*>(customDef)) {
+            auto newMap = exDef->GetExtendedType()->CalculateGenericTyMapping(*instParentCustomType);
+            CJC_ASSERT(newMap.first);
+            instMap = std::move(newMap.second);
+        } else {
+            instMap = GetInstMapFromCurDefToCurType(StaticCast<CustomType&>(*instParentCustomType));
+        }
+    }
+    auto genericTypeParams = func.GetGenericTypeParams();
+    CJC_ASSERT(genericTypeParams.size() == instTypeArgs.size());
+    for (size_t i = 0; i < genericTypeParams.size(); ++i) {
+        instMap.emplace(genericTypeParams[i], instTypeArgs[i]);
+    }
+    thisType = thisTy;
 }
 
 void BlockGroupCopyHelper::InstBlockGroup(std::vector<Block*>& blocks)
