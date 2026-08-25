@@ -12,10 +12,12 @@
 
 #include "Common.h"
 #include "TypeMapper.h"
+#include "NativeFFI/Utils.h"
 #include "cangjie/AST/Clone.h"
 
 namespace Cangjie::Interop::ObjC {
 using namespace Cangjie::AST;
+using namespace Cangjie::Native::FFI;
 
 namespace {
 
@@ -57,7 +59,7 @@ void GenerateSyntheticClassFuncStub(ClassDecl& synthetic, FuncDecl& fd)
         }
     }
 
-    funcStub->outerDecl = Ptr(&synthetic);
+    RebindClonedStubToSynthetic(*funcStub, synthetic);
     synthetic.body->decls.emplace_back(std::move(funcStub));
 }
 
@@ -73,7 +75,7 @@ void GenerateSyntheticClassPropStub([[maybe_unused]] ClassDecl& synthetic, [[may
         }
     }
 
-    propStub->outerDecl = Ptr(&synthetic);
+    RebindClonedStubToSynthetic(*propStub, synthetic);
     synthetic.body->decls.emplace_back(std::move(propStub));
 }
 

@@ -11,6 +11,7 @@
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Utils/CastingTemplate.h"
@@ -470,6 +471,19 @@ bool AreParamTypeKindsValid(const FuncDecl& fd, const std::vector<TypeKind>& typ
         }
     }
     return true;
+}
+
+void RebindClonedStubToSynthetic(Decl& stub, ClassDecl& synthetic)
+{
+    stub.outerDecl = Ptr(&synthetic);
+    Walker(&stub, [&synthetic](Ptr<Node> node) {
+        node->curFile = synthetic.curFile;
+        if (auto decl = DynamicCast<Decl>(node)) {
+            decl->fullPackageName = synthetic.fullPackageName;
+            decl->moduleName = synthetic.moduleName;
+        }
+        return VisitAction::WALK_CHILDREN;
+    }).Walk();
 }
 
 } // namespace Cangjie::Native::FFI

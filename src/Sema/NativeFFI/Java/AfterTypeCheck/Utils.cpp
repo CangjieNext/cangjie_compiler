@@ -54,7 +54,7 @@ void GenerateSyntheticClassFuncStub(ClassDecl& synthetic, FuncDecl& fd)
         }
     }
 
-    funcStub->outerDecl = Ptr(&synthetic);
+    RebindClonedStubToSynthetic(*funcStub, synthetic);
     synthetic.body->decls.emplace_back(std::move(funcStub));
 }
 } // namespace

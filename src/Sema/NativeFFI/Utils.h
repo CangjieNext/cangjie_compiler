@@ -172,6 +172,14 @@ OwnedPtr<ThrowExpr> CreateThrowExceptionCall(const ImportManager& importManager,
     TypeManager& typeManager, const std::string& msg, Ptr<File> curFile);
 bool AreParamTypeKindsValid(const FuncDecl& fd, const std::vector<TypeKind>& typeKinds);
 
+/**
+ * @brief Sets `outerDecl` and package identity of a cloned stub to match `synthetic`.
+ *
+ * @param stub The cloned member declaration.
+ * @param synthetic The synthetic wrapper class that owns the stub.
+ */
+void RebindClonedStubToSynthetic(Decl& stub, ClassDecl& synthetic);
+
 } // namespace Cangjie::Native::FFI
 
 #endif // CANGJIE_SEMA_NATIVE_FFI_UTILS
