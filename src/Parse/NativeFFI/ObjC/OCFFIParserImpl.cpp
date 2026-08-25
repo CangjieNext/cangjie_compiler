@@ -19,7 +19,7 @@
 using namespace Cangjie;
 using namespace AST;
 
-void OCFFIParserImpl::CheckAnnotation(const Annotation& anno, ScopeKind scopeKind) const
+void OCFFIParserImpl::CheckAnnotation(Annotation& anno, ScopeKind scopeKind) const
 {
     switch (anno.kind) {
         case AnnotationKind::OBJ_C_MIRROR: {
@@ -122,25 +122,25 @@ void OCFFIParserImpl::CheckImplSignature(ClassLikeDecl& decl, const PtrVector<An
     }
 }
 
-void OCFFIParserImpl::CheckMirrorAnnoArgs(const Annotation& anno) const
+void OCFFIParserImpl::CheckMirrorAnnoArgs(Annotation& anno) const
 {
     static const std::string OBJC_MIRROR_NAME = "@ObjCMirror";
     p.ffiParser->CheckZeroOrSingleStringLitArgAnnotation(anno, OBJC_MIRROR_NAME);
 }
 
-void OCFFIParserImpl::CheckImplAnnoArgs(const Annotation& anno) const
+void OCFFIParserImpl::CheckImplAnnoArgs(Annotation& anno) const
 {
     static const std::string OBJC_IMPL_NAME = "@ObjCImpl";
     p.ffiParser->CheckZeroOrSingleStringLitArgAnnotation(anno, OBJC_IMPL_NAME);
 }
 
-void OCFFIParserImpl::CheckInitAnnoArgs(const Annotation& anno) const
+void OCFFIParserImpl::CheckInitAnnoArgs(Annotation& anno) const
 {
     static const std::string OBJC_INIT_NAME = "@ObjCInit";
     p.ffiParser->CheckNoArgAnnotation(anno, OBJC_INIT_NAME);
 }
 
-void OCFFIParserImpl::CheckOptionalAnnoArgs(const Annotation& anno) const
+void OCFFIParserImpl::CheckOptionalAnnoArgs(Annotation& anno) const
 {
     static const std::string OBJC_OPTIONAL_NAME = "@ObjCOptional";
     p.ffiParser->CheckNoArgAnnotation(anno, OBJC_OPTIONAL_NAME);

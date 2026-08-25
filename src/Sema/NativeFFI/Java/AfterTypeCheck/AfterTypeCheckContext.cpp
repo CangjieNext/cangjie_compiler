@@ -5,7 +5,6 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "AfterTypeCheckContext.h"
-#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
 #include "NativeFFI/Java/Utils.h"
@@ -84,26 +83,10 @@ std::vector<Ptr<FuncDecl>> AfterTypeCheckContext::GetJavaImplUserDefinedConstruc
     std::vector<Ptr<FuncDecl>> ctors;
 
     for (auto member : refWrapper.GetMemberDeclPtrs()) {
-        if (!member->TestAttr(Attribute::CONSTRUCTOR)) {
+        if (!IsUserDefinedJavaImplConstructor(*member)) {
             continue;
         }
-
-        // Skip original primary constructors and only consider its FuncDecl counterpart.
-        auto ctor = As<ASTKind::FUNC_DECL>(member);
-        if (!ctor) {
-            continue;
-        }
-        auto hasParams = !ctor->funcBody->paramLists.empty() && !ctor->funcBody->paramLists[0]->params.empty();
-
-        // Primary constructor is desugared as fresh FuncDecl with COMPILER_ADD attribute.
-        auto isPrimary = member->TestAttr(Attribute::PRIMARY_CONSTRUCTOR, Attribute::COMPILER_ADD);
-        // Visit implicit constructors too (compiler added without any parameters).
-        auto isImplicit = member->TestAttr(Attribute::COMPILER_ADD, Attribute::IMPLICIT_ADD) && !hasParams;
-        if (!isPrimary && !isImplicit && member->TestAttr(Attribute::COMPILER_ADD)) {
-            continue;
-        }
-
-        ctors.emplace_back(ctor);
+        ctors.emplace_back(StaticAs<ASTKind::FUNC_DECL>(member));
     }
     return ctors;
 }
@@ -146,7 +129,9 @@ void AfterTypeCheckContext::FlushGeneratedDecls()
         /*
          * Make the generated declaration visible and available via ImportManager/CjoManager.
          */
-        importManager.GetCjoManager()->AddGeneratedDeclToDeclMap(*generatedDecl);
+        if (generatedDecl->IsExportedDecl()) {
+            importManager.GetCjoManager()->AddGeneratedDeclToDeclMap(*generatedDecl);
+        }
         auto& fileDecls = generatedDecl->curFile->decls;
         fileDecls.push_back(std::move(generatedDecl));
     }
