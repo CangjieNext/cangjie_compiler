@@ -31,7 +31,6 @@ constexpr auto INTEROPLIB_OBJ_C_OPTIONAL_METHOD_UNIMPLEMENTED_EXCEPTION = "ObjCO
 constexpr auto INTEROPLIB_OBJ_C_STATIC_METHOD_CALL_ON_INTERFACE_EXCEPTION = "ObjCStaticMethodCallOnInterfaceException";
 constexpr auto INTEROPLIB_NATIVE_BLOCK_ABI = "NativeBlockABI";
 constexpr auto INTEROPLIB_CANGJIE_BLOCK_ABI = "CangjieBlockABI";
-constexpr auto INTEROPLIB_OBJ_C_GET_FROM_REGISTRY_BY_NATIVE_HANDLE = "getFromRegistryByNativeHandle";
 constexpr auto INTEROPLIB_OBJ_C_GET_FROM_REGISTRY_BY_ID = "getFromRegistryById";
 constexpr auto INTEROPLIB_OBJ_C_PUT_TO_REGISTRY = "putToRegistry";
 constexpr auto INTEROPLIB_OBJ_C_REMOVE_FROM_REGISTRY = "removeFromRegistry";
@@ -61,6 +60,8 @@ constexpr auto INTEROPLIB_OBJ_C_CONFORMS_TO_PROTOCOL = "conformsToProtocol";
 constexpr auto INTEROPLIB_OBJ_C_CONVERT_TO_NSSTRING = "convertToNSString";
 constexpr auto INTEROPLIB_OBJ_C_DESCRIPTION_AS_STRING = "descriptionAsString";
 constexpr auto INTEROPLIB_OBJ_C_RETAIN_AUTORELEASED_RETURN_VALUE = "objCRetainAutoreleasedReturnValue";
+constexpr auto INTEROPLIB_OBJ_C_SET_REGISTRY_ID = "setRegistryId";
+constexpr auto INTEROPLIB_OBJ_C_GET_REGISTRY_ID = "getRegistryId";
 
 // objc.lang
 constexpr auto OBJ_C_FUNC_GET_FPOINTER = "unsafeGetFunctionPointer";
@@ -80,7 +81,7 @@ Ptr<T> GetMemberOfDecl(Decl& decl, std::function<bool(const Decl&)> pred)
 }
 } // namespace
 
-Ptr<TypeAliasDecl> InteropLibBridge::GetNativeObjCIdDecl()
+Ptr<TypeAliasDecl> InteropLibBridge::GetNativeObjCIdDecl() const noexcept
 {
     static auto decl = GetInteropLibDecl<ASTKind::TYPE_ALIAS_DECL>(INTEROPLIB_NATIVE_OBJ_C_ID);
     return decl;
@@ -92,7 +93,7 @@ Ptr<InterfaceDecl> InteropLibBridge::GetObjCIdDecl()
     return decl;
 }
 
-Ptr<Ty> InteropLibBridge::GetNativeObjCIdTy()
+Ptr<Ty> InteropLibBridge::GetNativeObjCIdTy() const noexcept
 {
     return GetNativeObjCIdDecl()->type->GetTy();
 }
@@ -125,13 +126,13 @@ Ptr<Ty> InteropLibBridge::GetNativeObjCSuperPtrTy()
     return GetNativeObjCSuperPtrDecl()->type->GetTy();
 }
 
-Ptr<TypeAliasDecl> InteropLibBridge::GetRegistryIdDecl()
+Ptr<TypeAliasDecl> InteropLibBridge::GetRegistryIdDecl() const noexcept
 {
     static auto decl = GetInteropLibDecl<ASTKind::TYPE_ALIAS_DECL>(INTEROPLIB_REGISTRY_ID);
     return decl;
 }
 
-Ptr<Ty> InteropLibBridge::GetRegistryIdTy()
+Ptr<Ty> InteropLibBridge::GetRegistryIdTy() const noexcept
 {
     return GetRegistryIdDecl()->type->GetTy();
 }
@@ -155,19 +156,13 @@ Ptr<ClassDecl> InteropLibBridge::GetObjCStaticMethodCallOnIntefaceExceptionDecl(
     return decl;
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetGetFromRegistryByNativeHandleDecl()
-{
-    static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_GET_FROM_REGISTRY_BY_NATIVE_HANDLE);
-    return decl;
-}
-
-Ptr<FuncDecl> InteropLibBridge::GetGetFromRegistryByIdDecl()
+Ptr<FuncDecl> InteropLibBridge::GetGetFromRegistryByIdDecl() const noexcept
 {
     static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_GET_FROM_REGISTRY_BY_ID);
     return decl;
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetPutToRegistryDecl()
+Ptr<FuncDecl> InteropLibBridge::GetPutToRegistryDecl() const noexcept
 {
     static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_PUT_TO_REGISTRY);
     return decl;
@@ -179,7 +174,7 @@ Ptr<FuncDecl> InteropLibBridge::GetRemoveFromRegistryDecl()
     return decl;
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetAllocDecl()
+Ptr<FuncDecl> InteropLibBridge::GetAllocDecl() const noexcept
 {
     static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_ALLOC);
     return decl;
@@ -311,9 +306,21 @@ Ptr<FuncDecl> InteropLibBridge::GetDescriptionAsStringDecl()
     return decl;
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetObjCRetainAutoreleasedReturnValue()
+Ptr<FuncDecl> InteropLibBridge::GetObjCRetainAutoreleasedReturnValueDecl()
 {
     static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_RETAIN_AUTORELEASED_RETURN_VALUE);
+    return decl;
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetSetRegistryIdDecl() const noexcept
+{
+    static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_SET_REGISTRY_ID);
+    return decl;
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetGetRegistryIdDecl() const noexcept
+{
+    static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_GET_REGISTRY_ID);
     return decl;
 }
 

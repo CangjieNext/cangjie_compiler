@@ -133,7 +133,7 @@ void TypeChecker::TypeCheckerImpl::CheckClassDecl(ASTContext& ctx, ClassDecl& cd
     if (cd.IsJavaMirror() || cd.IsJavaImpl()) {
         CheckJavaInteropLibImport(cd);
     }
-    if (cd.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE)) {
+    if (cd.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_IMPL)) {
         CheckObjCInteropLibImport(cd);
     }
 }
@@ -264,7 +264,7 @@ void TypeChecker::TypeCheckerImpl::CheckInterfaceDecl(ASTContext& ctx, Interface
     if (id.IsJavaMirror() || id.IsJavaImpl()) {
         CheckJavaInteropLibImport(id);
     }
-    if (id.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE)) {
+    if (id.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_IMPL)) {
         CheckObjCInteropLibImport(id);
     }
 }

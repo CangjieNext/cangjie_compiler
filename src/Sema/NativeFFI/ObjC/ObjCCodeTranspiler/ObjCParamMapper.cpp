@@ -11,14 +11,14 @@
  */
 
 #include "ObjCParamMapper.h"
-#include "Transpiler.h"
 #include "Emitter.h"
 #include "NativeFFI/ObjC/Utils/ASTFactory.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "NativeFFI/Utils.h"
+#include "Transpiler.h"
+#include "Utils.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/FileUtil.h"
-#include "Utils.h"
 #include <iostream>
 #include <set>
 
@@ -115,16 +115,16 @@ ArgsList ObjCParamMapper::ConvertParamsListToArgsList(
 }
 
 std::string ObjCParamMapper::ConvertParamsListToArgsListToString(
-    const std::vector<OwnedPtr<AST::FuncParamList>>& paramLists, bool withRegistryId)
+    const std::vector<OwnedPtr<AST::FuncParamList>>& paramLists, bool withSelfInfo)
 {
     std::string result = "";
 
-    if (withRegistryId) {
-        result = SELF_NAME + "." + REGISTRY_ID;
+    if (withSelfInfo) {
+        result = SELF_NAME + "." + REGISTRY_ID + ", " + CAST_TO_VOID_PTR + SELF_NAME;
     }
 
     if (!paramLists.empty() && paramLists[0]) {
-        if (withRegistryId && paramLists[0]->params.size() != 0) {
+        if (withSelfInfo && paramLists[0]->params.size() != 0) {
             result += ", ";
         }
         for (size_t i = 0; i < paramLists[0]->params.size(); i++) {
@@ -206,13 +206,13 @@ std::string ObjCParamMapper::MapCJTypeToObjCType(std::vector<std::string>& typed
 std::string ObjCParamMapper::GenerateArgumentCast(const Ty& retTy, std::string value)
 {
     const auto& actualTy = retTy.IsCoreOptionType() ? *retTy.typeArgs[0] : retTy;
-    if (TypeMapper::IsObjCImpl(actualTy)) {
+    if (IsObjCImpl(actualTy)) {
         return CAST_TO_VOID_PTR + std::move(value);
     }
-    if (TypeMapper::IsObjCMirror(actualTy) || TypeMapper::IsObjCBlock(actualTy)) {
+    if (IsObjCMirror(actualTy) || IsObjCBlock(actualTy)) {
         return CAST_TO_VOID_PTR_RETAINED + std::move(value);
     }
-    if (TypeMapper::IsObjCPointer(actualTy)) {
+    if (IsObjCPointer(actualTy)) {
         return CAST_TO_VOID_PTR_UNSAFE + std::move(value);
     }
     return value;

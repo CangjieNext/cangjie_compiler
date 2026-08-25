@@ -166,11 +166,12 @@ void FFIParserImpl::CheckForeignNameAnnotation(Decl& decl) const
         if (it->kind != AnnotationKind::FOREIGN_NAME) {
             continue;
         }
-        if (!decl.outerDecl || (!decl.outerDecl->IsJavaMirror() && !decl.outerDecl->IsJavaImpl() &&
-            !decl.outerDecl->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE))) {
-                p.diag.DiagnoseRefactor(DiagKindRefactor::parse_foreign_name_on_ffi_decl_member, decl);
-                decl.EnableAttr(Attribute::IS_BROKEN);
-                return;
+        if (!decl.outerDecl ||
+            (!decl.outerDecl->IsJavaMirror() && !decl.outerDecl->IsJavaImpl() &&
+                !decl.outerDecl->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_IMPL))) {
+            p.diag.DiagnoseRefactor(DiagKindRefactor::parse_foreign_name_on_ffi_decl_member, decl);
+            decl.EnableAttr(Attribute::IS_BROKEN);
+            return;
         }
     }
 }

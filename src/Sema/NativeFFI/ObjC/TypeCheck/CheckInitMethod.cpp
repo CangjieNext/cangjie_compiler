@@ -11,7 +11,7 @@
  */
 
 #include "Handlers.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "cangjie/AST/Match.h"
 
 using namespace Cangjie::AST;
@@ -19,12 +19,12 @@ using namespace Cangjie::Interop::ObjC;
 
 void CheckInitMethod::HandleImpl(TypeCheckContext& ctx)
 {
-    if (!TypeMapper::IsObjCMirror(ctx.target)) {
+    if (!IsObjCMirror(ctx.target)) {
         return;
     }
 
     for (auto member : ctx.target.GetMemberDeclPtrs()) {
-        if (!IsStaticInitMethod(*member)) {
+        if (!IsObjCInitMethod(*member)) {
             continue;
         }
         auto& method = *StaticAs<ASTKind::FUNC_DECL>(member);

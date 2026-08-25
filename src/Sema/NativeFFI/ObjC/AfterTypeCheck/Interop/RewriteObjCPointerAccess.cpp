@@ -12,7 +12,7 @@
 
 
 #include "NativeFFI/Utils.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/AST/Match.h"
@@ -73,7 +73,7 @@ void HandleObjCPointerRead(InteropContext& ctx, CallExpr& callExpr)
     readPointerRef->instTys.push_back(rawCType);
     readPointerRef->SetTy(ctx.typeManager.GetFunctionTy(std::vector{pointerType, int64Type}, rawCType));
 
-    auto ptrExpr = ctx.factory.CreateUnsafePointerCast(
+    auto ptrExpr = ctx.deprecatedFactory.CreateUnsafePointerCast(
         CreateMemberAccess(std::move(receiver), *ptrFieldDecl),
         rawCType);
     CopyBasicInfo(&callExpr, ptrExpr);
@@ -87,8 +87,8 @@ void HandleObjCPointerRead(InteropContext& ctx, CallExpr& callExpr)
         rawCType,
         CallKind::CALL_INTRINSIC_FUNCTION), callExpr.curFile);
     // We use objc_retain here, because it's not a return value of any method
-    auto wrappedCall = ctx.factory.WrapEntity(std::move(call), *elementType, Retain::RETAINED);
-    ctx.factory.SetDesugarExpr(
+    auto wrappedCall = ctx.deprecatedFactory.WrapEntity(std::move(call), *elementType, Retain::RETAINED);
+    ctx.deprecatedFactory.SetDesugarExpr(
         &callExpr,
         std::move(wrappedCall)
     );
@@ -134,21 +134,21 @@ void HandleObjCPointerWrite(InteropContext& ctx, CallExpr& callExpr)
     writePointerRef->instTys.push_back(rawCType);
     writePointerRef->SetTy(ctx.typeManager.GetFunctionTy({pointerType, int64Type, rawCType}, unitType));
 
-    auto ptrExpr = ctx.factory.CreateUnsafePointerCast(
+    auto ptrExpr = ctx.deprecatedFactory.CreateUnsafePointerCast(
         CreateMemberAccess(std::move(receiver), *ptrFieldDecl),
         rawCType);
     CopyBasicInfo(&callExpr, ptrExpr);
     auto callArgs = std::vector<OwnedPtr<FuncArg>> {};
     callArgs.emplace_back(CreateFuncArg(std::move(ptrExpr)));
     callArgs.emplace_back(CreateFuncArg(CreateZero(int64Type)));
-    callArgs.emplace_back(CreateFuncArg(ctx.factory.UnwrapEntity(std::move(valueArg))));
+    callArgs.emplace_back(CreateFuncArg(ctx.deprecatedFactory.UnwrapEntity(std::move(valueArg))));
     auto call = WithinFile(CreateCallExpr(
         std::move(writePointerRef),
         std::move(callArgs),
         writePointerFunc,
         unitType,
         CallKind::CALL_INTRINSIC_FUNCTION), callExpr.curFile);
-    ctx.factory.SetDesugarExpr(&callExpr, std::move(call));
+    ctx.deprecatedFactory.SetDesugarExpr(&callExpr, std::move(call));
 }
 }
 
@@ -165,18 +165,18 @@ void RewriteObjCPointerAccess::HandleImpl(InteropContext& ctx)
             }
 
             auto funcDecl = callExpr->resolvedFunction;
-            if (!funcDecl || !funcDecl->outerDecl || !ctx.typeMapper.IsObjCPointer(*funcDecl->outerDecl)) {
+            if (!funcDecl || !funcDecl->outerDecl || !IsObjCPointer(*funcDecl->outerDecl)) {
                 return VisitAction::WALK_CHILDREN;
             }
 
             if (funcDecl->identifier == OBJCPOINTER_READ_METHOD && callExpr->args.size() == 0 &&
-                ctx.typeMapper.IsObjCCompatible(*callExpr->GetTy())) {
+                IsObjCCompatible(*callExpr->GetTy())) {
                 HandleObjCPointerRead(ctx, *callExpr);
                 return VisitAction::WALK_CHILDREN;
             }
 
             if (funcDecl->identifier == OBJCPOINTER_WRITE_METHOD && callExpr->args.size() == 1 &&
-                ctx.typeMapper.IsObjCCompatible(*callExpr->args[0]->GetTy())) {
+                IsObjCCompatible(*callExpr->args[0]->GetTy())) {
                 HandleObjCPointerWrite(ctx, *callExpr);
                 return VisitAction::WALK_CHILDREN;
             }
