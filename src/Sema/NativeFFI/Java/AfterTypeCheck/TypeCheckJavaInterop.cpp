@@ -7,6 +7,7 @@
 #include "JavaInteropManager.h"
 
 #include "DiagsInterop.h"
+#include "NativeFFI/Java/Utils.h"
 #include "Utils.h"
 
 #include "cangjie/AST/Match.h"
@@ -305,8 +306,7 @@ void JavaInteropManager::CheckImplRedefinition(Package& package)
             if (!IsImpl(*classLikeDecl)) {
                 continue;
             }
-
-            auto name = GetJavaFQName(*classLikeDecl);
+            auto name = Native::FFI::Java::GetJavaFQName(*classLikeDecl);
             if (javaNameToDecl.find(name) != javaNameToDecl.end()) {
                 DiagJavaImplRedefinitionInJava(diag, *classLikeDecl, *(javaNameToDecl[name]));
                 classLikeDecl->EnableAttr(Attribute::IS_BROKEN);

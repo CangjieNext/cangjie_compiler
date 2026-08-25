@@ -185,7 +185,7 @@ OCFFIParserImpl FFIParserImpl::ObjC() const
     return op;
 }
 
-void FFIParserImpl::CheckZeroOrSingleStringLitArgAnnotation(const AST::Annotation &anno,
+void FFIParserImpl::CheckZeroOrSingleStringLitArgAnnotation(AST::Annotation &anno,
                                                             const std::string &annotationName) const
 {
     if (anno.args.size() == 0) {
@@ -194,17 +194,19 @@ void FFIParserImpl::CheckZeroOrSingleStringLitArgAnnotation(const AST::Annotatio
 
     if (anno.args.size() > 1 || !IsLitString(anno.args[0]->expr)) {
         p.DiagAnnotationMoreThanOneArgs(anno, annotationName, "'String' literal");
+        anno.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
 }
 
-void FFIParserImpl::CheckNoArgAnnotation(const AST::Annotation &anno, const std::string &annotationName) const
+void FFIParserImpl::CheckNoArgAnnotation(AST::Annotation &anno, const std::string &annotationName) const
 {
     if (anno.args.empty()) {
         return;
     }
 
     p.DiagAnnotationShouldNotHaveArgs(anno, annotationName);
+    anno.EnableAttr(Attribute::IS_BROKEN);
 }
 
 

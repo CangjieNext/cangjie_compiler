@@ -241,7 +241,7 @@ void DesugarJArray::ReplaceCallsWithArrayJavaEntityGet(File& file) const
         base->target = arrayJavaEntityGetDecl;
         base->SetTy(arrayJavaEntityGetDecl->GetTy());
         callExpr->desugarExpr = ilib.UnwrapJavaEntity(
-            std::move(newCallExpr), arrayElementType, *As<ASTKind::CLASS_LIKE_DECL>(funcDecl->outerDecl));
+            std::move(newCallExpr), arrayElementType, funcDecl->outerDecl);
         callExpr->desugarArgs = std::nullopt;
 
         return VisitAction::WALK_CHILDREN;

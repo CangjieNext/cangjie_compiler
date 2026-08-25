@@ -18,7 +18,7 @@
 using namespace Cangjie;
 using namespace AST;
 
-void JFFIParserImpl::CheckAnnotation(const Annotation& anno) const
+void JFFIParserImpl::CheckAnnotation(Annotation& anno) const
 {
     if (anno.kind == AnnotationKind::JAVA_MIRROR) {
         CheckMirrorAnnoArgs(anno);
@@ -30,7 +30,7 @@ void JFFIParserImpl::CheckAnnotation(const Annotation& anno) const
     }
 }
 
-void JFFIParserImpl::CheckMirrorAnnoTarget(const Annotation& anno) const
+void JFFIParserImpl::CheckMirrorAnnoTarget(Annotation& anno) const
 {
     if (p.SeeingAny({TokenKind::CLASS, TokenKind::INTERFACE})) {
         return;
@@ -39,10 +39,11 @@ void JFFIParserImpl::CheckMirrorAnnoTarget(const Annotation& anno) const
     if (anno.kind == AnnotationKind::JAVA_MIRROR) {
         auto& lah = p.lookahead;
         p.DiagUnexpectedAnnoOn(anno, lah.Begin(), anno.identifier, lah.Value());
+        anno.EnableAttr(Attribute::IS_BROKEN);
     }
 }
 
-void JFFIParserImpl::CheckImplAnnoTarget(const Annotation& anno) const
+void JFFIParserImpl::CheckImplAnnoTarget(Annotation& anno) const
 {
     if (p.SeeingAny({TokenKind::CLASS, TokenKind::INTERFACE})) {
         return;
@@ -51,16 +52,17 @@ void JFFIParserImpl::CheckImplAnnoTarget(const Annotation& anno) const
     if (anno.kind == AnnotationKind::JAVA_IMPL) {
         auto& lah = p.lookahead;
         p.DiagUnexpectedAnnoOn(anno, lah.Begin(), anno.identifier, lah.Value());
+        anno.EnableAttr(Attribute::IS_BROKEN);
     }
 }
 
-void JFFIParserImpl::CheckMirrorAnnoArgs(const Annotation& anno) const
+void JFFIParserImpl::CheckMirrorAnnoArgs(Annotation& anno) const
 {
     static const std::string JAVA_MIRROR_NAME = "@JavaMirror";
     p.ffiParser->CheckZeroOrSingleStringLitArgAnnotation(anno, JAVA_MIRROR_NAME);
 }
 
-void JFFIParserImpl::CheckImplAnnoArgs(const Annotation& anno) const
+void JFFIParserImpl::CheckImplAnnoArgs(Annotation& anno) const
 {
     static const std::string JAVA_IMPL_NAME = "@JavaImpl";
     p.ffiParser->CheckZeroOrSingleStringLitArgAnnotation(anno, JAVA_IMPL_NAME);
@@ -107,13 +109,14 @@ void JFFIParserImpl::CheckImplSignature(AST::ClassLikeDecl& decl, const PtrVecto
     }
 }
 
-void JFFIParserImpl::CheckJavaHasDefaultAnnotation(const Annotation& anno) const
+void JFFIParserImpl::CheckJavaHasDefaultAnnotation(Annotation& anno) const
 {
     if (p.Seeing(TokenKind::FUNC)) {
         return;
     }
     auto& lah = p.lookahead;
     p.DiagUnexpectedAnnoOn(anno, lah.Begin(), anno.identifier, lah.Value());
+    anno.EnableAttr(Attribute::IS_BROKEN);
 }
 
 bool JFFIParserImpl::IsAbstractFunction(const FuncDecl& fd, const Decl& outerDecl) const

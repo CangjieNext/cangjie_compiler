@@ -12,7 +12,10 @@
 
 #include "JavaSourceCodeGenerator.h"
 #include "NativeFFI/Java/AfterTypeCheck/Utils.h"
+#include "NativeFFI/Java/JavaClassSignature.h"
+#include "NativeFFI/Java/Utils.h"
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/StdUtils.h"
@@ -142,7 +145,7 @@ void JavaSourceCodeGenerator::AddHeaderWithPackageName(std::string& curPackageNa
     };
     header += Join(imports, "\n", mapper) + "\n";
     header += "import static cangjie.lang.LibraryLoader.loadLibrary;\n";
-    header += "import " + GetConstructorMarkerFQName() + ";\n";
+    header += "import " + JavaClassSignature::GetConstructorMarkerClass().GetFQName() + ";\n";
 
     header += "\n";
 
@@ -265,12 +268,14 @@ std::string JavaSourceCodeGenerator::AddImport(
 
     if (auto classlikety = DynamicCast<ClassLikeTy>(ty)) {
         if (auto clDecl = As<ASTKind::CLASS_LIKE_DECL>(classlikety->commonDecl)) {
-            auto [package, topLevelClassName, fullClassName] = Interop::Java::DestructJavaClassName(*clDecl);
-            if (!package) {
+            auto package = GetJavaPackage(*clDecl);
+            auto topLevelClassName = GetJavaTopLevelClassName(*clDecl);
+            auto fullClassName = GetJavaUnqualifiedTypeName(*clDecl, ".");
+            if (package.empty()) {
                 return fullClassName;
             }
-            if (*package != *curPackageName && *package != IGNORE_IMPORT) {
-                javaImports->insert(*package + "." + topLevelClassName);
+            if (package != *curPackageName && package != IGNORE_IMPORT) {
+                javaImports->insert(package + "." + topLevelClassName);
             }
             javaType = fullClassName;
         }
@@ -429,7 +434,7 @@ std::string JavaSourceCodeGenerator::GenerateConstructorDecl(const FuncDecl& fun
                 params += JAVA_COMMA;
                 params += JAVA_WHITESPACE;
             }
-            params += GetConstructorMarkerClassName();
+            params += JavaClassSignature::GetConstructorMarkerClass().GetUnqualifiedTypeName();
             params += JAVA_WHITESPACE;
             params += JAVA_SPECIAL_PARAM_NAME;
         }
