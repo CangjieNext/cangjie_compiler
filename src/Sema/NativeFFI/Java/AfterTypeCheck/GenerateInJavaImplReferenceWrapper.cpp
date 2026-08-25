@@ -6,6 +6,9 @@
 
 #include "JavaDesugarManager.h"
 #include "GenerateInJavaImplReferenceWrapper.h"
+#include "NativeFFI/Java/AfterTypeCheck/ASTFactory.h"
+#include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
+#include "NativeFFI/Java/JavaMemberSignature.h"
 #include "NativeFFI/Utils.h"
 #include "Utils.h"
 #include "NativeFFI/Java/Utils.h"
@@ -237,8 +240,8 @@ FuncDecl& GenerateInJavaImplReferenceWrapper::InsertJavaSideConstructor(FuncDecl
     return res;
 }
 
-void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorInitialization(FuncDecl& ctor,
-    VarDecl& companionRefField, ClassDecl& companion) const
+void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorInitialization(AfterTypeCheckContext& ctx,
+    FuncDecl& ctor, VarDecl& companionRefField, ClassDecl& companion) const
 {
     auto curFile = ctor.curFile;
     auto jniEnvCall = ilib.CreateGetJniEnvCall(curFile);
@@ -257,15 +260,21 @@ void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorInitializa
     FuncDecl& parentCtor = *GetJavaMirrorWrappingConstructor(*refWrapper.GetSuperClassDecl());
     CJC_ASSERT(parentCtor.funcBody->paramLists[0]->params.size() == 1); // Java_CFFI_JavaEntity
 
-    auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, jniEnvCall);
-
     CJC_ASSERT(ctor.funcBody);
     CJC_ASSERT(ctor.funcBody->paramLists.size() == 1);
     auto& paramList = *ctor.funcBody->paramLists[0];
-
-    // No global reference is created here:
+    auto args = factory.CreateParamsUsage(paramList);
+    args.push_back(ilib.CreateJavaEntityNullCall(curFile)); // Marker parameter
+    
+    // NOTE: No global reference is created here:
     // it is wrapped into global reference in `super` constructors chain call: within `JObject`.
-    auto javaCtorExpr = ilib.CreateJavaConstructorBlock(refWrapper.GetTy(), paramList, curFile, false);
+    // NOTE: marker is used to distinguish between two types of `@JavaImpl` constructors
+    // running the same user-defined logics within it:
+    // 1. Constructor directly callable in cangjie code.
+    // 2. Constructor (with marker) callable in generated `@C` bridge functions callable by Java counterpart object.
+    auto javaCtorExpr = factory.CreateNewJavaObjectCall(ctx, *curFile,
+        JavaMemberSignature::FromConstructor(ctor, /* withMarker = */ true),
+        std::move(args));
     if (!javaCtorExpr) {
         ctor.EnableAttr(Attribute::IS_BROKEN);
         companion.EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
@@ -274,15 +283,6 @@ void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorInitializa
 
     auto superCall = CreateSuperCall(*ctor.outerDecl, parentCtor, parentCtor.GetTy());
     superCall->args.insert(superCall->args.begin(), CreateFuncArg(std::move(javaCtorExpr)));
-
-    if (!ctor.funcBody->body->body.empty()) {
-        auto firstNode = ctor.funcBody->body->body[0].get();
-        if (auto callExpr = As<ASTKind::CALL_EXPR>(firstNode); callExpr && IsSuperConstructorCall(*callExpr)) {
-             // This super-constructor call `callExpr` is removed in `JavaSourceCodeGenerator`.
-            // TODO: remove it here and memoize with context/cache.
-            callExpr->EnableAttr(Attribute::JAVA_MIRROR, Attribute::UNREACHABLE);
-        }
-    }
 
      // Inserts assignment of registry companion into an instance.
     ctor.funcBody->body->body.insert(ctor.funcBody->body->body.begin(),
@@ -295,7 +295,7 @@ void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorsInitializ
     ClassDecl& refWrapper, VarDecl& companionRefField, ClassDecl& companion) const
 {
     for (auto ctor : ctx.GetJavaImplUserDefinedConstructors(refWrapper)) {
-        RewriteUserDefinedConstructorInitialization(*ctor, companionRefField, companion);
+        RewriteUserDefinedConstructorInitialization(ctx, *ctor, companionRefField, companion);
     }
 
     RewriteRefWrapperPrimaryConstructor(refWrapper, companion, companionRefField);
@@ -331,8 +331,8 @@ void GenerateInJavaImplReferenceWrapper::Process(ClassDecl& refWrapper, AfterTyp
 }
 
 GenerateInJavaImplReferenceWrapper::GenerateInJavaImplReferenceWrapper(TypeManager& typeManager,
-    const ImportManager& importManager, InteropLibBridge& ilib)
-    : typeManager(typeManager), importManager(importManager), ilib(ilib)
+    const ImportManager& importManager, InteropLibBridge& ilib, ASTFactory& factory)
+    : typeManager(typeManager), importManager(importManager), ilib(ilib), factory(factory)
 {
 }
 

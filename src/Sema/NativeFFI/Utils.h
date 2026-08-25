@@ -13,11 +13,10 @@
 #define CANGJIE_SEMA_NATIVE_FFI_UTILS
 
 #include "cangjie/AST/Create.h"
-#include "cangjie/AST/Match.h"
-#include "cangjie/AST/Utils.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"
+#include "cangjie/Utils/CheckUtils.h"
 
 namespace Cangjie::Native::FFI {
 constexpr std::string_view NSSTRING_CLASS_IDENT = "NSString";
@@ -25,9 +24,11 @@ constexpr std::string_view NSOBJECT_CLASS_IDENT = "NSObject";
 constexpr std::string_view TOSTRING_METHOD_IDENT = "toString";
 constexpr std::string_view INIT_IDENT = "init";
 
+constexpr std::string_view READ_POINTER_INTRINSIC = "readPointer";
+constexpr std::string_view GET_POINTER_ADDRESS_INTRINSIC = "getPointerAddress";
+
 using namespace AST;
 
-enum class ArrayOperationKind : uint8_t { CREATE, GET, SET, GET_LENGTH };
 
 OwnedPtr<RefExpr> CreateThisRef(Ptr<Decl> target, Ptr<Ty> ty, Ptr<File> curFile);
 
@@ -42,7 +43,6 @@ OwnedPtr<RefExpr> CreateSuperRef(Ptr<Decl> target, Ptr<Ty> ty);
 
 OwnedPtr<CallExpr> CreateSuperCall(Decl& target, FuncDecl& baseTarget, Ptr<Ty> funcTy);
 
-ArrayOperationKind GetArrayOperationKind(Decl& decl);
 
 template <typename Ret = Node, typename... Args> std::vector<OwnedPtr<Ret>> Nodes(OwnedPtr<Args>&&... args)
 {
@@ -56,11 +56,19 @@ namespace Details {
 template <typename T> void WrapArg(std::vector<OwnedPtr<FuncArg>>* funcArgs, OwnedPtr<T>&& e)
 {
     CJC_ASSERT(e);
-    if (auto ptr = As<ASTKind::FUNC_ARG>(e.get())) {
-        funcArgs->emplace_back(ptr);
-    } else {
-        funcArgs->push_back(CreateFuncArg(std::forward<OwnedPtr<T>>(e)));
-    }
+    funcArgs->push_back(CreateFuncArg(StaticCast<Expr*>(e.release())));
+}
+
+template<> inline void WrapArg<FuncArg>(std::vector<OwnedPtr<FuncArg>>* funcArgs, OwnedPtr<FuncArg>&& e)
+{
+    CJC_ASSERT(e);
+    funcArgs->emplace_back(std::move(e));
+}
+
+template<> inline void WrapArg<Expr>(std::vector<OwnedPtr<FuncArg>>* funcArgs, OwnedPtr<Expr>&& e)
+{
+    CJC_ASSERT(e);
+    funcArgs->push_back(CreateFuncArg(std::forward<OwnedPtr<Expr>>(e)));
 }
 
 } // namespace Details
@@ -103,6 +111,42 @@ OwnedPtr<CallExpr> CreateMemberCall(OwnedPtr<Expr> receiver, Ptr<FuncDecl> fd, O
     return CreateCallExpr(std::move(ma), std::move(funcArgs), fd, funcTy->retTy, CallKind::CALL_DECLARED_FUNCTION);
 }
 
+template <typename... Args>
+OwnedPtr<CallExpr> CreateMemberCall(
+    [[maybe_unused]] TypeManager& typeManager, OwnedPtr<Expr> receiver, VarDecl& vd, OwnedPtr<Args>&&... args)
+{
+    CJC_NULLPTR_CHECK(receiver);
+    CJC_ASSERT(vd.GetTy()->IsFunc() || vd.GetTy()->IsCFunc());
+    std::vector<OwnedPtr<FuncArg>> funcArgs;
+
+    (Details::WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
+
+    auto funcTy = StaticCast<FuncTy*>(vd.GetTy());
+
+    // Ensure formal parameters count is the same as passed arguments.
+    CJC_ASSERT(funcTy->paramTys.size() == funcArgs.size());
+#ifdef NDEBUG
+    // Ensure passed arguments are subtypes of expected types.
+    for (auto [expectedTy, actualParam] = std::tuple{funcTy->paramTys.begin(), funcArgs.begin()};
+         expectedTy != funcTy->paramTys.end();
+         expectedTy++, actualParam++) {
+             CJC_ASSERT(typeManager.IsSubtype((*actualParam)->GetTy(), *expectedTy));
+        }
+#endif // NDEBUG
+
+        auto ma = CreateMemberAccess(std::move(receiver), vd);
+        if (vd.GetTy()->IsCFunc()) {
+            ma->EnableAttr(Attribute::UNSAFE);
+        }
+        CopyBasicInfo(ma->baseExpr, ma);
+        auto ca =
+            CreateCallExpr(std::move(ma), std::move(funcArgs), nullptr, funcTy->retTy, CallKind::CALL_FUNCTION_PTR);
+        if (vd.GetTy()->IsCFunc()) {
+            ca->EnableAttr(Attribute::UNSAFE);
+        }
+        return ca;
+}
+
 OwnedPtr<Type> CreateType(Ptr<Ty> ty);
 OwnedPtr<Type> CreateFuncType(Ptr<FuncTy> ty);
 
@@ -110,6 +154,12 @@ OwnedPtr<Expr> CreateBoolMatch(
     OwnedPtr<Expr> selector, OwnedPtr<Expr> trueBranch, OwnedPtr<Expr> falseBranch, Ptr<Ty> ty);
 
 StructDecl& GetStringDecl(const ImportManager& importManager);
+FuncDecl& GetReadPointerIntrinsicDecl(const ImportManager& importManager);
+FuncDecl& GetGetPointerAddressIntrinsicDecl(const ImportManager& importManager);
+
+OwnedPtr<Expr> CreateReadPointerCall(const ImportManager& importManager, TypeManager& typeManager, Ptr<Expr> ptr);
+OwnedPtr<Expr> CreateGetPointerAddressCall(const ImportManager& importManager, TypeManager& typeManager, Ptr<Expr> ptr);
+OwnedPtr<Expr> CreateIsPtrNullCheckCall(const ImportManager& importManager, TypeManager& typeManager, Ptr<Expr> ptr);
 
 /**
  * Returns synthetic lambda call that includes nodes. The result of the call expr is the last node:
@@ -122,6 +172,12 @@ StructDecl& GetStringDecl(const ImportManager& importManager);
  * }()
  */
 OwnedPtr<CallExpr> WrapReturningLambdaCall(TypeManager& typeManager, std::vector<OwnedPtr<Node>> nodes);
+
+/**
+ * Returns lambda called in-place.
+ * @see WrapReturningLambdaCall(TypeManager&, std::vector<OwnedPtr<Node>>) overload.
+ */
+OwnedPtr<CallExpr> WrapReturningLambdaCall(TypeManager& typeManager, OwnedPtr<Block> nodes);
 
 /**
  * Returns lambda expression of nodes returning `Unit`.

@@ -12,6 +12,9 @@
 #include "DesugarJavaImplSuperMethodCall.h"
 #include "GenerateInJavaImplReferenceWrapper.h"
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
+#include "NativeFFI/Java/AfterTypeCheck/GenerateJavaMirrorApiStub.h"
+#include "NativeFFI/Java/AfterTypeCheck/GenerateJavaReferenceFieldInJObject.h"
+#include "NativeFFI/Java/AfterTypeCheck/PopulateJavaMirrorStubs.h"
 #include "RewriteJavaImplReferenceWrapperFields.h"
 #include "GenerateNativeBridgeForJavaImpl.h"
 #include "DesugarTypeCheckingAndCasting.h"
@@ -24,26 +27,22 @@ namespace Cangjie::Interop::Java {
 void JavaDesugarManager::ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx,
     std::function<void(AST::Node&)> desugarPropRef)
 {
-    for (auto& file : ctx.pkg.files) {
-        GenerateInMirrors(*file, true);
-    }
-
+    Process<GenerateJavaReferenceFieldInJObject>(ctx, lib);
+    Process<GenerateJavaMirrorApiStub>(ctx, typeManager, lib, utils, memberMap);
     Process<GenerateJavaImplApiStub>(ctx, typeManager, lib, jniBridge);
 
     for (auto& file : ctx.pkg.files) {
-        GenerateInMirrors(*file, false);
+        GenerateInMirrors(*file);
     }
 
     Process<GenerateInJavaImplRegistryCompanion>(ctx, typeManager, lib);
     Process<DesugarJavaImplSuperConstructorCall>(ctx, typeManager, lib, jniBridge, diag, utils);
-    Process<GenerateInJavaImplReferenceWrapper>(ctx, typeManager, importManager, lib);
-    Process<DesugarJavaImplSuperMethodCall>(ctx, lib, utils);
+    Process<GenerateInJavaImplReferenceWrapper>(ctx, typeManager, importManager, lib, factory);
+    Process<DesugarJavaImplSuperMethodCall>(ctx, lib, factory);
     Process<RewriteJavaImplReferenceWrapperFields>(ctx, typeManager, utils, desugarPropRef);
     Process<GenerateNativeBridgeForJavaImpl>(ctx, typeManager, importManager, lib, jniBridge);
 
-    for (auto& file : ctx.pkg.files) {
-        DesugarMirrors(*file);
-    }
+    Process<PopulateJavaMirrorStubs>(ctx, typeManager, lib, factory);
 
     Process<DesugarJArray>(ctx, typeManager, importManager, lib);
     GenerateJavaSourceCode(ctx);

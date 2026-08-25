@@ -26,7 +26,6 @@ using namespace Cangjie;
 
 namespace {
 
-constexpr auto READ_POINTER_INTRINSIC = "readPointer";
 constexpr auto WRITE_POINTER_INTRINSIC = "writePointer";
 constexpr auto OBJCPOINTER_READ_METHOD = "read";
 constexpr auto OBJCPOINTER_WRITE_METHOD = "write";
@@ -62,30 +61,14 @@ void HandleObjCPointerRead(InteropContext& ctx, CallExpr& callExpr)
     CJC_NULLPTR_CHECK(receiver);
     auto elementType = receiver->GetTy()->typeArgs[0];
     auto rawCType = ctx.typeMapper.Cj2CType(elementType);
-    Ptr<Ty> pointerType = ctx.typeManager.GetPointerTy(rawCType);
     auto ptrFieldDecl = ctx.bridge.GetObjCPointerPointerField();
     CJC_ASSERT(ptrFieldDecl);
-    Ptr<Ty> int64Type = ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_INT64);
-
-    auto readPointerFunc = ctx.importManager.GetCoreDecl<FuncDecl>(READ_POINTER_INTRINSIC);
-    CJC_NULLPTR_CHECK(readPointerFunc);
-    auto readPointerRef = CreateRefExpr(*readPointerFunc, callExpr);
-    readPointerRef->instTys.push_back(rawCType);
-    readPointerRef->SetTy(ctx.typeManager.GetFunctionTy(std::vector{pointerType, int64Type}, rawCType));
 
     auto ptrExpr = ctx.factory.CreateUnsafePointerCast(
         CreateMemberAccess(std::move(receiver), *ptrFieldDecl),
         rawCType);
     CopyBasicInfo(&callExpr, ptrExpr);
-    auto callArgs = std::vector<OwnedPtr<FuncArg>> {};
-    callArgs.emplace_back(CreateFuncArg(std::move(ptrExpr)));
-    callArgs.emplace_back(CreateFuncArg(CreateZero(int64Type)));
-    auto call = WithinFile(CreateCallExpr(
-        std::move(readPointerRef),
-        std::move(callArgs),
-        readPointerFunc,
-        rawCType,
-        CallKind::CALL_INTRINSIC_FUNCTION), callExpr.curFile);
+    auto call = CreateReadPointerCall(ctx.importManager, ctx.typeManager, std::move(ptrExpr));
     // We use objc_retain here, because it's not a return value of any method
     auto wrappedCall = ctx.factory.WrapEntity(std::move(call), *elementType, Retain::RETAINED);
     ctx.factory.SetDesugarExpr(
