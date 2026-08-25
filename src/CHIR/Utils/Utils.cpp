@@ -726,6 +726,49 @@ std::unordered_map<const GenericType*, Type*> GetInstMapFromCurDefAndExDefToCurT
     return replaceTable;
 }
 
+std::unordered_map<const GenericType*, Type*> GetInstMapFromApply(const ApplyBase& apply, CHIRBuilder& builder)
+{
+    std::unordered_map<const GenericType*, Type*> instMap;
+    auto callee = apply.GetCallee();
+    // 1. callee is lambda
+    if (auto localVar = DynamicCast<LocalVar*>(callee)) {
+        auto lambda = StaticCast<Lambda*>(localVar->GetExpr());
+        auto genericTypeParams = lambda->GetGenericTypeParams();
+        auto instantiatedTypeArgs = apply.GetInstantiatedTypeArgs();
+        CJC_ASSERT(genericTypeParams.size() == instantiatedTypeArgs.size());
+        for (size_t i = 0; i < genericTypeParams.size(); ++i) {
+            instMap.emplace(genericTypeParams[i], instantiatedTypeArgs[i]);
+        }
+        return instMap;
+    }
+
+    auto func = DynamicCast<Function*>(callee);
+    // 2. callee is parameter, we don't know it's lambda or function, and can't get instMap from it
+    if (func == nullptr) {
+        return instMap;
+    }
+    // 3. callee is function
+    auto customDef = func->GetParentCustomTypeDef();
+    if (customDef != nullptr && customDef->IsGenericDef()) {
+        auto instParentCustomType = apply.GetInstParentCustomTyOfCallee(builder);
+        CJC_NULLPTR_CHECK(instParentCustomType);
+        if (auto exDef = DynamicCast<const ExtendDef*>(customDef)) {
+            auto newMap = exDef->GetExtendedType()->CalculateGenericTyMapping(*instParentCustomType);
+            CJC_ASSERT(newMap.first);
+            instMap = std::move(newMap.second);
+        } else {
+            instMap = GetInstMapFromCurDefToCurType(StaticCast<CustomType&>(*instParentCustomType));
+        }
+    }
+    auto genericTypeParams = func->GetGenericTypeParams();
+    auto instantiatedTypeArgs = apply.GetInstantiatedTypeArgs();
+    CJC_ASSERT(genericTypeParams.size() == instantiatedTypeArgs.size());
+    for (size_t i = 0; i < genericTypeParams.size(); ++i) {
+        instMap.emplace(genericTypeParams[i], instantiatedTypeArgs[i]);
+    }
+    return instMap;
+}
+
 void GetAllInstantiatedParentType(ClassType& cur, CHIRBuilder& builder, std::vector<ClassType*>& parents,
     std::set<std::pair<const Type*, const Type*>>* visited)
 {
@@ -1216,14 +1259,6 @@ Value* GetCastOriginalTarget(const Expression& expr)
         return StaticCast<Box*>(&expr)->GetSourceValue();
     }
     return nullptr;
-}
-
-bool IsInstanceVarInit(const Value& value)
-{
-    if (auto func = DynamicCast<Function>(&value)) {
-        return func->IsInstanceVarInit();
-    }
-    return false;
 }
 
 std::vector<ClassType*> GetSuperTypesRecusively(Type& subType, CHIRBuilder& builder)

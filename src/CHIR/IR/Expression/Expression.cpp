@@ -334,6 +334,10 @@ void Expression::MoveAfter(Expression* expr)
     CJC_ASSERT(pos != expr->parent->exprs.end());
     expr->parent->exprs.insert(pos + 1, this);
     parent = expr->parent;
+    // Terminator moved to a new block: rebuild predecessor edges for its successors.
+    for (auto suc : GetSuccessors()) {
+        suc->AddPredecessor(parent);
+    }
 }
 
 void Expression::MoveTo(Block& block)
