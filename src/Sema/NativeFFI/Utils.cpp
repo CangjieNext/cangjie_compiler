@@ -18,6 +18,7 @@
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
+#include <sys/types.h>
 
 namespace Cangjie::Native::FFI {
 
@@ -133,6 +134,78 @@ StructDecl& GetStringDecl(const ImportManager& importManager)
     static auto decl = importManager.GetCoreDecl<StructDecl>(STD_LIB_STRING);
     CJC_NULLPTR_CHECK(decl);
     return *decl;
+}
+
+FuncDecl& GetReadPointerIntrinsicDecl(const ImportManager& importManager)
+{
+    static auto decl = importManager.GetCoreDecl<FuncDecl>(std::string{READ_POINTER_INTRINSIC});
+    CJC_NULLPTR_CHECK(decl);
+    return *decl;
+}
+
+FuncDecl& GetGetPointerAddressIntrinsicDecl(const ImportManager& importManager)
+{
+    static auto decl = importManager.GetCoreDecl<FuncDecl>(std::string{GET_POINTER_ADDRESS_INTRINSIC});
+    CJC_NULLPTR_CHECK(decl);
+    return *decl;
+}
+
+OwnedPtr<Expr> CreateReadPointerCall(const ImportManager& importManager, TypeManager& typeManager, Ptr<Expr> ptr)
+{
+    CJC_ASSERT(ptr && ptr->GetTy()->IsPointer());
+    auto& fd = GetReadPointerIntrinsicDecl(importManager);
+
+    auto fdref = WithinFile(CreateRefExpr(fd), ptr->curFile);
+    fdref->instTys.push_back(ptr->GetTy());
+    fdref->SetTy(typeManager.GetInstantiatedTy(fd.GetTy(), GenerateTypeMapping(fd, fdref->instTys)));
+    static auto int64Ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64);
+    auto zero = WithinFile(CreateLitConstExpr(LitConstKind::INTEGER, "0", int64Ty), ptr->curFile);
+
+    auto readCall = CreateCallExpr(std::move(fdref), {}, &fd, ptr->GetTy()->typeArgs[0],
+        CallKind::CALL_INTRINSIC_FUNCTION);
+    auto& args = readCall->args;
+    args.push_back(CreateFuncArg(ASTCloner::Clone(ptr)));
+    args.push_back(CreateFuncArg(std::move(zero)));
+
+    readCall->EnableAttr(Attribute::UNSAFE);
+    return readCall;
+}
+
+OwnedPtr<Expr> CreateGetPointerAddressCall(const ImportManager& importManager, TypeManager& typeManager, Ptr<Expr> ptr)
+{
+    CJC_ASSERT(ptr && ptr->GetTy()->IsPointer());
+    auto& fd = GetGetPointerAddressIntrinsicDecl(importManager);
+
+    auto fdref = WithinFile(CreateRefExpr(fd), ptr->curFile);
+    fdref->instTys.push_back(ptr->GetTy()->typeArgs.front());
+
+    static auto uintNativeTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT_NATIVE);
+    fdref->SetTy(typeManager.GetFunctionTy(std::vector{ptr->GetTy()}, uintNativeTy));
+
+    auto getAddrCall = CreateCallExpr(std::move(fdref), {}, &fd, uintNativeTy, CallKind::CALL_INTRINSIC_FUNCTION);
+    auto& args = getAddrCall->args;
+    args.push_back(CreateFuncArg(ASTCloner::Clone(ptr)));
+
+    getAddrCall->EnableAttr(Attribute::UNSAFE);
+    return getAddrCall;
+}
+
+OwnedPtr<Expr> CreateIsPtrNullCheckCall(const ImportManager& importManager, TypeManager& typeManager, Ptr<Expr> ptr)
+{
+    static auto uintNativeTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT_NATIVE);
+
+    auto getAddrCall = CreateGetPointerAddressCall(importManager, typeManager, ptr);
+    auto zero = WithinFile(CreateLitConstExpr(LitConstKind::INTEGER, "0", uintNativeTy), ptr->curFile);
+    auto addrCmpExpr = CreateBinaryExpr(std::move(getAddrCall), std::move(zero), TokenKind::EQUAL);
+    addrCmpExpr->SetTy(TypeManager::GetBoolTy());
+    return addrCmpExpr;
+}
+
+OwnedPtr<CallExpr> WrapReturningLambdaCall(TypeManager& typeManager, OwnedPtr<Block> nodes)
+{
+    auto res = WrapReturningLambdaCall(typeManager, std::move(nodes->body));
+    nodes.reset();
+    return res;
 }
 
 OwnedPtr<CallExpr> WrapReturningLambdaCall(TypeManager& typeManager, std::vector<OwnedPtr<Node>> nodes)

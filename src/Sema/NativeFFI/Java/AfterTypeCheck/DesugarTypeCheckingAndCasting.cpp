@@ -91,7 +91,7 @@ OwnedPtr<Expr> DesugarTypeCheckingAndCasting::CreateIsInstanceCall(Ptr<VarDecl> 
 
     auto javaRefExpr = CreateJavaRefCall(WithinFile(CreateRefExpr(*jObjectVar), curFile));
 
-    auto nameLit = CreateLitConstExpr(LitConstKind::STRING, utils.GetJavaClassNormalizeSignature(*classTy),
+    auto nameLit = CreateLitConstExpr(LitConstKind::STRING, GetJavaJniClassName(*classTy),
         isInstanceOfDecl->funcBody->paramLists[0]->params[2]->GetTy());
 
     return CreateCall(isInstanceOfDecl, curFile, std::move(jniEnvCall), std::move(javaRefExpr), std::move(nameLit));
@@ -111,7 +111,7 @@ OwnedPtr<Expr> DesugarTypeCheckingAndCasting::CreateJObjectCast(Ptr<VarDecl> jOb
     // cast true => ...
     // wrap into mirror constructor or into wrapping constructor of java impl on the reference from registry
     OwnedPtr<Expr> trueBranch = utils.CreateOptionSomeCall(
-        ilib.UnwrapJavaEntity(std::move(javarefExpr), castTy, *castDecl),
+        ilib.UnwrapJavaEntity(std::move(javarefExpr), castTy, castDecl),
         castTy);
 
     // case false => None
@@ -131,7 +131,7 @@ OwnedPtr<Block> DesugarTypeCheckingAndCasting::CastAndSubstituteVars(
         auto castDecl = StaticAs<ASTKind::CLASS_LIKE_DECL>(Ty::GetDeclOfTy(castTy));
 
         auto javarefExpr = CreateJavaRefCall(WithinFile(CreateRefExpr(*varDecl), curFile));
-        OwnedPtr<Expr> initializer = ilib.UnwrapJavaEntity(std::move(javarefExpr), castDecl->GetTy(), *castDecl);
+        OwnedPtr<Expr> initializer = ilib.UnwrapJavaEntity(std::move(javarefExpr), castDecl->GetTy(), castDecl);
         auto castedVar = WithinFile(CreateTmpVarDecl(CreateType(castDecl->GetTy()), std::move(initializer)), curFile);
         varsMapping[varDecl] = castedVar;
         varsBlock->body.emplace_back(std::move(castedVar));

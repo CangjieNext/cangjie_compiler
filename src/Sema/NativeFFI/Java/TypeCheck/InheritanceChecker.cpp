@@ -6,10 +6,11 @@
 
 #include "InheritanceChecker.h"
 
-#include "NativeFFI/Java/AfterTypeCheck/Utils.h"
+#include "NativeFFI/Utils.h"
 #include "cangjie/AST/Clone.h"
 
 namespace Cangjie::Interop::Java {
+using namespace Cangjie::Native::FFI;
 
 namespace {
 

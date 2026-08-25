@@ -14,6 +14,8 @@
 
 #include "AfterTypeCheckStage.h"
 #include "InteropLibBridge.h"
+#include "NativeFFI/Java/AfterTypeCheck/ASTFactory.h"
+#include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "cangjie/AST/Node.h"
 
 namespace Cangjie::Native::FFI::Java {
@@ -26,14 +28,16 @@ using namespace Interop::Java;
  */
 class DesugarJavaImplSuperMethodCall : public AfterTypeCheckStage {
 public:
-    explicit DesugarJavaImplSuperMethodCall(InteropLibBridge& ilib, Native::FFI::Java::Utils& utils);
+    explicit DesugarJavaImplSuperMethodCall(
+        InteropLibBridge& ilib, ASTFactory& factory);
+
 protected:
     void Process(AfterTypeCheckContext& ctx) override;
 private:
-    void DesugarSuperMethodCall(AST::CallExpr& call, AST::ClassDecl& impl) const;
+    void DesugarSuperMethodCall(AfterTypeCheckContext& ctx, AST::CallExpr& call, AST::ClassDecl& impl) const;
 
     InteropLibBridge& ilib;
-    Native::FFI::Java::Utils& utils;
+    ASTFactory& factory;
 };
 
 }
