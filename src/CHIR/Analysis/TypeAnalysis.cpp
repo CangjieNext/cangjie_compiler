@@ -6,6 +6,7 @@
 
 #include "cangjie/CHIR/Analysis/TypeAnalysis.h"
 #include "cangjie/CHIR/Utils/Utils.h"
+#include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 
 #include <queue>
 
@@ -75,33 +76,6 @@ std::string TypeValue::GetKindString(DevirtualTyKind clsTyKind) const
     }
 }
 
-namespace {
-Type* GetRealGenericRetType(const Apply& apply, Type& genericType, const Function* calleeFunc, CHIRBuilder& builder)
-{
-    auto instTypes = apply.GetInstantiatedTypeArgs();
-    auto genericTypes = calleeFunc->GetGenericTypeParams();
-    CJC_ASSERT(instTypes.size() == genericTypes.size());
-    std::unordered_map<const GenericType*, Type*> genericMap;
-    for (size_t i = 0; i < instTypes.size(); ++i) {
-        genericMap[genericTypes[i]] = instTypes[i];
-    }
-    if (calleeFunc->GetParentCustomTypeDef() != nullptr) {
-        auto def = calleeFunc->GetParentCustomTypeDef();
-        auto thisType = apply.GetThisType()->StripAllRefs();
-        if (thisType->IsClassOrStruct()) {
-            auto customType = StaticCast<CustomType*>(thisType);
-            auto defGenericParams = def->GetGenericTypeParams();
-            auto genericArgs = customType->GetGenericArgs();
-            CJC_ASSERT(defGenericParams.size() == genericArgs.size());
-            for (size_t i = 0; i < customType->GetGenericArgs().size(); ++i) {
-                genericMap[defGenericParams[i]] = genericArgs[i];
-            }
-        }
-    }
-    return ReplaceRawGenericArgType(genericType, genericMap, builder);
-}
-}
-
 CHIRBuilder* TypeValue::builder{nullptr};
 template <> const std::string Analysis<TypeDomain>::name = "type-analysis";
 template <> const std::optional<unsigned> Analysis<TypeDomain>::blockLimit = std::nullopt;
@@ -126,33 +100,28 @@ template <> bool IsTrackedGV<ValueDomain<TypeValue>>(const GlobalVar& gv)
 
 TypeAnalysis::TypeAnalysis(
     const Function* func, CHIRBuilder& builder, bool isDebug, const DevirtualizationInfo& devirtInfo)
-    : ValueAnalysis(func, builder, isDebug), realRetTyMap(devirtInfo.GetReturnTypeMap()),
-      constMemberTypeMap(devirtInfo.GetConstMemberMap())
+    : ValueAnalysis(func, builder, isDebug), realRetTyMap(devirtInfo.returnTypeMap),
+      constMemberTypeMap(devirtInfo.constMemberTypeMap)
 {
 }
 
-bool TypeAnalysis::CheckFuncHasInvoke(const BlockGroup& body)
+bool TypeAnalysis::CheckFuncHasInvoke(const Function& func)
 {
-    std::vector<Block*> blocks = body.GetBlocks();
-    for (auto bb : blocks) {
-        auto exprs = bb->GetNonTerminatorExpressions();
-        for (size_t i = 0; i < exprs.size(); ++i) {
-            if (exprs[i]->GetExprKind() == ExprKind::LAMBDA) {
-                if (CheckFuncHasInvoke(*StaticCast<Lambda*>(exprs[i])->GetBody())) {
-                    return true;
-                }
-            }
-            if (exprs[i]->GetExprKind() == ExprKind::INVOKE) {
-                return true;
-            }
+    bool hasInvoke = false;
+    auto preVisit = [&hasInvoke](Expression& expr) {
+        if (Is<InvokeBase>(&expr)) {
+            hasInvoke = true;
+            return VisitResult::STOP;
         }
-    }
-    return false;
+        return VisitResult::CONTINUE;
+    };
+    Visitor::Visit(func, preVisit);
+    return hasInvoke;
 }
 
 bool TypeAnalysis::Filter(const Function& method)
 {
-    if (!CheckFuncHasInvoke(*method.GetBody())) {
+    if (!CheckFuncHasInvoke(method)) {
         return false;
     }
     if (IsSTDFunction(method)) {
@@ -173,10 +142,18 @@ void TypeAnalysis::HandleNormalExpressionEffect(TypeDomain& state, const Express
 {
     switch (expression->GetExprKind()) {
         case ExprKind::CLASS_STATIC_CAST:
+            return HandleClassStaticCastExpr(state, StaticCast<const ClassStaticCast*>(expression));
         case ExprKind::NUMERIC_CAST:
-            return HandleTypeCastExpr(state, StaticCast<const TypeCast*>(expression));
+            // NumericCast does not contribute class-type facts for de-virtualization.
+            state.TrySetToTopOrTopRef(
+                expression->GetResult(), expression->GetResult()->GetType()->IsRef());
+            return;
         case ExprKind::BOX:
             return HandleBoxExpr(state, StaticCast<const Box*>(expression));
+        case ExprKind::UNBOX_TO_VALUE:
+        case ExprKind::UNBOX_TO_REF:
+            // UnBox: no class-type fact for de-virtualization.
+            // Fall through to default (Top / EXACTLY for primitives).
         default: {
             auto res = expression->GetResult();
             auto domain = state.GetAbstractDomain(res);
@@ -185,6 +162,7 @@ void TypeAnalysis::HandleNormalExpressionEffect(TypeDomain& state, const Express
             } else {
                 state.TrySetToTopOrTopRef(res, res->GetType()->IsRef());
             }
+            break;
         }
     }
     auto resultType = expression->GetResult()->GetType();
@@ -210,15 +188,14 @@ void TypeAnalysis::HandleAllocateExpr(TypeDomain& state, const Allocate* express
 std::optional<Block*> TypeAnalysis::HandleTerminatorEffect(TypeDomain& state, const Expression* terminator)
 {
     switch (terminator->GetExprKind()) {
-        // already handled by the framework
-        // case ExprKind::TRY_ALLOCATE:
-        // case ExprKind::TRY_RAW_ARRAY_ALLOCATE:
-        // case ExprKind::TRY_RAW_ARRAY_LITERAL_ALLOCATE:
-        // case ExprKind::TRY_APPLY:
-        // case ExprKind::TRY_INVOKE:
-        case ExprKind::TRY_NUMERIC_CAST:
-            HandleTypeCastExpr(state, StaticCast<const TryNumericCast*>(terminator));
+        case ExprKind::TRY_NUMERIC_CAST: {
+            // Same as NumericCast: no class-type fact.
+            auto dest = terminator->GetResult();
+            if (dest) {
+                state.SetToTopOrTopRef(dest, dest->GetType()->IsRef());
+            }
             break;
+        }
         case ExprKind::GOTO:
         case ExprKind::EXIT:
         case ExprKind::BRANCH:
@@ -247,11 +224,7 @@ std::optional<Block*> TypeAnalysis::HandleTerminatorEffect(TypeDomain& state, co
 
 void TypeAnalysis::HandleInvokeExpr(TypeDomain& state, const Invoke* invoke, Value* refObj)
 {
-    Type* resTy = invoke->GetResult()->GetType();
-    while (resTy->IsRef()) {
-        auto ty = StaticCast<RefType*>(resTy)->GetBaseType();
-        resTy = ty;
-    }
+    auto resTy = invoke->GetResult()->GetType()->StripAllRefs();
     if (!resTy->IsClass()) {
         return;
     }
@@ -259,7 +232,31 @@ void TypeAnalysis::HandleInvokeExpr(TypeDomain& state, const Invoke* invoke, Val
         refObj, std::make_unique<TypeValue>(DevirtualTyKind::SUBTYPE_OF, StaticCast<ClassType*>(resTy)));
 }
 
+std::optional<Block*> TypeAnalysis::HandleTryInvokeTerminator(
+    TypeDomain& state, const TryInvoke* invoke, Value* refObj)
+{
+    auto resTy = invoke->GetResult()->GetType()->StripAllRefs();
+    if (!resTy->IsClass()) {
+        return std::nullopt;
+    }
+    state.Update(
+        refObj, std::make_unique<TypeValue>(DevirtualTyKind::SUBTYPE_OF, StaticCast<ClassType*>(resTy)));
+    return std::nullopt;
+}
+
 void TypeAnalysis::HandleApplyExpr(TypeDomain& state, const Apply* apply, Value* refObj)
+{
+    HandleApplyBase(state, apply, refObj);
+}
+
+std::optional<Block*> TypeAnalysis::HandleTryApplyTerminator(
+    TypeDomain& state, const TryApply* apply, Value* refObj)
+{
+    HandleApplyBase(state, apply, refObj);
+    return std::nullopt;
+}
+
+void TypeAnalysis::HandleApplyBase(TypeDomain& state, const ApplyBase* apply, Value* refObj) const
 {
     auto callee = apply->GetCallee();
     if (!callee->IsFuncWithBody()) {
@@ -275,7 +272,8 @@ void TypeAnalysis::HandleApplyExpr(TypeDomain& state, const Apply* apply, Value*
     }
     auto realRetTy = it->second;
     if (realRetTy->IsGenericRelated()) {
-        realRetTy = GetRealGenericRetType(*apply, *realRetTy, calleeFunc, builder);
+        auto genericMap = GetInstMapFromApply(*apply, builder);
+        realRetTy = ReplaceRawGenericArgType(*realRetTy, genericMap, builder);
         if (realRetTy == nullptr) {
             // cannot get real generic return type, return.
             return;
@@ -293,66 +291,59 @@ void TypeAnalysis::HandleBoxExpr(TypeDomain& state, const Box* boxExpr) const
     state.Propagate(boxExpr->GetSourceValue(), obj);
 }
 
-template <typename TTypeCast> void TypeAnalysis::HandleTypeCastExpr(TypeDomain& state, const TTypeCast* typecast) const
+void TypeAnalysis::HandleClassStaticCastExpr(TypeDomain& state, const ClassStaticCast* typecast) const
 {
-    Type* srcTy = typecast->GetSourceType();
-    Type* tgtTy = typecast->GetTargetType();
-    while (srcTy->IsRef()) {
-        auto ty1 = StaticCast<RefType*>(srcTy)->GetBaseType();
-        srcTy = ty1;
-    }
-
-    while (tgtTy->IsRef()) {
-        auto ty1 = StaticCast<RefType*>(tgtTy)->GetBaseType();
-        tgtTy = ty1;
-    }
+    // Keep abstract type as precise as possible:
+    // - never widen to a parent type;
+    // - on upcast (or when abs type is already <= target): preserve kind and type (Propagate);
+    // - on true downcast (target < abs type): narrow to SUBTYPE_OF(target).
+    Type* srcTy = typecast->GetSourceType()->StripAllRefs();
+    Type* tgtTy = typecast->GetTargetType()->StripAllRefs();
     LocalVar* result = typecast->GetResult();
-    // Set an initial state
+
+    // Set an initial state; refined below when possible.
     if (result->GetType()->IsRef()) {
         state.GetReferencedObjAndSetToTop(result, typecast);
     } else {
         state.SetToTopOrTopRef(result, false);
     }
 
+    // Skip non-class casts (e.g. NumericCast).
     if (!srcTy->IsClass() || !tgtTy->IsClass()) {
         return;
     }
 
-    // Check whether sourceTy is a subclass of targetTy.
-    auto checkSubClass = [this](ClassType* sourceTy, ClassType* targetTy) {
-        auto fatherTy = LeastCommonSuperClass(sourceTy, targetTy, &builder);
-        // Return the sourceTy, only if least common super class is targetTy.
-        if (fatherTy == targetTy) {
-            return sourceTy;
-        }
-        return targetTy;
-    };
-
-    auto srcAbsVal = state.CheckAbstractObjectRefBy(typecast->GetSourceValue());
-    if (!srcAbsVal) {
+    auto srcAbsObj = state.CheckAbstractObjectRefBy(typecast->GetSourceValue());
+    if (!srcAbsObj) {
         return;
     }
-    auto srcVal = state.CheckAbstractValue(srcAbsVal);
+    auto srcVal = state.CheckAbstractValue(srcAbsObj);
     if (!srcVal) {
         return;
     }
 
-    if (srcVal->GetTypeKind() == DevirtualTyKind::EXACTLY) {
-        return state.Propagate(typecast->GetSourceValue(), result);
-    } else if (srcVal->GetTypeKind() == DevirtualTyKind::SUBTYPE_OF) {
-        ClassType* srcClsTy = StaticCast<ClassType*>(srcTy);
-        ClassType* tgtClsTy = StaticCast<ClassType*>(tgtTy);
-        ClassType* resTy = checkSubClass(srcClsTy, tgtClsTy);
-        if (srcVal->GetSpecificType() == resTy) {
-            return state.Propagate(typecast->GetSourceValue(), result);
-        } else {
-            Value* resVal = result;
-            if (result->GetType()->IsRef()) {
-                resVal = state.CheckAbstractObjectRefBy(result);
-            }
-            return state.Update(resVal, std::make_unique<TypeValue>(DevirtualTyKind::SUBTYPE_OF, tgtClsTy));
-        }
+    Type* absTy = srcVal->GetSpecificType();
+    if (!absTy->IsClass()) {
+        return;
     }
+    auto absClsTy = StaticCast<ClassType*>(absTy);
+    auto tgtClsTy = StaticCast<ClassType*>(tgtTy);
+    // absType <= target: upcast, identity, or already finer than downcast target -> keep.
+    if (absClsTy->IsEqualOrSubTypeOf(*tgtClsTy, builder)) {
+        return state.Propagate(typecast->GetSourceValue(), result);
+    }
+
+    // target < absType: true downcast -> narrow. Always SUBTYPE_OF(target): cast success
+    // only proves "Child or its subclass", not EXACTLY Child.
+    if (tgtClsTy->IsEqualOrSubTypeOf(*absClsTy, builder)) {
+        Value* resVal = result;
+        if (result->GetType()->IsRef()) {
+            resVal = state.CheckAbstractObjectRefBy(result);
+        }
+        return state.Update(resVal, std::make_unique<TypeValue>(DevirtualTyKind::SUBTYPE_OF, tgtClsTy));
+    }
+
+    // Unrelated types: leave Top.
 }
 
 template <class MemberAccess>

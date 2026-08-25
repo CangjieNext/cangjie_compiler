@@ -13,6 +13,14 @@
 
 namespace Cangjie::CHIR {
 
+/**
+ * @brief type kind used by type analysis / de-virtualization.
+ */
+enum class DevirtualTyKind : uint8_t {
+    SUBTYPE_OF, // Means a type who is the sub-class or sub-interface of another type.
+    EXACTLY,    // Means a type exactly.
+};
+
 struct TypeValue {
     TypeValue() = delete;
 
@@ -109,10 +117,10 @@ public:
 
     /**
      * @brief check CHIR function whether has invoke expression.
-     * @param body function body to detect
+     * @param func function to detect
      * @return flag if has invoke expression.
      */
-    static bool CheckFuncHasInvoke(const BlockGroup& body);
+    static bool CheckFuncHasInvoke(const Function& func);
 
     /**
      * @brief call CheckFuncHasInvoke to detect CHIR function whether has invoke expression.
@@ -133,9 +141,17 @@ private:
 
     void HandleApplyExpr(TypeDomain& state, const Apply* apply, Value* refObj) override;
 
+    std::optional<Block*> HandleTryApplyTerminator(
+        TypeDomain& state, const TryApply* apply, Value* refObj) override;
+
+    void HandleApplyBase(TypeDomain& state, const ApplyBase* apply, Value* refObj) const;
+
     void HandleInvokeExpr(TypeDomain& state, const Invoke* invoke, Value* refObj) override;
 
-    template <typename TTypeCast> void HandleTypeCastExpr(TypeDomain& state, const TTypeCast* typecast) const;
+    std::optional<Block*> HandleTryInvokeTerminator(
+        TypeDomain& state, const TryInvoke* invoke, Value* refObj) override;
+
+    void HandleClassStaticCastExpr(TypeDomain& state, const ClassStaticCast* typecast) const;
 
     template <typename TMemberAccess>
     void HandleMemberAccess(TypeDomain& state, const TMemberAccess* memberAccess) const;
