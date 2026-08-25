@@ -126,7 +126,7 @@ private:
     void DumpCHIRToFile(const std::string& suffix, bool needCheckFlag = true);
     void DoClosureConversion();
     void ReportUnusedCode();
-    void Devirtualization(DevirtualizationInfo& devirtInfo);
+    void Devirtualization();
     void UnreachableBlockElimination();
     void UnreachableBlockReporter();
     void NothingTypeExprElimination();
@@ -144,7 +144,7 @@ private:
     void RunConstantPropagation();
     void RunRangePropagation();
     void RunArrayListConstStartOpt();
-    void RunFunctionInline(DevirtualizationInfo& devirtInfo);
+    void RunFunctionInline();
     void RunArrayLambdaOpt();
     void RunRedundantFutureOpt();
     void RunSanitizerCoverage();
@@ -152,7 +152,6 @@ private:
     void RunOptimizationPass();
     void RunUnitUnify();
     void OptimizeFuncReturnType();
-    DevirtualizationInfo CollectDevirtualizationInfo();
     bool RunConstantEvaluation();
     bool RunIRChecker(const Phase& phase);
     void RecordCodeInfoAtTheBegin();
