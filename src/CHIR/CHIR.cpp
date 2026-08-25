@@ -347,27 +347,25 @@ void ToCHIR::RunGetRefToArrayElemOpt()
     DumpCHIRToFile("ArrayGetRefOpt");
 }
 
-void ToCHIR::Devirtualization(DevirtualizationInfo& devirtInfo)
+void ToCHIR::Devirtualization()
 {
     if (!opts.IsOptimizationExisted(GlobalOptions::OptimizationFlag::DEVIRTUALIZATION) ||
         opts.enIncrementalCompilation) {
         return;
     }
 
+    Utils::ProfileRecorder::Start("CHIR Opt", "Collect Devirt Info");
+    DevirtualizationInfo devirtInfo(chirPkg);
+    devirtInfo.Collect();
+    Utils::ProfileRecorder::Stop("CHIR Opt", "Collect Devirt Info");
+
     Utils::ProfileRecorder recorder("CHIR Opt", "Devirtualization");
-    devirtInfo.FreshRetMap();
-    devirtInfo.CollectConstMemberVarType();
-    auto funcs = CHIR::Devirtualization::CollectContainInvokeExprFuncs(chirPkg);
-    // Only process functions containing invoke expressions.
-    if (funcs.empty()) {
-        return;
-    }
     size_t threadNum = opts.GetJobs();
     TypeValue::SetCHIRBuilder(&builder);
     AnalysisWrapper<TypeAnalysis, TypeDomain> typeAnalysisWrapper(builder);
     typeAnalysisWrapper.RunOnPackage(chirPkg, opts.chirDebugOptimizer, threadNum, devirtInfo);
-    auto devirt = CHIR::Devirtualization(&typeAnalysisWrapper, devirtInfo);
-    devirt.RunOnFuncs(funcs, builder, opts.chirDebugOptimizer);
+    auto devirt = CHIR::Devirtualization(&typeAnalysisWrapper, devirtInfo, builder, *chirPkg, opts);
+    devirt.RunOnFuncs(chirPkg->GetGlobalFuncsWithBody());
     auto devirtStatics = CHIR::DevirtualizeTrivialStatics();
     devirtStatics.RunOnPackage(*chirPkg, builder, opts.chirDebugOptimizer);
 
@@ -378,7 +376,7 @@ void ToCHIR::Devirtualization(DevirtualizationInfo& devirtInfo)
             auto res = typeAnalysisWrapper.RunOnFunc(func, opts.chirDebugOptimizer, devirtInfo);
             devirt.AppendFrozenFuncState(func, std::move(res));
         }
-        devirt.RunOnFuncs(frozenFuncs, builder, opts.chirDebugOptimizer);
+        devirt.RunOnFuncs(frozenFuncs);
 
         auto pass = FunctionInline(
             builder, opts.optimizationLevel, opts.chirDebugOptimizer);
@@ -429,13 +427,13 @@ void ToCHIR::RunArrayListConstStartOpt()
     DumpCHIRToFile("RunArrayListConstStartOpt");
 }
 
-void ToCHIR::RunFunctionInline(DevirtualizationInfo& devirtInfo)
+void ToCHIR::RunFunctionInline()
 {
     if (!opts.IsOptimizationExisted(GlobalOptions::OptimizationFlag::FUNC_INLINING)) {
         return;
     }
     Utils::ProfileRecorder::Start("CHIR Opt", "FunctionInline");
-    CallGraphAnalysis callGraphAnalysis(chirPkg, devirtInfo);
+    CallGraphAnalysis callGraphAnalysis(chirPkg);
     // Collect all call graph information.
     callGraphAnalysis.DoCallGraphAnalysis(false);
     auto pass = FunctionInline(builder, opts.optimizationLevel, opts.chirDebugOptimizer);
@@ -610,19 +608,6 @@ void ToCHIR::RunUnitUnify()
     DumpCHIRToFile("Unit_Unify");
 }
 
-DevirtualizationInfo ToCHIR::CollectDevirtualizationInfo()
-{
-    Utils::ProfileRecorder recorder("CHIR Opt", "Collect Devirt Info");
-    DevirtualizationInfo devirtInfo(chirPkg, opts);
-    if (opts.IsOptimizationExisted(GlobalOptions::OptimizationFlag::FUNC_INLINING) ||
-        (opts.IsOptimizationExisted(GlobalOptions::OptimizationFlag::DEVIRTUALIZATION) &&
-            !opts.enIncrementalCompilation)) {
-        // Collect all inheritance tree information.
-        devirtInfo.CollectInfo();
-    }
-    return devirtInfo;
-}
-
 void ToCHIR::OptimizeFuncReturnType()
 {
     Utils::ProfileRecorder recorder("CHIR Opt", "Optimize Function Return Type");
@@ -637,13 +622,12 @@ void ToCHIR::RunOptimizationPass()
     OptimizeFuncReturnType();
     RunArrayListConstStartOpt();
     RunUnitUnify();
-    auto devirtInfo = CollectDevirtualizationInfo();
-    RunFunctionInline(devirtInfo);
+    RunFunctionInline();
     RedundantLoadElimination();
     RedundantGetOrThrowElimination();
     RunRangePropagation();
     UselessAllocateElimination();
-    Devirtualization(devirtInfo);
+    Devirtualization();
     RunArrayLambdaOpt();
     RunRedundantFutureOpt();
     RunGetRefToArrayElemOpt();
