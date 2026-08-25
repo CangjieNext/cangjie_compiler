@@ -43,12 +43,23 @@ public:
     std::pair<std::vector<Block*>, LocalVar*> CloneBlockGroup(const BlockGroup& oldBG, BlockGroup& newBG);
 
     /**
-     * @brief get instantiation map from apply call, using for function instantiation.
+     * @brief get instantiation map from apply call, used by function inline.
      * @param apply input apply expression to get instantiation map
      * @param newBodyOuterFunction func that encloses new body to decide this type conversion,
      *  use apply's top level function if nullptr
      */
     void GetInstMapFromApply(const Apply& apply, const Function* newBodyOuterFunction = nullptr);
+
+    /**
+     * @brief get instantiation map for a concrete function call site (devirtualization).
+     * Callee is always a Function (no lambda). Uses call-site thisType/args to resolve parent generics.
+     * @param func callee function
+     * @param thisType instantiated this type of the call (may be nullptr for non-member)
+     * @param instTypeArgs instantiated type arguments of the call
+     * @param args call-site arguments (needed to disambiguate parent type)
+     */
+    void GetInstMapFromFuncCall(Function& func, Type* thisType, const std::vector<Type*>& instTypeArgs,
+        const std::vector<Value*>& args);
 
     static void ReplaceExprOperands(std::vector<Block*>& blocks, const std::unordered_map<Value*, Value*>& valueMap);
 private:

@@ -469,6 +469,19 @@ std::unordered_map<const GenericType*, Type*> GetInstMapFromCurDefToCurType(cons
 std::unordered_map<const GenericType*, Type*> GetInstMapFromCurDefAndExDefToCurType(const CustomType& curType);
 
 /**
+ * @brief Build generic instantiation map from an ApplyBase call site.
+ *
+ * Maps callee function/lambda generic parameters and parent custom-type generics
+ * to the instantiated types provided by the apply. Does not decide ThisType
+ * rewriting (left to callers such as BlockGroupCopyHelper).
+ *
+ * @param apply The apply / try-apply expression.
+ * @param builder The CHIR builder.
+ * @return Instantiation map from generic types to concrete types.
+ */
+std::unordered_map<const GenericType*, Type*> GetInstMapFromApply(const ApplyBase& apply, CHIRBuilder& builder);
+
+/**
  * @brief Retrieves the instance map from a custom type definition and its parent.
  *
  * @param def The custom type definition.
@@ -731,8 +744,6 @@ bool IsConstructor(const Value& value);
  * @return value before cast.
  */
 Value* GetCastOriginalTarget(const Expression& expr);
-
-bool IsInstanceVarInit(const Value& value);
 
 std::vector<ClassType*> GetSuperTypesRecusively(Type& subType, CHIRBuilder& builder);
 

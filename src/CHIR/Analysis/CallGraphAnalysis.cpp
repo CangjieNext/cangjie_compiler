@@ -24,9 +24,10 @@
 #include <iostream>
 #include <set>
 
-#include "cangjie/CHIR/Optimization/Devirtualization.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
+#include "cangjie/Utils/Casting.h"
+#include "cangjie/Utils/Utils.h"
 
 namespace Cangjie::CHIR {
 
@@ -93,10 +94,8 @@ bool CallGraph::Edge::operator==(const Edge& other) const
     return this->edgeValue.first == other.edgeValue.first;
 }
 
-CallGraph::CallGraph(const Package* package, DevirtualizationInfo& devirtFuncInfo)
-    : devirtFuncInfo(devirtFuncInfo),
-      entryNode(std::make_unique<Node>(nullptr)),
-      exitNode(std::make_unique<Node>(nullptr))
+CallGraph::CallGraph(const Package* package)
+    : entryNode(std::make_unique<Node>(nullptr)), exitNode(std::make_unique<Node>(nullptr))
 {
     // build the call graph.
     for (auto func : package->GetGlobalFuncsWithBody()) {
@@ -208,13 +207,12 @@ std::unordered_set<Function*> CallGraph::GetAllPossibleCalleeOfInvoke(
     const std::pair<std::string, std::vector<Type*>>& method) const
 {
     (void)method;
-    (void)devirtFuncInfo;
     return std::unordered_set<Function*>();
 }
 
 void CallGraphAnalysis::DoCallGraphAnalysis(bool isDebug)
 {
-    CallGraph callGraph(package, devirtFuncInfo);
+    CallGraph callGraph(package);
     BuildSCC(callGraph);
     if (isDebug) {
         PrintCallGraph(callGraph);
