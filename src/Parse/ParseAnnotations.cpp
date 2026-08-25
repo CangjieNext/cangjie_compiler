@@ -327,7 +327,7 @@ void ParserImpl::CheckDeprecatedAnnotation(const Annotation& anno)
     }
 }
 
-void ParserImpl::CheckObjCMirrorAnnotation(const Annotation& anno) const
+void ParserImpl::CheckObjCMirrorAnnotation(Annotation& anno) const
 {
     static const std::string OBJ_C_MIRROR_NAME = "@ObjCMirror";
     static const std::string OBJ_C_IMPL_NAME = "@ObjCImpl";

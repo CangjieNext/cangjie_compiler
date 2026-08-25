@@ -7,7 +7,7 @@
 #include "DiagsInterop.h"
 #include "Diags.h"
 #include "Utils.h"
-#include "cangjie/AST/Utils.h"
+#include "NativeFFI/Java/Utils.h"
 
 namespace Cangjie::Interop::Java {
 using namespace Sema;
@@ -32,6 +32,7 @@ Range MakeJavaImplJavaNameRange(const ClassLikeDecl& decl)
 
 void DiagJavaImplRedefinitionInJava(DiagnosticEngine& diag, const ClassLikeDecl& decl, const ClassLikeDecl& prevDecl)
 {
+    using namespace Native::FFI::Java;
     if (decl.TestAttr(Attribute::IS_BROKEN)) {
         return;
     }

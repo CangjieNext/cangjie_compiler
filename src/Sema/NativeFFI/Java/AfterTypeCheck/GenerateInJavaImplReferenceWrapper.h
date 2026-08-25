@@ -14,6 +14,8 @@
 
 #include "AfterTypeCheckStage.h"
 #include "InteropLibBridge.h"
+#include "NativeFFI/Java/AfterTypeCheck/ASTFactory.h"
+#include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"
@@ -27,7 +29,7 @@ using namespace Interop::Java;
 class GenerateInJavaImplReferenceWrapper : public AfterTypeCheckStage {
 public:
     explicit GenerateInJavaImplReferenceWrapper(TypeManager& typeManager,
-        const ImportManager& importManager, InteropLibBridge& ilib);
+        const ImportManager& importManager, InteropLibBridge& ilib, ASTFactory& factory);
 protected:
     void Process(AfterTypeCheckContext& ctx) override;
 private:
@@ -107,8 +109,8 @@ private:
      *       ...body...
      *   }
      */
-    void RewriteUserDefinedConstructorInitialization(AST::FuncDecl& ctor, AST::VarDecl& companionRefField,
-        AST::ClassDecl& companion) const;
+    void RewriteUserDefinedConstructorInitialization(AfterTypeCheckContext& ctx,
+        AST::FuncDecl& ctor, AST::VarDecl& companionRefField, AST::ClassDecl& companion) const;
 
     /**
      *
@@ -121,6 +123,7 @@ private:
     TypeManager& typeManager;
     const ImportManager& importManager;
     InteropLibBridge& ilib;
+    ASTFactory& factory;
 };
 
 /**

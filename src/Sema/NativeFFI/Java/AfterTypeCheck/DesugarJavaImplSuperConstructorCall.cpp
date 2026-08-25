@@ -5,6 +5,7 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "DesugarJavaImplSuperConstructorCall.h"
+#include "NativeFFI/Java/Utils.h"
 #include "NativeFFI/Utils.h"
 #include "Utils.h"
 #include "InteropLibBridge.h"
@@ -139,7 +140,7 @@ OwnedPtr<Expr> DesugarJavaImplSuperConstructorCall::UnwrapRefExpr(OwnedPtr<RefEx
     // jobject -> JavaEntity
     auto entity = ilib.CreateJavaEntityJobjectCall(std::move(ref));
     // JavaEntity -> Cangjie Type
-    return ilib.UnwrapJavaEntity(std::move(entity), targetTy, decl);
+    return ilib.UnwrapJavaEntity(std::move(entity), targetTy, Ptr<const Decl>(&decl));
 }
 
 /**
@@ -164,7 +165,7 @@ OwnedPtr<Expr> DesugarJavaImplSuperConstructorCall::WrapExprWithExceptionHandlin
         ret = WithinFile(CreateRefExpr(*res), curFile);
     } else {
         // Cangjie Type -> JavaEntity -> jobject
-        ret = ilib.UnwrapJavaEntity(ilib.WrapJavaEntity(WithinFile(CreateRefExpr(*res), curFile)), retTy, decl, true);
+        ret = ilib.UnwrapJavaEntity(ilib.WrapJavaEntity(WithinFile(CreateRefExpr(*res), curFile)), retTy, &decl, true);
     }
     nodes.push_back(std::move(res));
     nodes.push_back(std::move(ret));

@@ -25,10 +25,10 @@ public:
     }
     ~JFFIParserImpl() = default;
 
-    void CheckAnnotation(const Annotation& anno) const;
+    void CheckAnnotation(Annotation& anno) const;
     void CheckMirrorSignature(ClassLikeDecl& decl, const PtrVector<Annotation>& annos) const;
     void CheckImplSignature(ClassLikeDecl& decl, const PtrVector<Annotation>& annos) const;
-    void CheckJavaHasDefaultAnnotation(const Annotation& anno) const;
+    void CheckJavaHasDefaultAnnotation(Annotation& anno) const;
     bool IsAbstractFunction(const FuncDecl& fd, const Decl& outerDecl) const;
 
     void DiagJavaMirrorCannotHaveFinalizer(const Node& node) const;
@@ -42,11 +42,11 @@ public:
     void DiagJavaImplCannotHaveStaticInit(const Node& node) const;
 
 private:
-    void CheckMirrorAnnoArgs(const Annotation& anno) const;
-    void CheckImplAnnoArgs(const Annotation& anno) const;
+    void CheckMirrorAnnoArgs(Annotation& anno) const;
+    void CheckImplAnnoArgs(Annotation& anno) const;
 
-    void CheckMirrorAnnoTarget(const Annotation& anno) const;
-    void CheckImplAnnoTarget(const Annotation& anno) const;
+    void CheckMirrorAnnoTarget(Annotation& anno) const;
+    void CheckImplAnnoTarget(Annotation& anno) const;
 
     // Diag report
     void DiagOuterDeclMissMatch(const Node& node,

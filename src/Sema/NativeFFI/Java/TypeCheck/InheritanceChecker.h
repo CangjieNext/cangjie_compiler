@@ -16,13 +16,13 @@
 #include "cangjie/AST/Node.h"
 #include "cangjie/Sema/TypeManager.h"
 
-#include "InheritanceChecker/StructInheritanceChecker.h"
+#include "InheritanceChecker/MemberSignature.h"
 
 namespace Cangjie::Interop::Java {
 
 /** Checks @ForeignName annotation usage and propagates it */
 void CheckForeignName(DiagnosticEngine& diag, TypeManager& typeManager, const MemberSignature& parent,
-    const MemberSignature& child, const Decl& checkingDecl);
+    const MemberSignature& child, const AST::Decl& checkingDecl);
 
 } // namespace Cangjie::Interop::Java
 

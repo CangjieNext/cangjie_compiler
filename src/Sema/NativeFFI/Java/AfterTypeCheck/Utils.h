@@ -18,20 +18,11 @@
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
-#include "InheritanceChecker/MemberSignature.h"
-#include "InheritanceChecker/MemberSignature.h"
 #include "NativeFFI/Utils.h"
 
 namespace Cangjie::Interop::Java {
 using namespace AST;
 using namespace Cangjie::Native::FFI;
-
-enum class ArrayOperationKind: uint8_t {
-    CREATE,
-    GET,
-    SET,
-    GET_LENGTH
-};
 
 class Utils final {
 public:
@@ -59,9 +50,6 @@ public:
     // Decl of String
     StructDecl& GetStringDecl();
 
-    std::string GetJavaClassNormalizeSignature(const Ty& cjtype) const;
-    std::string GetJavaTypeSignature(const Ty& cjtype);
-    std::string GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& args);
     std::string GetJavaObjectTypeName(const Ty& ty);
 
     OwnedPtr<Expr> CreateOptionMatch(
@@ -149,55 +137,12 @@ Ptr<FuncDecl> GetJavaMirrorWrappingConstructor(ClassLikeDecl& mirrorLike);
  */
 Ptr<FuncDecl> GetJavaMirrorWrappingConstructor(ClassDecl& mirror);
 
-/**
- * Returns name of corresponding Java method or field with respect to @ForeignName annotation
- */
-std::string GetJavaMemberName(const Decl& decl);
+std::string GetJavaJniClassName(const Ty& cjtype);
 
 /**
  * Returns true if has java fully-qualified name defined in annotation as a string literal
  */
 bool HasPredefinedJavaName(const ClassLikeDecl& decl);
-
-/**
- * Returns fully-qualified name of the extend decl
- */
-std::string GetJavaFQNameFromExtendDecl(const ExtendDecl& extendDecl);
-
-/**
- * Returns fully-qualified name of the decl or fq-name specified in @JavaMirror as attribute,
- * which is suitable for specifying in JNI calls
- */
-std::string GetJavaFQName(const Decl& decl);
-
-/**
- * Returns fully-qualified name of the decl or fq-name specified in @JavaMirror as attribute,
- * which is suitable for using Java source code:
- * - For specifying nested class '.' is used
- */
-std::string GetJavaFQSourceCodeName(const ClassLikeDecl& decl);
-
-
-struct DestructedJavaClassName {
-    /// Full package name
-    std::optional<std::string> packageName;
-
-    /// Name of top level class
-    std::string topLevelClassName;
-
-    /// Full name of the class, starting from top level
-    std::string fullClassName;
-};
-
-/**
- * Returns parts of java class name
- */
-DestructedJavaClassName DestructJavaClassName(const ClassLikeDecl& decl);
-
-/**
- * Returns package of the decl or package specified in @JavaMirror as attribute (omitting class name)
- */
-std::string GetJavaPackage(const Decl& decl);
 
 /**
  * Performs mangling of `javaTy` with `mangler`. If `javaTy` is a mirrror or impl, then it returns `jobjectTy`
@@ -223,10 +168,6 @@ bool IsOptionOfString(Ptr<Ty> ty);
 bool IsMirror(const Ty& ty);
 
 bool IsImpl(const Ty& ty);
-std::string ReplaceClassName(std::string& classTypeSignature, std::string newSegment);
-std::string NormalizeJavaSignature(const std::string& sig);
-
-ArrayOperationKind GetArrayOperationKind(Decl& decl);
 
 template <typename Ret = Node, typename... Args>
 std::vector<OwnedPtr<Ret>> Nodes(OwnedPtr<Args>&&... args)
@@ -299,15 +240,6 @@ Ptr<MemberDecl> FindFirstMemberDecl(
  * This constructor
  */
 Ptr<AST::FuncDecl> GetJavaImplRegistryCompanionConstructor(AST::ClassDecl& companion);
-
-/**
- * Returns FQ name of marker class for Cangjie side constructor of Java class
- */
-std::string GetConstructorMarkerFQName();
-std::string GetConstructorMarkerClassName();
-OwnedPtr<ClassDecl> CreateConstructorMarkerClassDecl();
-
-void GenerateSyntheticClassMemberStubs(ClassDecl& synthetic, const MemberMap& members);
 
 } // namespace Cangjie::Interop::Java
 
