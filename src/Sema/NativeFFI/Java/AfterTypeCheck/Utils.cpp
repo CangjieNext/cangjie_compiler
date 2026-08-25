@@ -27,38 +27,6 @@ using namespace TypeCheckUtil;
 using namespace Cangjie::Native::FFI;
 using namespace Cangjie::Native::FFI::Java;
 
-namespace {
-using namespace Cangjie;
-using namespace AST;
-
-/**
- * @brief Generates a synthetic function stub based on an existing function declaration.
- *
- * This function creates a clone of the provided function declaration (fd),
- * replaces its outerDecl to synthetic class, and then inserts the
- * modified function declaration into the specified synthetic class declaration.
- *
- * @param synthetic The class declaration where the cloned function stub will be inserted.
- * @param fd The original function declaration that will be cloned and modified.
- */
-void GenerateSyntheticClassFuncStub(ClassDecl& synthetic, FuncDecl& fd)
-{
-    OwnedPtr<FuncDecl> funcStub = ASTCloner::Clone(Ptr(&fd));
-    funcStub->DisableAttr(Attribute::DEFAULT);
-
-    // remove foreign anno from cloned func decl
-    for (auto it = funcStub->annotations.begin(); it != funcStub->annotations.end(); ++it) {
-        if ((*it)->kind == AnnotationKind::FOREIGN_NAME) {
-            funcStub->annotations.erase(it);
-            break;
-        }
-    }
-
-    RebindClonedStubToSynthetic(*funcStub, synthetic);
-    synthetic.body->decls.emplace_back(std::move(funcStub));
-}
-} // namespace
-
 Utils::Utils(ImportManager& importManager, TypeManager& typeManager)
     : importManager(importManager), typeManager(typeManager)
 {
@@ -329,23 +297,6 @@ bool IsGeneratedJavaImplConstructor(const FuncDecl& ctor)
     return plists[0]->params[0]->identifier == JAVA_IMPL_ENTITY_ARG_NAME_IN_GENERATED_CTOR;
 }
 
-std::string GetJavaMemberName(const Decl& decl)
-{
-    for (auto& anno : decl.annotations) {
-        if (anno->kind != AnnotationKind::FOREIGN_NAME) {
-            continue;
-        }
-
-        CJC_ASSERT(anno->args.size() == 1);
-
-        auto litExpr = DynamicCast<LitConstExpr>(anno->args[0]->expr.get());
-        CJC_ASSERT(litExpr);
-        return litExpr->stringValue;
-    }
-
-    return decl.identifier;
-}
-
 bool HasPredefinedJavaName(const ClassLikeDecl& decl)
 {
     for (auto& anno : decl.annotations) {
@@ -357,199 +308,6 @@ bool HasPredefinedJavaName(const ClassLikeDecl& decl)
     return false;
 }
 
-Ptr<std::string> GetJavaMirrorAnnoAttr(const ClassLikeDecl& decl)
-{
-    for (auto& anno : decl.annotations) {
-        if (anno->kind != AnnotationKind::JAVA_MIRROR && anno->kind != AnnotationKind::JAVA_IMPL) {
-            continue;
-        }
-
-        CJC_ASSERT(anno->args.size() < 2); // It is empty if < 2
-        if (anno->args.empty()) {
-            break;
-        }
-
-        CJC_ASSERT(anno->args[0]->expr->astKind == ASTKind::LIT_CONST_EXPR);
-        auto lce = As<ASTKind::LIT_CONST_EXPR>(anno->args[0]->expr.get());
-        CJC_ASSERT(lce);
-        return &lce->stringValue;
-    }
-    return nullptr;
-}
-
-namespace {
-
-template <typename I>
-std::string StringJoin(I begin, I end, std::string_view separator)
-{
-    std::string res;
-    for (auto it = begin; it != end; ++it) {
-        if (it != begin) {
-            res += separator;
-        }
-        res += *it;
-    }
-    return res;
-}
-
-std::vector<std::string> GetFQNameParts(std::string_view name)
-{
-    std::vector<std::string> res;
-    res.push_back("");
-
-    bool wasBackslash = false;
-    for (std::size_t i = 0; i < name.length(); ++i) {
-        switch (name[i]) {
-            case '\\':
-                if (wasBackslash) {
-                    res.back() += '\\';
-                }
-                wasBackslash = true;
-                continue;
-            case '$':
-                if (wasBackslash) {
-                    res.back() += '$';
-                } else {
-                    res.push_back("");
-                }
-                wasBackslash = false;
-                continue;
-            default:
-                if (wasBackslash) {
-                    res.back() += '\\';
-                }
-                res.back() += name[i];
-                wasBackslash = false;
-                continue;
-        }
-    }
-    if (wasBackslash) {
-        res.back() += '\\';
-    }
-
-    return res;
-}
-
-std::string GetFQNameJoinBy(const std::string& name, std::string_view separator)
-{
-    auto parts = GetFQNameParts(name);
-    return StringJoin(parts.begin(), parts.end(), separator);
-}
-
-} // namespace
-
-std::string GetJavaFQNameFromExtendDecl(const ExtendDecl& extendDecl)
-{
-    auto rt = DynamicCast<const RefType *>(extendDecl.extendedType.get());
-    CJC_ASSERT(rt);
-    return GetJavaFQName(*rt->ref.target);
-}
-
-std::string GetJavaFQName(const Decl& decl)
-{
-    if (auto extendDecl = DynamicCast<const ExtendDecl*>(&decl)) {
-        return GetJavaFQNameFromExtendDecl(*extendDecl);
-    }
-    if (auto classlikeDecl = DynamicCast<const ClassLikeDecl*>(&decl)) {
-        auto attr = GetJavaMirrorAnnoAttr(*classlikeDecl);
-        if (attr) {
-            return GetFQNameJoinBy(*attr, "$");
-        }
-    }
-    return decl.GetFullPackageName() + "." + decl.identifier;
-}
-
-std::string GetJavaFQSourceCodeName(const ClassLikeDecl& decl)
-{
-    auto attr = GetJavaMirrorAnnoAttr(decl);
-    return attr ? GetFQNameJoinBy(*attr, ".") : (decl.GetFullPackageName() + "." + decl.identifier);
-}
-
-DestructedJavaClassName DestructJavaClassName(const ClassLikeDecl& decl)
-{
-    auto attr = GetJavaMirrorAnnoAttr(decl);
-    if (!attr) {
-        return {decl.GetFullPackageName(), decl.identifier, decl.identifier};
-    }
-
-    auto parts = GetFQNameParts(*attr);
-    CJC_ASSERT(parts.size() > 0);
-    auto ind = parts[0].find_last_of('.');
-    if (ind == std::string::npos) {
-        return {.packageName = std::nullopt,
-            .topLevelClassName = parts[0],
-            .fullClassName = StringJoin(parts.begin(), parts.end(), ".")};
-    }
-    auto package = parts[0].substr(0, ind);
-    parts[0] = parts[0].substr(ind + 1);
-    return {.packageName = package,
-        .topLevelClassName = parts[0],
-        .fullClassName = StringJoin(parts.begin(), parts.end(), ".")};
-}
-
-ArrayOperationKind GetArrayOperationKind(Decl& decl)
-{
-    CJC_ASSERT(IsJArray(*decl.outerDecl));
-
-    if (Is<PropDecl>(decl) && decl.identifier == "length") {
-        return ArrayOperationKind::GET_LENGTH;
-    }
-
-    if (auto funcDecl = As<ASTKind::FUNC_DECL>(&decl); funcDecl && funcDecl->identifier == "[]") {
-        auto paramsNumber = funcDecl->funcBody->paramLists[0]->params.size();
-        if (paramsNumber == 1) {
-            // Array "get" has one parameter: index.
-            return ArrayOperationKind::GET;
-        } else if (paramsNumber == 2) {
-            // Array "set" has two parameters: index and value to be set.
-            return ArrayOperationKind::SET;
-        }
-    }
-
-    if (auto funcDecl = As<ASTKind::FUNC_DECL>(&decl)) {
-        if (funcDecl->identifier == JAVA_ARRAY_GET_FOR_REF_TYPES) {
-            // Special version of get operation for object-based types
-            return ArrayOperationKind::GET;
-        }
-        if (funcDecl->identifier == JAVA_ARRAY_SET_FOR_REF_TYPES) {
-            // Special version of set operation for object-based types
-            return ArrayOperationKind::SET;
-        }
-    }
-
-    CJC_ABORT();
-
-    return ArrayOperationKind::GET;
-}
-
-std::string GetJavaPackage(const Decl& decl)
-{
-    for (auto& anno : decl.annotations) {
-        if (anno->kind != AnnotationKind::JAVA_MIRROR && anno->kind != AnnotationKind::JAVA_IMPL) {
-            continue;
-        }
-
-        // @JavaMirror or @JavaImpl annotations could accept optional string literal argument with fully-qualified name.
-        CJC_ASSERT_WITH_MSG(anno->args.size() < 2, "@JavaMirror or @JavaImpl could accept maximum one argument");
-        if (anno->args.empty()) {
-            break;
-        }
-
-        CJC_ASSERT(anno->args[0]->expr->astKind == ASTKind::LIT_CONST_EXPR);
-        auto lce = As<ASTKind::LIT_CONST_EXPR>(anno->args[0]->expr.get());
-        CJC_ASSERT(lce);
-        std::string fqname = lce->stringValue;
-        auto beforeClassNamePos = fqname.rfind(".");
-        if (beforeClassNamePos != std::string::npos) {
-            fqname.erase(beforeClassNamePos);
-        } else {
-            return "";
-        }
-        return fqname;
-    }
-
-    return decl.GetFullPackageName();
-}
 
 std::string Utils::GetJavaObjectTypeName(const Ty& ty)
 {
@@ -601,103 +359,10 @@ std::string Utils::GetJavaObjectTypeName(const Ty& ty)
  * Call only when the type is a class or interface.
  * such as: turn class 'Integer' to 'java/lang/Integer'
  */
-std::string Utils::GetJavaClassNormalizeSignature(const Ty& cjtype) const
+std::string GetJavaJniClassName(const Ty& cjtype)
 {
     CJC_ASSERT(!IsJArray(cjtype));
     return NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(cjtype).commonDecl));
-}
-
-/*
- * Should be called only on java compatible type or a function type over java compatible types
- */
-std::string Utils::GetJavaTypeSignature(const Ty& cjtype)
-{
-    std::string jsig;
-
-    switch (cjtype.kind) {
-        case TypeKind::TYPE_UNIT:
-            jsig = "V";
-            break;
-        case TypeKind::TYPE_BOOLEAN:
-            jsig = "Z";
-            break;
-        case TypeKind::TYPE_INT8:
-            jsig = "B";
-            break;
-        case TypeKind::TYPE_UINT16:
-            jsig = "C";
-            break;
-        case TypeKind::TYPE_INT16:
-            jsig = "S";
-            break;
-        case TypeKind::TYPE_INT32:
-            jsig = "I";
-            break;
-        case TypeKind::TYPE_INT64:
-            jsig = "J";
-            break;
-        case TypeKind::TYPE_FLOAT32:
-            jsig = "F";
-            break;
-        case TypeKind::TYPE_FLOAT64:
-            jsig = "D";
-            break;
-
-        case TypeKind::TYPE_STRUCT: {
-            if (cjtype.IsString()) {
-                jsig = "L" + NormalizeJavaSignature(GetJavaFQName(*GetJStringDecl())) + ";";
-                break;
-            }
-            if (!cjtype.IsStructArray()) {
-                break;
-            }
-            [[fallthrough]]; // for Array<T> - fallback
-        }
-        case TypeKind::TYPE_ARRAY:
-            jsig = "[" + GetJavaTypeSignature(*cjtype.typeArgs[0]);
-            break;
-        case TypeKind::TYPE_ENUM: {
-            if (!cjtype.IsCoreOptionType()) {
-                break;
-            };
-            CJC_ASSERT_WITH_MSG(!cjtype.typeArgs.empty(), "Option type must be generic");
-            auto& argTy = *cjtype.typeArgs[0];
-            if (IsJArray(argTy)) {
-                jsig = GetJavaTypeSignature(argTy);
-            } else {
-                jsig = "L" + NormalizeJavaSignature(GetJavaObjectTypeName(argTy)) + ";";
-            }
-            break;
-        }
-        case TypeKind::TYPE_CLASS:
-        case TypeKind::TYPE_INTERFACE:
-            if (IsJArray(*StaticCast<ClassLikeTy&>(cjtype).commonDecl)) {
-                jsig = "[" + GetJavaTypeSignature(*cjtype.typeArgs[0]);
-            } else {
-                jsig = "L" + NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(cjtype).commonDecl)) + ";";
-            }
-            break;
-        case TypeKind::TYPE_FUNC: {
-            auto& funcTy = *StaticCast<FuncTy>(&cjtype);
-            jsig = "(";
-            for (auto paramTy : funcTy.paramTys) {
-                jsig.append(GetJavaTypeSignature(*paramTy));
-            }
-            jsig.append(")");
-            jsig.append(GetJavaTypeSignature(*funcTy.retTy));
-            break;
-        }
-        default:
-            CJC_ABORT();
-            break; // method must be called only on java-compatible types
-    }
-
-    return jsig;
-}
-
-std::string Utils::GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& params)
-{
-    return GetJavaTypeSignature(*typeManager.GetFunctionTy(params, &retTy));
 }
 
 OwnedPtr<CallExpr> Utils::CreateZeroValue(Ptr<Ty> ty, File& curFile) const
@@ -784,31 +449,6 @@ bool IsImpl(const Ty& ty)
 {
     auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty);
     return classLikeTy && classLikeTy->commonDecl && IsImpl(*classLikeTy->commonDecl);
-}
-
-std::string ReplaceClassName(std::string& classTypeSignature, std::string newSegment)
-{
-    bool hasSemicolon = (!classTypeSignature.empty() && classTypeSignature.back() == ';');
-
-    std::string base = hasSemicolon
-        ? classTypeSignature.substr(0, classTypeSignature.length() - 1)
-        : classTypeSignature;
-
-    size_t lastSlash = classTypeSignature.rfind('/');
-    if (lastSlash != std::string::npos) {
-        base = base.substr(0, lastSlash + 1) + newSegment;
-    } else {
-        base = newSegment;
-    }
-
-    return hasSemicolon ? base + ";" : base;
-}
-
-std::string NormalizeJavaSignature(const std::string& sig)
-{
-    std::string normalized = sig;
-    std::replace(normalized.begin(), normalized.end(), '.', '/');
-    return normalized;
 }
 
 OwnedPtr<Expr> CreateMirrorConstructorCall(
@@ -938,12 +578,8 @@ bool IsJArray(const Decl& decl)
         return false;
     }
 
-    auto attr = GetJavaMirrorAnnoAttr(*classLikeDecl);
-    if (!attr) {
-        return false;
-    }
-
-    return *attr == "[]";
+    auto attr = GetJavaFQName(*classLikeDecl); // prioritizes foreign name instead of decl name.
+    return attr == "[]";
 }
 
 bool IsJArray(const Ty& ty)
@@ -1080,13 +716,6 @@ OwnedPtr<MatchExpr> InteropLibBridge::CreateMatchByTypeArgument(
     return std::move(matchExpr);
 }
 
-namespace {
-
-constexpr auto NATIVE_CONSTRUCTOR_MARKER_CLASS_NAME = "$$NativeConstructorMarker";
-constexpr auto NATIVE_CONSTRUCTOR_MARKER_PACKAGE_NAME = "cangjie.lang.internal";
-
-} // namespace
-
 Ptr<FuncDecl> GetJavaImplRegistryCompanionConstructor(AST::ClassDecl& companion)
 {
     CJC_ASSERT(IsImplRegistryCompanion(companion));
@@ -1104,50 +733,4 @@ Ptr<FuncDecl> GetJavaImplRegistryCompanionConstructor(AST::ClassDecl& companion)
     return nullptr;
 }
 
-std::string GetConstructorMarkerFQName()
-{
-    std::string res;
-    res += NATIVE_CONSTRUCTOR_MARKER_PACKAGE_NAME;
-    res += ".";
-    res += NATIVE_CONSTRUCTOR_MARKER_CLASS_NAME;
-    return res;
-}
-
-std::string GetConstructorMarkerClassName()
-{
-    return NATIVE_CONSTRUCTOR_MARKER_CLASS_NAME;
-}
-
-OwnedPtr<ClassDecl> CreateConstructorMarkerClassDecl()
-{
-    OwnedPtr<ClassDecl> markerClassDecl = MakeOwned<ClassDecl>();
-    markerClassDecl->identifier = std::string(NATIVE_CONSTRUCTOR_MARKER_CLASS_NAME);
-    markerClassDecl->fullPackageName = NATIVE_CONSTRUCTOR_MARKER_PACKAGE_NAME;
-    return markerClassDecl;
-}
-
-void GenerateSyntheticClassMemberStubs(ClassDecl& synthetic, const MemberMap& members)
-{
-    for (const auto& idMemberSignature : members) {
-        const auto& signature = idMemberSignature.second;
-
-        // only abstract functions must be inside synthetic class
-        if (!signature.decl->TestAttr(Attribute::ABSTRACT)) {
-            continue;
-        }
-
-        // JObject already has implementation of java ref getter
-        if (Interop::Java::IsJavaRefGetter(*signature.decl)) {
-            continue;
-        }
-
-        switch (signature.decl->astKind) {
-            case ASTKind::FUNC_DECL:
-                GenerateSyntheticClassFuncStub(synthetic, *StaticAs<ASTKind::FUNC_DECL>(signature.decl));
-                break;
-            default:
-                continue;
-        }
-    }
-}
 } // namespace Cangjie::Interop::Java

@@ -54,22 +54,22 @@ OwnedPtr<Expr> GenerateNativeBridgeForJavaImpl::UnwrapCTypeExprAsJavaCompatible(
         resExpr = CreateMirrorConstructorCall(importManager, std::move(entity), javaCompatibleTy);
     } else if (IsImpl(*javaCompatibleTy)) {
         auto entity = ilib.CreateJavaEntityJobjectCall(std::move(cexpr));
-        resExpr = ilib.UnwrapJavaEntity(std::move(entity), javaCompatibleTy, *outerDecl);
+        resExpr = ilib.UnwrapJavaEntity(std::move(entity), javaCompatibleTy, outerDecl);
     } else if (javaCompatibleTy->IsCoreOptionType() && IsMirror(*javaCompatibleTy->typeArgs[0])) {
         // funcDecl(Java_CFFI_JavaEntity(arg)) // if arg is null (as jobject == 0) -> java entity will preserve it
         auto entity = ilib.CreateJavaEntityJobjectCall(std::move(cexpr));
-        resExpr = ilib.UnwrapJavaEntity(std::move(entity), javaCompatibleTy, *outerDecl);
+        resExpr = ilib.UnwrapJavaEntity(std::move(entity), javaCompatibleTy, outerDecl);
     } else if (javaCompatibleTy->IsCoreOptionType() && IsImpl(*javaCompatibleTy->typeArgs[0])) {
         auto entity = ilib.CreateJavaEntityJobjectCall(std::move(cexpr));
-        resExpr = ilib.UnwrapJavaEntity(std::move(entity), javaCompatibleTy, *outerDecl);
+        resExpr = ilib.UnwrapJavaEntity(std::move(entity), javaCompatibleTy, outerDecl);
     } else if (javaCompatibleTy->IsString()) {
         // Convert JNI jobject (jstring) to Cangjie String:
         // jobject -> JavaEntity -> Struct-String.
         auto entity = ilib.CreateJavaEntityJobjectCall(std::move(cexpr));
-        resExpr = ilib.UnwrapJavaEntity(std::move(entity), javaCompatibleTy, *outerDecl);
+        resExpr = ilib.UnwrapJavaEntity(std::move(entity), javaCompatibleTy, outerDecl);
     } else if (javaCompatibleTy->IsCoreOptionType() && javaCompatibleTy->typeArgs[0]->IsString()) {
         auto entity = ilib.CreateJavaEntityJobjectCall(std::move(cexpr));
-        resExpr = ilib.UnwrapJavaEntity(std::move(entity), javaCompatibleTy, *outerDecl);
+        resExpr = ilib.UnwrapJavaEntity(std::move(entity), javaCompatibleTy, outerDecl);
     } else {
         // C-compatible param. Just pass-through.
         resExpr = std::move(cexpr);
@@ -206,7 +206,7 @@ OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateInstanceMethodBridge(A
                 methodCallRes->GetTy() = retTy;
                 OwnedPtr<Expr> retExpr = ilib.UnwrapJavaEntity(
                     ilib.WrapJavaEntity(WithinFile(CreateRefExpr(*methodCallRes), &curFile)),
-                    &jni.ConvertCangjieToJniTy(*retTy), *(refWrapperFunc.outerDecl), true);
+                    &jni.ConvertCangjieToJniTy(*retTy), refWrapperFunc.outerDecl, true);
 
                 f.funcBody->body->body.push_back(
                     ilib.WrapExceptionHandling(WithinFile(CreateRefExpr(jniEnv), &curFile),
@@ -259,7 +259,7 @@ OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateStaticMethodBridge(
                 methodCallRes->GetTy() = retTy;
                 OwnedPtr<Expr> retExpr = ilib.UnwrapJavaEntity(
                     ilib.WrapJavaEntity(WithinFile(CreateRefExpr(*methodCallRes), &curFile)),
-                    &jni.ConvertCangjieToJniTy(*retTy), *(refWrapperFunc.outerDecl), true);
+                    &jni.ConvertCangjieToJniTy(*retTy), refWrapperFunc.outerDecl, true);
 
                 f.funcBody->body->body.push_back(
                     ilib.WrapExceptionHandling(WithinFile(CreateRefExpr(jniEnv), &curFile),
