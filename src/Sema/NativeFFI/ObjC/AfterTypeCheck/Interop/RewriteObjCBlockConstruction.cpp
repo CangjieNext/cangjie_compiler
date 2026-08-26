@@ -42,6 +42,9 @@ void RewriteObjCBlockConstruction::HandleImpl(InteropContext& ctx)
             if (node->astKind != ASTKind::CALL_EXPR) {
                 return VisitAction::WALK_CHILDREN;
             }
+            if (node->TestAttr(Attribute::IS_BROKEN)) {
+                return VisitAction::SKIP_CHILDREN;
+            }
             auto callExpr = StaticCast<CallExpr>(node);
             CJC_ASSERT(callExpr);
 
@@ -53,7 +56,7 @@ void RewriteObjCBlockConstruction::HandleImpl(InteropContext& ctx)
                 return VisitAction::WALK_CHILDREN;
             }
             auto containingClass = calledFunc->outerDecl;
-            
+
             if (containingClass == nullptr || containingClass->astKind != ASTKind::CLASS_DECL) {
                 return VisitAction::WALK_CHILDREN;
             }
