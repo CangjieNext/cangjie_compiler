@@ -335,6 +335,9 @@ public:
 class CheckObjCPointerTypeArguments : public Handler<CheckObjCPointerTypeArguments, InteropContext> {
 public:
     void HandleImpl(InteropContext& ctx);
+private:
+    void CheckTypeUsage(InteropContext& ctx, AST::Type& type);
+    void CheckConstructorCall(InteropContext& ctx, AST::CallExpr& callExpr);
 };
 
 /**
@@ -343,6 +346,9 @@ public:
 class CheckObjCFuncTypeArguments : public Handler<CheckObjCFuncTypeArguments, InteropContext> {
 public:
     void HandleImpl(InteropContext& ctx);
+private:
+    void CheckTypeUsage(InteropContext& ctx, AST::Type& type);
+    void CheckConstructorCall(InteropContext& ctx, AST::CallExpr& callExpr);
 };
 
 /**
