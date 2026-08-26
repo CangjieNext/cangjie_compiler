@@ -301,6 +301,27 @@ bool TypeMapper::IsObjCCompatible(const Ty& ty)
     }
 }
 
+bool TypeMapper::IsObjCCompatibleFuncTy(const Ty& ty)
+{
+    auto fTy = DynamicCast<FuncTy>(&ty);
+    if (fTy == nullptr) {
+        return false;
+    }
+    if (fTy->isC) {
+        return false;
+    }
+
+    if (!IsObjCCompatible(*fTy->retTy)) {
+        return false;
+    }
+    for (auto argTy : fTy->paramTys) {
+        if (!IsObjCCompatible(*argTy)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool TypeMapper::IsObjCMirror(const Decl& decl)
 {
     return decl.TestAttr(Attribute::OBJ_C_MIRROR);
