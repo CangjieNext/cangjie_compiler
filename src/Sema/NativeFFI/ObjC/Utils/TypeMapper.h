@@ -49,6 +49,7 @@ public:
     static MappedCType Cj2ObjCForObjC(const AST::Ty& from);
     Ptr<AST::Ty> Cj2CType(Ptr<AST::Ty> cjty) const;
     static bool IsObjCCompatible(const AST::Ty& ty);
+    static bool IsObjCCompatibleFuncTy(const AST::Ty& ty);
     static bool IsObjCMirror(const AST::Decl& decl);
     static bool IsObjCMirrorSubtype(const AST::Decl& decl);
     static bool IsObjCImpl(const AST::Decl& decl);
