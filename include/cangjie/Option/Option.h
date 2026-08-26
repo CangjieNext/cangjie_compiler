@@ -131,7 +131,6 @@ enum class Environment : uint8_t {
     NOT_AVAILABLE,
 };
 
-inline static const std::string DEFAULT_ANDROID_API {"31"};
 inline static const std::string MIN_ANDROID_API {"23"};
 
 struct Info {
