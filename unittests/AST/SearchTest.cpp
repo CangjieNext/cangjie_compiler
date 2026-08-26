@@ -2007,9 +2007,10 @@ main() {
     results = instance->GetGivenReferenceTarget(ctx, scopeName, *access05, false);
     ASSERT_FALSE(results.hasDecl);
     tys = results.tys;
-    ASSERT_EQ(tys.size(), 7);
+    EXPECT_EQ(tys.size(), 7);
     auto str = Ty::GetModalTypesToStableStr(std::set<ModalTy>(tys.begin(), tys.end()), " ");
-    EXPECT_EQ(str, "Struct-Array<Struct-String> Struct-String Unit");
+    EXPECT_EQ(str, "Struct-Array<Struct-String> Struct-Array<Struct-String> @local! Struct-Array<Struct-String> @local?"
+        " Struct-String Struct-String @local! Struct-String @local? Unit");
 
     OwnedPtr<Expr> access06 = Parser("z[0].get(0).getOrThrow()", diag, sm).ParseExpr();
     AddCurFile(*access06, pkgs[0]->files[0].get());
