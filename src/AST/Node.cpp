@@ -577,6 +577,41 @@ std::vector<Ptr<ClassLikeDecl>> InheritableDecl::GetAllSuperDecls()
     return ret;
 }
 
+std::vector<Ptr<ClassLikeDecl>> InheritableDecl::GetAllSpecificSuperDecls()
+{
+    std::set<Ptr<ClassLikeDecl>> visited; // to avoid multiple paths or cycle
+    std::vector<Ptr<ClassLikeDecl>> ret;  // to guarantee order
+    std::queue<Ptr<InheritableDecl>> workList;
+    workList.push(this);
+    if (auto cd = DynamicCast<ClassLikeDecl*>(this)) {
+        visited.emplace(cd);
+        ret.emplace_back(cd);
+    }
+    while (!workList.empty()) {
+        auto curDecl = workList.front();
+        workList.pop();
+        for (auto& it : curDecl->inheritedTypes) {
+            // If the declaration contains a specific version, 'GetDeclPtrOfTy' will by default obtain the specific
+            // version.
+            auto declPtr = Ty::GetDeclPtrOfTy<ClassLikeDecl>(it->GetTy());
+            if (declPtr == nullptr) {
+                continue;
+            }
+            if (auto clsTy = DynamicCast<ClassTy*>(it->GetTy()); clsTy && visited.count(declPtr) == 0) {
+                workList.push(declPtr);
+                visited.emplace(declPtr);
+                ret.emplace_back(declPtr);
+            } else if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->GetTy());
+                interfaceTy && visited.count(declPtr) == 0) {
+                workList.push(declPtr);
+                visited.emplace(declPtr);
+                ret.emplace_back(declPtr);
+            }
+        }
+    }
+    return ret;
+}
+
 std::vector<Ptr<Decl>> Decl::GetMemberDeclPtrs() const
 {
     std::vector<Ptr<Decl>> results;

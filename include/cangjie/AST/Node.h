@@ -1102,6 +1102,10 @@ struct InheritableDecl : public Decl {
     std::vector<Ptr<InterfaceTy>> GetStableSuperInterfaceTys() const;
     // guarantees sub-types always exist before super-types
     std::vector<Ptr<AST::ClassLikeDecl>> GetAllSuperDecls();
+    // Unlike 'GetAllSuperDecls', under cjmp mode 'GetAllSuperDecls' fetches the common-version super-type declarations
+    // while 'GetAllSpecificSuperDecls' fetches the specific-version ones; the difference lies in whether the DeclPtr is
+    // obtained from the ty via 'Ty::GetDeclPtrOfTy'.
+    std::vector<Ptr<AST::ClassLikeDecl>> GetAllSpecificSuperDecls();
 
 protected:
     InheritableDecl(ASTKind kind) : Decl(kind)
