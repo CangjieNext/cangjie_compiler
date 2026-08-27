@@ -119,25 +119,6 @@ bool StructInheritanceChecker::ComputeInconsistentTypes(const MemberSignature& c
     return hasConsistentReturnTy;
 }
 
-void StructInheritanceChecker::UpdateOverriddenFuncDeclCache(Ptr<Decl> child, Ptr<Decl> parent)
-{
-    if (!child || !parent) {
-        return;
-    }
-    // Record when the overriding member belongs to the type currently under check.
-    bool isMemberOfCheckingType = !checkingDecls.empty() && child->outerDecl == checkingDecls.back();
-    // Also record interface-to-interface overrides (e.g. Equatable.!= overrides NotEqual.!=)
-    // when the child interface itself is being checked as an inherited base: in that case
-    // checkingDecls.back() is still the child interface, so the branch above already covers
-    // it. Keep an explicit interface fallback for robustness when checkingDecls is empty.
-    bool isInterfaceOverride = child->outerDecl && parent->outerDecl &&
-        child->outerDecl->astKind == ASTKind::INTERFACE_DECL &&
-        parent->outerDecl->astKind == ASTKind::INTERFACE_DECL;
-    if (isMemberOfCheckingType || (checkingDecls.empty() && isInterfaceOverride)) {
-        typeManager.UpdateTopOverriddenFuncDeclMap(child, parent);
-    }
-}
-
 /**
  * Update @p child value into the @p members
  * NOTE: Do not report error here.
@@ -181,7 +162,6 @@ MemberSignature StructInheritanceChecker::UpdateInheritedMemberIfNeeded(
 
         if (shouldUpdate) {
             if (parent.decl->TestAttr(Attribute::ABSTRACT) || !child.decl->TestAttr(Attribute::ABSTRACT)) {
-                UpdateOverriddenFuncDeclCache(child.decl, parent.decl);
                 it->second = updated; // Override stored value to child.
             }
             it->second.replaceOther = true;

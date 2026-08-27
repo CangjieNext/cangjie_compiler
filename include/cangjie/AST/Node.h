@@ -1100,8 +1100,17 @@ struct InheritableDecl : public Decl {
     std::vector<OwnedPtr<Type>> inheritedTypes; /**< Super class or super interfaces. */
     std::set<Ptr<InterfaceTy>> GetSuperInterfaceTys() const;
     std::vector<Ptr<InterfaceTy>> GetStableSuperInterfaceTys() const;
-    // guarantees sub-types always exist before super-types
-    std::vector<Ptr<AST::ClassLikeDecl>> GetAllSuperDecls();
+    /**
+     * Collect this decl and all its super-decls (super classes and super interfaces) via BFS
+     * over inheritedTypes, ordered so sub-types precede super-types, each visited once.
+     * Only collects the super-decls of this declaration; it does NOT include interfaces
+     * introduced by extends of this type.
+     * @param obtainSpecific If true, each super-decl is resolved via Ty::GetDeclPtrOfTy
+     *     (maps common type to its specificImplementation when one exists); if false, taken
+     *     directly from the type. Only super-decls are mapped; the root (this) is inserted
+     *     as-is, so callers of the specific mode MUST ensure `this` is already a specific decl.
+     */
+    std::vector<Ptr<AST::ClassLikeDecl>> GetAllSuperDecls(bool obtainSpecific = false);
 
 protected:
     InheritableDecl(ASTKind kind) : Decl(kind)

@@ -8,12 +8,10 @@
  * @file
  * Unit tests for TypeManager::GetTopOverriddenFuncDecl.
  *
- * GetTopOverriddenFuncDecl walks the overrideMap and then continues up the
- * inheritance chain so that the true top-most overridden function is reached
- * even when the map only records a partial prefix of the chain (which is the
- * common case for imported declarations, e.g. an override of Equatable.!=).
- * These tests drive real Cangjie source through Sema, then assert the resolved
- * top-most declaration for selected override functions.
+ * GetTopOverriddenFuncDecl walks the inheritance chain (including extends)
+ * upward to reach the top-most overridden function. These tests drive real
+ * Cangjie source through Sema, then assert the resolved top-most declaration
+ * for selected override functions.
  */
 
 #include <cstdlib>
@@ -24,16 +22,10 @@
 
 #include "gtest/gtest.h"
 
-// Open private members of TypeManager so the partial-overrideMap test can
-// directly simulate the "imported / incomplete map" condition that the API's
-// inheritance-walk fallback is designed for. Standard library headers must be
-// included BEFORE this macro to avoid altering their internal access.
-#define private public
 #include "TestCompilerInstance.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Sema/TypeManager.h"
-#undef private
 
 #ifdef _WIN32
 #include <windows.h>
@@ -280,11 +272,8 @@ protected:
 //
 // Dependency package `dep` declares interface I and two classes A (which
 // implements I.f) and B (which overrides A.f). The main package imports `dep`
-// and calls B().f(). The B.f declaration the call resolves to is an IMPORTED
-// decl whose overrideMap edges are typically only partially recorded (exactly
-// the "imported / partial map" condition GetTopOverriddenFuncDecl's inheritance
-// walk is designed to handle, e.g. an override of Equatable.!=). Despite that,
-// resolving the imported B.f must still reach the abstract interface root I.f.
+// and calls B().f(). Resolving the imported B.f must still reach the abstract
+// interface root I.f, which the inheritance walk handles for imported decls.
 TEST_F(GetTopOverriddenFuncDeclTest, ImplOfInterfaceResolvesToAbstractRoot)
 {
     // 1) Compile the dependency package.
@@ -324,7 +313,7 @@ main(): Int64 {
 
     // 4) Resolving the imported B.f must reach the abstract interface root I.f,
     //    not B.f or A.f. This exercises the inheritance-walk fallback that the
-    //    API uses when the overrideMap is incomplete for imported declarations.
+    //    API uses to walk the inheritance chain for imported declarations.
     auto top = GetTop(callee.get());
     ASSERT_TRUE(top);
     EXPECT_EQ(QualName(top), "I.f");
@@ -371,7 +360,7 @@ main(): Int64 {
 
     // 4) Resolving the imported B.f must reach the abstract interface root I.f,
     //    not B.f or A.f. This exercises the inheritance-walk fallback that the
-    //    API uses when the overrideMap is incomplete for imported declarations.
+    //    API uses to walk the inheritance chain for imported declarations.
     auto top = GetTop(callee.get());
     ASSERT_TRUE(top);
     EXPECT_EQ(QualName(top), "I.f");
@@ -425,7 +414,7 @@ main(): Int64 {
 
     // 4) Resolving the imported B.f must reach the abstract interface root I.f,
     //    not B.f or A.f. This exercises the inheritance-walk fallback that the
-    //    API uses when the overrideMap is incomplete for imported declarations.
+    //    API uses to walk the inheritance chain for imported declarations.
     auto top = GetTop(callee.get());
     ASSERT_TRUE(top);
     EXPECT_EQ(QualName(top), "I.f");
@@ -476,7 +465,7 @@ main(): Int64 {
 
     // 4) Resolving the imported B.f must reach the abstract interface root I.f,
     //    not B.f or A.f. This exercises the inheritance-walk fallback that the
-    //    API uses when the overrideMap is incomplete for imported declarations.
+    //    API uses to walk the inheritance chain for imported declarations.
     auto top = GetTop(callee.get());
     ASSERT_TRUE(top);
     EXPECT_EQ(QualName(top), "I.f");
@@ -532,11 +521,44 @@ main(): Int64 {
 
     // 4) Resolving the imported B.f must reach the abstract interface root I.f,
     //    not B.f or A.f. This exercises the inheritance-walk fallback that the
-    //    API uses when the overrideMap is incomplete for imported declarations.
+    //    API uses to walk the inheritance chain for imported declarations.
     auto top = GetTop(callee.get());
     ASSERT_TRUE(top);
     EXPECT_EQ(QualName(top), "I.f");
     EXPECT_TRUE(top->TestAttr(Attribute::ABSTRACT));
     EXPECT_NE(QualName(top), "B.f");
     EXPECT_NE(QualName(top), "A.f");
+}
+
+TEST_F(GetTopOverriddenFuncDeclTest, GetTopOverriddenFuncThatSourceExported04)
+{
+    BeginMainPackage("", {}, R"(
+public interface AAA {
+    func foo(x: Int64): Int64
+}
+
+public interface BBB {
+    func foo(x: Int64): Int64
+}
+
+func posion<T>(x: T): Int64 where T <: AAA & BBB {
+    0
+}
+
+public func goo<R>(x: R): Int64 where R <: BBB {
+    x.foo(1)
+}
+
+main() {}
+    )");
+    instance->invocation.globalOptions.optimizationLevel = GlobalOptions::OptimizationLevel::O2;
+    ASSERT_TRUE(instance->Compile(CompileStage::SEMA));
+    ASSERT_EQ(diag.GetErrorCount(), 0u);
+
+    auto callee = FindResolvedCallee("foo", instance->GetSourcePackages()[0]);
+    ASSERT_TRUE(callee) << "x.foo(1) call did not resolve to a function";
+
+    auto top = GetTop(callee.get());
+    ASSERT_TRUE(top);
+    EXPECT_EQ(QualName(top), "BBB.foo");
 }

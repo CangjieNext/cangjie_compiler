@@ -370,15 +370,7 @@ bool IsOverrideOrShadow(TypeManager& typeManager, const PropDecl& src, const Pro
     }
     auto srcTy = src.type ? src.type->GetTy() : src.GetTy();
     auto targetTy = target.type ? target.type->GetTy() : target.GetTy();
-    bool ret = srcTy == typeManager.GetInstantiatedTy(targetTy, typeMapping);
-    // If property `src` overrides `target` within the same instantiated type (i.e. `src.outerDecl` equals the
-    // declaration of `baseTy`) and both have the same `static` attribute, update the cached overridden function
-    // declaration for the property.
-    if (ret && src.outerDecl == Ty::GetDeclPtrOfTy(baseTy) &&
-        src.TestAttr(Attribute::STATIC) == target.TestAttr(Attribute::STATIC)) {
-        typeManager.UpdateTopOverriddenFuncDeclMap(&src, &target);
-    }
-    return ret;
+    return srcTy == typeManager.GetInstantiatedTy(targetTy, typeMapping);
 }
 
 // Check where expr is memberAccess calling interface's member.

@@ -300,14 +300,14 @@ MemberFuncSet OverrideFunctionResolver::GetTopOverriddenFuncs(AST::Ty& instBaseT
     std::set<Ptr<AST::ExtendDecl>> extendDecls;
     MemberFuncSet result;
     if (baseDecl) {
-        auto superDeclsVec = baseDecl->GetAllSuperDecls();
+        auto superDeclsVec = baseDecl->GetAllSuperDecls(true);
         superDecls.insert(superDeclsVec.begin(), superDeclsVec.end());
         extendDecls = typeManager->GetDeclExtends(*baseDecl);
     } else {
         extendDecls = typeManager->GetAllExtendsByTy(instBaseTy);
     }
     for (auto extendDecl : extendDecls) {
-        auto superDeclsVec = extendDecl->GetAllSuperDecls();
+        auto superDeclsVec = extendDecl->GetAllSuperDecls(true);
         superDecls.insert(superDeclsVec.begin(), superDeclsVec.end());
     }
     for (auto superDecl : superDecls) {
