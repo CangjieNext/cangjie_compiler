@@ -752,6 +752,7 @@ static void InitCjStringLiteralDeferred(const CGModule& cgMod)
         // pass dedups them by content bytes after GlobalDCE, and ConstantMerge
         // can also merge identical unnamed_addr buffers across packages.
         std::string bufName = GetCjStringDataNameFromLiteralName(cjStringName);
+        CJC_ASSERT(!bufName.empty() && "cjstring literal name has unexpected prefix");
         auto bufGV = llvm::cast<llvm::GlobalVariable>(module->getOrInsertGlobal(bufName, bufType));
         bufGV->setInitializer(bufInit);
         bufGV->setConstant(true);
@@ -857,7 +858,12 @@ void InitializeCjStringLiteral(const CGModule& cgMod)
     // Full LTO emits per-literal buffers (deferred pooling) so GlobalDCE /
     // ConstantMerge / the backend CJStringPoolMerge pass can trim, dedup and
     // repack them. Otherwise use the legacy per-package pool.
-    if (cgMod.GetCGContext().GetCompileOptions().IsFullLTOEnabled()) {
+    // The per-literal buffer shape {i8*, i64, [N x i8]} mirrors the runtime
+    // MArray layout whose data offset (sizeof(MArray)) is 16 on 64-bit but
+    // 8 on 32-bit; the backend pass is likewise 64-bit only, so emit
+    // deferred buffers only for 64-bit targets.
+    bool is64Bit = cgMod.GetLLVMModule()->getDataLayout().getPointerSize() == 8;
+    if (cgMod.GetCGContext().GetCompileOptions().IsFullLTOEnabled() && is64Bit) {
         InitCjStringLiteralDeferred(cgMod);
     } else {
         InitCjStringLiteralPooled(cgMod);
