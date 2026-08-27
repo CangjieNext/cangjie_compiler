@@ -1312,6 +1312,70 @@ std::string GlobalOptions::GetCangjieLibTargetPathName() const
     return name;
 }
 
+std::string GlobalOptions::BuildLegacyAndroidToolchainName(const std::string &apiLevel) const
+{
+    // Directory naming convention: <os>_android<API>_<arch>_<backend>. When apiLevel equals
+    // MIN_ANDROID_API and the arch is not "arm", the numeric suffix is omitted to match the
+    // historical directory naming (e.g. linux_android_aarch64_cjnative).
+    const std::string archStr = target.ArchToString();
+    std::string envName = target.EnvironmentToSimpleString();
+    if (archStr == "arm" || apiLevel != MIN_ANDROID_API) {
+        envName += apiLevel;
+    }
+    return target.OSToString() + "_" + envName + "_" + archStr + "_" + BackendToString(backend);
+}
+
+bool GlobalOptions::ParseAndroidToolchainApi(const std::string &dirName, const std::string &prefix,
+    const std::string &suffix, int &api) const
+{
+    // A directory name matches when it starts with `prefix`, ends with `suffix`, and the
+    // middle part is either empty (stands for MIN_ANDROID_API) or a pure number.
+    if (dirName.size() < prefix.size() + suffix.size() ||
+        dirName.compare(0, prefix.size(), prefix) != 0 ||
+        dirName.compare(dirName.size() - suffix.size(), suffix.size(), suffix) != 0) {
+        return false;
+    }
+    const std::string middle = dirName.substr(prefix.size(), dirName.size() - prefix.size() - suffix.size());
+    if (middle.empty()) {
+        // The omitted-suffix form stands for MIN_ANDROID_API.
+        api = std::stoi(MIN_ANDROID_API);
+        return true;
+    }
+    // The middle part must be a pure number, otherwise the directory does not match.
+    for (char c : middle) {
+        if (c < '0' || c > '9') {
+            return false;
+        }
+    }
+    try {
+        api = std::stoi(middle);
+    } catch (std::exception const&) {
+        return false;
+    }
+    return true;
+}
+
+void GlobalOptions::ReportAndroidToolchainNotFound(const std::string &requestedApiStr,
+    const std::string &libDir, const std::vector<std::pair<int, std::string>> &candidates) const
+{
+    // No installed Android toolchain satisfies the requested api level. List the available
+    // levels so the user can pick one that is installed.
+    Errorf("No Android toolchain found for API level %s under '%s'.",
+        requestedApiStr.c_str(), libDir.c_str());
+    std::string available;
+    for (const auto &cand : candidates) {
+        if (!available.empty()) {
+            available += ", ";
+        }
+        available += std::to_string(cand.first);
+    }
+    if (available.empty()) {
+        Errorln("No Android toolchain directories are installed.");
+    } else {
+        Errorf(" Available Android API levels: %s.\n", available.c_str());
+    }
+}
+
 std::string GlobalOptions::ResolveAndroidToolchainPathName() const
 {
     // Directory naming convention: <os>_android<API>_<arch>_<backend>
@@ -1321,25 +1385,10 @@ std::string GlobalOptions::ResolveAndroidToolchainPathName() const
     const std::string prefix = target.OSToString() + "_android";
     const std::string suffix = "_" + archStr + "_" + BackendToString(backend);
 
-    // Helper that builds the legacy (non-scanned) path name for a given api level string.
-    // When apiLevel equals MIN_ANDROID_API and the arch is not "arm", the numeric suffix is
-    // omitted to match the historical directory naming.
-    auto buildLegacyName = [&](const std::string &apiLevel) -> std::string {
-        std::string envName = target.EnvironmentToSimpleString();
-        // When apiLevel equals MIN_ANDROID_API and the arch is not "arm", the numeric suffix
-        // is omitted to match the historical directory naming (e.g. linux_android_aarch64_cjnative).
-        if (archStr != "arm" && apiLevel == MIN_ANDROID_API) {
-            // keep envName as "android" without the api level
-        } else {
-            envName += apiLevel;
-        }
-        return target.OSToString() + "_" + envName + "_" + archStr + "_" + BackendToString(backend);
-    };
-
     // Without a cangjie home (e.g. some LSP/frontend scenarios) we cannot scan the installed
     // toolchains, so fall back to the legacy exact-match name derived from the requested api.
     if (cangjieHome.empty()) {
-        return buildLegacyName(target.apiLevel.empty() ? MIN_ANDROID_API : target.apiLevel);
+        return BuildLegacyAndroidToolchainName(target.apiLevel.empty() ? MIN_ANDROID_API : target.apiLevel);
     }
 
     const std::string libDir = FileUtil::JoinPath(cangjieHome, "lib");
@@ -1352,76 +1401,33 @@ std::string GlobalOptions::ResolveAndroidToolchainPathName() const
     try {
         requestedApi = std::stoi(requestedApiStr);
     } catch (std::exception const&) {
-        return buildLegacyName(target.apiLevel);
+        return BuildLegacyAndroidToolchainName(target.apiLevel);
     }
 
-    struct Candidate {
-        int api;
-        std::string name;
-    };
-    std::vector<Candidate> candidates;
+    // Collect the installed toolchain directories that match the naming convention.
+    std::vector<std::pair<int, std::string>> candidates;
     for (const auto &dir : directories) {
-        const std::string &dirName = dir.name;
-        if (dirName.size() < prefix.size() + suffix.size() ||
-            dirName.compare(0, prefix.size(), prefix) != 0 ||
-            dirName.compare(dirName.size() - suffix.size(), suffix.size(), suffix) != 0) {
-            continue;
-        }
-        const std::string middle = dirName.substr(prefix.size(), dirName.size() - prefix.size() - suffix.size());
         int api = 0;
-        if (middle.empty()) {
-            // The omitted-suffix form stands for MIN_ANDROID_API.
-            api = std::stoi(MIN_ANDROID_API);
-        } else {
-            // The middle part must be a pure number, otherwise the directory does not match.
-            bool allDigits = !middle.empty();
-            for (char c : middle) {
-                if (c < '0' || c > '9') {
-                    allDigits = false;
-                    break;
-                }
-            }
-            if (!allDigits) {
-                continue;
-            }
-            try {
-                api = std::stoi(middle);
-            } catch (std::exception const&) {
-                continue;
-            }
+        if (ParseAndroidToolchainApi(dir.name, prefix, suffix, api)) {
+            candidates.emplace_back(api, dir.name);
         }
-        candidates.push_back({api, dirName});
     }
 
     // Pick the largest available api that is not greater than the requested level.
-    const Candidate *selected = nullptr;
+    const std::pair<int, std::string> *selected = nullptr;
     for (const auto &cand : candidates) {
-        if (cand.api > requestedApi) {
+        if (cand.first > requestedApi) {
             continue;
         }
-        if (selected == nullptr || cand.api > selected->api) {
+        if (selected == nullptr || cand.first > selected->first) {
             selected = &cand;
         }
     }
     if (selected != nullptr) {
-        return selected->name;
+        return selected->second;
     }
 
-    // No installed Android toolchain satisfies the requested api level.
-    Errorf("No Android toolchain found for API level %s under '%s'.",
-        requestedApiStr.c_str(), libDir.c_str());
-    std::string available;
-    for (const auto &cand : candidates) {
-        if (!available.empty()) {
-            available += ", ";
-        }
-        available += std::to_string(cand.api);
-    }
-    if (available.empty()) {
-        Errorln("No Android toolchain directories are installed.");
-    } else {
-        Errorf(" Available Android API levels: %s.\n", available.c_str());
-    }
+    ReportAndroidToolchainNotFound(requestedApiStr, libDir, candidates);
     return "";
 }
 

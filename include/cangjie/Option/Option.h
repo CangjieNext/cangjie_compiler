@@ -1271,6 +1271,46 @@ private:
      */
     std::string ResolveAndroidToolchainPathName() const;
 
+    /**
+     * @brief Build the legacy (non-scanned) path name from a given api level string.
+     *
+     * Used when the installed toolchains cannot be scanned (e.g. cangjieHome is empty) or the
+     * requested api level is not a valid number. When apiLevel equals MIN_ANDROID_API and the
+     * arch is not "arm", the numeric suffix is omitted to match the historical directory naming.
+     *
+     * @param apiLevel The api level string to embed into the name.
+     * @return std::string The legacy exact-match library path name.
+     */
+    std::string BuildLegacyAndroidToolchainName(const std::string &apiLevel) const;
+
+    /**
+     * @brief Parse the ANDROID_API value encoded in a toolchain directory name.
+     *
+     * A directory name matches when it starts with `prefix`, ends with `suffix`, and the
+     * middle part is either empty (stands for MIN_ANDROID_API) or a pure number.
+     *
+     * @param dirName The directory name to parse.
+     * @param prefix  The expected prefix (e.g. "linux_android").
+     * @param suffix  The expected suffix (e.g. "_aarch64_cjnative").
+     * @param api     Output parameter receiving the parsed api level on match.
+     * @return bool   True if the directory name matches the toolchain naming convention.
+     */
+    bool ParseAndroidToolchainApi(const std::string &dirName, const std::string &prefix,
+        const std::string &suffix, int &api) const;
+
+    /**
+     * @brief Report that no installed Android toolchain satisfies the requested api level.
+     *
+     * Prints an error listing the requested level, the scanned lib directory and the available
+     * api levels, then leaves the resolver to return an empty string.
+     *
+     * @param requestedApiStr The requested api level as a string.
+     * @param libDir          The scanned lib directory.
+     * @param candidates      The installed toolchain candidates (api, dirName) found during scan.
+     */
+    void ReportAndroidToolchainNotFound(const std::string &requestedApiStr, const std::string &libDir,
+        const std::vector<std::pair<int, std::string>> &candidates) const;
+
     // Cache for the resolved Android toolchain path name. A present (possibly empty) value
     // means the scan has already been performed; an empty value means no match was found.
     mutable std::optional<std::string> cachedAndroidLibTargetPathName;
