@@ -1230,7 +1230,7 @@ void ClosureConversion::DoFunctionInlineForLambda()
     if (!opts.IsOptimizationExisted(GlobalOptions::OptimizationFlag::FUNC_INLINING)) {
         return;
     }
-    auto funcInline = FunctionInline(builder, GlobalOptions::OptimizationLevel::O2, opts.chirDebugOptimizer);
+    auto funcInline = FunctionInline(builder, GlobalOptions::OptimizationLevel::O2, opts, opts.chirDebugOptimizer);
     for (auto& it : autoEnvImplDefs) {
         for (auto lambda : it.second->GetMethods()) {
             // after inlining generic virtual func, we should remvoe Box and Unbox expr, we will do it later

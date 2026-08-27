@@ -53,7 +53,7 @@ bool CheckLambdaUsingForMultiThread(const Lambda& lambda)
 }
 
 LambdaInline::LambdaInline(CHIRBuilder& builder, const GlobalOptions& opts)
-    : opts(opts), inlinePass(builder, GlobalOptions::OptimizationLevel::O2, opts.chirDebugOptimizer)
+    : opts(opts), inlinePass(builder, GlobalOptions::OptimizationLevel::O2, opts, opts.chirDebugOptimizer)
 {
 }
 

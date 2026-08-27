@@ -31,10 +31,12 @@ public:
      * @brief constructor for function inline pass
      * @param builder CHIR builder for generating IR.
      * @param optLevel optimization level from Cangjie inputs.
+     * @param globalOpts global options (for CLI inline-threshold overrides, Phase 1).
      * @param debug flag whether print debug log.
      */
-    FunctionInline(CHIRBuilder& builder, const GlobalOptions::OptimizationLevel& optLevel, bool debug)
-        : builder(builder), optLevel(optLevel), debug(debug)
+    FunctionInline(CHIRBuilder& builder, const GlobalOptions::OptimizationLevel& optLevel,
+                   const GlobalOptions& globalOpts, bool debug)
+        : builder(builder), optLevel(optLevel), globalOpts(globalOpts), debug(debug)
     {
     }
 
@@ -85,6 +87,7 @@ private:
 
     CHIRBuilder& builder;
     const GlobalOptions::OptimizationLevel& optLevel;
+    const GlobalOptions& globalOpts;
     bool debug{false};
     Function* globalFunc{nullptr};
     std::unordered_map<Function*, size_t> inlinedCountMap;

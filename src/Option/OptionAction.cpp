@@ -646,6 +646,7 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
         }
         return true;
     }},
+    { Options::ID::CHIR_INLINE_LEGACY, OPTION_TRUE_ACTION(opts.chirInlineLegacy = true) },
     { Options::ID::STATIC_STD, OPTION_TRUE_ACTION(opts.linkStaticStd = true) },
     { Options::ID::DY_STD, OPTION_TRUE_ACTION(opts.linkStaticStd = false) },
     { Options::ID::STATIC_LIBS, OPTION_TRUE_ACTION((void)opts) },

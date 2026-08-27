@@ -12,6 +12,7 @@
 
 #include "cangjie/CHIR/Optimization/FunctionInline.h"
 
+#include <algorithm>
 #include <list>
 
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
@@ -24,19 +25,42 @@
 
 using namespace Cangjie::CHIR;
 
-// Set the threshold value of inline
-constexpr static size_t INIT_INLINE_THRESHOLD = 20;
-// Set the threshold value of inlined call in one function to avoid code expandsion
+// Set the threshold value of inlined call in one function to avoid code expansion
 constexpr static size_t INLINED_COUNT_THRESHOLD = 20;
 // This is for efficiency and avoid overflowing on `size`, we will
-// terminate the counting if the size is already 3 times of the threshold
-constexpr static size_t SEARCH_THRESHOLD = INIT_INLINE_THRESHOLD * 3;
+// terminate the counting if the size is already 3 times of the threshold.
+// Bumped from 60 (=INIT*3) to 200 after the cost metric switched to asm-weighted
+// counting (Phase 1): weighted per-expr cost is 0..4, so the old 60 cut-off starved
+// medium functions. Kept as a hard cap to bound counting on huge functions.
+constexpr static size_t SEARCH_THRESHOLD = 200;
 
-// Increase the threshold value by 20%
-constexpr static size_t INCREASE_THRESHOLD = 5;
+// Phase 1: per-optLevel base inline threshold for the #4 front-end decision.
+// Lower than the LLVM back-end thresholds (O2=225/Os=50/Oz=5) on purpose:
+// the front-end #4 only inlines small functions to expose cross-
+// function optimizations; the back-end owns the real machine-cost inlining decision.
+constexpr static size_t BASE_THRESHOLD_O0 = 0;   // no front-end inline
+constexpr static size_t BASE_THRESHOLD_O1 = 0;    // disabled for now (same as O0)
+constexpr static size_t BASE_THRESHOLD_O2 = 30;   // tightened from 50; stdx codesize/build-time regression deemed too large
+constexpr static size_t BASE_THRESHOLD_O3 = 60;  // perf-first tier, more aggressive than O2; lowered from 80
+constexpr static size_t BASE_THRESHOLD_OS = 20;   // ~2/3 of O2 (size-aware); lowered from 24
+constexpr static size_t BASE_THRESHOLD_OZ = 16;   // most conservative; kept at design baseline 16
 
-// Step when the callee is with lambda parameter
-constexpr static size_t INCREASE_WHEN_CALLEE_WITH_LAMBDA_ARG = 2;
+// Bonus multipliers are expressed as fractions over the base threshold (numerator/
+// denominator). The old code used `=` assignment which wiped earlier bonuses; we now
+// scale multiplicatively and cap so bonuses compose instead of clobbering each other.
+constexpr static size_t BONUS_NUMERATOR_ONLY_CALLED_ONCE = 25;   // +25%  (was +20% via /5)
+constexpr static size_t BONUS_DENOMINATOR = 100;
+constexpr static size_t BONUS_NUMERATOR_HOTSPOT = 25;            // +25%
+constexpr static size_t BONUS_NUMERATOR_LAMBDA_ARG = 50;            // +50% (was *2 in legacy, +100% in Phase1 baseline); lowered from 100 to curb stdx callback-heavy bloat
+// Hard cap on the post-bonus threshold so a tiny base cannot balloon unboundedly.
+constexpr static size_t THRESHOLD_HARD_CAP = 200;
+
+// --- Legacy (pre-Phase1) decision constants, used only under --chir-inline-legacy. ---
+// Restored verbatim from the Phase 0 baseline so the legacy path is a faithful A/B reference.
+constexpr static size_t LEGACY_INIT_INLINE_THRESHOLD = 20;
+constexpr static size_t LEGACY_SEARCH_THRESHOLD = LEGACY_INIT_INLINE_THRESHOLD * 3;  // = 60
+constexpr static size_t LEGACY_INCREASE_THRESHOLD = 5;            // +20% via /5
+constexpr static size_t LEGACY_INCREASE_WHEN_CALLEE_WITH_LAMBDA_ARG = 2;  // *2
 
 // Set the threshold of CHIR in one block for inline
 constexpr static size_t INLINED_BLOCKSIZE_THRESHOLD = 10000;
@@ -168,16 +192,26 @@ static bool OnlyCalledOnce(const Function& func)
 static bool IsHotSpotCall(const Function& callee)
 {
     // Case A: the callee is operator overloading function like `[]`, `+`, `-`
+    // NOTE: this is a weak proxy for "hot" — operator overloading != necessarily in a loop.
     if (callee.TestAttr(Attribute::OPERATOR)) {
         return true;
     }
     // Case B: the call site is located in a loop
-    // note: currently unsupported
+    // NOTE: currently UNIMPLEMENTED — the "hot path ROI" rationale of this bonus is NOT
+    // yet honored; only the operator-overloading half fires. Implementing case B (walk
+    // the call site's ancestor blocks for a loop header) is the real value of this bonus.
     return false;
 }
 
 static bool FunctionWithLambdaArg(const Function& func)
 {
+    // Bonus rationale: a higher-order function (takes a lambda arg) is worth a higher
+    // inline threshold because inlining it into the caller exposes the concrete lambda
+    // to #1 LambdaInline, which can then specialize / eliminate the closure env — a
+    // gain beyond mere call-removal. This REQUIRES #1 to run AFTER #4 so the newly
+    // exposed lambda is visible to it. Timing verified: #4 RunFunctionInline is in
+    // RunOptimizationPass (CHIR.cpp:641); #1 LambdaInline is in DoClosureConversion
+    // (ClosureConversion.cpp:1261) which runs after RunOptimizationPass (CHIR.cpp:1169).
     for (auto arg : func.GetParams()) {
         if (arg->GetType()->IsFunc()) {
             return true;
@@ -186,27 +220,104 @@ static bool FunctionWithLambdaArg(const Function& func)
     return false;
 }
 
-static size_t CalculateThreshold(const Value& callee, const Cangjie::GlobalOptions::OptimizationLevel& optLevel)
+// Phase 1: base inline threshold by optLevel, with optional CLI override.
+// Honors --chir-inline-threshold=base_<level>=<val> from the global options' override map.
+static size_t GetBaseThreshold(const Cangjie::GlobalOptions::OptimizationLevel& optLevel,
+                               const std::unordered_map<std::string, size_t>& overrides)
 {
-    size_t realThreshold = INIT_INLINE_THRESHOLD;
+    size_t base = 0;
+    switch (optLevel) {
+        case Cangjie::GlobalOptions::OptimizationLevel::O0: base = BASE_THRESHOLD_O0; break;
+        case Cangjie::GlobalOptions::OptimizationLevel::O1: base = BASE_THRESHOLD_O1; break;
+        case Cangjie::GlobalOptions::OptimizationLevel::O2: base = BASE_THRESHOLD_O2; break;
+        case Cangjie::GlobalOptions::OptimizationLevel::O3: base = BASE_THRESHOLD_O3; break;
+        case Cangjie::GlobalOptions::OptimizationLevel::Os: base = BASE_THRESHOLD_OS; break;
+        case Cangjie::GlobalOptions::OptimizationLevel::Oz: base = BASE_THRESHOLD_OZ; break;
+        default: break;
+    }
+    // CLI override (Phase 0 data channel): key "base_o0".."base_oz", lowercased by the parser.
+    static const std::unordered_map<Cangjie::GlobalOptions::OptimizationLevel, std::string> keyMap = {
+        {Cangjie::GlobalOptions::OptimizationLevel::O0, "base_o0"},
+        {Cangjie::GlobalOptions::OptimizationLevel::O1, "base_o1"},
+        {Cangjie::GlobalOptions::OptimizationLevel::O2, "base_o2"},
+        {Cangjie::GlobalOptions::OptimizationLevel::O3, "base_o3"},
+        {Cangjie::GlobalOptions::OptimizationLevel::Os, "base_os"},
+        {Cangjie::GlobalOptions::OptimizationLevel::Oz, "base_oz"},
+    };
+    auto it = overrides.find(keyMap.at(optLevel));
+    if (it != overrides.end()) {
+        base = it->second;
+    }
+    return base;
+}
+
+// Phase 1: compose bonuses multiplicatively over the base threshold, then cap.
+// Replaces the old `=`-assignment logic in CalculateThreshold which wiped earlier
+// bonuses (OnlyCalledOnce, HotSpot, LambdaArg were mutually exclusive due to overwrite).
+// Bonuses only apply below -Os (the original guard), where speed is preferred.
+static size_t ApplyBonusAdjustments(size_t base, const Function& func,
+                                    const Cangjie::GlobalOptions::OptimizationLevel& optLevel)
+{
+    if (base == 0) {
+        return 0;  // O0: no front-end inline regardless of bonuses.
+    }
+    if (optLevel >= Cangjie::GlobalOptions::OptimizationLevel::Os) {
+        return std::min(base, THRESHOLD_HARD_CAP);  // size levels: no speed bonuses.
+    }
+    // Each bonus is an additive fraction of the base; they stack (no longer clobber).
+    size_t numerator = 0;
+    if (OnlyCalledOnce(func)) {
+        numerator += BONUS_NUMERATOR_ONLY_CALLED_ONCE;
+    }
+    if (IsHotSpotCall(func)) {
+        numerator += BONUS_NUMERATOR_HOTSPOT;
+    }
+    if (FunctionWithLambdaArg(func)) {
+        numerator += BONUS_NUMERATOR_LAMBDA_ARG;
+    }
+    size_t adjusted = base + base * numerator / BONUS_DENOMINATOR;
+    return std::min(adjusted, THRESHOLD_HARD_CAP);
+}
+
+// --- Legacy (pre-Phase1) decision path, active under --chir-inline-legacy. ---
+// Verbatim from the Phase 0 baseline: fixed threshold 20, `=`-assignment bonuses
+// (so HotSpot/LambdaArg clobber an earlier OnlyCalledOnce bonus), flat per-expr
+// cost (each expression counts 1, lambda body recurses). Kept as a faithful A/B
+// reference so regressions can be attributed to Phase1 weighting/threshold changes
+// vs. something else.
+//
+// Override channel: under --chir-inline-legacy, `--chir-inline-threshold=legacy=N`
+// replaces the fixed base 20, and every bonus computation derives from N too, so
+// the override truly scales the legacy path rather than only seeding the initial
+// value. Without the override, the legacy path is byte-for-byte the Phase 0 baseline.
+static size_t LegacyCalculateThreshold(const Value& callee,
+                                        const Cangjie::GlobalOptions::OptimizationLevel& optLevel,
+                                        const std::unordered_map<std::string, size_t>& overrides)
+{
+    size_t effectiveBase = LEGACY_INIT_INLINE_THRESHOLD;
+    auto it = overrides.find("legacy");
+    if (it != overrides.end()) {
+        effectiveBase = it->second;
+    }
+    size_t realThreshold = effectiveBase;
     const auto& func = Cangjie::StaticCast<const Function&>(callee);
     if (OnlyCalledOnce(func)) {
         // Increase the threshold value by 20%
-        realThreshold += realThreshold / INCREASE_THRESHOLD;
+        realThreshold += realThreshold / LEGACY_INCREASE_THRESHOLD;
     }
     if (optLevel < Cangjie::GlobalOptions::OptimizationLevel::Os) {
         if (IsHotSpotCall(func)) {
-            // Increase the threshold value by 20%
-            realThreshold = INIT_INLINE_THRESHOLD + INIT_INLINE_THRESHOLD / INCREASE_THRESHOLD;
+            // Increase the threshold value by 20%  (note: `=` overwrites the OnlyCalledOnce bonus above)
+            realThreshold = effectiveBase + effectiveBase / LEGACY_INCREASE_THRESHOLD;
         }
         if (FunctionWithLambdaArg(func)) {
-            realThreshold = INIT_INLINE_THRESHOLD * INCREASE_WHEN_CALLEE_WITH_LAMBDA_ARG;
+            realThreshold = effectiveBase * LEGACY_INCREASE_WHEN_CALLEE_WITH_LAMBDA_ARG;
         }
     }
     return realThreshold;
 }
 
-static size_t GetExprSize(const Expression& expr)
+static size_t LegacyGetExprSize(const Expression& expr)
 {
     size_t exprSize = 0;
     if (expr.GetExprKind() != ExprKind::LAMBDA) {
@@ -220,12 +331,68 @@ static size_t GetExprSize(const Expression& expr)
     return exprSize;
 }
 
+static size_t LegacyCountFuncSize(const Function& func)
+{
+    size_t funcSize = 0;
+    for (auto block : func.GetBody()->GetBlocks()) {
+        for (auto e : block->GetExpressions()) {
+            funcSize += LegacyGetExprSize(*e);
+            if (funcSize >= LEGACY_SEARCH_THRESHOLD) {
+                break;
+            }
+        }
+    }
+    return funcSize;
+}
+
+// Phase 1: asm-footprint-approximated weighted cost per expression, dispatched by ExprKind.
+// Replaces GetExprSize which charged a flat 1 for every expression. Weights are a proxy
+// (CHIR->asm is not 1:1 due to mem2reg/instcombine/CodeGen), but they only drive the
+// "small enough to inline" #4 decision and attribute stamping; the LLVM back-end retains
+// the real machine-cost inlining decision. Enum names verified against ExprKind.inc.
+static size_t GetAsmWeightedCost(const Expression& expr)
+{
+    switch (expr.GetExprKind()) {
+        case ExprKind::APPLY:        // arg setup(mov*arity) + call + ret ~3-5
+        case ExprKind::TRY_APPLY:    // exception variant, same weight
+            return 4;
+        case ExprKind::LAMBDA: {
+            // closure = function body + captured env; recurse over the body (existing path),
+            // plus a floor for env construction.
+            size_t cost = 4;
+            auto postVisit = [&cost](Expression&) {
+                cost += 1;
+                return VisitResult::CONTINUE;
+            };
+            Visitor::Visit(*Cangjie::StaticCast<const Lambda&>(expr).GetBody(), postVisit);
+            return cost;
+        }
+        case ExprKind::ALLOCATE:     // stack slot; mem2reg often removes it
+        case ExprKind::LOAD:
+        case ExprKind::STORE:
+        case ExprKind::GOTO:
+        case ExprKind::BRANCH:
+        case ExprKind::MULTIBRANCH:
+            return 1;
+        case ExprKind::BOX:          // alloc + store pointer ~2-3
+        case ExprKind::UNBOX_TO_VALUE:
+        case ExprKind::UNBOX_TO_REF:
+        case ExprKind::CAST_TO_GENERIC:
+        case ExprKind::CAST_TO_CONCRETE:
+            return 2;
+        case ExprKind::CONSTANT:     // usually folded as immediate into the user
+            return 0;
+        default:                      // arithmetic/comparison/bitwise ~1
+            return 1;
+    }
+}
+
 static size_t CountFuncSize(const Function& func)
 {
     size_t funcSize = 0;
     for (auto block : func.GetBody()->GetBlocks()) {
         for (auto e : block->GetExpressions()) {
-            funcSize += GetExprSize(*e);
+            funcSize += GetAsmWeightedCost(*e);
             if (funcSize >= SEARCH_THRESHOLD) {
                 break;
             }
@@ -285,13 +452,24 @@ bool FunctionInline::CheckCanRewrite(const Apply& apply)
     if (inlinedCountMap[globalFunc] >= INLINED_COUNT_THRESHOLD) {
         return false;
     }
-    size_t realThreshold = CalculateThreshold(*callee, optLevel);
     // `res` is std::pair<iterator, bool>, so
     // `res.second == true` means `callee` is emplaced successfully, then we must set correct function size
     // `res.second == false` means `callee` has already been emplaced before, we can use its size directly
     auto res = funcSizeMap.emplace(func, 0);
-    if (res.second) {
-        res.first->second = CountFuncSize(*func);
+    size_t realThreshold = 0;
+    if (globalOpts.chirInlineLegacy) {
+        // Legacy path: flat per-expr cost + fixed threshold 20 + `=` bonuses.
+        if (res.second) {
+            res.first->second = LegacyCountFuncSize(*func);
+        }
+        realThreshold = LegacyCalculateThreshold(*callee, optLevel, globalOpts.inlineThresholdOverrides);
+    } else {
+        // Phase 1 path: asm-weighted cost + graded threshold + multiplicative bonuses.
+        size_t baseThreshold = GetBaseThreshold(optLevel, globalOpts.inlineThresholdOverrides);
+        realThreshold = ApplyBonusAdjustments(baseThreshold, *func, optLevel);
+        if (res.second) {
+            res.first->second = CountFuncSize(*func);
+        }
     }
     if (res.first->second <= realThreshold) {
         inlinedCountMap[globalFunc]++;
