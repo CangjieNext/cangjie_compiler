@@ -381,7 +381,7 @@ void ToCHIR::Devirtualization(DevirtualizationInfo& devirtInfo)
         devirt.RunOnFuncs(frozenFuncs, builder, opts.chirDebugOptimizer);
 
         auto pass = FunctionInline(
-            builder, opts.optimizationLevel, opts.chirDebugOptimizer);
+            builder, opts.optimizationLevel, opts, opts.chirDebugOptimizer);
         for (auto& func : frozenFuncs) {
             pass.Run(*func);
         }
@@ -422,7 +422,7 @@ void ToCHIR::RunArrayListConstStartOpt()
         return;
     }
     Utils::ProfileRecorder recorder("CHIR Opt", "ArrayListOpt");
-    auto functionInline = FunctionInline(builder, opts.optimizationLevel, opts.chirDebugOptimizer);
+    auto functionInline = FunctionInline(builder, opts.optimizationLevel, opts, opts.chirDebugOptimizer);
     auto pass = ArrayListConstStartOpt(builder, functionInline);
     pass.RunOnPackage(*chirPkg);
     MergeEffectMap(pass.GetEffectMap(), effectMap);
@@ -438,7 +438,7 @@ void ToCHIR::RunFunctionInline(DevirtualizationInfo& devirtInfo)
     CallGraphAnalysis callGraphAnalysis(chirPkg, devirtInfo);
     // Collect all call graph information.
     callGraphAnalysis.DoCallGraphAnalysis(false);
-    auto pass = FunctionInline(builder, opts.optimizationLevel, opts.chirDebugOptimizer);
+    auto pass = FunctionInline(builder, opts.optimizationLevel, opts, opts.chirDebugOptimizer);
     for (auto func : callGraphAnalysis.postOrderSCCFunctionlist) {
         if (!func) {
             continue;
