@@ -427,7 +427,12 @@ Function* Devirtualization::CreateInstFuncIfPossible(Function* func, FuncCallCon
         auto [newBlocks, newBlockGroupRetValue] = helper.CloneBlockGroup(*oriBlockGroup, *newBody);
         auto funcEntry = GetEntryBlock(*oriBlockGroup, newBlocks);
         newBody->SetEntryBlock(funcEntry);
-        newFunc->SetReturnValue(*newBlockGroupRetValue);
+        // Bug1 fix: use ReplaceReturnValue (rebuilds FuncType so declared ret follows the cloned
+        // body's instantiated concrete ret) instead of SetReturnValue (only installs retValue,
+        // leaves declared ret = apply's interface retType -> covariant-return mismatch rejected by
+        // strict pointer-equality CheckFuncRetValue CHIRChecker.cpp:1381). See
+        // cangjie-inline-devirt-bugs-archive.md Bug1.
+        newFunc->ReplaceReturnValue(newBlockGroupRetValue, builder);
         auto parameterType = instFuncType->GetParamTypes();
         CJC_ASSERT(parameterType.size() == func->GetParams().size());
         std::unordered_map<Value*, Value*> paramMap;
@@ -438,7 +443,9 @@ Function* Devirtualization::CreateInstFuncIfPossible(Function* func, FuncCallCon
         helper.ReplaceExprOperands(newBlocks, paramMap);
 
         FixCastProblemAfterInst(newBlocks, builder);
-        newFunc->SetReturnValue(*newBlockGroupRetValue);
+        // Bug1 fix (second site): re-stamp after operand/cast fixups so the final FuncType follows
+        // the (possibly further-instantiated) body ret. Idempotent rebuild.
+        newFunc->ReplaceReturnValue(newBlockGroupRetValue, builder);
         frozenInstFuns.push_back(newFunc);
         frozenInstFuncMap[newId] = newFunc;
     }
