@@ -562,15 +562,19 @@ std::vector<Ptr<ClassLikeDecl>> InheritableDecl::GetAllSuperDecls()
         auto curDecl = workList.front();
         workList.pop();
         for (auto& it : curDecl->inheritedTypes) {
-            if (auto clsTy = DynamicCast<ClassTy*>(it->GetTy()); clsTy && visited.count(clsTy->declPtr) == 0) {
-                workList.push(clsTy->declPtr);
-                visited.emplace(clsTy->declPtr);
-                ret.emplace_back(clsTy->declPtr);
+            auto declPtr = Ty::GetDeclPtrOfTy<ClassLikeDecl>(it->GetTy());
+            if (declPtr == nullptr) {
+                continue;
+            }
+            if (auto clsTy = DynamicCast<ClassTy*>(it->GetTy()); clsTy && visited.count(declPtr) == 0) {
+                workList.push(declPtr);
+                visited.emplace(declPtr);
+                ret.emplace_back(declPtr);
             } else if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->GetTy());
-                interfaceTy && visited.count(interfaceTy->declPtr) == 0) {
-                workList.push(interfaceTy->declPtr);
-                visited.emplace(interfaceTy->declPtr);
-                ret.emplace_back(interfaceTy->declPtr);
+                interfaceTy && visited.count(declPtr) == 0) {
+                workList.push(declPtr);
+                visited.emplace(declPtr);
+                ret.emplace_back(declPtr);
             }
         }
     }
