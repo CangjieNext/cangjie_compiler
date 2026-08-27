@@ -540,3 +540,36 @@ main(): Int64 {
     EXPECT_NE(QualName(top), "B.f");
     EXPECT_NE(QualName(top), "A.f");
 }
+
+TEST_F(GetTopOverriddenFuncDeclTest, GetTopOverriddenFuncThatSourceExported04)
+{
+    BeginMainPackage("dep", {}, R"(
+public interface AAA {
+    func foo(x: Int64): Int64
+}
+
+public interface BBB {
+    func foo(x: Int64): Int64
+}
+
+func posion<T>(x: T): Int64 where T <: AAA & BBB {
+    0
+}
+
+public func goo<R>(x: R): Int64 where R <: BBB {
+    x.foo(1)
+}
+
+main() {}
+    )");
+    instance->invocation.globalOptions.optimizationLevel = GlobalOptions::OptimizationLevel::O2;
+    ASSERT_TRUE(instance->Compile(CompileStage::SEMA));
+    ASSERT_EQ(diag.GetErrorCount(), 0u);
+
+    auto callee = FindResolvedCallee("foo", instance->GetSourcePackages()[0]);
+    ASSERT_TRUE(callee) << "x.foo(1) call did not resolve to a function";
+
+    auto top = GetTop(callee.get());
+    ASSERT_TRUE(top);
+    EXPECT_EQ(QualName(top), "BBB.foo");
+}
