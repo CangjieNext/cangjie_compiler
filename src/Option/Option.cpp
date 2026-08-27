@@ -1357,7 +1357,7 @@ void GlobalOptions::ReportAndroidToolchainNotFound(const std::string &requestedA
 {
     // No installed Android toolchain satisfies the requested api level. List the available
     // levels so the user can pick one that is installed.
-    Errorf("No Android toolchain found for API level %s under '%s'.",
+    Errorf("No Android toolchain found for API level %s under '%s'.\n",
         requestedApiStr.c_str(), libDir.c_str());
     std::string available;
     for (const auto &cand : candidates) {
@@ -1369,7 +1369,7 @@ void GlobalOptions::ReportAndroidToolchainNotFound(const std::string &requestedA
     if (available.empty()) {
         Errorln("No Android toolchain directories are installed.");
     } else {
-        Errorf(" Available Android API levels: %s.\n", available.c_str());
+        Errorf("Available Android API levels: %s.\n", available.c_str());
     }
 }
 
