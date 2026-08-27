@@ -548,7 +548,7 @@ void ClassLikeDecl::MarkAsJavaImpl()
     EnableAttr(Attribute::JAVA_IMPL);
 }
 
-std::vector<Ptr<ClassLikeDecl>> InheritableDecl::GetAllSuperDecls()
+std::vector<Ptr<ClassLikeDecl>> InheritableDecl::GetAllSuperDecls(bool obtainSpecific)
 {
     std::set<Ptr<ClassLikeDecl>> visited; // to avoid multiple paths or cycle
     std::vector<Ptr<ClassLikeDecl>> ret; // to guarantee order
@@ -562,16 +562,25 @@ std::vector<Ptr<ClassLikeDecl>> InheritableDecl::GetAllSuperDecls()
         auto curDecl = workList.front();
         workList.pop();
         for (auto& it : curDecl->inheritedTypes) {
-            if (auto clsTy = DynamicCast<ClassTy*>(it->GetTy()); clsTy && visited.count(clsTy->declPtr) == 0) {
-                workList.push(clsTy->declPtr);
-                visited.emplace(clsTy->declPtr);
-                ret.emplace_back(clsTy->declPtr);
-            } else if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->GetTy());
-                interfaceTy && visited.count(interfaceTy->declPtr) == 0) {
-                workList.push(interfaceTy->declPtr);
-                visited.emplace(interfaceTy->declPtr);
-                ret.emplace_back(interfaceTy->declPtr);
+            if (!Ty::IsTyCorrect(it->GetTy())) {
+                continue;
             }
+            Ptr<ClassLikeDecl> declPtr = nullptr;
+            if (obtainSpecific && (it->GetTy()->IsClass() || it->GetTy()->IsInterface())) {
+                // If the declaration contains a specific version, 'GetDeclPtrOfTy' will by default obtain the specific
+                // version.
+                declPtr = Ty::GetDeclPtrOfTy<ClassLikeDecl>(it->GetTy());
+            } else if (auto clsTy = DynamicCast<ClassTy*>(it->GetTy())) {
+                declPtr = clsTy->declPtr;
+            } else if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->GetTy())) {
+                declPtr = interfaceTy->declPtr;
+            }
+            if (declPtr == nullptr || visited.count(declPtr) != 0) {
+                continue;
+            }
+            workList.push(declPtr);
+            visited.emplace(declPtr);
+            ret.emplace_back(declPtr);
         }
     }
     return ret;

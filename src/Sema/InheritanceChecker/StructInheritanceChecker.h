@@ -53,7 +53,6 @@ private:
     std::pair<MemberMap, MemberMap> GetVisibleExtendMembersForExtend(const InheritableDecl& decl);
     void CheckExtendExportDependence(
         const InheritableDecl& curExtend, const MemberSignature& interface, const MemberMap& implDecl);
-    void UpdateOverriddenFuncDeclCache(Ptr<Decl> child, Ptr<Decl> parent);
     MemberSignature UpdateInheritedMemberIfNeeded(
         MemberMap& inheritedMembers, const MemberSignature& child, bool inheritedInterfaces = false);
     bool ComputeInconsistentTypes(const MemberSignature& child, const MemberSignature& parent, MemberSignature& updated,
