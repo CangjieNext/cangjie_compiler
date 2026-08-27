@@ -196,7 +196,23 @@ bool DriverOptions::PerformPostActions()
     success = success && CheckRuntimeRPath();
     success = success && CheckSanitizerRPath();
     success = success && CheckStaticOption();
+    success = success && CheckAndroidToolchainOptions();
     return success;
+}
+
+bool DriverOptions::CheckAndroidToolchainOptions() const
+{
+    if (target.env != Triple::Environment::ANDROID) {
+        return true;
+    }
+    // Trigger the Android toolchain directory scan (and cache the result). If no installed
+    // toolchain satisfies the requested api level, an error has already been printed by the
+    // resolver; report failure here so compilation stops.
+    const auto &libTargetPathName = GetCangjieLibTargetPathName();
+    if (libTargetPathName.empty()) {
+        return false;
+    }
+    return true;
 }
 
 bool DriverOptions::CheckObfuscationOptions() const

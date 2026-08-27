@@ -140,6 +140,7 @@ private:
     bool CheckRuntimeRPath() const;
     bool CheckSanitizerRPath() const;
     bool CheckStaticOption();
+    bool CheckAndroidToolchainOptions() const;
 };
 } // namespace Cangjie
 #endif // CANGJIE_DRIVER_DRIVEROPTIONS_H

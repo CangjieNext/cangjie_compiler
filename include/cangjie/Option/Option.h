@@ -1261,6 +1261,20 @@ private:
     std::string SanitizerTypeToSerializedString() const;
     void CollectOrderedInputFiles(ArgInstance& arg, uint64_t idx);
 
+    /**
+     * @brief Resolve the Cangjie library path name for the Android target by scanning the
+     *        installed toolchain directories and picking the one whose ANDROID_API is the
+     *        largest value not greater than the requested API level.
+     *
+     * @return std::string The resolved library path name. Empty string if no matching
+     *                     toolchain directory is found (an error has been printed).
+     */
+    std::string ResolveAndroidToolchainPathName() const;
+
+    // Cache for the resolved Android toolchain path name. A present (possibly empty) value
+    // means the scan has already been performed; an empty value means no match was found.
+    mutable std::optional<std::string> cachedAndroidLibTargetPathName;
+
     std::vector<std::string> ltoVisiblePkgs;
 };
 

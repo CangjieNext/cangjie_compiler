@@ -1294,19 +1294,135 @@ std::string GlobalOptions::GetCangjieLibHostPathName() const
 
 std::string GlobalOptions::GetCangjieLibTargetPathName() const
 {
+    if (target.env == Triple::Environment::ANDROID) {
+        // For the Android target, scan the installed toolchain directories and pick the one
+        // whose ANDROID_API is the largest value not greater than the requested API level.
+        // The result is cached so that subsequent calls (lib/ and runtime/lib/ paths, etc.)
+        // do not repeat the directory scan.
+        if (!cachedAndroidLibTargetPathName.has_value()) {
+            cachedAndroidLibTargetPathName = ResolveAndroidToolchainPathName();
+        }
+        return cachedAndroidLibTargetPathName.value();
+    }
     std::string name = target.OSToString();
     if (target.env != Triple::Environment::GNU && target.env != Triple::Environment::NOT_AVAILABLE) {
-        std::string envName = target.EnvironmentToString();
-        if (target.env == Triple::Environment::ANDROID) {
-            auto envNameLen = envName.size();
-            if (target.ArchToString() != "arm" && target.apiLevel == MIN_ANDROID_API) {
-                envName.erase(envNameLen - target.apiLevel.size());
-            }
-        }
-        name += "_" + envName;
+        name += "_" + target.EnvironmentToString();
     }
     name += "_" + target.ArchToString() + "_" + BackendToString(backend);
     return name;
+}
+
+std::string GlobalOptions::ResolveAndroidToolchainPathName() const
+{
+    // Directory naming convention: <os>_android<API>_<arch>_<backend>
+    //   e.g. "linux_android26_aarch64_cjnative" (API == 26)
+    //        "linux_android_aarch64_cjnative"   (API == MIN_ANDROID_API, the suffix is omitted)
+    const std::string archStr = target.ArchToString();
+    const std::string prefix = target.OSToString() + "_android";
+    const std::string suffix = "_" + archStr + "_" + BackendToString(backend);
+
+    // Helper that builds the legacy (non-scanned) path name for a given api level string.
+    // When apiLevel equals MIN_ANDROID_API and the arch is not "arm", the numeric suffix is
+    // omitted to match the historical directory naming.
+    auto buildLegacyName = [&](const std::string &apiLevel) -> std::string {
+        std::string envName = target.EnvironmentToSimpleString();
+        // When apiLevel equals MIN_ANDROID_API and the arch is not "arm", the numeric suffix
+        // is omitted to match the historical directory naming (e.g. linux_android_aarch64_cjnative).
+        if (archStr != "arm" && apiLevel == MIN_ANDROID_API) {
+            // keep envName as "android" without the api level
+        } else {
+            envName += apiLevel;
+        }
+        return target.OSToString() + "_" + envName + "_" + archStr + "_" + BackendToString(backend);
+    };
+
+    // Without a cangjie home (e.g. some LSP/frontend scenarios) we cannot scan the installed
+    // toolchains, so fall back to the legacy exact-match name derived from the requested api.
+    if (cangjieHome.empty()) {
+        return buildLegacyName(target.apiLevel.empty() ? MIN_ANDROID_API : target.apiLevel);
+    }
+
+    const std::string libDir = FileUtil::JoinPath(cangjieHome, "lib");
+    const auto directories = FileUtil::GetDirectories(libDir);
+
+    // Parse the requested api level. An empty value (the user did not specify an api level)
+    // is treated as the minimum supported level.
+    const std::string requestedApiStr = target.apiLevel.empty() ? MIN_ANDROID_API : target.apiLevel;
+    int requestedApi = 0;
+    try {
+        requestedApi = std::stoi(requestedApiStr);
+    } catch (std::exception const&) {
+        return buildLegacyName(target.apiLevel);
+    }
+
+    struct Candidate {
+        int api;
+        std::string name;
+    };
+    std::vector<Candidate> candidates;
+    for (const auto &dir : directories) {
+        const std::string &dirName = dir.name;
+        if (dirName.size() < prefix.size() + suffix.size() ||
+            dirName.compare(0, prefix.size(), prefix) != 0 ||
+            dirName.compare(dirName.size() - suffix.size(), suffix.size(), suffix) != 0) {
+            continue;
+        }
+        const std::string middle = dirName.substr(prefix.size(), dirName.size() - prefix.size() - suffix.size());
+        int api = 0;
+        if (middle.empty()) {
+            // The omitted-suffix form stands for MIN_ANDROID_API.
+            api = std::stoi(MIN_ANDROID_API);
+        } else {
+            // The middle part must be a pure number, otherwise the directory does not match.
+            bool allDigits = !middle.empty();
+            for (char c : middle) {
+                if (c < '0' || c > '9') {
+                    allDigits = false;
+                    break;
+                }
+            }
+            if (!allDigits) {
+                continue;
+            }
+            try {
+                api = std::stoi(middle);
+            } catch (std::exception const&) {
+                continue;
+            }
+        }
+        candidates.push_back({api, dirName});
+    }
+
+    // Pick the largest available api that is not greater than the requested level.
+    const Candidate *selected = nullptr;
+    for (const auto &cand : candidates) {
+        if (cand.api > requestedApi) {
+            continue;
+        }
+        if (selected == nullptr || cand.api > selected->api) {
+            selected = &cand;
+        }
+    }
+    if (selected != nullptr) {
+        return selected->name;
+    }
+
+    // No installed Android toolchain satisfies the requested api level.
+    Errorf("No Android toolchain found for API level %s under '%s'.",
+        requestedApiStr.c_str(), libDir.c_str());
+    std::string available;
+    for (const auto &cand : candidates) {
+        if (!available.empty()) {
+            available += ", ";
+        }
+        available += std::to_string(cand.api);
+    }
+    if (available.empty()) {
+        Errorln("No Android toolchain directories are installed.");
+    } else {
+        Errorf(" Available Android API levels: %s.\n", available.c_str());
+    }
+    return "";
 }
 
 void GlobalOptions::SetCompilationCachedPath()
