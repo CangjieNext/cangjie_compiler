@@ -849,6 +849,17 @@ public:
      */
     std::unordered_map<std::string, size_t> inlineThresholdOverrides;
 
+    /**
+     * @brief When true, the #4 front-end FunctionInline falls back to the pre-Phase1
+     *        decision logic: flat per-expr cost (each expr == 1), fixed threshold
+     *        (INIT_INLINE_THRESHOLD = 20), and the old `=`-assignment bonus scheme.
+     *        Parsed from `--chir-inline-legacy`. Intended for A/B testing whether
+     *        Phase1's asm-weighted cost / graded threshold / multiplicative bonuses
+     *        are the trigger of a regression. Does not affect backend attribute
+     *        stamping (OPTSIZE/MINSIZE/NO_INLINE bridges still apply as-is).
+     */
+    bool chirInlineLegacy = false;
+
     enum class CHIRMode : uint8_t { NA, STANDARD, WITH_ID, ALL };
 
     bool codegenDebugMode = false;

@@ -492,11 +492,16 @@ OPTION("--disable-backend-opt", DISABLE_BACKEND_OPT, FLAG, { BACKEND(ALL) },
     "Disable optimizaion in Backend")
 
 OPTION("--chir-opt-debug", CHIR_OPT_DEBUG, FLAG, { BACKEND(ALL) },
-    { GROUP(GLOBAL) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Debug optimizer")
 OPTION("--chir-inline-threshold", CHIR_INLINE_THRESHOLD, SEPARATED, { BACKEND(ALL) },
-    { GROUP(GLOBAL) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Override CHIR inline thresholds, form: key=val (e.g. base_o2=50). Internal/tuning only.")
+OPTION("--chir-inline-legacy", CHIR_INLINE_LEGACY, FLAG, { BACKEND(ALL) },
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Restore the pre-Phase1 CHIR inline decision logic (flat per-expr cost, fixed threshold 20, "
+    "= assignment bonuses). Use to A/B test whether Phase1 weighting/threshold changes are the "
+    "trigger of a regression. Does NOT touch backend attribute stamping.")
 OPTION("--render-chir", RENDER_CHIR, SEPARATED, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) }, nullptr, chir_mode, SINGLE_OCCURRENCE,
     "Render CHIR as graph. Candidate modes: ")
