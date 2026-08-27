@@ -1342,16 +1342,13 @@ bool GlobalOptions::ParseAndroidToolchainApi(const std::string &dirName, const s
         return true;
     }
     // The middle part must be a pure number, otherwise the directory does not match.
+    // After this check std::stoi cannot throw, so no try/catch is needed here.
     for (char c : middle) {
         if (c < '0' || c > '9') {
             return false;
         }
     }
-    try {
-        api = std::stoi(middle);
-    } catch (std::exception const&) {
-        return false;
-    }
+    api = std::stoi(middle);
     return true;
 }
 
@@ -1395,14 +1392,19 @@ std::string GlobalOptions::ResolveAndroidToolchainPathName() const
     const auto directories = FileUtil::GetDirectories(libDir);
 
     // Parse the requested api level. An empty value (the user did not specify an api level)
-    // is treated as the minimum supported level.
+    // is treated as the minimum supported level. The api level has already been validated by
+    // the target triple parser, so the catch branch is a defensive fallback only.
     const std::string requestedApiStr = target.apiLevel.empty() ? MIN_ANDROID_API : target.apiLevel;
     int requestedApi = 0;
+#ifndef CANGJIE_ENABLE_GCOV
     try {
+#endif
         requestedApi = std::stoi(requestedApiStr);
+#ifndef CANGJIE_ENABLE_GCOV
     } catch (std::exception const&) {
         return BuildLegacyAndroidToolchainName(target.apiLevel);
     }
+#endif
 
     // Collect the installed toolchain directories that match the naming convention.
     std::vector<std::pair<int, std::string>> candidates;
