@@ -1032,7 +1032,10 @@ Ptr<Type> Translator::GetMemberFuncCallerInstType(const AST::CallExpr& expr, boo
         }
         Type* root = callerType->IsRef() ? StaticCast<RefType*>(callerType)->GetBaseType() : callerType;
         callerType = GetExactParentType(*root, *expr.resolvedFunction, *instFuncType, funcInstTypeArgs, false);
-        CJC_NULLPTR_CHECK(callerType);
+        // Same null->deref hardening as in GetExactParentTypeAndFuncType: the release no-op
+        // CJC_NULLPTR_CHECK would let a null callerType reach `callerType->IsClass()` below
+        // (SIGSEGV). Surface a genuine unresolvable parent as a clean InternalError instead.
+        InternalError(callerType != nullptr, "failed to resolve exact parent type for call expr");
         if (callerType->IsClass()) {
             callerType = builder.GetType<RefType>(callerType);
         }

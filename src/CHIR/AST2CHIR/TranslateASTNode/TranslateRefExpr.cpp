@@ -277,6 +277,13 @@ Value* Translator::WrapMemberMethodByLambda(
     } else {
         // Apply
         if (thisObj != nullptr) {
+            // `instFuncType.instParentCustomTy` has no null check here (only `thisObj` is
+            // guarded). A null parent custom type would be dereferenced inside
+            // AddRefIfFuncIsMutOrClass. This mirrors the same null->deref hardening applied
+            // in GetExactParentTypeAndFuncType and TranslateCallExpr: surface a genuine
+            // unresolvable parent as a clean InternalError instead of a SIGSEGV.
+            InternalError(instFuncType.instParentCustomTy != nullptr,
+                "failed to resolve exact parent type for ref expr");
             auto objExpectedType = AddRefIfFuncIsMutOrClass(*instFuncType.instParentCustomTy, funcDecl, builder);
             args.insert(args.begin(), TransformThisType(*thisObj, *objExpectedType, *lambda));
         }
