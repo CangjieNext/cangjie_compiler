@@ -239,7 +239,7 @@ std::vector<Ptr<InterfaceDecl>> FindInterfacesWithDefaults(Ptr<InheritableDecl> 
 {
     std::vector<Ptr<InterfaceDecl>> res;
 
-    for (auto& inherited : decl->inheritedTypes) {
+    for (auto& inherited : decl->GetAllSuperDecls()) {
         auto typeDecl = Ty::GetDeclOfTy(inherited->GetTy());
         auto interfaceDecl = As<ASTKind::INTERFACE_DECL>(typeDecl);
         if (!interfaceDecl) {
