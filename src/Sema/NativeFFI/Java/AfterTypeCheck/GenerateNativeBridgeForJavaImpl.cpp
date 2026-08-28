@@ -78,7 +78,6 @@ OwnedPtr<Expr> GenerateNativeBridgeForJavaImpl::UnwrapCTypeExprAsJavaCompatible(
     return resExpr;
 }
 
-
 OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateConstructorBridge(
     FuncDecl& refWrapperUserCtor, FuncDecl& refWrapperGeneratedCtor,
     FuncDecl& registryCompanionCtor, ClassDecl& companion) const
@@ -94,17 +93,25 @@ OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateConstructorBridge(
         [&](FuncDecl& f, FuncParam& jniEnv, FuncParam& jobject, std::vector<Ptr<FuncParam>> cTypeUserParams) {
             std::vector<OwnedPtr<FuncArg>> refWrapperCtorArgs;
 
-            // Construct reference wrapper object.
-            // argument 1: $obj -> Java_CFFI_JavaEntity($obj)
-            refWrapperCtorArgs.emplace_back(CreateFuncArg(
-                ilib.CreateJavaEntityJobjectCall(WithinFile(CreateRefExpr(jobject), &curFile))));
+            // let $gref: Java_CFFI_JavaEntity
+            auto& javaref = StaticCast<VarDecl&>(*f.funcBody->body->body.emplace_back(CreateTmpVarDecl()));
+            javaref.SetTy(ilib.GetJavaEntityTy());
+            // $ref = Java_CFFI_JavaEntity(SwapLocalWithGlobalRef($obj)) | global java ref
+            javaref.initializer = ilib.CreateJavaEntityJobjectCall(
+                ilib.CreateSwapLocalWithGlobalRefCall(
+                    WithinFile(CreateRefExpr(jniEnv), &curFile),
+                    WithinFile(CreateRefExpr(jobject), &curFile)));
 
-            // argument 2: $reg -> JavaImpl$reg(Java_CFFI_JavaEntity($obj))
+            // Construct reference wrapper object.
+            // argument 1: $obj -> $ref
+            refWrapperCtorArgs.emplace_back(CreateFuncArg(
+                WithinFile(CreateRefExpr(javaref), &curFile)));
+
+            // argument 2: $reg -> JavaImpl$reg($gref)
             refWrapperCtorArgs.emplace_back(CreateFuncArg(WithinFile(
                 CreateCallExpr(
                     WithinFile(CreateRefExpr(registryCompanionCtor), &curFile),
-                    Nodes<FuncArg>(CreateFuncArg(
-                        ilib.CreateJavaEntityJobjectCall(WithinFile(CreateRefExpr(jobject), &curFile)))),
+                    Nodes<FuncArg>(CreateFuncArg(WithinFile(CreateRefExpr(javaref), &curFile))),
                     &registryCompanionCtor, companion.GetTy(), CallKind::CALL_OBJECT_CREATION),
                 &curFile)));
 

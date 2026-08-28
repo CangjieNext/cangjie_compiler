@@ -50,6 +50,12 @@ private:
 
     AST::FuncDecl& InsertAbstractJavaReferenceGetterStub(AST::InterfaceDecl& mirror) const;
 
+    /*
+     * Creates reference wrapping constructor that accepts `$ref` of `Java_CFFI_JavaEntity`.
+     *
+     * Assumption: only strong global reference is expected as a reference to java object.
+     * Ownership over the reference is taken by the cangjie object under construction.
+     */
     OwnedPtr<AST::FuncDecl> CreateWrappingConstructorStub(AST::ClassDecl& mirror) const;
 
     /**
