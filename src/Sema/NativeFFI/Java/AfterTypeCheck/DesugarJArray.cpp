@@ -167,9 +167,18 @@ void DesugarJArray::InsertConstructorBody(FuncDecl& constr) const
     }
 
     auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, ilib.CreateGetJniEnvCall(constr.curFile));
-    auto newObjectCall = ilib.CreateCFFINewJavaArrayCall(
-        WithinFile(CreateRefExpr(*jniEnvVar), constr.curFile), *constr.funcBody->paramLists[0]);
-    std::vector<OwnedPtr<Node>> lambdaNodes = Nodes(std::move(jniEnvVar), std::move(newObjectCall));
+    
+    // SwapLocalWithGlobalReference(Java_CFFI_newJavaArray($jniEnvPtr, $jniType, length).asJobject())
+    auto newObjectCall = ilib.CreateSwapLocalWithGlobalRefCall(
+        WithinFile(CreateRefExpr(*jniEnvVar), constr.curFile),
+        ilib.CreateAsJniJobjectCall(
+            ilib.CreateCFFINewJavaArrayCall(
+                WithinFile(CreateRefExpr(*jniEnvVar), constr.curFile),
+                *constr.funcBody->paramLists[0])));
+
+    // Java_CFFI_JavaEntity($newObjectCall)
+    auto javaref = ilib.CreateJavaEntityJobjectCall(std::move(newObjectCall));
+    std::vector<OwnedPtr<Node>> lambdaNodes = Nodes(std::move(jniEnvVar), std::move(javaref));
 
     constr.constructorCall = ConstructorCall::OTHER_INIT;
 
