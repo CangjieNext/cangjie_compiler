@@ -281,11 +281,23 @@ void JavaDesugarManager::InsertJStringOfStringCtorBody(ClassDecl& decl)
     auto& generatedCtor = getConstructorOfString(decl);
     auto& param = generatedCtor.funcBody->paramLists[0]->params[0];
     auto jObjectCtor = GetJavaMirrorWrappingConstructor(decl);
-    auto convertCall = CreateCall(lib.GetCangjieStringToJava(), curFile,
-        lib.CreateGetJniEnvCall(curFile), WithinFile(CreateRefExpr(*param), curFile));
+
+    auto block = factory.WithLocalJniEnvPtr(*curFile, [&](Ptr<AST::Expr> jniEnvPtr) {
+        // Java_CFFI_CangjieStringToJava($jniEnvPtr, s).asJobject() | local java reference
+        auto convertCall = lib.CreateAsJniJobjectCall(CreateCall(lib.GetCangjieStringToJava(), curFile,
+            ASTCloner::Clone(jniEnvPtr), WithinFile(CreateRefExpr(*param), curFile)));
+
+        auto block = CreateBlock({}, lib.GetJavaEntityTy());
+        // Java_CFFI_JavaEntity($convertCall)
+        auto javaEntity = lib.CreateJavaEntityJobjectCall(lib.CreateSwapLocalWithGlobalRefCall(
+            ASTCloner::Clone(jniEnvPtr),
+            std::move(convertCall)));
+        block->body.push_back(std::move(javaEntity));
+        return block;
+   });
 
     auto superCall = CreateSuperCall(decl, *jObjectCtor, jObjectCtor->GetTy());
-    superCall->args.emplace_back(CreateFuncArg(std::move(convertCall)));
+    superCall->args.emplace_back(CreateFuncArg(WrapReturningLambdaCall(typeManager, std::move(block))));
 
     generatedCtor.funcBody->body->body.emplace_back(std::move(superCall));
 }
