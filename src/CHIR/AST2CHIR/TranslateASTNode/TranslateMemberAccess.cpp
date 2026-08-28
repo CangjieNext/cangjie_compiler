@@ -197,6 +197,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromVarInit(const AST::R
         .thisType = parentType,
         .instParamTys = paramTys,
         .instRetTy = funcType->GetReturnType(),
+        .instantiatedTypeArgs = TranslateASTTypes(expr.instTys),
         .isVirtualFuncCall = false,
         .originalFuncDecl = funcDecl
     };
