@@ -191,12 +191,17 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromVarInit(const AST::R
     auto funcDecl = StaticCast<AST::FuncDecl*>(expr.ref.target);
     CJC_NULLPTR_CHECK(funcDecl->outerDecl);
     CJC_ASSERT(funcDecl->TestAttr(AST::Attribute::STATIC));
+    std::vector<Type*> funcInstArgs;
+    for (auto ty : expr.instTys) {
+        funcInstArgs.emplace_back(TranslateType(*ty));
+    }
     auto parentType = GetNominalSymbolTable(*funcDecl->outerDecl)->GetType();
     return InstCalleeInfo {
         .instParentCustomTy = parentType,
         .thisType = parentType,
         .instParamTys = paramTys,
         .instRetTy = funcType->GetReturnType(),
+        .instantiatedTypeArgs = std::move(funcInstArgs),
         .isVirtualFuncCall = false,
         .originalFuncDecl = funcDecl
     };
