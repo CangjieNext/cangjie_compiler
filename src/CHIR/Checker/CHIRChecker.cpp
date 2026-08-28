@@ -2140,8 +2140,13 @@ bool CHIRChecker::CheckApplyThisType(
     if (func == nullptr) {
         return true;
     }
-    // 4. thisType can't be nullptr if callee is member method
-    if (func->IsMemberFunc() && thisDerefTy == nullptr) {
+    // 4. thisType can't be nullptr if callee is an INSTANCE member method.
+    //    A STATIC member method also has IsMemberFunc()==true (declaredParent != nullptr, see
+    //    Function::IsMemberFunc) but legitimately has no ThisType — a static call has no receiver.
+    //    When inline widens ClosureConversion's reach, a static member func passed as a higher-order
+    //    `provider` can be emitted as a direct Apply/TryApply with thisType=nullptr, which is correct.
+    //    Treating that as an error (the old behavior) was an over-strict assumption that blocked std.net.
+    if (func->IsMemberFunc() && !func->TestAttr(Attribute::STATIC) && thisDerefTy == nullptr) {
         auto errMsg = "callee is member method, but there is no ThisType.";
         ErrorInExpr(topLevelFunc, expr, errMsg);
         return false;
@@ -2155,7 +2160,12 @@ bool CHIRChecker::CheckApplyThisType(
     if (!func->IsMemberFunc() && thisDerefTy == nullptr) {
         return true;
     }
-    
+    // 5.5 a STATIC member method has no ThisType by definition — same as a non-member for checking
+    //     purposes. Return early so the case-6 block below (which dereferences thisDerefTy) is skipped.
+    if (func->IsMemberFunc() && func->TestAttr(Attribute::STATIC) && thisDerefTy == nullptr) {
+        return true;
+    }
+
     // 6. thisType must be equal or sub type of callee's parent type
     if (thisDerefTy->IsBuiltinType() || thisDerefTy->IsCustomType()) {
         return CheckThisTypeIsEqualOrSubTypeOfFuncParentType(*thisDerefTy, *func, expr, topLevelFunc);
