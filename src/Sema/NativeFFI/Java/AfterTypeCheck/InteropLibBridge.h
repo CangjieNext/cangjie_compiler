@@ -48,14 +48,14 @@ public:
     Decl& GetJavaEntityKindJObject();
 
     /**
-     * Java_CFFI_newGlobalReference
+     * Java_CFFI_deleteGlobalRef
      */
-    Ptr<FuncDecl> GetNewGlobalRefDecl();
+    Ptr<FuncDecl> GetDeleteGlobalRefDecl() const;
 
     /**
-     * Java_CFFI_deleteGlobalReference
+     * Java_CFFI_swapLocalWithGlobalReference
      */
-    Ptr<FuncDecl> GetDeleteGlobalRefDecl();
+    Ptr<FuncDecl> GetSwapLocalWithGlobalRefDecl() const;
 
     /**
      * JNIEnv_ptr
@@ -197,11 +197,6 @@ public:
     Ptr<FuncDecl> GetGetInstanceFieldIdDecl() const;
     Ptr<FuncDecl> GetGetStaticFieldIdDecl() const;
 
-    /**
-     * deleteLocalRef()
-     */
-    Ptr<FuncDecl> GetDeleteLocalRefDecl();
-
     Ptr<Ty> GetJValueTy();
 
     /**
@@ -223,12 +218,12 @@ public:
      * jclass ty
      */
     AST::Ty& GetJniJClassTy() const;
-    
+
     /**
      * jmethodId ty
      */
     AST::Ty& GetJniJmethodIdTy() const;
-    
+
     /**
      * jfieldId ty
      */
@@ -295,14 +290,14 @@ public:
     OwnedPtr<CallExpr> CreateCFFINewJavaArrayCall(OwnedPtr<Expr> jniEnv, FuncParamList& params);
 
     /**
-     * Java_CFFI_newGlobalReference(env, obj, isWeak)
+     * Java_CFFI_swapLocalWithGlobalReference(env, localRef)
      */
-    OwnedPtr<CallExpr> CreateNewGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj, bool isWeak);
+    OwnedPtr<CallExpr> CreateSwapLocalWithGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> localRef) const;
 
     /**
-     * Java_CFFI_deleteGlobalReference(env, obj)
+     * Java_CFFI_deleteGlobalRef(env, obj)
      */
-    OwnedPtr<CallExpr> CreateDeleteGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj);
+    OwnedPtr<CallExpr> CreateDeleteGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj) const;
 
     /**
      * Java_CFFI_arrayGetLength(env)
@@ -468,13 +463,15 @@ public:
     static bool IsInteropLibAccessible(const ImportManager& importManager);
     static bool IsJavaEntityTy(Ty& ty);
 
+    OwnedPtr<CallExpr> CreateAsJniJobjectCall(OwnedPtr<Expr> javaEntity) const;
+    OwnedPtr<CallExpr> CreateAsJvalueCall(OwnedPtr<Expr> javaEntity) const;
+
     Ptr<StructDecl> GetJNINativeInterfaceDecl() const;
 
     /**
      * Converts a Cangjie expression to its JNI jvalue representation.
      */
     OwnedPtr<Expr> CreateJValueExpr(OwnedPtr<Expr> expr);
-    OwnedPtr<CallExpr> CreateAsJniJobjectCall(OwnedPtr<Expr> javaEntity);
 
     OwnedPtr<Expr> CreateJNIHandlePendingExceptionCall(Ptr<Expr> jniEnvPtr);
 
@@ -483,7 +480,7 @@ private:
     * Version value should be the same as for java interop library for the same SDK.
     * Version value must be bumped up on: API changes in interop library that require compatibility with cjc.
     */
-    static constexpr auto INTEROPLIB_VERSION = 11;
+    static constexpr auto INTEROPLIB_VERSION = 12;
     static constexpr auto INTEROPLIB_PACKAGE_NAME = "java.internal";
 
     const std::vector<TypeKind> supportedArrayPrimitiveElementType = {
@@ -526,8 +523,6 @@ private:
         return ImportDecl<K>(INTEROP_JAVA_LANG_PACKAGE, declname);
     }
 
-    Ptr<VarDecl> GetJNINativeInterfaceField(const std::string_view name);
-    OwnedPtr<CallExpr> CreateJNIEnvReadCall(Ptr<Expr> env);
     OwnedPtr<CallExpr> CreateBitCastExpr(OwnedPtr<Expr> expr, Ptr<Ty> resultTy, Ptr<Ty> valueTy, Ptr<File> curFile);
 
     const ImportManager& importManager;

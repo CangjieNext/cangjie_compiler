@@ -29,8 +29,7 @@ public:
     explicit JClassCache(
         const ImportManager& importManager,
         TypeManager& typeManager,
-        InteropLibBridge& ilib,
-        JniBridge& jni);
+        InteropLibBridge& ilib);
 
     OwnedPtr<AST::Expr> CreateJClassAccess(AfterTypeCheckContext& ctx,
         JavaClassSignature javaClass,
@@ -41,7 +40,6 @@ private:
     const ImportManager& importManager;
     TypeManager& typeManager;
     InteropLibBridge& ilib;
-    JniBridge& jni;
 
     /**
      * For jclasses, already presented in cache, just returns corresponding jclass variable.
