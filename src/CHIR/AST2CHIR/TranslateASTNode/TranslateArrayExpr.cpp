@@ -155,6 +155,45 @@ Ptr<Value> Translator::InitArrayByItem(const AST::ArrayExpr& array)
     return rawArrayRef;
 }
 
+namespace {
+// Substitute the enclosing class's generic instantiation into a method-generic's
+// upper-bound class type. Under -O2/-Os the enclosing class is monomorphized, so the
+// method body observes the concrete enclosing instantiation (e.g. W<Int64, B>) while the
+// upper bound (e.g. A<T>) still holds the generic `T` referenced from the enclosing
+// class. Without this substitution CustomType::GetExactParentType builds a replaceTable
+// {A_T -> T} and the substituted parameter type stays generic `T` while the caller-side
+// argument is already `Int64`; the guard at CustomTypeDef.cpp then mismatches and
+// returns nullptr, which GetExactParentTypeAndFuncType dereferences (SIGSEGV).
+// `GetGenericDecl()` is non-null only for an instantiated (monomorphized) def, so the
+// generic -O0/-O1 path is left untouched. Returns the (possibly substituted) class type.
+ClassType* SubstituteEnclosingClassInstantiation(
+    Function* curFunc, ClassType& upperClassType, CHIRBuilder& builder)
+{
+    if (curFunc == nullptr) {
+        return &upperClassType;
+    }
+    auto parentTy = curFunc->GetParentCustomTypeOrExtendedType();
+    auto parentDef = curFunc->GetParentCustomTypeDef();
+    if (parentTy == nullptr || parentDef == nullptr) {
+        return &upperClassType;
+    }
+    auto genericDecl = parentDef->GetGenericDecl();
+    if (genericDecl == nullptr) {
+        return &upperClassType;
+    }
+    std::unordered_map<const GenericType*, CHIR::Type*> outerSubst;
+    auto genericParams = genericDecl->GetGenericTypeParams();
+    auto instArgs = parentTy->GetTypeArgs();
+    for (size_t i = 0; i < genericParams.size() && i < instArgs.size(); ++i) {
+        outerSubst.emplace(genericParams[i], instArgs[i]);
+    }
+    if (outerSubst.empty()) {
+        return &upperClassType;
+    }
+    return StaticCast<ClassType*>(ReplaceRawGenericArgType(upperClassType, outerSubst, builder)->StripAllRefs());
+}
+}  // namespace
+
 CHIR::Type* Translator::GetExactParentType(
     Type& fuzzyParentType, const AST::FuncDecl& resolvedFunction, FuncType& funcType,
     std::vector<Type*>& funcInstTypeArgs, bool checkAbstractMethod)
@@ -182,37 +221,10 @@ CHIR::Type* Translator::GetExactParentType(
         CJC_ASSERT(!upperBounds.empty());
         for (auto upperBound : upperBounds) {
             ClassType* upperClassType = StaticCast<ClassType*>(StaticCast<RefType*>(upperBound)->GetBaseType());
-            // A method-generic's upper bound may reference an enclosing class's generic param
-            // (e.g. `func rel<C>(c: C) where C <: A<T>` inside `class W<T, B>`). When the
-            // enclosing class is monomorphized under -O2/-Os, the method body observes the
-            // concrete enclosing instantiation (e.g. W<Int64, B>) -- so `this.d` becomes
-            // `Int64` on the caller side -- but the upper bound `A<T>` still holds the generic
-            // `T`. CustomType::GetExactParentType then builds replaceTable {A_T -> T} and the
-            // substituted parameter type stays generic `T` while the caller-side argument is
-            // already `Int64`; the guard at CustomTypeDef.cpp mismatches and returns nullptr,
-            // which GetExactParentTypeAndFuncType dereferences at TranslateMemberAccess.cpp
-            // (SIGSEGV, only under -O2/-Os). Substitute the enclosing-class instantiation into
-            // the upper bound before recursing so the comparison happens on concrete types,
-            // matching the -O0/-O1 behaviour. `GetGenericDecl()` is non-null only for an
-            // instantiated (monomorphized) def, so the generic -O0 path is left untouched.
-            if (auto curFunc = GetCurrentFunc()) {
-                auto parentTy = curFunc->GetParentCustomTypeOrExtendedType();
-                auto parentDef = curFunc->GetParentCustomTypeDef();
-                if (parentTy != nullptr && parentDef != nullptr) {
-                    if (auto genericDecl = parentDef->GetGenericDecl()) {
-                        auto genericParams = genericDecl->GetGenericTypeParams();
-                        auto instArgs = parentTy->GetTypeArgs();
-                        std::unordered_map<const GenericType*, Type*> outerSubst;
-                        for (size_t i = 0; i < genericParams.size() && i < instArgs.size(); ++i) {
-                            outerSubst.emplace(genericParams[i], instArgs[i]);
-                        }
-                        if (!outerSubst.empty()) {
-                            upperClassType = StaticCast<ClassType*>(
-                                ReplaceRawGenericArgType(*upperClassType, outerSubst, builder)->StripAllRefs());
-                        }
-                    }
-                }
-            }
+            // Substitute the enclosing-class instantiation (T->Int64) into the upper bound
+            // so the recursive GetExactParentType compares concrete types (matches -O0/-O1).
+            // See SubstituteEnclosingClassInstantiation for the full rationale.
+            upperClassType = SubstituteEnclosingClassInstantiation(GetCurrentFunc(), *upperClassType, builder);
             result = GetExactParentType(
                 *upperClassType, resolvedFunction, funcType, funcInstTypeArgs, checkAbstractMethod);
             if (result != nullptr) {
