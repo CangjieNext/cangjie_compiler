@@ -8,11 +8,13 @@
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "NativeFFI/Java/AfterTypeCheck/InteropLibBridge.h"
 #include "NativeFFI/Java/AfterTypeCheck/JniBridge.h"
+#include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 #include "NativeFFI/Java/CachingApi/JFieldIdCache.h"
 #include "NativeFFI/Java/JavaMemberSignature.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
+#include "cangjie/AST/Utils.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CheckUtils.h"
 
@@ -53,34 +55,42 @@ OwnedPtr<Block> ASTFactory::CreateNewJavaObjectCall(AfterTypeCheckContext& ctx, 
 
     auto jclass = jclassCache.CreateJClassAccess(ctx, constructor.GetClassSignature(), jniEnvPtr);
     auto jmethod = jmethodIdCache.CreateJMethodIdAccess(ctx, constructor, ASTCloner::Clone(jclass.get()), jniEnvPtr);
-    
-    // 1. let jniCallRes: Java_CFFI_JavaEntity
+
+    // 1. let jniCallRes: jobject | local java reference
     auto& callResVar = StaticCast<VarDecl&>(*block->body.emplace_back(CreateTmpVarDecl(nullptr, nullptr)));
-    callResVar.SetTy(ilib.GetJavaEntityTy());
+    callResVar.curFile = curFile;
 
     if (args.empty()) {
         // call without arguments, no need to pass empty value.
-        // 2. jniCallRes = Java_CFFI_JavaEntity((*jniEnv)->NewObject(jclass, jmethod))
-        callResVar.initializer = ilib.CreateJavaEntityJobjectCall(jni.interface.CreateNewObjectCall(jniEnvPtr,
-            ASTCloner::Clone(jclass.get()), ASTCloner::Clone(jmethod.get())));
+        // 2. jniCallRes = (*jniEnv)->NewObject(jclass, jmethod)
+        callResVar.initializer = jni.interface.CreateNewObjectCall(jniEnvPtr,
+            ASTCloner::Clone(jclass.get()), ASTCloner::Clone(jmethod.get()));
     } else {
         // call with arguments - arguments are constructed as JValue-s within VArray and passed as in-out value into JNI
         // 0. var jniArgs: VArray<jvalue, $x> = [args...]
         auto& jniArgs = StaticCast<VarDecl&>(**block->body.emplace(block->body.begin(),
             CreateTmpVArrayVarDecl(ConvertToJValues(std::move(args)), *curFile)));
-        
-        // 2. jniCallRes = Java_CFFI_JavaEntity((*jniEnv)->NewObjectA(jclass, jmethod, inout jniArgs))
-        callResVar.initializer = ilib.CreateJavaEntityJobjectCall(
-            jni.interface.CreateNewObjectACall(jniEnvPtr,
-                CreateFuncArg(ASTCloner::Clone(jclass.get())),
-                CreateFuncArg(ASTCloner::Clone(jmethod.get())),
-                CreateInoutVArrayArg(WithinFile(CreateRefExpr(jniArgs), curFile), typeManager)));
+
+        // 2. jniCallRes = (*jniEnv)->NewObjectA(jclass, jmethod, inout jniArgs)
+        callResVar.initializer = jni.interface.CreateNewObjectACall(jniEnvPtr,
+            CreateFuncArg(ASTCloner::Clone(jclass.get())),
+            CreateFuncArg(ASTCloner::Clone(jmethod.get())),
+            CreateInoutVArrayArg(WithinFile(CreateRefExpr(jniArgs), curFile), typeManager));
     }
-    
+    callResVar.SetTy(callResVar.initializer->GetTy());
+
     // 4. handlePendingException()
     block->body.push_back(ilib.CreateJNIHandlePendingExceptionCall(jniEnvPtr));
-    // 5. return jniCallRes
-    block->body.push_back(WithinFile(CreateRefExpr(callResVar), curFile));
+    // 5. let $gref = Java_CFFI_JavaEntity(SwapLocalWithGlobalReference(jniCallRes)) | global java reference
+    auto& gref = StaticCast<VarDecl&>(*block->body.emplace_back(CreateTmpVarDecl(nullptr, nullptr)));
+    gref.curFile = curFile;
+    gref.initializer = ilib.CreateJavaEntityJobjectCall(ilib.CreateSwapLocalWithGlobalRefCall(
+        ASTCloner::Clone(jniEnvPtr),
+        WithinFile(CreateRefExpr(callResVar), curFile)));
+    gref.SetTy(gref.initializer->GetTy());
+
+    // 6. return $gref
+    block->body.push_back(WithinFile(CreateRefExpr(gref), curFile));
     return block;
 }
 
@@ -156,12 +166,24 @@ OwnedPtr<Block> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx, Ptr
 
     auto block = CreateBlock({}, &retTy);
 
-    static auto convertJniValueToJavaCompatible = [this](OwnedPtr<Expr> jniValue, Ty& expectedTy) {
-        auto ret = std::move(jniValue);
-        if (!expectedTy.IsPrimitive()) {
-            ret = ilib.CreateJavaEntityJobjectCall(std::move(ret));
-        }
-        return ilib.ConvertJavaResultToCJ(std::move(ret), &expectedTy);
+    static auto convertJniValueToJavaCompatible = [this](OwnedPtr<Expr> jniValue,
+        Ty& expectedTy, Ptr<Expr> jniEnvPtr, Block& block) {
+            auto ret = std::move(jniValue);
+            if (IsMirror(expectedTy) || IsImpl(expectedTy) || expectedTy.IsCoreOptionType()) {
+                // local java reference -> global java reference
+                CJC_ASSERT(ret->GetTy()->IsPointer());
+                auto& gref = StaticCast<VarDecl&>(*block.body.emplace_back(CreateTmpVarDecl(nullptr, nullptr)));
+                gref.curFile = ret->curFile;
+                gref.initializer = ilib.CreateSwapLocalWithGlobalRefCall(
+                    ASTCloner::Clone(jniEnvPtr),
+                    std::move(ret));
+                gref.SetTy(gref.initializer->GetTy());
+                ret = WithinFile(CreateRefExpr(gref), gref.curFile);
+            }
+            if (!expectedTy.IsPrimitive()) {
+                ret = ilib.CreateJavaEntityJobjectCall(std::move(ret));
+            }
+            return ilib.ConvertJavaResultToCJ(std::move(ret), &expectedTy);
     };
 
     auto jclass = jclassCache.CreateJClassAccess(ctx, method.GetClassSignature(), jniEnvPtr);
@@ -187,7 +209,7 @@ OwnedPtr<Block> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx, Ptr
         auto& jniArgs = StaticCast<VarDecl&>(**block->body.emplace(block->body.begin(),
             CreateTmpVArrayVarDecl(ConvertToJValues(std::move(args)), *curFile)));
 
-        // 2. jniCallRes = Java_CFFI_JavaEntity((*jniEnv)->CallMethod(jclass/jobject, jmethod, inout jniArgs))
+        // 2. jniCallRes = (*jniEnv)->CallMethod(jclass/jobject, jmethod, inout jniArgs)
         auto jniMethodCall = method.IsStatic()
         ? jni.CreateStaticJavaMethodCall(retTy, jniEnvPtr, jclass, jmethod, createInoutVArrayArg(jniArgs))
         : isVirtual
@@ -202,8 +224,9 @@ OwnedPtr<Block> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx, Ptr
     // 3. handlePendingException()
     block->body.push_back(ilib.CreateJNIHandlePendingExceptionCall(jniEnvPtr));
     // 4. return unwrapped jniCallRes
-    block->body.push_back(convertJniValueToJavaCompatible(WithinFile(CreateRefExpr(callResVar), curFile), retTy));
-    // block->body.push_back(WithinFile(CreateRefExpr(callResVar), curFile));
+    block->body.push_back(convertJniValueToJavaCompatible(
+        WithinFile(CreateRefExpr(callResVar), curFile),
+        retTy, jniEnvPtr, *block));
     return block;
 }
 
@@ -248,8 +271,20 @@ OwnedPtr<AST::Block> ASTFactory::CreateJavaFieldGetCall(AfterTypeCheckContext& c
     CJC_ASSERT(field.IsStatic() || jobjectInstance); // instance cannot be null if field is non-static.
     auto block = CreateBlock({}, &ty);
 
-    static auto convertJniValueToJavaCompatible = [this](OwnedPtr<Expr> jniValue, Ty& expectedTy) {
+    static auto convertJniValueToJavaCompatible = [this](OwnedPtr<Expr> jniValue,
+        Ty& expectedTy, Ptr<Expr> jniEnvPtr, Block& block) {
         auto ret = std::move(jniValue);
+        if (IsMirror(expectedTy) || IsImpl(expectedTy) || expectedTy.IsCoreOptionType()) {
+            // local java reference -> global java reference
+            CJC_ASSERT(ret->GetTy()->IsPointer());
+            auto& gref = StaticCast<VarDecl&>(*block.body.emplace_back(CreateTmpVarDecl(nullptr, nullptr)));
+            gref.curFile = ret->curFile;
+            gref.initializer = ilib.CreateSwapLocalWithGlobalRefCall(
+                ASTCloner::Clone(jniEnvPtr),
+                std::move(ret));
+            gref.SetTy(gref.initializer->GetTy());
+            ret = WithinFile(CreateRefExpr(gref), gref.curFile);
+        }
         if (!expectedTy.IsPrimitive()) {
             ret = ilib.CreateJavaEntityJobjectCall(std::move(ret));
         }
@@ -272,7 +307,9 @@ OwnedPtr<AST::Block> ASTFactory::CreateJavaFieldGetCall(AfterTypeCheckContext& c
     // 3. handlePendingException()
     block->body.push_back(ilib.CreateJNIHandlePendingExceptionCall(jniEnvPtr));
     // 4. return jniCallRes
-    block->body.push_back(convertJniValueToJavaCompatible(WithinFile(CreateRefExpr(callResVar), curFile), ty));
+    block->body.push_back(convertJniValueToJavaCompatible(
+        WithinFile(CreateRefExpr(callResVar), curFile),
+        ty, jniEnvPtr, *block));
     return block;
 }
 
@@ -301,7 +338,7 @@ OwnedPtr<AST::Block> ASTFactory::CreateJavaFieldSetCall(AfterTypeCheckContext& c
         : jni.CreateSetInstanceJavaFieldCall(ty, jniEnvPtr, jobjectInstance, jfield,
             ilib.CreateJValueExpr(std::move(value)));
     block->body.push_back(std::move(jniFieldSetCall));
-    
+
     // 2. handlePendingException()
     block->body.push_back(ilib.CreateJNIHandlePendingExceptionCall(jniEnvPtr));
     return block;

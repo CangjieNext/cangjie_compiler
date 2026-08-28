@@ -16,9 +16,7 @@ using namespace Cangjie::AST;
 JClassCache::JClassCache(
     const ImportManager& importManager,
     TypeManager& typeManager,
-    InteropLibBridge& ilib,
-    JniBridge& jni) : importManager(importManager),
-    typeManager(typeManager), ilib(ilib), jni(jni)
+    InteropLibBridge& ilib) : importManager(importManager), typeManager(typeManager), ilib(ilib)
 {}
 
 std::string JClassCache::GetNewAccessorName(const JavaClassSignature& javaClass) const
@@ -53,7 +51,7 @@ OwnedPtr<AST::Expr> JClassCache::CreateJClassAccess(
 
     ifNull.push_back(
         CreateAssignExpr(WithinFile(CreateRefExpr(classVar), &curFile),
-            jni.interface.CreateNewGlobalRefCall(envPtr, createGetClassCall(javaClass)),
+            ilib.CreateSwapLocalWithGlobalRefCall(ASTCloner::Clone(envPtr), createGetClassCall(javaClass)),
             TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)));
     ifNull.push_back(WithinFile(CreateRefExpr(classVar), &curFile));
 
