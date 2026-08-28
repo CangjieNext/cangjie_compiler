@@ -70,10 +70,7 @@ OwnedPtr<FuncDecl> GenerateJavaMirrorApiStub::CreateWrappingConstructorStub(Clas
     if (isJObject) {
         // For JObject, body for wrapping constructor is generated at this stage.
         auto lhsRef = WithinFile(CreateRefExpr(*GetJavaRefField(mirror)), curFile);
-        auto rhs = ilib.CreateNewGlobalRefCall(
-            ilib.CreateGetJniEnvCall(curFile),
-            WithinFile(CreateRefExpr(*param), curFile),
-            false);
+        auto rhs = WithinFile(CreateRefExpr(*param), curFile);
 
         auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
         auto refAssignment = CreateAssignExpr(std::move(lhsRef), std::move(rhs), unitTy);

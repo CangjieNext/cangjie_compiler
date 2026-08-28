@@ -6,12 +6,6 @@
 // ASTKIND(ast kind, ast value for human reading, ast node, ast size for notify checking related code)
 #ifdef DEFINE_MEMBER
 
-// jobject NewGlobalRef(JNIEnv *env, jobject obj);
-DEFINE_MEMBER(NewGlobalRef, VAR_DECL, 2)
-
-// jweak NewWeakGlobalRef(JNIEnv *env, jobject obj);
-DEFINE_MEMBER(NewWeakGlobalRef, VAR_DECL, 2)
-
 // jobject NewObject(JNIEnv *env, jclass clazz, jmethodID methodID);
 DEFINE_MEMBER(NewObject, VAR_DECL, 3)
 // jobject NewObjectA(JNIEnv *env, jclass clazz, jmethodID methodID, const jvalue *args);
