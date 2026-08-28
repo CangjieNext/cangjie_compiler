@@ -197,6 +197,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromVarInit(const AST::R
         .thisType = parentType,
         .instParamTys = paramTys,
         .instRetTy = funcType->GetReturnType(),
+        .instantiatedTypeArgs = TranslateASTTypes(expr.instTys),
         .isVirtualFuncCall = false,
         .originalFuncDecl = funcDecl
     };
@@ -240,7 +241,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromRefExpr(const AST::R
     auto isVirtualFuncCall = IsVirtualFuncCall(*caller, *funcDecl, false);
 
     // 3. real Invoke callee is the top-overridden virtual method
-    auto originalFuncDecl = typeManager.GetTopOverriddenFuncDecl(funcDecl);
+    auto originalFuncDecl = isVirtualFuncCall ? typeManager.GetTopOverriddenFuncDecl(funcDecl) : funcDecl;
     CJC_NULLPTR_CHECK(originalFuncDecl);
 
     // 4. calculate instantiated parent type from originalFuncDecl (vtable src parent of the real callee)
@@ -290,7 +291,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromMemberAccess(const A
     }
 
     // 3. real Invoke callee is the top-overridden virtual method
-    auto originalFuncDecl = typeManager.GetTopOverriddenFuncDecl(funcDecl);
+    auto originalFuncDecl = isVirtualFuncCall ? typeManager.GetTopOverriddenFuncDecl(funcDecl) : funcDecl;
     CJC_NULLPTR_CHECK(originalFuncDecl);
 
     // 4. calculate instantiated parent type from originalFuncDecl (vtable src parent of the real callee)
