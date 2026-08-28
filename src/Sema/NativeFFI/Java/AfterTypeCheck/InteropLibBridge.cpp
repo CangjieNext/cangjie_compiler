@@ -47,8 +47,8 @@ constexpr auto INTEROPLIB_CFFI_GET_STATIC_METHOD_ID = "Java_CFFI_getStaticMethod
 constexpr auto INTEROPLIB_CFFI_GET_INSTANCE_FIELD_ID = "Java_CFFI_getInstanceFieldId";
 constexpr auto INTEROPLIB_CFFI_GET_STATIC_FIELD_ID = "Java_CFFI_getStaticFieldId";
 constexpr auto INTEROPLIB_JNI_HANDLE_PENDING_EXCEPTION_DECL_ID = "handlePendingException";
-constexpr auto INTEROPLIB_CFFI_NEW_GLOBAL_REF_ID = "Java_CFFI_newGlobalReference";
-constexpr auto INTEROPLIB_CFFI_DELETE_GLOBAL_REF_ID = "Java_CFFI_deleteGlobalReference";
+constexpr auto INTEROPLIB_CFFI_SWAP_LOCAL_WITH_GLOBAL_REF_ID = "Java_CFFI_swapLocalWithGlobalRef";
+constexpr auto INTEROPLIB_CFFI_DELETE_GLOBAL_REF_ID = "Java_CFFI_deleteGlobalRef";
 constexpr auto INTEROPLIB_CFFI_NEW_JAVA_ARRAY_ID = "Java_CFFI_newJavaArray";
 constexpr auto INTEROPLIB_CFFI_JAVA_ARRAY_GET_ID = "Java_CFFI_arrayGet";
 constexpr auto INTEROPLIB_CFFI_JAVA_ARRAY_SET_ID = "Java_CFFI_arraySet";
@@ -73,7 +73,6 @@ constexpr auto INTEROPLIB_CFFI_JAVA_STRING_TO_CANGJIE = "Java_CFFI_JavaStringToC
 constexpr auto INTEROPLIB_CFFI_CANGJIE_STRING_TO_JAVA = "Java_CFFI_CangjieStringToJava";
 constexpr auto INTEROPLIB_CFFI_WITH_EXCEPTION_HANDLING_ID = "withExceptionHandling";
 constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_GET_CLASS = "Java_CFFI_getClass";
-constexpr auto DELETE_LOCAL_REF = "deleteLocalRef";
 
 } // namespace
 
@@ -115,14 +114,20 @@ Decl& InteropLibBridge::GetJavaEntityKindJObject()
     return *LookupEnumMember(entityKindDecl, INTEROPLIB_JAVA_ENTITY_KIND_JOBJECT);
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetNewGlobalRefDecl()
+Ptr<FuncDecl> InteropLibBridge::GetDeleteGlobalRefDecl(bool isWeak) const
 {
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_NEW_GLOBAL_REF_ID);
+    static auto deleteGlobalRef = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_DELETE_GLOBAL_REF_ID);
+    if (isWeak) {
+        CJC_ABORT(); // Currently, there is no need in weak reference API.
+        return nullptr;
+    }
+    return deleteGlobalRef;
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetDeleteGlobalRefDecl()
+Ptr<FuncDecl> InteropLibBridge::GetSwapLocalWithGlobalRefDecl() const
 {
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_DELETE_GLOBAL_REF_ID);
+    static auto deleteLocalRef = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_SWAP_LOCAL_WITH_GLOBAL_REF_ID);
+    return deleteLocalRef;
 }
 
 Ptr<FuncDecl> InteropLibBridge::GetGetJniEnvDecl()
@@ -201,6 +206,16 @@ Ptr<FuncDecl> InteropLibBridge::FindAsJObjectDecl() const
 
     CJC_NULLPTR_CHECK(result);
     return result;
+}
+
+OwnedPtr<CallExpr> InteropLibBridge::CreateAsJvalueCall(OwnedPtr<Expr> javaEntity) const
+{
+    return CreateMemberCall(std::move(javaEntity), FindAsJValueDecl());
+}
+
+OwnedPtr<CallExpr> InteropLibBridge::CreateAsJobjectCall(OwnedPtr<Expr> javaEntity) const
+{
+    return CreateMemberCall(std::move(javaEntity), FindAsJObjectDecl());
 }
 
 Ptr<VarDecl> InteropLibBridge::GetJNINativeInterfaceField(const std::string_view name)
@@ -342,10 +357,6 @@ Ptr<FuncDecl> InteropLibBridge::GetGetClassDecl() const
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_CFFI_GET_CLASS);
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetDeleteLocalRefDecl()
-{
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(DELETE_LOCAL_REF);
-}
 // ty
 
 Ptr<Ty> InteropLibBridge::GetJNIEnvPtrTy()
@@ -707,20 +718,17 @@ Ptr<FuncDecl> InteropLibBridge::FindArrayJavaEntitySetDecl(ClassDecl& jArrayDecl
     return nullptr;
 }
 
-OwnedPtr<CallExpr> InteropLibBridge::CreateNewGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj, bool isWeak)
+OwnedPtr<CallExpr> InteropLibBridge::CreateSwapLocalWithGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> localRef) const
 {
-    auto curFile = obj->curFile;
-    auto isWeakBoolValue = CreateBoolLit(isWeak);
-    isWeakBoolValue->curFile = curFile;
-    isWeakBoolValue->SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN));
-
-    return CreateCall(GetNewGlobalRefDecl(), curFile, std::move(env), std::move(obj), std::move(isWeakBoolValue));
+    auto curFile = localRef->curFile;
+    return CreateCall(GetSwapLocalWithGlobalRefDecl(), curFile, std::move(env), std::move(localRef));
 }
 
-OwnedPtr<CallExpr> InteropLibBridge::CreateDeleteGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj)
+OwnedPtr<CallExpr> InteropLibBridge::CreateDeleteGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj,
+    bool isWeak) const
 {
     auto curFile = obj->curFile;
-    return CreateCall(GetDeleteGlobalRefDecl(), curFile, std::move(env), std::move(obj));
+    return CreateCall(GetDeleteGlobalRefDecl(isWeak), curFile, std::move(env), std::move(obj));
 }
 
 OwnedPtr<CallExpr> InteropLibBridge::CreateGetMethodIdCall(Ptr<Expr> env, OwnedPtr<Expr> clazz,
@@ -948,14 +956,7 @@ OwnedPtr<Expr> InteropLibBridge::CreateJValueExpr(OwnedPtr<Expr> expr)
     }
 
     auto entityExpr = IsJavaEntityTy(*ty) ? std::move(expr) : WrapJavaEntity(std::move(expr));
-    auto asJValueDecl = FindAsJValueDecl();
-    CJC_NULLPTR_CHECK(asJValueDecl);
-    auto member =
-        WithinFile(CreateMemberAccess(std::move(entityExpr), *asJValueDecl), curFile);
-
-    auto call = CreateCallExpr(std::move(member), {}, asJValueDecl, GetJValueTy(), CallKind::CALL_DECLARED_FUNCTION);
-    call->curFile = curFile;
-    return call;
+    return CreateAsJvalueCall(std::move(entityExpr));
 }
 
 OwnedPtr<Expr> InteropLibBridge::ConvertJavaResultToCJ(OwnedPtr<Expr> result, Ptr<Ty> resultTy, const Ptr<Decl> scope)
@@ -1389,7 +1390,9 @@ OwnedPtr<FuncDecl> InteropLibBridge::CreateDeletingGlobalRefFinalizer(ClassDecl&
     auto curFile = decl.curFile;
     auto fbody = CreateFuncBody({}, nullptr, CreateBlock({}, unitTy), unitTy);
     fbody->paramLists.emplace_back(MakeOwned<FuncParamList>());
-    auto delCall = CreateDeleteGlobalRefCall(CreateGetJniEnvCall(curFile), CreateJavaRefCall(decl, curFile));
+    auto delCall = CreateDeleteGlobalRefCall(CreateGetJniEnvCall(curFile),
+        CreateAsJobjectCall(CreateJavaRefCall(decl, curFile)),
+        /* isWeak = */ false);
     fbody->body->body.emplace_back(std::move(delCall));
     auto fd = CreateFuncDecl("~init", std::move(fbody), typeManager.GetFunctionTy({}, unitTy));
     fd->EnableAttr(Attribute::PRIVATE, Attribute::FINALIZER, Attribute::IN_CLASSLIKE);

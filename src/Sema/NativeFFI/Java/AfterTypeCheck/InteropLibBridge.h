@@ -48,14 +48,14 @@ public:
     Decl& GetJavaEntityKindJObject();
 
     /**
-     * Java_CFFI_newGlobalReference
-     */
-    Ptr<FuncDecl> GetNewGlobalRefDecl();
-
-    /**
      * Java_CFFI_deleteGlobalReference
      */
-    Ptr<FuncDecl> GetDeleteGlobalRefDecl();
+    Ptr<FuncDecl> GetDeleteGlobalRefDecl(bool isWeak) const;
+    
+    /**
+     * Java_CFFI_swapLocalWithGlobalReference
+     */
+    Ptr<FuncDecl> GetSwapLocalWithGlobalRefDecl() const;
 
     /**
      * JNIEnv_ptr
@@ -197,11 +197,6 @@ public:
     Ptr<FuncDecl> GetGetInstanceFieldIdDecl() const;
     Ptr<FuncDecl> GetGetStaticFieldIdDecl() const;
 
-    /**
-     * deleteLocalRef()
-     */
-    Ptr<FuncDecl> GetDeleteLocalRefDecl();
-
     Ptr<Ty> GetJValueTy();
 
     /**
@@ -295,14 +290,14 @@ public:
     OwnedPtr<CallExpr> CreateCFFINewJavaArrayCall(OwnedPtr<Expr> jniEnv, FuncParamList& params);
 
     /**
-     * Java_CFFI_newGlobalReference(env, obj, isWeak)
+     * Java_CFFI_swapLocalWithGlobalReference(env, localRef)
      */
-    OwnedPtr<CallExpr> CreateNewGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj, bool isWeak);
+    OwnedPtr<CallExpr> CreateSwapLocalWithGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> localRef) const;
 
     /**
-     * Java_CFFI_deleteGlobalReference(env, obj)
+     * Java_CFFI_deleteGlobalReference(env, obj, isWeak)
      */
-    OwnedPtr<CallExpr> CreateDeleteGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj);
+    OwnedPtr<CallExpr> CreateDeleteGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj, bool isWeak) const;
 
     /**
      * Java_CFFI_arrayGetLength(env)
@@ -467,6 +462,9 @@ public:
     void CheckInteropLibVersion();
     static bool IsInteropLibAccessible(const ImportManager& importManager);
     static bool IsJavaEntityTy(Ty& ty);
+
+    OwnedPtr<CallExpr> CreateAsJobjectCall(OwnedPtr<Expr> javaEntity) const;
+    OwnedPtr<CallExpr> CreateAsJvalueCall(OwnedPtr<Expr> javaEntity) const;
 
     Ptr<StructDecl> GetJNINativeInterfaceDecl() const;
 

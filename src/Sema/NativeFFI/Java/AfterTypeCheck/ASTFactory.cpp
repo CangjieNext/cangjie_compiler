@@ -54,7 +54,7 @@ OwnedPtr<Block> ASTFactory::CreateNewJavaObjectCall(AfterTypeCheckContext& ctx, 
     auto jclass = jclassCache.CreateJClassAccess(ctx, constructor.GetClassSignature(), jniEnvPtr);
     auto jmethod = jmethodIdCache.CreateJMethodIdAccess(ctx, constructor, ASTCloner::Clone(jclass.get()), jniEnvPtr);
     
-    // 1. let jniCallRes: Java_CFFI_JavaEntity
+    // 1. let jniCallRes: Java_CFFI_JavaEntity | local java reference
     auto& callResVar = StaticCast<VarDecl&>(*block->body.emplace_back(CreateTmpVarDecl(nullptr, nullptr)));
     callResVar.SetTy(ilib.GetJavaEntityTy());
 
@@ -79,8 +79,10 @@ OwnedPtr<Block> ASTFactory::CreateNewJavaObjectCall(AfterTypeCheckContext& ctx, 
     
     // 4. handlePendingException()
     block->body.push_back(ilib.CreateJNIHandlePendingExceptionCall(jniEnvPtr));
-    // 5. return jniCallRes
-    block->body.push_back(WithinFile(CreateRefExpr(callResVar), curFile));
+    // 5. return SwapLocalWithGlobalReference(jniCallRes) | global java reference
+    block->body.push_back(ilib.CreateSwapLocalWithGlobalRefCall(
+        ASTCloner::Clone(jniEnvPtr),
+        WithinFile(CreateRefExpr(callResVar), curFile)));
     return block;
 }
 

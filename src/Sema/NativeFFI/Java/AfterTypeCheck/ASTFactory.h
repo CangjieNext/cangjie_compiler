@@ -26,7 +26,7 @@ public:
 
     /**
      * Creates expression with `javaClassTy` (as a mirror/impl type) constructor call via JNI.
-     * Returned expr has `JavaEntity` ty.
+     * Returned expr is a global java reference wrapped into `Java_CFFI_JavaEntity`.
      * `args` are java-compatible arguments.
      * `constructor` is Cangjie declaration of Java constructor that should be called.
      * For marked constructors (`isMarkedConstructor`) is additionally passes an extra marker as an argument.
@@ -38,7 +38,7 @@ public:
 
     /*
      * Creates expression of `javaClassTy` (as a mirror/impl type) constructor call via JNI.
-     * Returned expr has `JavaEntity` ty.
+     * Returned expr is a global java reference wrapped into `Java_CFFI_JavaEntity`.
      * `args` are java-compatible arguments.
      * `constructor` is Cangjie declaration of Java constructor that should be called.
      * For marked constructors (`isMarkedConstructor`) is additionally passes an extra marker as an argument.
@@ -92,6 +92,9 @@ public:
 
     std::vector<OwnedPtr<AST::Expr>> ExtractArgExprs(const std::vector<OwnedPtr<FuncArg>>& args) const;
 
+    OwnedPtr<AST::Block> WithLocalJniEnvPtr(AST::File& curFile,
+        std::function<OwnedPtr<AST::Block>(Ptr<AST::Expr> jniEnvPtr)> builder) const;
+
 private:
     OwnedPtr<AST::Block> CreateJavaMethodCall(AfterTypeCheckContext& ctx, Ptr<AST::Expr> jniEnvPtr,
         Ptr<AST::Expr> jobjectInstance, JavaMemberSignature method, AST::Ty& retTy,
@@ -122,9 +125,6 @@ private:
      * Converts `values` expressions as JValue expressions in-place.
      */
     std::vector<OwnedPtr<AST::Expr>> ConvertToJValues(std::vector<OwnedPtr<AST::Expr>> values) const;
-    
-    OwnedPtr<AST::Block> WithLocalJniEnvPtr(AST::File& curFile,
-        std::function<OwnedPtr<AST::Block>(Ptr<AST::Expr> jniEnvPtr)> builder) const;
 
     TypeManager& typeManager;
     Interop::Java::InteropLibBridge& ilib;

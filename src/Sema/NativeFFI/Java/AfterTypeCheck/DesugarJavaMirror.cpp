@@ -281,11 +281,19 @@ void JavaDesugarManager::InsertJStringOfStringCtorBody(ClassDecl& decl)
     auto& generatedCtor = getConstructorOfString(decl);
     auto& param = generatedCtor.funcBody->paramLists[0]->params[0];
     auto jObjectCtor = GetJavaMirrorWrappingConstructor(decl);
+
+    // Java_CFFI_CangjieStringToJava($jniEnvPtr, s) | local java reference
     auto convertCall = CreateCall(lib.GetCangjieStringToJava(), curFile,
         lib.CreateGetJniEnvCall(curFile), WithinFile(CreateRefExpr(*param), curFile));
 
+    auto block = factory.WithLocalJniEnvPtr(*curFile, [&](Ptr<AST::Expr> jniEnvPtr) {
+       auto block = CreateBlock({}, lib.GetJavaEntityTy());
+       block->body.push_back(lib.CreateSwapLocalWithGlobalRefCall(ASTCloner::Clone(jniEnvPtr), std::move(convertCall)));
+       return block;
+   });
+
     auto superCall = CreateSuperCall(decl, *jObjectCtor, jObjectCtor->GetTy());
-    superCall->args.emplace_back(CreateFuncArg(std::move(convertCall)));
+    superCall->args.emplace_back(CreateFuncArg(WrapReturningLambdaCall(typeManager, std::move(block))));
 
     generatedCtor.funcBody->body->body.emplace_back(std::move(superCall));
 }
