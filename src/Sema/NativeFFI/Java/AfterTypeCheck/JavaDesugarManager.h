@@ -52,7 +52,7 @@ public:
               *lib.GetJniEnvPtrDecl(),
               *lib.GetJobjectDecl(),
               *lib.GetJNINativeInterfaceDecl()),
-          jclassCache(importManager, typeManager, lib, jniBridge),
+          jclassCache(importManager, typeManager, lib),
           jmethodIdCache(importManager, typeManager, lib),
           jfieldIdCache(importManager, typeManager, lib),
           factory(typeManager, lib, jniBridge, jclassCache, jmethodIdCache, jfieldIdCache),
