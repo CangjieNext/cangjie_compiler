@@ -117,7 +117,10 @@ public:
         Type* instRetTy{nullptr};
         std::vector<Type*> instantiatedTypeArgs;
         bool isVirtualFuncCall{false};
-        /** Top-overridden AST func decl; Invoke/InvokeStatic callee is GetSymbolTable of this. */
+        /**
+         * AST func decl used as Invoke/InvokeStatic callee via GetSymbolTable.
+         * Virtual call: top-overridden decl; non-virtual call: the resolved decl.
+         */
         const AST::FuncDecl* originalFuncDecl{nullptr};
     };
 
@@ -960,8 +963,8 @@ private:
     InvokeCallContext GenerateInvokeCallContext(const InstCalleeInfo& instFuncInfo, Value& caller,
         const std::vector<Value*>& args, const OverflowStrategy strategy = OverflowStrategy::THROWING);
     InstCalleeInfo GetInstCalleeInfoFromVarInit(const AST::RefExpr& expr);
-    std::pair<Type*, FuncCallType> GetExactParentTypeAndFuncType(
-        const AST::NameReferenceExpr& expr, Type& thisType, const AST::FuncDecl& funcDecl, bool& isVirtualFuncCall);
+    InstCalleeInfo GetInstCalleeInfoInGeneral(
+        const AST::NameReferenceExpr& expr, AST::FuncDecl& resolvedFuncDecl, Type* thisType, bool isVirtualFuncCall);
     InstCalleeInfo GetInstCalleeInfoFromRefExpr(const AST::RefExpr& expr);
     InstCalleeInfo GetInstCalleeInfoFromMemberAccess(const AST::MemberAccess& expr);
 
