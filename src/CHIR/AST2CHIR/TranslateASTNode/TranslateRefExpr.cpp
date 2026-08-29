@@ -277,6 +277,21 @@ Value* Translator::WrapMemberMethodByLambda(
     } else {
         // Apply
         if (thisObj != nullptr) {
+            // `instFuncType.instParentCustomTy` has no null check here (only `thisObj` is
+            // guarded). A null parent custom type would be dereferenced inside
+            // AddRefIfFuncIsMutOrClass. This mirrors the same null->deref hardening applied
+            // in GetExactParentTypeAndFuncType and TranslateCallExpr: surface a genuine
+            // unresolvable parent as a clean InternalError instead of a SIGSEGV.
+            InternalError(instFuncType.instParentCustomTy != nullptr,
+                "failed to resolve exact parent type for ref expr");
+            if (instFuncType.instParentCustomTy == nullptr) {
+                // InternalError returned. Returning nullptr skips currentBlock restore
+                // + Exit terminator (lines 304-305), leaving invalid CHIR (half-finished
+                // Lambda) + cursor stuck in lambda entry; callers (:331/:356/:323) don't
+                // null-check → crash propagates upstream (review 187308453). CJC_ABORT()
+                // is empty in release; abort() guarantees termination.
+                abort();
+            }
             auto objExpectedType = AddRefIfFuncIsMutOrClass(*instFuncType.instParentCustomTy, funcDecl, builder);
             args.insert(args.begin(), TransformThisType(*thisObj, *objExpectedType, *lambda));
         }

@@ -149,7 +149,28 @@ std::pair<CHIR::Type*, FuncCallType> Translator::GetExactParentTypeAndFuncType(
     if (parentType == nullptr) {
         CJC_ASSERT(!isVirtualFuncCall);
         parentType = GetExactParentType(*thisDerefTy, funcDecl, *funcType, funcInstArgs, true);
-        CJC_NULLPTR_CHECK(parentType);
+        // The no-op release `CJC_NULLPTR_CHECK` let a null parentType fall through to the
+        // `parentType->IsClass()` deref below (SIGSEGV). Emit a release-effective
+        // InternalError instead so a genuine unresolvable parent surfaces as a clean
+        // diagnostic rather than a crash. (The -O2 monomorphization case that used to reach
+        // here is resolved upstream by the outer-class substitution in
+        // Translator::GetExactParentType, so this gate now only fires for truly
+        // unrecoverable shapes.)
+        InternalError(parentType != nullptr, "failed to resolve exact parent type for member access");
+        // InternalError may return (LSP/unittest build, or a second ICE in the same
+        // process due to the one-shot message latch in ICEUtil.h), in which case control
+        // would otherwise reach the `parentType->IsClass()` deref below (SIGSEGV). Fall
+        // out cleanly instead. Mirrors the repo pattern `InternalError(...) + return
+        // <default>` (e.g. TranslateCallExpr.cpp). The success path (parentType non-null
+        // after the retry) is unchanged and still sets isVirtualFuncCall = true.
+        if (parentType == nullptr) {
+            // InternalError returned (LSP/unittest, or second ICE via one-shot latch).
+            // Returning {nullptr, FuncCallType{}} moves the null-deref to the caller's
+            // funcType->GetParamTypes() (funcType defaults nullptr, UserDefinedType.h:45;
+            // callers at :271/:318 don't null-check — review 187308441). CJC_ABORT() is
+            // empty in release (CheckUtils.h:54); abort() guarantees termination.
+            abort();
+        }
         isVirtualFuncCall = true;
     }
     if (!funcDecl.TestAttr(AST::Attribute::STATIC)) {
