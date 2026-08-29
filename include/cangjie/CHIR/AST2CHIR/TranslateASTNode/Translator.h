@@ -117,7 +117,10 @@ public:
         Type* instRetTy{nullptr};
         std::vector<Type*> instantiatedTypeArgs;
         bool isVirtualFuncCall{false};
-        /** Top-overridden AST func decl; Invoke/InvokeStatic callee is GetSymbolTable of this. */
+        /**
+         * AST func decl used as Invoke/InvokeStatic callee via GetSymbolTable.
+         * Virtual call: top-overridden decl; non-virtual call: the resolved decl.
+         */
         const AST::FuncDecl* originalFuncDecl{nullptr};
     };
 
