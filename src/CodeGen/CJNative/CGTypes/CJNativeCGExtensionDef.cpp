@@ -556,16 +556,39 @@ void GetOrderedParentTypesRecusively(
         GetOrderedParentTypesRecusively(*superClass, parents, builder);
     }
 
+    auto appendInterface = [&parents, &builder](const CHIR::ClassType* instType, bool isFromCompilerAddedExtend) {
+        if (std::find(parents.begin(), parents.end(), instType) != parents.end()) {
+            return;
+        }
+        parents.emplace_back(instType);
+        // Keep consistent with the def overload below: for a compiler-added extend def,
+        // only the direct interface is collected without recursing into its parent types.
+        if (!isFromCompilerAddedExtend) {
+            GetOrderedParentTypesRecusively(*const_cast<CHIR::ClassType*>(instType), parents, builder);
+        }
+    };
     auto classDef = type.GetClassDef();
     auto [res, replaceTable] = classDef->GetType()->CalculateGenericTyMapping(type);
     CJC_ASSERT(res);
     for (auto ty : classDef->GetImplementedInterfaceTys()) {
         auto instType = StaticCast<CHIR::ClassType*>(ReplaceRawGenericArgType(*ty, replaceTable, builder));
-        if (std::find(parents.begin(), parents.end(), instType) != parents.end()) {
+        appendInterface(instType, false);
+    }
+    // Interfaces implemented via extensions of an ancestor class also appear in this class's vtable
+    // (see VTableGenerator), so they must be collected here as well. Otherwise the ExtensionDef list
+    // of a subclass misses these entries, and virtual dispatch through such an interface would skip
+    // overrides declared in the subclass.
+    for (auto extend : classDef->GetExtends()) {
+        if (!type.IsEqualOrInstantiatedTypeOf(*extend->GetExtendedType(), builder)) {
             continue;
         }
-        parents.emplace_back(instType);
-        GetOrderedParentTypesRecusively(*instType, parents, builder);
+        // maybe we can meet `extend<T> A<B<T>> {}`, and `type` is A<Int32>, then ignore this def,
+        // so not need to check `res`
+        auto [extRes, extReplaceTable] = extend->GetExtendedType()->CalculateGenericTyMapping(type);
+        for (auto ty : extend->GetImplementedInterfaceTys()) {
+            auto instType = StaticCast<CHIR::ClassType*>(ReplaceRawGenericArgType(*ty, extReplaceTable, builder));
+            appendInterface(instType, extend->TestAttr(CHIR::Attribute::COMPILER_ADD));
+        }
     }
 }
 
