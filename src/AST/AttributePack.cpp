@@ -137,6 +137,7 @@ const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::CJ_MIRROR_OBJC_INTERFACE_FWD, "CJ_MIRROR_OBJC_INTERFACE_FWD(deprecated)"},
     {AST::Attribute::ALREADY_LOADED, "ALREADY_LOADED"},
     {AST::Attribute::JAVA_IMPL_REGISTRY_COMPANION, "JAVA_IMPL_REGISTRY_COMPANION"},
+    {AST::Attribute::DOES_NOT_THROW, "DOES_NOT_THROW"},
     {AST::Attribute::AST_ATTR_END, "AST_ATTR_END"},
 };
 UNSUPPRESS_WARNING()
