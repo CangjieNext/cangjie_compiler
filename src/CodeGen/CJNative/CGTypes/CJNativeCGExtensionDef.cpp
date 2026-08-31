@@ -548,6 +548,22 @@ bool CGExtensionDef::CreateExtensionDefForType(const CHIR::ClassType& inheritedT
 }
 
 namespace {
+// Returns true if matching this extension at runtime requires evaluating a where-condition function:
+// the extend has generic parameters with upper bounds, or its extended type has a non-trivial type
+// argument pattern (e.g. `extend<T> A<(T, T)>`, `extend A<Bool>`). Mirrors needGenerateFnForGenericType.
+bool ExtendConformanceIsConditional(const CHIR::ExtendDef& extend)
+{
+    auto extendedTy = extend.GetExtendedType();
+    std::vector<CHIR::Type*> genericTypes;
+    for (auto gt : extend.GetGenericTypeParams()) {
+        if (!gt->GetUpperBounds().empty()) {
+            return true;
+        }
+        genericTypes.emplace_back(gt);
+    }
+    return genericTypes != extendedTy->GetTypeArgs();
+}
+
 void GetOrderedParentTypesRecusively(
     CHIR::ClassType& type, std::list<const CHIR::ClassType*>& parents, CHIR::CHIRBuilder& builder)
 {
@@ -556,16 +572,46 @@ void GetOrderedParentTypesRecusively(
         GetOrderedParentTypesRecusively(*superClass, parents, builder);
     }
 
+    auto appendInterface = [&parents, &builder](const CHIR::ClassType* instType, bool isFromCompilerAddedExtend) {
+        if (std::find(parents.begin(), parents.end(), instType) != parents.end()) {
+            return;
+        }
+        parents.emplace_back(instType);
+        // Keep consistent with the def overload below: for a compiler-added extend def,
+        // only the direct interface is collected without recursing into its parent types.
+        if (!isFromCompilerAddedExtend) {
+            GetOrderedParentTypesRecusively(*const_cast<CHIR::ClassType*>(instType), parents, builder);
+        }
+    };
     auto classDef = type.GetClassDef();
     auto [res, replaceTable] = classDef->GetType()->CalculateGenericTyMapping(type);
     CJC_ASSERT(res);
     for (auto ty : classDef->GetImplementedInterfaceTys()) {
         auto instType = StaticCast<CHIR::ClassType*>(ReplaceRawGenericArgType(*ty, replaceTable, builder));
-        if (std::find(parents.begin(), parents.end(), instType) != parents.end()) {
+        appendInterface(instType, false);
+    }
+    // Interfaces implemented via extensions of an ancestor class also appear in this class's vtable
+    // (see VTableGenerator), so they must be collected here as well. Otherwise the ExtensionDef list
+    // of a subclass misses these entries, and virtual dispatch through such an interface would skip
+    // overrides declared in the subclass.
+    for (auto extend : classDef->GetExtends()) {
+        // Skip conditional conformances (e.g. `extend<T> A<T> <: I3 where T <: I3`): the ExtensionDef
+        // emitted for a subclass carries no where-condition function, so collecting them here would
+        // make the subclass match the interface unconditionally. They are still handled at runtime
+        // via the outer ExtensionDef of the extend itself.
+        if (ExtendConformanceIsConditional(*extend)) {
             continue;
         }
-        parents.emplace_back(instType);
-        GetOrderedParentTypesRecusively(*instType, parents, builder);
+        if (!type.IsEqualOrInstantiatedTypeOf(*extend->GetExtendedType(), builder)) {
+            continue;
+        }
+        // maybe we can meet `extend<T> A<B<T>> {}`, and `type` is A<Int32>, then ignore this def,
+        // so not need to check `res`
+        auto [extRes, extReplaceTable] = extend->GetExtendedType()->CalculateGenericTyMapping(type);
+        for (auto ty : extend->GetImplementedInterfaceTys()) {
+            auto instType = StaticCast<CHIR::ClassType*>(ReplaceRawGenericArgType(*ty, extReplaceTable, builder));
+            appendInterface(instType, extend->TestAttr(CHIR::Attribute::COMPILER_ADD));
+        }
     }
 }
 
