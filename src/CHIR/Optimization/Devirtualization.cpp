@@ -312,34 +312,29 @@ bool Devirtualization::RewriteToBuiltinOp(const RewriteInfo& info)
     return true;
 }
 
+Type* Devirtualization::AddRefIfNeeded(Type& thisType, Function& callee)
+{
+    if (thisType.IsReferenceType()) {
+        return builder.GetType<RefType>(&thisType);
+    }
+    if (thisType.IsValueType() &&
+        (callee.TestAttr(Attribute::MUT) || callee.IsConstructor() || callee.IsInstanceVarInit())) {
+        return builder.GetType<RefType>(&thisType);
+    }
+    return &thisType;
+}
+
 void Devirtualization::RewriteToApply(std::vector<RewriteInfo>& infos)
 {
-    auto needThisTypeRef = [](Function& func) {
-        return func.TestAttr(Attribute::MUT) || func.IsConstructor() || func.IsInstanceVarInit();
-    };
     for (auto rewriteInfo = infos.rbegin(); rewriteInfo != infos.rend(); ++rewriteInfo) {
         if (RewriteToBuiltinOp(*rewriteInfo)) {
             continue;
         }
-        auto thisType = rewriteInfo->thisType;
+        // 1. instantiate callee if possible
         auto realFunc = rewriteInfo->realCallee;
-        if (thisType->IsReferenceType() || (thisType->IsValueType() && needThisTypeRef(*realFunc))) {
-            thisType = builder.GetType<RefType>(thisType);
-        }
-
+        auto thisType = AddRefIfNeeded(*rewriteInfo->thisType, *realFunc);
         auto invoke = rewriteInfo->invoke;
         auto args = invoke->GetArgs();
-        auto parent = invoke->GetParentBlock();
-        std::vector<TypeCast*> objCastExprs;
-        if (auto localVar = DynamicCast<LocalVar*>(args[0])) {
-            std::tie(args[0], objCastExprs) = CollectUpstreamTypeCasts(*localVar);
-        }
-        auto typecastRes = TypeCastOrBoxIfNeeded(*args[0], *thisType, builder, *parent, INVALID_LOCATION);
-        if (typecastRes != args[0]) {
-            StaticCast<LocalVar*>(typecastRes)->GetExpr()->MoveBefore(invoke);
-            args[0] = typecastRes;
-        }
-        auto loc = invoke->GetDebugLocation();
         auto context = FuncCallContext {
             .args = args,
             .instTypeArgs = rewriteInfo->invoke->GetInstantiatedTypeArgs(),
@@ -351,7 +346,24 @@ void Devirtualization::RewriteToApply(std::vector<RewriteInfo>& infos)
             realFunc = instFunc;
             instRetTy = instFunc->GetFuncType()->GetReturnType();
         }
+
+        // 2. get a correct type for args[0]
+        auto instParentCustomTy = GetInstParentCustomTyOfCallee(*realFunc, context.args, context.thisType, builder);
+        // realFunc is instantiated to a new function, the new function is global, not a member method
+        if (instParentCustomTy == nullptr) {
+            instParentCustomTy = realFunc->GetFuncType()->GetParamType(0);
+        }
+        instParentCustomTy = AddRefIfNeeded(*instParentCustomTy, *realFunc);
+        auto parent = invoke->GetParentBlock();
+        auto typecastRes = TypeCastOrBoxIfNeeded(*context.args[0], *instParentCustomTy, builder, *parent);
+        if (typecastRes != context.args[0]) {
+            StaticCast<LocalVar*>(typecastRes)->GetExpr()->MoveBefore(invoke);
+            context.args[0] = typecastRes;
+        }
+
+        // 3. rewrite to apply
         Expression* newCall = nullptr;
+        auto loc = invoke->GetDebugLocation();
         if (auto tryInvoke = DynamicCast<TryInvoke*>(invoke)) {
             newCall = builder.CreateExpression<TryApply>(
                 loc, instRetTy, realFunc, context, tryInvoke->GetSuccessBlock(), tryInvoke->GetErrorBlock(), parent);
@@ -360,11 +372,6 @@ void Devirtualization::RewriteToApply(std::vector<RewriteInfo>& infos)
         }
         invoke->ReplaceWith(*newCall);
         AddTypeCastForReturnVal(*newCall, *expectedRetTy, builder);
-        for (auto e : objCastExprs) {
-            if (e->GetResult()->GetUsers().empty()) {
-                e->RemoveSelfFromBlock();
-            }
-        }
     }
 }
 

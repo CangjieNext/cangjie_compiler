@@ -182,7 +182,7 @@ void WrapMutFunc::CreateMutFuncWrapper(Function& rawFunc, CustomTypeDef& curDef,
         Cangjie::CHIR::CreateAndAppendExpression<Allocate>(builder, builder.GetType<RefType>(retTy), retTy, entry);
     func->SetReturnValue(*ret->GetResult());
 
-    auto rawFuncFirstArgType = rawFunc.GetFuncType()->GetParamTypes()[0]->StripAllRefs();
+    auto rawFuncFirstArgType = rawFunc.GetFuncType()->GetParamType(0)->StripAllRefs();
     auto firstArgType = GetInstSubType(*rawFuncFirstArgType, srcClassTy, builder);
     if (!firstArgType->IsValueType() || rawFunc.TestAttr(Attribute::MUT)) {
         firstArgType = builder.GetType<RefType>(firstArgType);
