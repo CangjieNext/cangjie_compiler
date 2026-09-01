@@ -323,11 +323,7 @@ void JavaInteropManager::CheckTypes(File& file)
         if (auto classLikeDecl = As<ASTKind::CLASS_LIKE_DECL>(decl)) {
             CheckInheritance(*classLikeDecl);
             CheckTypes(*classLikeDecl);
-        } else if (auto extendDecl = As<ASTKind::EXTEND_DECL>(decl)) {
-            CheckExtendDecl(*extendDecl);
         }
-
-        CheckGenericsInstantiation(*decl);
     }
 }
 
