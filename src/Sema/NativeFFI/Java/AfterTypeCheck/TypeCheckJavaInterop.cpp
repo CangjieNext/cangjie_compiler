@@ -267,11 +267,6 @@ void JavaInteropManager::CheckExtendDecl(ExtendDecl& decl) const
     if (!IsMirror(ty) && !IsImpl(ty)) {
         return;
     }
-
-    if (!decl.inheritedTypes.empty()) {
-        DiagJavaDeclCannotBeExtendedWithInterface(diag, decl);
-        decl.EnableAttr(Attribute::IS_BROKEN);
-    }
 }
 
 void JavaInteropManager::CheckJavaMirrorTypes(ClassLikeDecl& decl)
