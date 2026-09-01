@@ -1251,6 +1251,9 @@ CGValue IRBuilder2::CreateGEP(
                     GetInsertFunction()->hasFnAttribute(THIS_PARAM_HAS_BP)) &&
                 **(cgMod | chirExpr->GetTopLevelFunc()->GetParam(0)) == ret) {
                 // It means this param doesn't have typeinfo, no need to add the offset.
+                // Mark the TypeInfo* as skipped so that the remaining subscripts (e.g. the
+                // inner generic struct field of `this.coords.x`) won't consume the budget.
+                hasSkippedTypeInfo = true;
             } else if (!hasSkippedTypeInfo) {
                 offset = CreateAdd(offset, llvm::ConstantInt::get(offset->getType(), GetPayloadOffset()));
                 hasSkippedTypeInfo = true;
