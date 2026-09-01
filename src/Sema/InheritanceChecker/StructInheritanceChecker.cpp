@@ -946,8 +946,10 @@ void StructInheritanceChecker::DiagnoseForUnimplementedInterfaces(const MemberMa
     // 1. Foreign struct.
     // 2. Mirror struct.
     // 3. Wrapper classes generated for java interop (corresponding members are generated after typecheck).
+    // 4. Handle wrapper classes generated for objc interop (corresponding members are generated after
+    // typecheck).
     if (structDecl.TestAttr(Attribute::FOREIGN) ||
-        structDecl.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SYNTHETIC_WRAPPER) ||
+        structDecl.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_INTERFACE_HANDLE_WRAPPER) ||
         structDecl.TestAttr(Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER)) {
         return;
     }
