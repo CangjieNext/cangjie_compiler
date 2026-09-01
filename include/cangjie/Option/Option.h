@@ -859,6 +859,16 @@ public:
      */
     bool chirInlineLegacy = false;
 
+    /**
+     * @brief When true, DISABLES stamping OPTSIZE/MINSIZE on callers for codesize control
+     *        (Phase 2 -O2 caller-bloat guard D1, and the future -Os/-Oz baseline stamping
+     *        in Phase 4). Default false = stamping is ON. Parsed from
+     *        `--chir-inline-no-sizeattr`. Intended for A/B comparison of the size-attribute
+     *        gains. Does NOT affect NO_INLINE stamping (blacklist / async-boundary / D2
+     *        callee-budget veto are semantic refusals, not size-tuning, so always apply).
+     */
+    bool chirInlineNoSizeAttr = false;
+
     enum class CHIRMode : uint8_t { NA, STANDARD, WITH_ID, ALL };
 
     bool codegenDebugMode = false;

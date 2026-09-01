@@ -502,6 +502,11 @@ OPTION("--chir-inline-legacy", CHIR_INLINE_LEGACY, FLAG, { BACKEND(ALL) },
     "Restore the pre-Phase1 CHIR inline decision logic (flat per-expr cost, fixed threshold 20, "
     "= assignment bonuses). Use to A/B test whether Phase1 weighting/threshold changes are the "
     "trigger of a regression. Does NOT touch backend attribute stamping.")
+OPTION("--chir-inline-no-sizeattr", CHIR_INLINE_NO_SIZEATTR, FLAG, { BACKEND(ALL) },
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Disable stamping OPTSIZE/MINSIZE on callers for codesize (Phase 2 -O2 caller-bloat guard, "
+    "and future -Os/-Oz baseline). Default is ON (stamp). Pass this to turn it OFF for A/B "
+    "comparison. Does NOT affect NO_INLINE (semantic refusal) stamping.")
 OPTION("--render-chir", RENDER_CHIR, SEPARATED, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) }, nullptr, chir_mode, SINGLE_OCCURRENCE,
     "Render CHIR as graph. Candidate modes: ")

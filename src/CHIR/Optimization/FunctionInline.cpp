@@ -34,6 +34,16 @@ constexpr static size_t INLINED_COUNT_THRESHOLD = 20;
 // medium functions. Kept as a hard cap to bound counting on huge functions.
 constexpr static size_t SEARCH_THRESHOLD = 200;
 
+// Phase 2: caller-bloat guard (D1). When a caller's asm-weighted size grows past
+// CALLER_SIZE_TRIGGER_O2 by inlining small callees into itself, stamp OPTSIZE so the
+// LLVM backend clamps that caller's subsequent callsite thresholds (225->50) and runs
+// size-first codegen on it. Only -O2 in Phase 2 (-Os/-Oz baseline deferred to Phase 4).
+constexpr static size_t CALLER_SIZE_TRIGGER_O2 = 300;   // K_size: 10x the O2 callee base (30)
+// Cap for CountCallerSize early-abort. Must be > K_size + max-overshoot(~4) so the
+// >= K_size trigger check sees a real value past the trigger rather than a clamped one.
+// Reusing CountFuncSize's 200 cap would clamp every caller at ~200 and K_size=300 never fire.
+constexpr static size_t CALLER_SIZE_SEARCH_CAP = 400;
+
 // Phase 1: per-optLevel base inline threshold for the #4 front-end decision.
 // Lower than the LLVM back-end thresholds (O2=225/Os=50/Oz=5) on purpose:
 // the front-end #4 only inlines small functions to expose cross-
@@ -251,6 +261,24 @@ static size_t GetBaseThreshold(const Cangjie::GlobalOptions::OptimizationLevel& 
     return base;
 }
 
+// Phase 2: caller-bloat trigger by optLevel, with optional CLI override.
+// Honors --chir-inline-threshold=caller_size_o2=<val>. Only -O2 stamps OPTSIZE in Phase 2
+// (-Os/-Oz baseline is deferred to Phase 4 as a measured item); other levels return SIZE_MAX
+// so the trigger never fires (CountCallerSize can never be >= SIZE_MAX).
+static size_t GetCallerSizeTrigger(const Cangjie::GlobalOptions::OptimizationLevel& optLevel,
+                                   const std::unordered_map<std::string, size_t>& overrides)
+{
+    size_t trigger = SIZE_MAX;  // default: never trigger
+    if (optLevel == Cangjie::GlobalOptions::OptimizationLevel::O2) {
+        trigger = CALLER_SIZE_TRIGGER_O2;
+    }
+    auto it = overrides.find("caller_size_o2");
+    if (it != overrides.end()) {
+        trigger = it->second;
+    }
+    return trigger;
+}
+
 // Phase 1: compose bonuses multiplicatively over the base threshold, then cap.
 // Replaces the old `=`-assignment logic in CalculateThreshold which wiped earlier
 // bonuses (OnlyCalledOnce, HotSpot, LambdaArg were mutually exclusive due to overwrite).
@@ -401,6 +429,26 @@ static size_t CountFuncSize(const Function& func)
     return funcSize;
 }
 
+// Phase 2 (D1): capped-count of a caller's CURRENT asm-weighted size. Unlike CountFuncSize
+// (which sizes a callee with a 200 early-abort to bound counting on huge callees), this uses
+// CALLER_SIZE_SEARCH_CAP (400) — must exceed K_size (300) + max-overshoot so the >= K_size
+// trigger at the stamp site sees a real value past the trigger. The caller grows live during
+// #4 (DoFunctionInline clones the callee body into it immediately), so this is recomputed
+// per callsite after each inline rather than cached in funcSizeMap (which caches callee sizes).
+static size_t CountCallerSize(const Function& caller)
+{
+    size_t funcSize = 0;
+    for (auto block : caller.GetBody()->GetBlocks()) {
+        for (auto e : block->GetExpressions()) {
+            funcSize += GetAsmWeightedCost(*e);
+            if (funcSize >= CALLER_SIZE_SEARCH_CAP) {
+                return funcSize;  // already big enough to trigger, stop counting
+            }
+        }
+    }
+    return funcSize;
+}
+
 bool FunctionInline::CheckCanRewrite(const Apply& apply)
 {
     auto callee = apply.GetCallee();
@@ -448,8 +496,19 @@ bool FunctionInline::CheckCanRewrite(const Apply& apply)
     if (func->TestAttr(Attribute::OBJ_C_MIRROR)) {
         return true;
     }
-    // Determine if we can inline by checking the size of callee exceed the threshold
+    // Determine if we can inline by checking the size of callee exceed the threshold.
+    // Phase 2 (D1): the count limit is also a bloat signal — a caller that already absorbed 20
+    // inlines is stamped OPTSIZE (backend clamps its callsites 225->50 + size-first codegen).
+    // Setting the count to the limit also serves as a "closed" marker: later callsites of this
+    // caller hit this guard O(1) and return false without re-counting size.
     if (inlinedCountMap[globalFunc] >= INLINED_COUNT_THRESHOLD) {
+        // Phase 2 (D1): the count limit is a bloat signal — stamp OPTSIZE (unless the size-attr
+        // master switch --chir-inline-no-sizeattr disables all OPTSIZE/MINSIZE stamping). The
+        // closure behavior (return false) is independent of the stamping.
+        if (!globalOpts.chirInlineNoSizeAttr && !globalFunc->TestAttr(Attribute::OPTSIZE)) {
+            globalFunc->EnableAttr(Attribute::OPTSIZE);
+            ++GetStats().optsizeStamped;
+        }
         return false;
     }
     // `res` is std::pair<iterator, bool>, so
@@ -473,6 +532,24 @@ bool FunctionInline::CheckCanRewrite(const Apply& apply)
     }
     if (res.first->second <= realThreshold) {
         inlinedCountMap[globalFunc]++;
+        // Phase 2 (D1): caller-bloat guard. If the caller's asm-weighted size has grown past
+        // K_size, stamp OPTSIZE (backend clamps that caller's callsites 225->50 + size-first
+        // codegen) AND close this caller: refuse THIS inline (do not add this callee to a
+        // bloated caller) and all later ones. Closure reuses the count-limit guard above —
+        // pinning inlinedCountMap to the limit makes later callsites hit it O(1) without
+        // re-counting size. Only -O2 (Os/Oz baseline deferred to Phase 4). Legacy = pre-Phase2
+        // A/B baseline, so D1 is skipped under --chir-inline-legacy.
+        if (!globalOpts.chirInlineLegacy && !globalOpts.chirInlineNoSizeAttr) {
+            size_t callerTrigger = GetCallerSizeTrigger(optLevel, globalOpts.inlineThresholdOverrides);
+            if (CountCallerSize(*globalFunc) >= callerTrigger) {
+                if (!globalFunc->TestAttr(Attribute::OPTSIZE)) {
+                    globalFunc->EnableAttr(Attribute::OPTSIZE);
+                    ++GetStats().optsizeStamped;
+                }
+                inlinedCountMap[globalFunc] = INLINED_COUNT_THRESHOLD;  // close: later callsites hit the count guard
+                return false;  // refuse THIS inline — caller is bloated, do not add this callee
+            }
+        }
         return true;
     }
     return false;
