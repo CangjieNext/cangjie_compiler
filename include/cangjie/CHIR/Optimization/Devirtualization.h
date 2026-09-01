@@ -79,6 +79,8 @@ private:
 
     bool RewriteToBuiltinOp(const RewriteInfo& info);
 
+    Type* AddRefIfNeeded(Type& thisType, Function& callee);
+
     TypeAnalysisWrapper* analysisWrapper;
     DevirtualizationInfo& devirtFuncInfo;
     CHIRBuilder& builder;
