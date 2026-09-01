@@ -98,7 +98,7 @@ void OCFFIParserImpl::CheckMirrorSignature(FuncDecl& decl, const PtrVector<Annot
 void OCFFIParserImpl::CheckImplSignature(ClassLikeDecl& decl, const PtrVector<Annotation>& annos) const
 {
     CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::OBJ_C_IMPL));
-    decl.EnableAttr(Attribute::OBJ_C_MIRROR_SUBTYPE);
+    decl.EnableAttr(Attribute::OBJ_C_IMPL);
     decl.EnableAttr(Attribute::NO_REFLECT_INFO);
 
     if (decl.GetGeneric() != nullptr) {

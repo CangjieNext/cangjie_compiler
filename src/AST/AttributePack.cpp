@@ -104,7 +104,7 @@ const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::JAVA_HAS_DEFAULT, "JAVA_HAS_DEFAULT"},
     {AST::Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER, "JAVA_MIRROR_SYNTHETIC_WRAPPER"},
     {AST::Attribute::OBJ_C_MIRROR, "OBJ_C_MIRROR"},
-    {AST::Attribute::OBJ_C_MIRROR_SUBTYPE, "OBJ_C_MIRROR_SUBTYPE"},
+    {AST::Attribute::OBJ_C_IMPL, "OBJ_C_IMPL"},
     {AST::Attribute::OBJ_C_INIT, "OBJ_C_INIT"},
     {AST::Attribute::OBJ_C_OPTIONAL, "OBJ_C_OPTIONAL"},
     /*
@@ -124,7 +124,7 @@ const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD, "CJ_MIRROR_JAVA_INTERFACE_FWD(deprecated)"},
     {AST::Attribute::DESUGARED_MIRROR_FIELD, "DESUGARED_MIRROR_FIELD"},
     {AST::Attribute::HAS_INITED_FIELD, "HAS_INITED_FIELD"},
-    {AST::Attribute::OBJ_C_MIRROR_SYNTHETIC_WRAPPER, "OBJ_C_MIRROR_SYNTHETIC_WRAPPER"},
+    {AST::Attribute::OBJ_C_MIRROR_INTERFACE_HANDLE_WRAPPER, "OBJ_C_MIRROR_INTERFACE_HANDLE_WRAPPER"},
     /*
      * deprecated: reverse-direction interop has been removed.
      * This attribute exists for compatibility persistance only and could be considered for removal.
@@ -138,6 +138,7 @@ const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::ALREADY_LOADED, "ALREADY_LOADED"},
     {AST::Attribute::JAVA_IMPL_REGISTRY_COMPANION, "JAVA_IMPL_REGISTRY_COMPANION"},
     {AST::Attribute::DOES_NOT_THROW, "DOES_NOT_THROW"},
+    {AST::Attribute::OBJ_C_IMPL_REGISTRY_COMPANION, "OBJ_C_IMPL_REGISTRY_COMPANION"},
     {AST::Attribute::AST_ATTR_END, "AST_ATTR_END"},
 };
 UNSUPPRESS_WARNING()

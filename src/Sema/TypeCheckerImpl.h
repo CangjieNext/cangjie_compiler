@@ -1782,7 +1782,7 @@ private:
      * Will be passed as a reference in TypeChecker::TypeCheckerImpl::PerformDesugarAfterTypeCheck
      * at Perform desugar after typecheck before generic instantiation stage.
      *
-     * Needed for Java, Objective C interop Synthetic class wrappers generation.
+     * Needed for Java synthetic class wrappers and Objective C handle wrapper generation.
      */
     std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap> structMemberMap;
 };
