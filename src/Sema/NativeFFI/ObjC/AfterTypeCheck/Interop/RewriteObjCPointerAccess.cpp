@@ -10,14 +10,13 @@
  * This file implements desugaring of ObjCPointer struct accessors
  */
 
-
-#include "NativeFFI/Utils.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
-#include "cangjie/AST/Create.h"
-#include "cangjie/AST/Walker.h"
-#include "cangjie/AST/Match.h"
-#include "cangjie/AST/Clone.h"
 #include "Handlers.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
+#include "NativeFFI/Utils.h"
+#include "cangjie/AST/Clone.h"
+#include "cangjie/AST/Create.h"
+#include "cangjie/AST/Match.h"
+#include "cangjie/AST/Walker.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
@@ -64,17 +63,13 @@ void HandleObjCPointerRead(InteropContext& ctx, CallExpr& callExpr)
     auto ptrFieldDecl = ctx.bridge.GetObjCPointerPointerField();
     CJC_ASSERT(ptrFieldDecl);
 
-    auto ptrExpr = ctx.factory.CreateUnsafePointerCast(
-        CreateMemberAccess(std::move(receiver), *ptrFieldDecl),
-        rawCType);
+    auto ptrExpr =
+        ctx.factory.CreateUnsafePointerCast(CreateMemberAccess(std::move(receiver), *ptrFieldDecl), rawCType);
     CopyBasicInfo(&callExpr, ptrExpr);
     auto call = CreateReadPointerCall(ctx.importManager, ctx.typeManager, std::move(ptrExpr));
     // We use objc_retain here, because it's not a return value of any method
     auto wrappedCall = ctx.factory.WrapEntity(std::move(call), *elementType, Retain::RETAINED);
-    ctx.factory.SetDesugarExpr(
-        &callExpr,
-        std::move(wrappedCall)
-    );
+    ctx.factory.SetDesugarExpr(&callExpr, std::move(wrappedCall));
 }
 
 /**
@@ -117,9 +112,8 @@ void HandleObjCPointerWrite(InteropContext& ctx, CallExpr& callExpr)
     writePointerRef->instTys.push_back(rawCType);
     writePointerRef->SetTy(ctx.typeManager.GetFunctionTy({pointerType, int64Type, rawCType}, unitType));
 
-    auto ptrExpr = ctx.factory.CreateUnsafePointerCast(
-        CreateMemberAccess(std::move(receiver), *ptrFieldDecl),
-        rawCType);
+    auto ptrExpr =
+        ctx.factory.CreateUnsafePointerCast(CreateMemberAccess(std::move(receiver), *ptrFieldDecl), rawCType);
     CopyBasicInfo(&callExpr, ptrExpr);
     auto callArgs = std::vector<OwnedPtr<FuncArg>> {};
     callArgs.emplace_back(CreateFuncArg(std::move(ptrExpr)));
@@ -148,18 +142,18 @@ void RewriteObjCPointerAccess::HandleImpl(InteropContext& ctx)
             }
 
             auto funcDecl = callExpr->resolvedFunction;
-            if (!funcDecl || !funcDecl->outerDecl || !ctx.typeMapper.IsObjCPointer(*funcDecl->outerDecl)) {
+            if (!funcDecl || !funcDecl->outerDecl || !IsObjCPointer(*funcDecl->outerDecl)) {
                 return VisitAction::WALK_CHILDREN;
             }
 
             if (funcDecl->identifier == OBJCPOINTER_READ_METHOD && callExpr->args.size() == 0) {
-                CJC_ASSERT(ctx.typeMapper.IsObjCCompatible(*callExpr->GetTy()));
+                CJC_ASSERT(IsObjCCompatible(*callExpr->GetTy()));
                 HandleObjCPointerRead(ctx, *callExpr);
                 return VisitAction::WALK_CHILDREN;
             }
 
             if (funcDecl->identifier == OBJCPOINTER_WRITE_METHOD && callExpr->args.size() == 1) {
-                CJC_ASSERT(ctx.typeMapper.IsObjCCompatible(*callExpr->args[0]->GetTy()));
+                CJC_ASSERT(IsObjCCompatible(*callExpr->args[0]->GetTy()));
                 HandleObjCPointerWrite(ctx, *callExpr);
                 return VisitAction::WALK_CHILDREN;
             }

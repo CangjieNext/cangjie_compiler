@@ -10,13 +10,10 @@
  * This file implements desugaring of ObjCBlock constructor from lambda (function)
  */
 
-#include "NativeFFI/Utils.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
-#include "cangjie/AST/Create.h"
-#include "cangjie/AST/Walker.h"
-#include "cangjie/AST/Match.h"
-#include "cangjie/AST/Clone.h"
 #include "Handlers.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
+#include "cangjie/AST/Clone.h"
+#include "cangjie/AST/Walker.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
@@ -60,7 +57,7 @@ void RewriteObjCBlockConstruction::HandleImpl(InteropContext& ctx)
             if (containingClass == nullptr || containingClass->astKind != ASTKind::CLASS_DECL) {
                 return VisitAction::WALK_CHILDREN;
             }
-            if (!ctx.typeMapper.IsObjCBlock(*containingClass)) {
+            if (!IsObjCBlock(*containingClass)) {
                 return VisitAction::WALK_CHILDREN;
             }
             if (callExpr->args.size() != 1) {
@@ -72,8 +69,7 @@ void RewriteObjCBlockConstruction::HandleImpl(InteropContext& ctx)
             }
 
             ctx.factory.SetDesugarExpr(
-                callExpr,
-                ctx.factory.CreateObjCBlockFromLambdaCall(ASTCloner::Clone<Expr>(arg->expr)));
+                callExpr, ctx.factory.CreateObjCBlockFromLambdaCall(ASTCloner::Clone<Expr>(arg->expr)));
             return VisitAction::WALK_CHILDREN;
         }).Walk();
     }

@@ -11,21 +11,20 @@
  */
 
 #include "Handlers.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "cangjie/AST/Match.h"
 
+namespace Cangjie::Interop::ObjC {
 using namespace Cangjie::AST;
-using namespace Cangjie::Interop::ObjC;
 
 void GenerateWrappers::HandleImpl(InteropContext& ctx)
 {
-    auto genWrapper = [this, &ctx](Decl& decl) {
-        if (decl.TestAttr(Attribute::IS_BROKEN)) {
-            return;
+    for (auto& impl : ctx.impls) {
+        if (impl->TestAttr(Attribute::IS_BROKEN)) {
+            continue;
         }
 
-        std::vector<Ptr<Decl>> results;
-        results = decl.GetMemberDeclPtrs();
-        for (auto& memberDecl : results) {
+        for (auto& memberDecl : impl->GetMemberDecls()) {
             if (memberDecl->TestAnyAttr(Attribute::IS_BROKEN, Attribute::CONSTRUCTOR)) {
                 continue;
             }
@@ -33,74 +32,67 @@ void GenerateWrappers::HandleImpl(InteropContext& ctx)
                 continue;
             }
 
-            if (ctx.factory.IsGeneratedMember(*memberDecl)) {
+            if (IsGeneratedMember(*memberDecl)) {
                 continue;
             }
 
             switch (memberDecl->astKind) {
                 case ASTKind::FUNC_DECL:
-                    this->GenerateWrapper(ctx, *StaticAs<ASTKind::FUNC_DECL>(memberDecl));
+                    GenerateWrapper(ctx, *impl, *StaticAs<ASTKind::FUNC_DECL>(memberDecl.get()));
                     break;
                 case ASTKind::PROP_DECL:
-                    this->GenerateWrapper(ctx, *StaticAs<ASTKind::PROP_DECL>(memberDecl));
+                    GenerateWrapper(ctx, *impl, *StaticAs<ASTKind::PROP_DECL>(memberDecl.get()));
                     break;
                 case ASTKind::VAR_DECL:
-                    this->GenerateWrapper(ctx, *StaticAs<ASTKind::VAR_DECL>(memberDecl));
+                    GenerateWrapper(ctx, *impl, *StaticAs<ASTKind::VAR_DECL>(memberDecl.get()));
                     break;
                 default:
                     break;
             }
         }
-    };
-
-    for (auto& impl : ctx.impls) {
-        genWrapper(*impl);
     }
 }
 
-void GenerateWrappers::GenerateWrapper(InteropContext& ctx, FuncDecl& method)
+void GenerateWrappers::GenerateWrapper(InteropContext& ctx, ClassDecl& impl, FuncDecl& method)
 {
-    auto wrapper = ctx.factory.CreateMethodWrapper(method);
+    auto wrapper = ctx.factory.CreateMethodWrapper(method, impl);
     CJC_NULLPTR_CHECK(wrapper);
-    ctx.genDecls.emplace_back(std::move(wrapper));
+    ctx.genDecls.push_back(std::move(wrapper));
 }
 
-void GenerateWrappers::GenerateWrapper(InteropContext& ctx, PropDecl& prop)
+void GenerateWrappers::GenerateWrapper(InteropContext& ctx, ClassDecl& impl, PropDecl& prop)
 {
-    auto wrapper = ctx.factory.CreateGetterWrapper(prop);
+    auto wrapper = ctx.factory.CreateGetterWrapper(prop, impl);
     CJC_NULLPTR_CHECK(wrapper);
-    ctx.genDecls.emplace_back(std::move(wrapper));
+    ctx.genDecls.push_back(std::move(wrapper));
 
     if (prop.isVar) {
-        GenerateSetterWrapper(ctx, prop);
+        GenerateSetterWrapper(ctx, impl, prop);
     }
 }
 
-void GenerateWrappers::GenerateSetterWrapper(InteropContext& ctx, PropDecl& prop)
+void GenerateWrappers::GenerateSetterWrapper(InteropContext& ctx, ClassDecl& impl, PropDecl& prop)
 {
-    auto wrapper = ctx.factory.CreateSetterWrapper(prop);
+    auto wrapper = ctx.factory.CreateSetterWrapper(prop, impl);
     CJC_NULLPTR_CHECK(wrapper);
-    ctx.genDecls.emplace_back(std::move(wrapper));
+    ctx.genDecls.push_back(std::move(wrapper));
 }
 
-void GenerateWrappers::GenerateWrapper(InteropContext& ctx, VarDecl& field)
+void GenerateWrappers::GenerateWrapper(InteropContext& ctx, ClassDecl& impl, VarDecl& field)
 {
-    if (ctx.factory.IsGeneratedNativeHandleField(field)) {
-        return;
-    }
-
-    auto wrapper = ctx.factory.CreateGetterWrapper(field);
+    auto wrapper = ctx.factory.CreateGetterWrapper(field, impl);
     CJC_NULLPTR_CHECK(wrapper);
-    ctx.genDecls.emplace_back(std::move(wrapper));
+    ctx.genDecls.push_back(std::move(wrapper));
 
     if (field.isVar) {
-        GenerateSetterWrapper(ctx, field);
+        GenerateSetterWrapper(ctx, impl, field);
     }
 }
 
-void GenerateWrappers::GenerateSetterWrapper(InteropContext& ctx, VarDecl& field)
+void GenerateWrappers::GenerateSetterWrapper(InteropContext& ctx, ClassDecl& impl, VarDecl& field)
 {
-    auto wrapper = ctx.factory.CreateSetterWrapper(field);
+    auto wrapper = ctx.factory.CreateSetterWrapper(field, impl);
     CJC_NULLPTR_CHECK(wrapper);
-    ctx.genDecls.emplace_back(std::move(wrapper));
+    ctx.genDecls.push_back(std::move(wrapper));
 }
+} // namespace Cangjie::Interop::ObjC

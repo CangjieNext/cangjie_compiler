@@ -11,7 +11,7 @@
  */
 
 #include "Handlers.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "NativeFFI/Utils.h"
 #include "cangjie/AST/Create.h"
 
@@ -26,43 +26,26 @@ void InsertNativeHandleGetterBody::HandleImpl(InteropContext& ctx)
             continue;
         }
 
-        if (HasMirrorSuperClass(*mirror)) {
-            continue;
-        }
-
         auto mirrorClass = As<ASTKind::CLASS_DECL>(mirror);
         if (!mirrorClass) {
             continue;
         }
 
+        if (HasObjCMirrorSuperClass(*mirrorClass)) {
+            continue;
+        }
+
         auto getterDecl = GetNativeHandleGetter(*mirrorClass);
-        CJC_NULLPTR_CHECK(getterDecl);
         auto nativeHandleFieldExpr = ctx.factory.CreateNativeHandleFieldExpr(*mirrorClass);
         getterDecl->funcBody->body->body.emplace_back(std::move(nativeHandleFieldExpr));
     }
 
-    for (auto& wrapper : ctx.synWrappers) {
+    for (auto& wrapper : ctx.mirrorInterfaceHandleWrappers) {
         if (wrapper->TestAttr(Attribute::IS_BROKEN)) {
             continue;
         }
         auto getterDecl = GetNativeHandleGetter(*wrapper);
-        CJC_NULLPTR_CHECK(getterDecl);
         auto nativeHandleFieldExpr = ctx.factory.CreateNativeHandleFieldExpr(*wrapper);
-        getterDecl->funcBody->body->body.emplace_back(std::move(nativeHandleFieldExpr));
-    }
-
-    for (auto& impl : ctx.impls) {
-        if (impl->TestAttr(Attribute::IS_BROKEN)) {
-            continue;
-        }
-
-        if (HasMirrorSuperClass(*impl)) {
-            continue;
-        }
-
-        auto getterDecl = GetNativeHandleGetter(*impl);
-        CJC_NULLPTR_CHECK(getterDecl);
-        auto nativeHandleFieldExpr = ctx.factory.CreateNativeHandleFieldExpr(*impl);
         getterDecl->funcBody->body->body.emplace_back(std::move(nativeHandleFieldExpr));
     }
 }

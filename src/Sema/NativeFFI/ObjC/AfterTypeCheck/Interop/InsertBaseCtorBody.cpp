@@ -11,7 +11,7 @@
  */
 
 #include "Handlers.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "NativeFFI/Utils.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Node.h"
@@ -32,17 +32,17 @@ void InsertBaseCtorBody::HandleImpl(InteropContext& ctx)
             continue;
         }
 
-        auto ctor = ctx.factory.GetGeneratedBaseCtor(*mirrorClass);
+        auto ctor = GetObjCMirrorBaseCtor(*mirrorClass);
         CJC_NULLPTR_CHECK(ctor);
         auto curFile = ctor->curFile;
 
         auto handleParam = WithinFile(CreateRefExpr(*ctor->funcBody->paramLists[0]->params[0]), curFile);
 
-        if (HasMirrorSuperClass(*mirrorClass)) {
-            auto superCtor = ctx.factory.GetGeneratedBaseCtor(*mirrorClass->GetSuperClassDecl());
-            auto superCall = WithinFile(CreateSuperCall(*mirrorClass, *superCtor, superCtor->GetTy()), curFile);
+        if (HasObjCMirrorSuperClass(*mirrorClass)) {
+            auto superCtor = GetObjCMirrorBaseCtor(*mirrorClass->GetSuperClassDecl());
+            auto superCall = CreateSuperCall(*mirrorClass, *superCtor, superCtor->GetTy());
             superCall->args.emplace_back(CreateFuncArg(std::move(handleParam)));
-            ctx.factory.AddMarkerToCallIfNeeded(*superCall);
+            ctx.factory.AppendNativeObjCIdMarkerIfNeeded(*superCall, curFile);
             ctor->funcBody->body->body.emplace_back(std::move(superCall));
         } else {
             auto lhs = ctx.factory.CreateNativeHandleFieldExpr(*mirrorClass);
@@ -52,11 +52,11 @@ void InsertBaseCtorBody::HandleImpl(InteropContext& ctx)
         }
     }
 
-    for (auto& wrapper: ctx.synWrappers) {
+    for (auto& wrapper : ctx.mirrorInterfaceHandleWrappers) {
         if (wrapper->TestAttr(Attribute::IS_BROKEN)) {
             continue;
         }
-        auto ctor = ctx.factory.GetGeneratedBaseCtor(*wrapper);
+        auto ctor = GetObjCMirrorInterfaceHandleWrapperBaseCtor(*wrapper);
         CJC_NULLPTR_CHECK(ctor);
         auto curFile = ctor->curFile;
 
@@ -72,21 +72,16 @@ void InsertBaseCtorBody::HandleImpl(InteropContext& ctx)
             continue;
         }
 
-        if (HasMirrorSuperClass(*impl)) {
-            continue;
-        }
+        auto ctor = GetObjCImplBaseCtor(*impl);
+        CJC_ASSERT_WITH_MSG(ctor, "expected base ctor in the @ObjCImpl class");
+        ctx.astTransformer.TransformToObjCImplBaseCtorBody(*ctor->funcBody, *impl, *ctx.implToRegCompanion[impl]);
+    }
 
-        CJC_ASSERT(HasMirrorSuperInterface(*impl));
-
-        auto ctor = ctx.factory.GetGeneratedBaseCtor(*impl);
-        CJC_NULLPTR_CHECK(ctor);
-        auto curFile = ctor->curFile;
-
-        auto handleParam = WithinFile(CreateRefExpr(*ctor->funcBody->paramLists[0]->params[0]), curFile);
-        auto lhs = ctx.factory.CreateNativeHandleFieldExpr(*impl);
-        static auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-        auto nativeHandleAssignExpr = CreateAssignExpr(std::move(lhs), std::move(handleParam), unitTy);
-        ctor->funcBody->body->body.emplace_back(std::move(nativeHandleAssignExpr));
+    for (auto& regComp : ctx.regCompanions) {
+        // no need to check if broken, because class is just generated
+        auto ctor = GetObjCImplRegCompanionBaseCtor(*regComp);
+        CJC_ASSERT_WITH_MSG(ctor, "expected base ctor in the @ObjCImpl registry companion class");
+        ctx.astTransformer.TransformToObjCImplRegCompBaseCtorBody(*ctor->funcBody, *regComp);
     }
 }
 

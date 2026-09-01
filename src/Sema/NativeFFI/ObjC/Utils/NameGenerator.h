@@ -35,7 +35,7 @@ public:
      * Returns name declared in @ForeignName or target.identifier if no foreign name specified.
      * The only one exception is function: If it has one param, then target.identifier + ":" will be returned.
      */
-    std::string GetObjCDeclName(const AST::Decl& target, const std::string* genericActualName = nullptr);
+    static std::string GetObjCDeclName(const AST::Decl& target);
 
     std::string GetObjCGetterName(const AST::Decl& arget);
     std::string GetObjCSetterName(const AST::Decl& target);
@@ -57,6 +57,9 @@ public:
      * Gets the pointer to value of @ForeignName anno or @ObjCMirror/@ObjCImpl annos or returns nullptr.
      */
     static Ptr<std::string> GetUserDefinedObjCName(const AST::Decl& target);
+
+    static std::string GenerateHandleWrapperName(const AST::ClassLikeDecl& mirror) noexcept;
+    static std::string GenerateRegistryCompanionName(const AST::ClassDecl& impl) noexcept;
 
 private:
     const BaseMangler& mangler;

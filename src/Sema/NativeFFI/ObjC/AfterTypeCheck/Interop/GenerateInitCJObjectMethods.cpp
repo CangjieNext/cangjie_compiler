@@ -11,52 +11,39 @@
  */
 
 #include "Handlers.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
 
 void GenerateInitCJObjectMethods::HandleImpl(InteropContext& ctx)
 {
-    auto genNativeInitMethod = [&ctx](Decl& decl) {
-        if (decl.TestAttr(Attribute::IS_BROKEN)) {
-            return;
+    for (auto& impl : ctx.impls) {
+        if (impl->TestAttr(Attribute::IS_BROKEN)) {
+            continue;
         }
-        for (auto& memberDecl : decl.GetMemberDeclPtrs()) {
+        for (auto& memberDecl : impl->GetMemberDecls()) {
             if (memberDecl->TestAttr(Attribute::IS_BROKEN)) {
                 continue;
             }
 
-            if (!memberDecl->TestAttr(Attribute::CONSTRUCTOR)) {
+            if (!memberDecl->TestAttr(Attribute::PUBLIC, Attribute::CONSTRUCTOR)) {
                 continue;
             }
 
-            if (!memberDecl->TestAttr(Attribute::PUBLIC)) {
+            auto ctorDecl = As<ASTKind::FUNC_DECL>(memberDecl.get());
+            if (!ctorDecl) {
                 continue;
             }
 
-            if (memberDecl->astKind != ASTKind::FUNC_DECL) {
-                // skip primary ctor, as it is desugared to init already
+            if (!IsObjCImplRegDataCtor(*ctorDecl)) {
                 continue;
             }
 
-            CJC_ASSERT_WITH_MSG(memberDecl->astKind == ASTKind::FUNC_DECL,
-                "Expected ASTKind::FUNC_DECL, found " + ASTKIND_TO_STR.at(memberDecl->astKind));
-
-            auto& ctorDecl = *StaticAs<ASTKind::FUNC_DECL>(memberDecl);
-
-            // skip original ctors
-            if (!ctx.factory.IsGeneratedCtor(ctorDecl)) {
-                continue;
-            }
-
-            OwnedPtr<FuncDecl> initCjObject = ctx.factory.CreateInitCjObjectReturningObjCSelf(decl, ctorDecl);
+            auto initCjObject = ctx.factory.CreateInitCjObjectReturningObjCSelf(
+                *impl, *ctx.implToRegCompanion[impl], *ctorDecl);
             CJC_ASSERT(initCjObject);
-            ctx.genDecls.emplace_back(std::move(initCjObject));
+            ctx.genDecls.push_back(std::move(initCjObject));
         }
-    };
-
-    for (auto& impl : ctx.impls) {
-        genNativeInitMethod(*impl);
     }
-
 }

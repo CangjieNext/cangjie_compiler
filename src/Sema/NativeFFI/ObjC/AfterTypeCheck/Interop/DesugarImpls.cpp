@@ -12,16 +12,16 @@
 
 #include "Context.h"
 #include "Handlers.h"
-#include "NativeFFI/ObjC/Utils/ASTFactory.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "NativeFFI/Utils.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Walker.h"
 
+namespace Cangjie::Interop::ObjC {
+
 using namespace Cangjie::AST;
 using namespace Cangjie::Native::FFI;
-namespace Cangjie::Interop::ObjC {
 
 void DesugarImpls::HandleImpl(InteropContext& ctx)
 {
@@ -55,15 +55,15 @@ void DesugarImpls::HandleImpl(InteropContext& ctx)
 namespace {
 void DesugarSuperCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
 {
-    // super(...) can appear only in constructors
-    if (!ctor.TestAttr(Attribute::CONSTRUCTOR)) {
+    // only super(...) in reg data ctor needs to be desugared
+    if (!IsObjCImplRegDataCtor(ctor)) {
         return;
     }
-    auto& body = ctor.funcBody->body->body;
-    if (body.size() < 1) {
+    auto& ctorBody = ctor.funcBody->body->body;
+    if (ctorBody.empty()) {
         return;
     }
-    auto& firstExpr = body[0];
+    auto& firstExpr = ctorBody[0];
     auto ce = As<ASTKind::CALL_EXPR>(firstExpr);
     if (!ce || !ce->resolvedFunction || !IsSuperConstructorCall(*ce)) {
         return;
@@ -72,119 +72,104 @@ void DesugarSuperCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
      * super(...args)
      * -->
      * if doesn't have @ObjCImpl super class:
-     * super({
-     *  self = [Impl alloc]; // skipped, if `self` is already provided
-     *  self = [super init:...args];
-     *  [self setRegistryId:putToRegistry(This)];
-     *  self
-     * }, ...args)
+     * super({ => [super init:...args]}(), ...args)
      *
      * else if has @ObjCImpl super class:
-     * super({
-     *   self = [Impl alloc]; // skipped, if `self` is already provided
-     * }, ...args)
+     * super($regData, ...args)
      */
-    OwnedPtr<Expr> objCSelf;
-    auto isInGeneratedCtor = ctx.factory.IsGeneratedCtor(ctor);
     auto curFile = ce->curFile;
+    CJC_ASSERT_WITH_MSG(!ctor.funcBody->paramLists.empty(), "expected at least one param list");
+    auto& ctorParams = ctor.funcBody->paramLists[0]->params;
+    CJC_ASSERT_WITH_MSG(!ctorParams.empty(), "expected at least one parameter");
+    auto regDataParamRef = CreateRefExpr(*ctorParams[0]);
     auto targetFd = ce->resolvedFunction;
-    if (isInGeneratedCtor) {
-        // already have a self ptr
-        auto& methodParams = ctor.funcBody->paramLists[0]->params;
-        CJC_ASSERT(methodParams.size() > 0);
-        objCSelf = WithinFile(CreateRefExpr(*methodParams[0]), curFile);
-    } else {
-        // alloc a new ptr
-        objCSelf = ctx.factory.CreateAllocCall(impl, curFile);
-    }
-
-    if (HasImplSuperClass(impl)) {
+    auto superClass = impl.GetSuperClassDecl();
+    if (IsObjCImpl(*superClass)) {
         std::vector<OwnedPtr<FuncArg>> args;
-        args.push_back(CreateFuncArg(std::move(objCSelf)));
-        auto marker = ctx.factory.CreateNativeHandleMarker(*curFile);
-        args.push_back(CreateFuncArg(std::move(marker)));
+        args.push_back(CreateFuncArg(ASTCloner::Clone(regDataParamRef.get())));
         args.insert(args.end(), std::make_move_iterator(ce->args.begin()), std::make_move_iterator(ce->args.end()));
 
-        auto realTarget = ctx.factory.GetGeneratedImplCtor(*GetImplSuperClass(impl), *targetFd);
+        auto realTarget = GetObjCImplRegDataCtor(*superClass, *targetFd);
         auto realTargetTy = StaticCast<FuncTy>(realTarget->GetTy());
         auto superCall = CreateSuperCall(*realTarget->outerDecl, *realTarget, realTargetTy);
         superCall->args = std::move(args);
+        superCall->sourceExpr = ce;
         ce->desugarExpr = std::move(superCall);
+    } else {
+        CJC_ASSERT_WITH_MSG(IsObjCMirror(*superClass), "expected @ObjCMirror decl");
+        auto objCSelf = CreateTupleAccess(
+            ASTCloner::Clone(regDataParamRef.get()), 0, TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64));
+        objCSelf->curFile = curFile;
+        auto withObjCSuper = WithinFile(
+            ctx.factory.CreateWithObjCSuperScope(std::move(objCSelf), impl, impl.GetTy(),
+                [&](auto&& receiver, auto&& objCSuper) {
+                    std::vector<OwnedPtr<Expr>> superInitArgs;
+                    std::transform(ce->args.begin(), ce->args.end(), std::back_inserter(superInitArgs), [&](auto& arg) {
+                        return ctx.factory.UnwrapEntity(
+                            WithinFile(ASTCloner::Clone(arg->expr.get()), curFile));
+                    });
+                    auto superInit = ctx.factory.CreateMethodCallViaMsgSendSuper(
+                        *targetFd, std::move(receiver), std::move(objCSuper), std::move(superInitArgs));
 
-        return;
+                    return Nodes<Node>(std::move(superInit));
+                }),
+            curFile);
+
+        // We use objc_retainAutoreleasedReturnValue instead of objc_retain here, because
+        // we assume that ARC applied objc_autoreleaseReturnValue on the result of the init method
+        auto withObjCSuperRetained =
+            ctx.factory.CreateObjCRetainAutoreleasedReturnValueCall(std::move(withObjCSuper));
+        auto baseCtor = GetObjCMirrorBaseCtor(*superClass);
+        auto baseCtorCall = WithinFile(CreateSuperCall(*superClass, *baseCtor, baseCtor->GetTy()), curFile);
+        baseCtorCall->args.push_back(CreateFuncArg(std::move(withObjCSuperRetained)));
+        ctx.factory.AppendNativeObjCIdMarkerIfNeeded(*baseCtorCall, curFile);
+        baseCtorCall->sourceExpr = ce;
+        ce->desugarExpr = std::move(baseCtorCall);
     }
 
-    auto withObjCSuper = WithinFile(
-        ctx.factory.CreateWithObjCSuperScope(std::move(objCSelf), impl, impl.GetTy(),
-            [&](auto&& receiver, auto&& objCSuper) {
-                std::vector<OwnedPtr<Expr>> superInitArgs;
-                std::transform(ce->args.begin(), ce->args.end(), std::back_inserter(superInitArgs), [&](auto& arg) {
-                    return ctx.factory.UnwrapEntity(WithinFile(ASTCloner::Clone(arg->expr.get()), curFile));
-                });
-                auto superInit = ctx.factory.CreateMethodCallViaMsgSendSuper(
-                    *targetFd, std::move(receiver), std::move(objCSuper), std::move(superInitArgs));
-
-                auto tmpSelf = WithinFile(CreateTmpVarDecl(nullptr, std::move(superInit)), curFile);
-                auto selfRef = WithinFile(CreateRefExpr(*tmpSelf), curFile);
-                auto putToRegistry =
-                    ctx.factory.CreatePutToRegistryCall(CreateThisRef(Ptr(&impl), impl.GetTy(), curFile));
-                auto setRegistryId =
-                    ctx.factory.CreateObjCMsgSendCall(ASTCloner::Clone(selfRef.get()), REGISTRY_ID_SETTER_SELECTOR,
-                        TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT), Nodes<Expr>(std::move(putToRegistry)));
-
-                return Nodes<Node>(std::move(tmpSelf), std::move(setRegistryId), std::move(selfRef));
-            }),
+    // set $reg field just after the super(...) expr
+    auto lhs = CreateRefExpr(*GetObjCImplRegCompanionField(impl));
+    auto rhs = WithinFile(
+        CreateTupleAccess(std::move(regDataParamRef), 1, ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_INT64)),
         curFile);
-
-    // We use objc_retainAutoreleasedReturnValue instead of objc_retain here, because
-    // we assume that ARC applied objc_autoreleaseReturnValue on the result of the init method
-    auto withObjCSuperRetained = ctx.factory.CreateObjCRetainAutoreleasedReturnValueCall(std::move(withObjCSuper));
-    auto baseCtor = ctx.factory.GetGeneratedBaseCtor(impl);
-    CJC_NULLPTR_CHECK(baseCtor);
-    auto baseCtorCall = WithinFile(CreateSuperCall(*baseCtor->outerDecl, *baseCtor, baseCtor->GetTy()), curFile);
-    baseCtorCall->args.push_back(CreateFuncArg(std::move(withObjCSuperRetained)));
-    ctx.factory.AddMarkerToCallIfNeeded(*baseCtorCall);
-    ce->desugarExpr = std::move(baseCtorCall);
+    static auto unitTy = ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    auto setRegCompField = CreateAssignExpr(std::move(lhs), std::move(rhs), unitTy);
+    ctorBody.insert(std::next(ctorBody.begin()), std::move(setRegCompField));
 }
 
-void DesugarThisCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
+void DesugarThisCtorCall(ClassDecl& impl, FuncDecl& ctor)
 {
-    // this(...) can appear only in constructors
-    if (!ctor.TestAttr(Attribute::CONSTRUCTOR)) {
+    // only this(...) in reg data ctor needs to be desugared
+    if (!IsObjCImplRegDataCtor(ctor)) {
         return;
     }
-    auto& body = ctor.funcBody->body->body;
-    if (body.size() < 1) {
+    auto& ctorBody = ctor.funcBody->body->body;
+    if (ctorBody.empty()) {
         return;
     }
-    auto& firstExpr = body[0];
+    auto& firstExpr = ctorBody[0];
     auto ce = As<ASTKind::CALL_EXPR>(firstExpr);
     if (!ce || !ce->resolvedFunction || !IsThisConstructorCall(*ce)) {
-        return;
-    }
-    auto isInGeneratedCtor = ctx.factory.IsGeneratedCtor(ctor);
-    if (!isInGeneratedCtor) {
         return;
     }
     /**
      * this(...args)
      * -->
-     * if is in generated ctor:
-     * this($obj, ...args)
+     * this($regData, ...args)
      */
     auto curFile = ce->curFile;
     auto targetFd = ce->resolvedFunction;
-    auto& methodParams = ctor.funcBody->paramLists[0]->params;
-    CJC_ASSERT(methodParams.size() > 0);
-    auto objCSelf = CreateRefExpr(*methodParams[0]);
+    CJC_ASSERT_WITH_MSG(!ctor.funcBody->paramLists.empty(), "expected at least one param list");
+    auto& ctorParams = ctor.funcBody->paramLists[0]->params;
+    CJC_ASSERT_WITH_MSG(!ctorParams.empty(), "expected at least one parameter");
+    auto regDataParamRef = CreateRefExpr(*ctorParams[0]);
 
     std::vector<OwnedPtr<FuncArg>> args;
-    args.push_back(CreateFuncArg(std::move(objCSelf)));
-    auto marker = ctx.factory.CreateNativeHandleMarker(*curFile);
-    args.push_back(CreateFuncArg(std::move(marker)));
+    args.push_back(CreateFuncArg(std::move(regDataParamRef)));
     args.insert(args.end(), std::make_move_iterator(ce->args.begin()), std::make_move_iterator(ce->args.end()));
 
-    auto realTarget = ctx.factory.GetGeneratedImplCtor(impl, *targetFd);
+    auto realTarget = GetObjCImplRegDataCtor(impl, *targetFd);
+    CJC_ASSERT_WITH_MSG(realTarget, "expected a reg data ctor generated from the delegated user ctor");
     auto realTargetTy = StaticCast<FuncTy>(realTarget->GetTy());
     ce->desugarExpr = CreateThisCall(impl, *realTarget, realTargetTy, curFile, std::move(args));
 }
@@ -193,11 +178,11 @@ void DesugarThisCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
 void DesugarImpls::Desugar(InteropContext& ctx, ClassDecl& impl, FuncDecl& method)
 {
     DesugarSuperCtorCall(ctx, impl, method);
-    DesugarThisCtorCall(ctx, impl, method);
+    DesugarThisCtorCall(impl, method);
     // We are interested in:
     // 1. CallExpr to MemberAccess, as it could be `super.<member>(...)`
     // 2. MemberAccess, as it could be a prop getter call
-    Walker(method.funcBody->body.get(), [&](auto node) {
+    Walker(method.funcBody->body.get(), [this, &ctx, &impl](auto node) {
         if (node->TestAnyAttr(
                 Attribute::HAS_BROKEN, Attribute::IS_BROKEN, Attribute::UNREACHABLE, Attribute::LEFT_VALUE)) {
             return VisitAction::SKIP_CHILDREN;
@@ -244,7 +229,7 @@ void DesugarImpls::DesugarCallExpr(InteropContext& ctx, ClassDecl& impl, CallExp
         return;
     }
 
-    if (ctx.factory.IsGeneratedCtor(*targetFd)) {
+    if (IsObjCMirrorBaseCtor(*targetFd)) {
         return;
     }
 
@@ -252,14 +237,15 @@ void DesugarImpls::DesugarCallExpr(InteropContext& ctx, ClassDecl& impl, CallExp
     auto curFile = ce.curFile;
 
     // method/prop branch
-    if (!ctx.typeMapper.IsObjCMirror(*targetFd->outerDecl->GetTy())) {
+    if (!IsObjCMirror(*targetFd->outerDecl->GetTy())) {
         // no need to desugar expr, if the target is not in the @ObjCMirror declaration
         return;
     }
 
     std::vector<OwnedPtr<Expr>> msgSendSuperArgs;
-    std::transform(ce.args.begin(), ce.args.end(), std::back_inserter(msgSendSuperArgs),
-        [&](auto& arg) { return ctx.factory.UnwrapEntity(WithinFile(ASTCloner::Clone(arg->expr.get()), curFile)); });
+    std::transform(ce.args.begin(), ce.args.end(), std::back_inserter(msgSendSuperArgs), [&](auto& arg) {
+        return ctx.factory.UnwrapEntity(WithinFile(ASTCloner::Clone(arg->expr.get()), curFile));
+    });
 
     auto nativeHandle = ctx.factory.CreateNativeHandleExpr(impl, false, ce.curFile);
     auto withObjCSuperCall = ctx.factory.CreateWithObjCSuperScope(
@@ -298,8 +284,7 @@ void DesugarImpls::DesugarCallExpr(InteropContext& ctx, ClassDecl& impl, CallExp
     ctx.factory.SetDesugarExpr(&ce, std::move(withObjCSuperCallWrapped));
 }
 
-void DesugarImpls::DesugarGetForPropDecl(
-    InteropContext& ctx, ClassDecl& impl, MemberAccess& ma)
+void DesugarImpls::DesugarGetForPropDecl(InteropContext& ctx, ClassDecl& impl, MemberAccess& ma)
 {
     if (ma.desugarExpr) {
         return;
@@ -320,14 +305,14 @@ void DesugarImpls::DesugarGetForPropDecl(
     }
 
     auto pd = StaticAs<ASTKind::PROP_DECL>(target);
-    if (!ctx.typeMapper.IsObjCMirror(*pd->outerDecl->GetTy())) {
+    if (!IsObjCMirror(*pd->outerDecl->GetTy())) {
         return;
     }
     auto nativeHandle = ctx.factory.CreateNativeHandleExpr(impl, false, ma.curFile);
     auto withObjCSuperCall = ctx.factory.CreateWithObjCSuperScope(
         std::move(nativeHandle), impl, ma.GetTy(), [&](auto&& receiver, auto&& objCSuper) {
-            auto msgSendSuperCall =
-                ctx.factory.CreatePropGetterCallViaMsgSendSuper(*pd, std::move(receiver), std::move(objCSuper));
+            auto msgSendSuperCall = ctx.factory.CreatePropGetterCallViaMsgSendSuper(
+                *pd, std::move(receiver), std::move(objCSuper));
 
             return Nodes<Node>(std::move(msgSendSuperCall));
         });
@@ -335,8 +320,8 @@ void DesugarImpls::DesugarGetForPropDecl(
 
     // We use objc_retainAutoreleasedReturnValue instead of objc_retain here, because
     // we assume that ARC applied objc_autoreleaseReturnValue on the result of the prop getter
-    auto withObjCSuperCallWrapped =
-        ctx.factory.WrapEntity(std::move(withObjCSuperCall), *ma.GetTy(), Retain::RETAIN_AUTORELEASED_RETURN_VALUE);
+    auto withObjCSuperCallWrapped = ctx.factory.WrapEntity(
+        std::move(withObjCSuperCall), *ma.GetTy(), Retain::RETAIN_AUTORELEASED_RETURN_VALUE);
     ctx.factory.SetDesugarExpr(&ma, std::move(withObjCSuperCallWrapped));
 }
 } // namespace Cangjie::Interop::ObjC

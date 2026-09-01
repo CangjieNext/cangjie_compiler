@@ -7,16 +7,31 @@
 /**
  * @file
  *
- * This file implements generating and inserting a finalizer for each @ObjCMirror class:
+ * This file implements generating and inserting a finalizer for each @ObjCMirror and @ObjCImpl class.
  */
 
 #include "Handlers.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
-#include "NativeFFI/Utils.h"
+#include <cstdint>
 
+namespace Cangjie::Interop::ObjC {
 using namespace Cangjie::AST;
-using namespace Cangjie::Interop::ObjC;
 using namespace Cangjie::Native::FFI;
+
+namespace {
+enum class NeedsHasInitedField : uint8_t { NO, YES };
+
+void CreateAndInsertFinalizer(
+    ASTFactory& factory, ClassDecl& cd, NeedsHasInitedField needsHasInitedField)
+{
+    if (needsHasInitedField == NeedsHasInitedField::YES) {
+        auto hasInitedField = factory.CreateHasInitedField(cd);
+        cd.body->decls.push_back(std::move(hasInitedField));
+    }
+
+    auto finalizer = factory.CreateFinalizer(cd);
+    cd.body->decls.push_back(std::move(finalizer));
+}
+} // namespace
 
 void InsertFinalizer::HandleImpl(InteropContext& ctx)
 {
@@ -29,26 +44,14 @@ void InsertFinalizer::HandleImpl(InteropContext& ctx)
             continue;
         }
 
-        auto hasInitedField = ctx.factory.CreateHasInitedField(*mirrorClass);
-        CJC_NULLPTR_CHECK(hasInitedField);
-        mirrorClass->body->decls.emplace_back(std::move(hasInitedField));
-
-        auto finalizer = ctx.factory.CreateFinalizer(*mirrorClass);
-        CJC_NULLPTR_CHECK(finalizer);
-        mirrorClass->body->decls.emplace_back(std::move(finalizer));
+        // Actually, only @ObjCMirror open class needs `$hasInited: Bool` field, but CHIR checks only
+        // OBJ_C_MIRROR attribute and not class openness, so we have to insert it for
+        // each @ObjCMirror class
+        CreateAndInsertFinalizer(ctx.factory, *mirrorClass, NeedsHasInitedField::YES);
     }
 
-    for (auto& wrapper : ctx.synWrappers) {
-        if (wrapper->TestAttr(Attribute::IS_BROKEN)) {
-            continue;
-        }
-        auto hasInitedField = ctx.factory.CreateHasInitedField(*wrapper);
-        CJC_NULLPTR_CHECK(hasInitedField);
-        wrapper->body->decls.emplace_back(std::move(hasInitedField));
-
-        auto finalizer = ctx.factory.CreateFinalizer(*wrapper);
-        CJC_NULLPTR_CHECK(finalizer);
-        wrapper->body->decls.emplace_back(std::move(finalizer));
+    for (auto& wrapper : ctx.mirrorInterfaceHandleWrappers) {
+        CreateAndInsertFinalizer(ctx.factory, *wrapper, NeedsHasInitedField::NO);
     }
 
     for (auto& impl : ctx.impls) {
@@ -56,25 +59,10 @@ void InsertFinalizer::HandleImpl(InteropContext& ctx)
             continue;
         }
 
-        if (HasMirrorSuperClass(*impl)) {
-            continue;
-        }
-
-        CJC_ASSERT(HasMirrorSuperInterface(*impl));
-        auto hasInitedField = ctx.factory.CreateHasInitedField(*impl);
-        CJC_NULLPTR_CHECK(hasInitedField);
-        impl->body->decls.emplace_back(std::move(hasInitedField));
-
-        auto finalizer = GetFinalizer(*impl);
-        if (finalizer && finalizer->funcBody && finalizer->funcBody->body) {
-            // user declared finalizer case - just insert release call in the end of it
-            auto nativeHandleFieldExpr = ctx.factory.CreateNativeHandleFieldExpr(*impl);
-            auto releaseCall = ctx.factory.CreateObjCReleaseCall(std::move(nativeHandleFieldExpr));
-            finalizer->funcBody->body->body.emplace_back(std::move(releaseCall));
-        } else {
-            finalizer = ctx.factory.CreateFinalizer(*impl);
-            CJC_NULLPTR_CHECK(finalizer);
-            impl->body->decls.emplace_back(std::move(hasInitedField));
-        }
+        // Actually, only @ObjCImpl open class needs `$hasInited: Bool` field, but CHIR checks only
+        // OBJ_C_IMPL attribute and not class openness, so we have to insert it for
+        // each @ObjCImpl class
+        CreateAndInsertFinalizer(ctx.factory, *impl, NeedsHasInitedField::YES);
     }
 }
+} // namespace Cangjie::Interop::ObjC

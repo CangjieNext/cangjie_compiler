@@ -13,31 +13,43 @@
 #ifndef CANGJIE_SEMA_DESUGAR_OBJ_C_INTEROP_INTEROP_CONTEXT
 #define CANGJIE_SEMA_DESUGAR_OBJ_C_INTEROP_INTEROP_CONTEXT
 
+#include "InheritanceChecker/MemberSignature.h"
+#include "NativeFFI/ObjC/AfterTypeCheck/Utils/AfterTypeCheckASTTransformer.h"
+#include "NativeFFI/ObjC/Utils/ASTInserter.h"
+#include "NativeFFI/ObjC/Utils/DeclarationCache.h"
+#include "NativeFFI/ObjC/Utils/ASTFactory.h"
+#include "NativeFFI/ObjC/Utils/InteropLibBridge.h"
+#include "NativeFFI/ObjC/Utils/NameGenerator.h"
+#include "NativeFFI/ObjC/Utils/TypeMapper.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Option/Option.h"
 #include "cangjie/Sema/TypeManager.h"
-#include "NativeFFI/ObjC/Utils/ASTFactory.h"
-#include "NativeFFI/ObjC/Utils/DeclarationCache.h"
-#include "NativeFFI/ObjC/Utils/InteropLibBridge.h"
-#include "NativeFFI/ObjC/Utils/NameGenerator.h"
-#include "NativeFFI/ObjC/Utils/TypeMapper.h"
-#include "InheritanceChecker/MemberSignature.h"
 
 namespace Cangjie::Interop::ObjC {
 
 struct InteropContext {
-    explicit InteropContext(
-        AST::Package& pkg, TypeManager& typeManager, ImportManager& importManager, DiagnosticEngine& diag,
-        const BaseMangler& mangler, const std::string& cjLibOutputPath, const std::string& outputObjCGenDir,
+    explicit InteropContext(AST::Package& pkg, TypeManager& typeManager, ImportManager& importManager,
+        DiagnosticEngine& diag, const BaseMangler& mangler, const std::string& cjLibOutputPath,
+        const std::string& outputObjCGenDir,
         const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& structMemberSignatures,
-        const Triple::OSType targetOsType)
-        : pkg(pkg), diag(diag), typeManager(typeManager), importManager(importManager), bridge(importManager, diag),
-          typeMapper(bridge, typeManager), mangler(mangler), nameGenerator(mangler),
-          declarationCache(), factory(bridge, typeManager, nameGenerator, typeMapper, importManager, declarationCache),
-          cjLibOutputPath(cjLibOutputPath), outputObjCGenDir(outputObjCGenDir),
+        const Triple::OSType targetOsType, std::function<void(AST::Node&)> desugarPropRef)
+        : pkg(pkg),
+          desugarPropRef(std::move(desugarPropRef)),
+          diag(diag),
+          typeManager(typeManager),
+          importManager(importManager),
+          bridge(importManager, diag),
+          typeMapper(bridge, typeManager),
+          mangler(mangler),
+          nameGenerator(mangler),
+          declarationCache(),
+          factory(bridge, typeManager, nameGenerator, typeMapper, importManager, declarationCache),
+          astTransformer(importManager, typeManager, diag, astInserter),
+          cjLibOutputPath(cjLibOutputPath),
+          outputObjCGenDir(outputObjCGenDir),
           structMemberSignatures(structMemberSignatures),
           sharedLibraryExtension(GlobalOptions::GetSharedLibraryExtension(targetOsType))
     {
@@ -47,8 +59,17 @@ struct InteropContext {
     std::vector<Ptr<AST::ClassLikeDecl>> mirrors;
     std::vector<Ptr<AST::FuncDecl>> mirrorTopLevelFuncs;
     std::vector<Ptr<AST::ClassDecl>> impls;
-    std::vector<Ptr<AST::ClassDecl>> synWrappers;
+    std::vector<Ptr<AST::ClassDecl>> mirrorInterfaceHandleWrappers;
+    std::vector<Ptr<AST::ClassDecl>> regCompanions;
+    /// W: MapImplToRegCompanion
+    std::unordered_map<Ptr<AST::Decl>, Ptr<AST::ClassDecl>> implToRegCompanion;
+
     std::vector<OwnedPtr<AST::Decl>> genDecls;
+    /**
+     * Re-runs early property-accessor desugaring after field -> prop re-resolution.
+     * R: MoveImplMembersToRegCompanion.
+     */
+    std::function<void(AST::Node&)> desugarPropRef;
 
     DiagnosticEngine& diag;
     TypeManager& typeManager;
@@ -59,6 +80,8 @@ struct InteropContext {
     NameGenerator nameGenerator;
     DeclarationCache declarationCache;
     ASTFactory factory;
+    AfterTypeCheckASTTransformer astTransformer;
+    ASTInserter astInserter;
     const std::string& cjLibOutputPath;
     const std::string& outputObjCGenDir;
     const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& structMemberSignatures;

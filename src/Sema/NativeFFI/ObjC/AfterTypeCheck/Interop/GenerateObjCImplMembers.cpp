@@ -11,10 +11,14 @@
  */
 
 #include "Handlers.h"
-#include "cangjie/AST/Create.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
+#include "cangjie/AST/Clone.h"
+#include "cangjie/AST/Types.h"
+
+namespace Cangjie::Interop::ObjC {
 
 using namespace Cangjie::AST;
-using namespace Cangjie::Interop::ObjC;
+using namespace Cangjie::Native::FFI;
 
 void GenerateObjCImplMembers::HandleImpl(InteropContext& ctx)
 {
@@ -23,27 +27,36 @@ void GenerateObjCImplMembers::HandleImpl(InteropContext& ctx)
             continue;
         }
 
+        auto regComp = ctx.implToRegCompanion[impl];
+
+        // Collect user constructors first (to avoid iterator invalidation during insertion)
+        // Skip the generated base ctor
+        std::vector<Ptr<FuncDecl>> userCtors;
         for (auto& memberDecl : impl->GetMemberDeclPtrs()) {
             if (memberDecl->TestAttr(Attribute::IS_BROKEN)) {
                 continue;
             }
-
-            switch (memberDecl->astKind) {
-                case ASTKind::FUNC_DECL:
-                    if (memberDecl->TestAttr(Attribute::CONSTRUCTOR)) {
-                        GenerateCtor(ctx, *impl, *StaticAs<ASTKind::FUNC_DECL>(memberDecl));
-                    }
-                    break;
-                default:
-                    break;
+            auto fd = As<ASTKind::FUNC_DECL>(memberDecl);
+            if (!fd || !fd->TestAttr(Attribute::CONSTRUCTOR)) {
+                continue;
             }
+            if (IsObjCImplBaseCtor(*fd)) {
+                continue;
+            }
+            userCtors.push_back(fd);
+        }
+
+        for (auto& origin : userCtors) {
+            auto regDataCtor = ASTCloner::Clone(Ptr(origin));
+            ctx.astTransformer.TransformToObjCImplRegDataCtorDecl(*regDataCtor, *impl, *regComp);
+            auto regDataCtorPtr = regDataCtor.get();
+            ctx.astInserter.InsertInto(*impl, std::move(regDataCtor));
+
+            ctx.astTransformer.TransformToObjCImplUserCtorBody(*origin->funcBody, *regDataCtorPtr, *impl, *regComp,
+                ctx.factory.CreateGetCachedClassAccess(
+                    *StaticCast<ClassLikeTy>(impl->GetTy()), impl->curFile));
         }
     }
 }
 
-void GenerateObjCImplMembers::GenerateCtor(InteropContext& ctx, ClassDecl& target, FuncDecl& from)
-{
-    auto ctor = ctx.factory.CreateImplCtor(from);
-    CJC_NULLPTR_CHECK(ctor);
-    target.body->decls.emplace_back(std::move(ctor));
-}
+} // namespace Cangjie::Interop::ObjC
