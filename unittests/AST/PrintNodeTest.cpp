@@ -15,7 +15,6 @@
  * and the per-node formatting bodies.
  */
 
-#include <iostream>
 #include <sstream>
 #include <string>
 
@@ -80,18 +79,15 @@ OwnedPtr<File> ParseRichFile()
 {
     static DiagnosticEngine diag;
     static SourceManager sm;
-    sm.AddSource("./", RICH_SRC);
+    // Hold a long-lived std::string so the Parser/Lexer keeps a valid pointer
+    // to the source buffer for the duration of parsing. Passing RICH_SRC (a
+    // const char*) directly binds it to `const std::string&`, producing a
+    // temporary whose c_str() the Lexer dangles after.
+    static const std::string src(RICH_SRC);
+    sm.AddSource("./", src);
     diag.SetSourceManager(&sm);
-    Parser parser(RICH_SRC, diag, diag.GetSourceManager());
+    Parser parser(src, diag, diag.GetSourceManager());
     return parser.ParseTopLevel();
-}
-
-std::string PrintFileToString()
-{
-    auto file = ParseRichFile();
-    std::ostringstream os;
-    PrintNode(file.get(), 0, "", os);
-    return os.str();
 }
 
 OwnedPtr<Expr> ParseExprFromSrc(const std::string& src)
@@ -153,11 +149,12 @@ std::string PrintConstructedNode(OwnedPtr<T> node)
 
 TEST(PrintNodeTest, FilePrintsAllDeclarations)
 {
-    const std::string out = PrintFileToString();
+    auto file = ParseRichFile();
+    std::ostringstream os;
+    PrintNode(file.get(), 0, "", os);
+    const std::string out = os.str();
     // Each declaration kind dispatches to its own PrintXxx, which emits an
     // "XxxDecl:" header. Assert the labels rather than source keywords.
-    std::cout << "\n===DEBUG PrintNodeTest.FilePrintsAllDeclarations out.size()=" << out.size()
-              << " BEGIN===\n" << out << "\n===DEBUG out END===\n" << std::endl;
     EXPECT_NE(out.find("ClassDecl:"), std::string::npos);
     EXPECT_NE(out.find("EnumDecl:"), std::string::npos);
     EXPECT_NE(out.find("StructDecl:"), std::string::npos);
@@ -168,10 +165,11 @@ TEST(PrintNodeTest, FilePrintsAllDeclarations)
 
 TEST(PrintNodeTest, FilePrintsExpressions)
 {
-    const std::string out = PrintFileToString();
+    auto file = ParseRichFile();
+    std::ostringstream os;
+    PrintNode(file.get(), 0, "", os);
+    const std::string out = os.str();
     // Expression PrintXxx overloads reached via the func bodies emit "XxxExpr:".
-    std::cout << "\n===DEBUG PrintNodeTest.FilePrintsExpressions out.size()=" << out.size()
-              << " BEGIN===\n" << out << "\n===DEBUG out END===\n" << std::endl;
     EXPECT_NE(out.find("MatchExpr:"), std::string::npos);
     EXPECT_NE(out.find("ConstExpr:"), std::string::npos);
 }
