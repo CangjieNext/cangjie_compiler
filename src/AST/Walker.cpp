@@ -32,6 +32,29 @@ template <class NodeT> unsigned WalkerT<NodeT>::GetNextWalkerID()
 }
 template class WalkerT<Node>;
 template class WalkerT<const Node>;
+
+void WalkParents(Ptr<Node> node, const std::function<void(Ptr<Node>)>& action)
+{
+    CJC_ASSERT(node);
+    for (Ptr<Node> cur = node->parent; cur; cur = cur->parent) {
+        action(cur);
+    }
+}
+
+Ptr<Node> WalkParentsUntil(
+    Ptr<Node> node, const std::function<bool(Ptr<Node>)>& pred, const std::function<bool(Ptr<Node>)>& stop)
+{
+    CJC_ASSERT(node);
+    for (Ptr<Node> cur = node->parent; cur; cur = cur->parent) {
+        if (pred(cur)) {
+            return cur;
+        }
+        if (stop && stop(cur)) {
+            return nullptr;
+        }
+    }
+    return nullptr;
+}
 } // namespace Cangjie::AST
 template VisitAction Walker::Walk(Ptr<Node> curNode) const;
 template VisitAction ConstWalker::Walk(Ptr<const Node> curNode) const;

@@ -28,6 +28,23 @@
 #include "cangjie/Utils/Utils.h"
 
 namespace Cangjie::AST {
+void SetParents(Node& root)
+{
+    std::vector<Ptr<Node>> parents;
+    auto visitPre = [&parents](Ptr<Node> node) -> VisitAction {
+        if (!parents.empty()) {
+            node->parent = parents.back();
+        }
+        parents.push_back(node);
+        return VisitAction::WALK_CHILDREN;
+    };
+    auto visitPost = [&parents](Ptr<Node>) -> VisitAction {
+        parents.pop_back();
+        return VisitAction::WALK_CHILDREN;
+    };
+    Walker(&root, visitPre, visitPost).Walk();
+}
+
 void AddCurFile(Node& root, Ptr<File> file)
 {
     Ptr<File> curFile = file;

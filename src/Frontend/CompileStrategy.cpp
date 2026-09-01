@@ -13,7 +13,7 @@
 #include "cangjie/Frontend/CompileStrategy.h"
 
 #include "MergeAnnoFromCjd.h"
-#include "cangjie/AST/PrintNode.h"
+#include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/ConditionalCompilation/ConditionalCompilation.h"
 #include "cangjie/Frontend/CompilerInstance.h"
@@ -31,6 +31,7 @@
 #include "cangjie/Utils/TaskQueue.h"
 
 using namespace Cangjie;
+using namespace AST;
 using namespace Utils;
 using namespace FileUtil;
 
@@ -58,6 +59,9 @@ void CompileStrategy::DesugarAfterSema() const
 {
     auto packages = ci->GetSourcePackages();
     ci->typeChecker->PerformDesugarAfterSema(packages);
+    for (auto pkg : packages) {
+        SetParents(*pkg);
+    }
 }
 
 bool CompileStrategy::OverflowStrategy() const
@@ -81,6 +85,7 @@ void CompileStrategy::PerformDesugar() const
     for (auto& [pkg, ctx] : ci->pkgCtxMap) {
         Cangjie::PerformDesugarBeforeTypeCheck(
             *pkg, ci->invocation.globalOptions.enableMacroInLSP, compatibleSDKVersion);
+        SetParents(*pkg);
     }
 }
 
@@ -170,9 +175,10 @@ public:
         const size_t lineNumIdx = 2;
         for (auto& taskResult : taskResults) {
             auto curResult = taskResult.get();
-            std::get<filePtrIdx>(curResult)->curPackage = &package;
-            std::get<filePtrIdx>(curResult)->indexOfPackage = package.files.size();
-            package.files.push_back(std::move(std::get<filePtrIdx>(curResult)));
+            auto& file = std::get<filePtrIdx>(curResult);
+            file->curPackage = &package;
+            file->indexOfPackage = package.files.size();
+            package.files.push_back(std::move(file));
             s.ci->GetSourceManager().AddComments(std::get<commentIdx>(curResult));
             lineCountOfAddedFiles += std::get<lineNumIdx>(curResult);
         }
@@ -180,7 +186,7 @@ public:
         return lineCountOfAddedFiles;
     }
 
-    OwnedPtr<AST::Package> GetMultiThreadParseOnePackage(
+    OwnedPtr<Package> GetMultiThreadParseOnePackage(
         ParseTaskResults& taskResults, const std::string& defaultPackageName) const
     {
         auto package = MakeOwned<Package>(defaultPackageName);
@@ -618,8 +624,12 @@ bool CompileStrategy::MacroExpand() const
     me.Execute(ci->srcPkgs);
     ci->diag.EmitCategoryDiagnostics(DiagCategory::PARSE);
 
+    for (auto& pkg : ci->srcPkgs) {
+        SetParents(*pkg);
+    }
+
 #if defined(CMAKE_ENABLE_ASSERT) || !defined(NDEBUG)
-    AST::ASTChecker astChecker;
+    ASTChecker astChecker;
     astChecker.CheckAST(ci->srcPkgs);
     astChecker.CheckBeginEnd(ci->srcPkgs);
 #endif

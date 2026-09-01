@@ -232,6 +232,7 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterInstantiation([[maybe_unus
     }
     Utils::ProfileRecorder markUnusedRecord("PerformDesugarAfterInstantiation", "MarkUsedPackageInFile");
     MarkUsedPackageInFile(&pkg);
+    SetParents(pkg);
 }
 
 bool AutoBoxing::NeedBoxOption(ModalTy child, ModalTy target)

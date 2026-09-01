@@ -151,6 +151,12 @@ struct Node {
      */
     Ptr<File> curFile{nullptr};
     /**
+     * Immediate parent in the AST tree.
+     * W: Frontend after MacroExpand; Sema via SetParents after desugar / temp node attach.
+     * R: Sema and later passes.
+     */
+    Ptr<Node> parent{};
+    /**
      * Current macro call node.
      * W: MacroExpansion.
      * R: TypeChecker, Collector.
@@ -354,6 +360,14 @@ struct Node {
     bool IsExpr() const noexcept
     {
         return astKind >= ASTKind::EXPR && astKind <= ASTKind::INVALID_EXPR;
+    }
+
+    /**
+     * Whether a node is Pattern.
+     */
+    bool IsPattern() const noexcept
+    {
+        return astKind >= ASTKind::PATTERN && astKind <= ASTKind::INVALID_PATTERN;
     }
 
     /**

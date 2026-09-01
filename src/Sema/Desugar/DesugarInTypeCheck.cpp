@@ -66,6 +66,7 @@ void DesugarPipelineExpr(ASTContext& ctx, BinaryExpr& be)
         be.desugarExpr->EnableAttr(Attribute::UNSAFE);
     }
     AddCurFile(be, be.curFile);
+    SetParents(be);
 }
 
 void DesugarCompositionExpr(ASTContext& ctx, BinaryExpr& be)
@@ -97,6 +98,7 @@ void DesugarCompositionExpr(ASTContext& ctx, BinaryExpr& be)
         be.desugarExpr->EnableAttr(Attribute::UNSAFE);
     }
     AddCurFile(be, be.curFile);
+    SetParents(be);
 }
 
 // Ignore empty intersection ty added by typealias substitution.
@@ -337,6 +339,7 @@ void DesugarOperatorOverloadExpr(ASTContext& ctx, BinaryExpr& be)
         be.desugarExpr->EnableAttr(Attribute::UNSAFE);
     }
     AddCurFile(be, be.curFile);
+    SetParents(be);
 }
 
 void DesugarOperatorOverloadExpr(ASTContext& ctx, UnaryExpr& ue)
@@ -362,6 +365,7 @@ void DesugarOperatorOverloadExpr(ASTContext& ctx, UnaryExpr& ue)
     }
     ue.desugarExpr = std::move(callExpr);
     AddCurFile(ue, ue.curFile);
+    SetParents(ue);
 }
 
 void DesugarOperatorOverloadExpr(ASTContext& ctx, SubscriptExpr& se)
@@ -392,6 +396,7 @@ void DesugarOperatorOverloadExpr(ASTContext& ctx, SubscriptExpr& se)
     }
     se.desugarExpr = std::move(callExpr);
     AddCurFile(se, se.curFile);
+    SetParents(se);
 }
 
 void DesugarSubscriptOverloadExpr(ASTContext& ctx, AssignExpr& ae)
@@ -451,6 +456,7 @@ void DesugarSubscriptOverloadExpr(ASTContext& ctx, AssignExpr& ae)
     }
     ae.desugarExpr = std::move(callExpr);
     AddCurFile(ae, ae.curFile);
+    SetParents(ae);
 }
 
 void DesugarOperatorOverloadExpr(ASTContext& ctx, AssignExpr& ae)
@@ -496,6 +502,7 @@ void DesugarOperatorOverloadExpr(ASTContext& ctx, AssignExpr& ae)
 
     ae.desugarExpr = std::move(assignExpr);
     AddCurFile(ae, ae.curFile);
+    SetParents(ae);
 }
 
 void DesugarCallExpr(ASTContext& ctx, CallExpr& ce)
@@ -524,6 +531,7 @@ void DesugarCallExpr(ASTContext& ctx, CallExpr& ce)
     ce.desugarExpr = std::move(callExpr);
     // Contains 'AddMacroAttr' for diag after macro expansion.
     AddCurFile(ce, ce.curFile);
+    SetParents(ce);
 }
 
 void DesugarVariadicCallExpr(ASTContext& ctx, CallExpr& ce, size_t fixedPositionalArity)
@@ -575,6 +583,7 @@ void DesugarVariadicCallExpr(ASTContext& ctx, CallExpr& ce, size_t fixedPosition
     }
     ce.desugarExpr = std::move(callExpr);
     AddCurFile(ce, ce.curFile);
+    SetParents(ce);
 }
 
 void TypeChecker::TypeCheckerImpl::DesugarPointerCall(ASTContext& ctx, CallExpr& ce)
@@ -612,6 +621,7 @@ void TypeChecker::TypeCheckerImpl::DesugarPointerCall(ASTContext& ctx, CallExpr&
     pointerExpr->end = ce.end;
     ce.desugarExpr = std::move(pointerExpr);
     AddCurFile(ce, ce.curFile);
+    SetParents(ce);
 }
 
 void TypeChecker::TypeCheckerImpl::DesugarVArrayCall(ASTContext& ctx, CallExpr& ce)
@@ -645,6 +655,7 @@ void TypeChecker::TypeCheckerImpl::DesugarVArrayCall(ASTContext& ctx, CallExpr& 
     arrayExpr->end = ce.end;
     ce.desugarExpr = std::move(arrayExpr);
     AddCurFile(ce, ce.curFile);
+    SetParents(ce);
 }
 
 void DesugarPrimaryCtor(Decl& decl, PrimaryCtorDecl& fd)
@@ -725,6 +736,7 @@ OwnedPtr<MemberAccess> DesugarRef2MemberAccess(
     baseFunc->compilerAddedTyArgs = field->compilerAddedTyArgs;
     CopyBasicInfo(field, baseFunc);
     AddCurFile(*baseFunc, field->curFile);
+    SetParents(*baseFunc);
     return baseFunc;
 }
 

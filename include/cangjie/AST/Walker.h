@@ -13,10 +13,10 @@
 #ifndef CANGJIE_AST_WALKER_H
 #define CANGJIE_AST_WALKER_H
 
-#include <functional>
-#include <string>
-#include <utility>
 #include <atomic>
+#include <functional>
+#include <type_traits>
+#include <utility>
 
 #include "cangjie/AST/Node.h"
 
@@ -115,6 +115,38 @@ using Walker = WalkerT<Node>;
 using ConstWalker = WalkerT<const Node>;
 extern template class WalkerT<Node>;
 extern template class WalkerT<const Node>;
+
+/**
+ * Walk ancestors of @p node (starting from its parent) and invoke @p action on each.
+ */
+void WalkParents(Ptr<Node> node, const std::function<void(Ptr<Node>)>& action);
+
+/**
+ * Walk ancestors of @p node until @p pred returns true, then return that ancestor.
+ * If @p stop returns true on an ancestor before @p pred matches, return nullptr.
+ */
+Ptr<Node> WalkParentsUntil(Ptr<Node> node, const std::function<bool(Ptr<Node>)>& pred,
+    const std::function<bool(Ptr<Node>)>& stop = nullptr);
+
+/**
+ * Find the first ancestor of @p node with type @p T.
+ * When @p T is Expr or a subclass of Expr, stop at function boundaries and return nullptr.
+ */
+template <typename T>
+inline Ptr<T> WalkParentsUntil(Ptr<Node> node)
+{
+    static_assert(std::is_base_of_v<Node, T>, "T must derive from Node");
+    auto pred = [](Ptr<Node> n) { return dynamic_cast<T*>(n.get()); };
+    Ptr<T> found{};
+    if constexpr (std::is_base_of_v<Expr, T>) {
+        found = WalkParentsUntil(node, pred, [](Ptr<Node> n) {
+            return n->IsFuncLike() || n->astKind == ASTKind::MAIN_DECL;
+        });
+    } else {
+        found = WalkParentsUntil(node, pred);
+    }
+    return found;
+}
 } // namespace Cangjie::AST
 
 #endif // CANGJIE_AST_WALKER_H

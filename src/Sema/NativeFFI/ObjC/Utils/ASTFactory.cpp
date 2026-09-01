@@ -2095,6 +2095,7 @@ void ASTFactory::SetDesugarExpr(Ptr<Expr> original, OwnedPtr<Expr> desugared) {
     original->desugarExpr->sourceExpr = original;
     CopyBasicInfo(original, original->desugarExpr);
     AddCurFile(*original->desugarExpr, original->curFile);
+    SetParents(*original);
 }
 
 OwnedPtr<FuncDecl> ASTFactory::CreateFinalizer(ClassDecl& target)

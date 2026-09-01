@@ -31,6 +31,11 @@ void AddMacroAttr(AST::Node& node);
 void AddCurFile(AST::Node& root, Ptr<AST::File> file = nullptr);
 
 /**
+ * Recursively set 'parent' for nodes under @p root (root itself is unchanged).
+ */
+void SetParents(AST::Node& root);
+
+/**
  * Whether the macrocall node is actually a pure annotation.
  */
 inline bool IsPureAnnotation(const AST::MacroInvocation& invocation)

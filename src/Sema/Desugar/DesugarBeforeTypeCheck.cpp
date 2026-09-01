@@ -78,6 +78,7 @@ void DesugarSynchronizedExpr(SynchronizedExpr& se)
     block->body.push_back(std::move(tryExpr));
     AddCurFile(*block, se.curFile);
     se.desugarExpr = std::move(block);
+    SetParents(se);
 }
 
 // Find the OptionalExpr in the left field of expr.
@@ -266,6 +267,7 @@ void DesugarOptionalChainExpr(OptionalChainExpr& oce)
         : DesugarOptionalChainWithMatchCase(*expr, CreateOptionalChainCallSome(std::move(oce.expr)), false);
     CopyBasicInfo(expr.get(), oce.desugarExpr.get());
     AddCurFile(*oce.desugarExpr, oce.curFile);
+    SetParents(oce);
 }
 
 // Get OptionalChainExpr appearing in leftTupleLit.
@@ -308,6 +310,7 @@ void DesugarIncOrDecExpr(IncOrDecExpr& ide)
         std::move(ide.expr), std::move(one), ide.op == TokenKind::INCR ? TokenKind::ADD_ASSIGN : TokenKind::SUB_ASSIGN);
     CopyBasicInfo(&ide, ae.get());
     ide.desugarExpr = std::move(ae);
+    SetParents(ide);
 }
 
 void DesugarAssignExprRecursively(const TupleLit& leftValues, Expr& rightExprs, std::vector<OwnedPtr<Node>>& nodes)
@@ -373,6 +376,7 @@ void DesugarAssignExpr(AssignExpr& ae)
     std::vector<OwnedPtr<Node>> nodes;
     DesugarAssignExprRecursively(*StaticAs<ASTKind::TUPLE_LIT>(ae.leftValue.get()), *ae.rightExpr, nodes);
     ae.desugarExpr = CreateBlock(std::move(nodes));
+    SetParents(ae);
 }
 
 void DesugarOptionType(OptionType& optionType)
@@ -418,6 +422,7 @@ void DesugarMainDecl(MainDecl& mainDecl)
         funcDecl->annotations.push_back(cl.Clone(anno.get()));
     }
     mainDecl.desugarDecl = std::move(funcDecl);
+    SetParents(mainDecl);
 }
 
 OwnedPtr<Expr> DesugarTrailClosureAsCall(TrailingClosureExpr& trailingClosure)
@@ -464,6 +469,7 @@ void DesugarTrailingClosureExpr(TrailingClosureExpr& trailingClosure)
         trailingClosure.desugarExpr = DesugarTrailClosureAsCall(trailingClosure);
     }
     CopyBasicInfo(&trailingClosure, trailingClosure.desugarExpr.get());
+    SetParents(trailingClosure);
 }
 
 const std::string LEVEL_IDENTGIFIER = "level";
@@ -694,6 +700,7 @@ void DesugarIfAvailableExpr(IfAvailableExpr& iae, const std::string& compatibleS
     ifExpr->sourceExpr = &iae;
     CopyBasicInfo(&iae, ifExpr);
     iae.desugarExpr = std::move(ifExpr);
+    SetParents(iae);
 }
 
 struct VisitContext {
