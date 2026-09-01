@@ -100,6 +100,10 @@ OwnedPtr<TypePattern> CreateTypePattern(OwnedPtr<Pattern>&& pattern, OwnedPtr<Ty
 using FullPackageNameToPrefixPaths = std::unordered_map<std::string, std::vector<std::string>>;
 OwnedPtr<ImportSpec> CreateImportSpec(const std::string& fullPackageName, const std::string& item = "*",
     const std::string& alias = "", const FullPackageNameToPrefixPaths& cache = {});
+/**
+ * @note doesn't create accessors, because their names depends on the compilation stage
+ */
+OwnedPtr<PropDecl> CreatePropDecl() noexcept;
 } // namespace Cangjie::AST
 
 #endif // CANGJIE_AST_CREATE_H
