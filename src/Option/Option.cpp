@@ -306,9 +306,6 @@ void GlobalOptions::SetupCompileTargetOptions()
 
 bool GlobalOptions::ReprocessReflectionOption()
 {
-    if (target.IsMacOS()) {
-        disableReflection = true;
-    }
     if (target.IsArm32()) {
         disableReflection = true;
     }
