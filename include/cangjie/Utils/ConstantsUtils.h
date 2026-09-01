@@ -139,12 +139,20 @@ inline const std::string OBJ_C_POINTER_IDENT = "ObjCPointer";
 inline const std::string OBJ_C_FUNC_IDENT = "ObjCFunc";
 inline const std::string OBJ_C_BLOCK_IDENT = "ObjCBlock";
 inline const std::string OBJ_C_LANG_PACKAGE_IDENT = "objc.lang";
+inline const std::string OBJ_C_INTERNAL_PACKAGE_IDENT = "objc.internal";
+inline const std::string NATIVE_OBJ_C_ID_MARKER_IDENT = "NativeObjCIdMarker";
 inline const std::string NATIVE_HANDLE_IDENT = "$obj";
 inline const std::string NATIVE_HANDLE_MARKER = "$mrk";
 inline const std::string GET_OBJ_C_CLASS_IDENT = "$getObjCClass";
 inline const std::string REGISTRY_ID_IDENT = "$registryId";
-inline const std::string REGISTRY_ID_SETTER_SELECTOR = "set$registryId:";
-inline const std::string SYNTHETIC_CLASS_SUFFIX = "$impl";
+inline constexpr std::string_view HANDLE_WRAPPER_SUFFIX = "$wrap";
+inline constexpr std::string_view REGISTRY_COMPANION_SUFFIX = "$reg";
+inline constexpr std::string_view REGISTRY_COMPANION_FIELD_IDENT = "$reg";
+inline constexpr std::string_view REGISTRY_DATA_PARAM_IDENT = "$regData";
+inline constexpr std::string_view INIT_IDENT = "init";
+inline constexpr std::string_view TO_STRING_METHOD_IDENT = "toString";
+inline constexpr std::string_view NSOBJECT_CLASS_IDENT = "NSObject";
+inline constexpr std::string_view NSSTRING_CLASS_IDENT = "NSString";
 inline const std::string NATIVE_HANDLE_GETTER_IDENT = "$getObj";
 } // namespace Interop::ObjC
 

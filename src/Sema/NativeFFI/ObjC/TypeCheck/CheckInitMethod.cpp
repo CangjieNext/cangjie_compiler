@@ -11,7 +11,7 @@
  */
 
 #include "Handlers.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "cangjie/AST/Match.h"
 
 using namespace Cangjie::AST;
@@ -19,26 +19,26 @@ using namespace Cangjie::Interop::ObjC;
 
 void CheckInitMethod::HandleImpl(TypeCheckContext& ctx)
 {
-    if (!TypeMapper::IsObjCMirror(ctx.target)) {
+    if (!IsObjCMirror(ctx.target)) {
         return;
     }
 
     for (auto member : ctx.target.GetMemberDeclPtrs()) {
-        if (!IsStaticInitMethod(*member)) {
+        auto method = As<ASTKind::FUNC_DECL>(member);
+        if (!method || !IsObjCInitMethod(*method)) {
             continue;
         }
-        auto& method = *StaticAs<ASTKind::FUNC_DECL>(member);
-        auto fTy = DynamicCast<FuncTy*>(method.GetTy());
-        if (!fTy || !method.funcBody->retType) {
+        auto fTy = DynamicCast<FuncTy*>(method->GetTy());
+        if (!fTy || !method->funcBody->retType) {
             continue;
         }
         auto retTy = fTy->retTy;
-        auto mirrorTy = method.outerDecl->GetTy();
+        auto mirrorTy = method->outerDecl->GetTy();
         if (ctx.typeManager.IsTyEqual(retTy, mirrorTy)) {
             continue;
         }
 
-        ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types, *method.funcBody->retType)
+        ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types, *method->funcBody->retType)
             .AddMainHintArguments(Ty::ToString(mirrorTy), Ty::ToString(retTy));
         ctx.target.EnableAttr(Attribute::IS_BROKEN);
     }
