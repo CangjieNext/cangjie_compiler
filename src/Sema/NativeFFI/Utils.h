@@ -203,10 +203,6 @@ Ptr<Annotation> GetForeignNameAnnotation(const Decl& decl);
 Ptr<Annotation> GetAnnotation(const Decl& decl, AnnotationKind annotationKind);
 
 Ptr<std::string> GetSingleArgumentAnnotationValue(const Decl& target, AnnotationKind annotationKind);
-std::string GetObjCMirrorForeignName(const ClassLikeDecl& target);
-bool IsObjCGeneratedNSStringCtor(const Decl& target);
-bool IsObjCGeneratedNSObjectToString(const Decl& target);
-bool IsObjCGeneratedMember(const Decl& target);
 
 bool IsSuperConstructorCall(const CallExpr& call);
 bool IsThisConstructorCall(const CallExpr& call);
@@ -235,6 +231,8 @@ bool AreParamTypeKindsValid(const FuncDecl& fd, const std::vector<TypeKind>& typ
  * @param synthetic The synthetic wrapper class that owns the stub.
  */
 void RebindClonedStubToSynthetic(Decl& stub, ClassDecl& synthetic);
+
+OwnedPtr<Expr> CreateZeroValue(const ImportManager& importManager, TypeManager& typeManager, Ty& ty);
 
 } // namespace Cangjie::Native::FFI
 

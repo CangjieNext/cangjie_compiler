@@ -10,7 +10,6 @@
  * This file implements factory class for names of different Objective-C interop entities.
  */
 
-#include "ASTFactory.h"
 #include "NameGenerator.h"
 #include "cangjie/AST/Match.h"
 #include "NativeFFI/Utils.h"
@@ -146,6 +145,12 @@ Ptr<std::string> NameGenerator::GetUserDefinedObjCName(const Decl& target)
             continue;
         }
 
+        // A broken annotation (e.g. more than one argument) has already been diagnosed by the parser,
+        // there is no usable user-defined name in it.
+        if (anno->TestAttr(Attribute::IS_BROKEN)) {
+            return nullptr;
+        }
+
         CJC_ASSERT(anno->args.size() < 2);
         if (anno->args.empty()) {
             break;
@@ -161,7 +166,7 @@ Ptr<std::string> NameGenerator::GetUserDefinedObjCName(const Decl& target)
     return nullptr;
 }
 
-std::string NameGenerator::GetObjCDeclName(const Decl& target, const std::string* genericActualName)
+std::string NameGenerator::GetObjCDeclName(const Decl& target)
 {
     auto foreignName = GetUserDefinedObjCName(target);
     if (foreignName) {
@@ -172,31 +177,6 @@ std::string NameGenerator::GetObjCDeclName(const Decl& target, const std::string
     if (auto fd = DynamicCast<const FuncDecl*>(&target); fd) {
         // No params case
         if (!fd->funcBody || fd->funcBody->paramLists.empty() || fd->funcBody->paramLists[0]->params.empty()) {
-            /*
-                public enum GenericEnum<T> {
-                    | Red(T) | Green(T) | Blue(T)
-                    public prop value: T {
-                        get() {
-                            match (this) {
-                                case Red(n) => n
-                                case Green(n) => n
-                                case Blue(n) => n
-                            }
-                        }
-                    }
-                }
-                There exists Genericenum prop func get(): target->identifier = "$valueget",
-                but it actually needs to be named using "value_get" method.
-            */
-            if (target.GetTy()->HasGeneric() && !target.identifierForLsp.empty()) {
-                std::string actualEnumName = target.identifier;
-                actualEnumName.erase(std::remove(actualEnumName.begin(), actualEnumName.end(), '$'), actualEnumName.end());
-                size_t pos = actualEnumName.find(target.identifierForLsp);
-                if (pos != std::string::npos) {
-                    actualEnumName.insert(pos, "_");
-                }
-                return actualEnumName;
-            }
             return target.identifier;
         }
 
@@ -215,9 +195,6 @@ std::string NameGenerator::GetObjCDeclName(const Decl& target, const std::string
         }
     }
 
-    if (genericActualName) {
-        return *genericActualName;
-    }
     return target.identifier;
 }
 
@@ -316,4 +293,14 @@ std::string NameGenerator::GetObjCFullDeclName(const Decl& target, const std::st
     // For Generic ActualTy Name
     std::string actualName = genericActualName ? *genericActualName : target.identifier;
     return target.fullPackageName + "." + actualName;
+}
+
+std::string NameGenerator::GenerateHandleWrapperName(const ClassLikeDecl& mirror) noexcept
+{
+    return mirror.identifier + std::string(HANDLE_WRAPPER_SUFFIX);
+}
+
+std::string NameGenerator::GenerateRegistryCompanionName(const ClassDecl& impl) noexcept
+{
+    return impl.identifier + std::string(REGISTRY_COMPANION_SUFFIX);
 }

@@ -48,29 +48,6 @@ public:
 
     static MappedCType Cj2ObjCForObjC(const AST::Ty& from);
     Ptr<AST::Ty> Cj2CType(Ptr<AST::Ty> cjty) const;
-    static bool IsObjCCompatible(const AST::Ty& ty);
-    static bool IsObjCCompatibleFuncTy(const AST::Ty& ty);
-    static bool IsObjCMirror(const AST::Decl& decl);
-    static bool IsObjCMirrorSubtype(const AST::Decl& decl);
-    static bool IsObjCImpl(const AST::Decl& decl);
-    static bool IsValidObjCMirror(const AST::Ty& ty);
-    static bool IsValidObjCMirrorSubtype(const AST::Ty& ty);
-    static bool IsObjCImpl(const AST::Ty& ty);
-    static bool IsObjCMirror(const AST::Ty& ty);
-    static bool IsObjCPointer(const AST::Decl& decl);
-    static bool IsObjCPointer(const AST::Ty& ty);
-    static bool IsSyntheticWrapper(const AST::Decl& decl);
-    static bool IsSyntheticWrapper(const AST::Ty& ty);
-    static bool IsObjCObjectType(const AST::Ty& ty);
-
-    static bool IsObjCFunc(const AST::Decl& decl);
-    static bool IsObjCFunc(const AST::Ty& ty);
-    static bool IsObjCBlock(const AST::Decl& decl);
-    static bool IsObjCBlock(const AST::Ty& ty);
-    static bool IsObjCFuncOrBlock(const AST::Decl& decl);
-    static bool IsObjCFuncOrBlock(const AST::Ty& ty);
-    static bool IsObjCId(const AST::Ty& ty);
-    static bool IsObjCId(const AST::Decl& decl);
 private:
     InteropLibBridge& bridge;
     TypeManager& typeManager;

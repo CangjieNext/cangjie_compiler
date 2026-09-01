@@ -10,14 +10,13 @@
  * This file implements desugaring of typechecks/typecasts involving ObjC-compatible types
  */
 
-
-#include "NativeFFI/Utils.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
-#include "cangjie/AST/Create.h"
-#include "cangjie/AST/Walker.h"
-#include "cangjie/AST/Match.h"
-#include "cangjie/AST/Clone.h"
 #include "Handlers.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
+#include "NativeFFI/Utils.h"
+#include "cangjie/AST/Clone.h"
+#include "cangjie/AST/Create.h"
+#include "cangjie/AST/Match.h"
+#include "cangjie/AST/Walker.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
@@ -32,7 +31,7 @@ bool ShouldDesugarTypecheck(Ptr<Type> type, Ptr<Expr> expr)
     // then will be desugared as regular is/as
     auto castDecl = DynamicCast<ClassLikeDecl>(Ty::GetDeclOfTy(type->GetTy()));
     auto objDecl = DynamicCast<ClassLikeDecl>(Ty::GetDeclOfTy(expr->GetTy()));
-    if (!objDecl || !castDecl || !castDecl->TestAnyAttr(Attribute::OBJ_C_MIRROR_SUBTYPE, Attribute::OBJ_C_MIRROR)) {
+    if (!objDecl || !castDecl || !castDecl->TestAnyAttr(Attribute::OBJ_C_IMPL, Attribute::OBJ_C_MIRROR)) {
         return false;
     }
 
@@ -47,7 +46,7 @@ void DesugarIsExpr(InteropContext& ctx, IsExpr& expr)
 
     auto type = static_cast<ClassTy*>(expr.isType->GetTy().get());
     auto targetName = ctx.nameGenerator.GetObjCDeclName(*type->decl);
-    if (ctx.typeMapper.IsObjCId(*type->decl)) {
+    if (IsObjCId(*type->decl)) {
         return;
     }
 
@@ -82,16 +81,16 @@ void DesugarIsExpr(InteropContext& ctx, IsExpr& expr)
     OwnedPtr<Cangjie::AST::Expr> checkCall = nullptr;
     switch (expr.isType->TyKind()) {
         case TypeKind::TYPE_CLASS:
-            checkCall = ctx.factory.CreateObjCIsKindOfClassCall(
-                ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*checkVarPattern->varDecl), curFile)),
-                    ctx.factory.CreateGetCachedClassAccess(targetName, curFile), curFile
-            );
+            checkCall = ctx.deprecatedFactory.CreateObjCIsKindOfClassCall(
+                ctx.deprecatedFactory.CreateNativeHandleExpr(
+                    WithinFile(CreateRefExpr(*checkVarPattern->varDecl), curFile)),
+                ctx.deprecatedFactory.CreateGetCachedClassAccess(targetName, curFile), curFile);
             break;
         case TypeKind::TYPE_INTERFACE:
-            checkCall = ctx.factory.CreateObjCConformsToProtocolCall(
-                ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*checkVarPattern->varDecl), curFile)),
-                    ctx.factory.CreateGetProtoCall(targetName, curFile), curFile
-            );
+            checkCall = ctx.deprecatedFactory.CreateObjCConformsToProtocolCall(
+                ctx.deprecatedFactory.CreateNativeHandleExpr(
+                    WithinFile(CreateRefExpr(*checkVarPattern->varDecl), curFile)),
+                ctx.deprecatedFactory.CreateGetProtoCall(targetName, curFile), curFile);
             break;
         default:
             return; // do not desugar if right side not class or protocol
@@ -123,14 +122,14 @@ void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
 
     auto castTy = expr.asType->GetTy();
     auto type = static_cast<ClassTy*>(expr.asType->GetTy().get());
-    if (ctx.typeMapper.IsObjCId(*type->decl)) {
+    if (IsObjCId(*type->decl)) {
         return;
     }
 
     auto objCIdDecl = ctx.bridge.GetObjCIdDecl();
     CJC_ASSERT(objCIdDecl);
 
-    auto castResultTy = ctx.factory.GetOptionTy(castTy);
+    auto castResultTy = ctx.deprecatedFactory.GetOptionTy(castTy);
     auto targetName = ctx.nameGenerator.GetObjCDeclName(*type->decl);
 
     // match (x)
@@ -139,9 +138,8 @@ void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
     // case x: Class => Some(x)
     auto ogVarPattern = WithinFile(CreateVarPattern(V_COMPILER, castTy), curFile);
 
-    OwnedPtr<Expr> originalBranch = ctx.factory.CreateOptionSomeCall(
-        WithinFile(CreateRefExpr(*ogVarPattern->varDecl), curFile), castTy
-    );
+    OwnedPtr<Expr> originalBranch =
+        ctx.deprecatedFactory.CreateOptionSomeCall(WithinFile(CreateRefExpr(*ogVarPattern->varDecl), curFile), castTy);
     auto originalTypePattern = CreateTypePattern(std::move(ogVarPattern),
         CreateType(castTy), *expr.leftExpr);
     originalTypePattern->needRuntimeTypeCheck = true;
@@ -152,29 +150,28 @@ void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
     // case x: ObjCId && isKindOfClass
     auto objCIdVarPattern = WithinFile(CreateVarPattern(V_COMPILER, objCIdDecl->GetTy()), curFile);
     objCIdVarPattern->varDecl->curFile = curFile;
-    
+
     OwnedPtr<Cangjie::AST::Expr> checkCall = nullptr;
     switch (expr.asType->TyKind()) {
         case TypeKind::TYPE_CLASS:
-            checkCall = ctx.factory.CreateObjCIsKindOfClassCall(
-                ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*objCIdVarPattern->varDecl), curFile)),
-                    ctx.factory.CreateGetCachedClassAccess(targetName, curFile), curFile
-            );
+            checkCall = ctx.deprecatedFactory.CreateObjCIsKindOfClassCall(
+                ctx.deprecatedFactory.CreateNativeHandleExpr(
+                    WithinFile(CreateRefExpr(*objCIdVarPattern->varDecl), curFile)),
+                ctx.deprecatedFactory.CreateGetCachedClassAccess(targetName, curFile), curFile);
             break;
         case TypeKind::TYPE_INTERFACE:
-            checkCall = ctx.factory.CreateObjCConformsToProtocolCall(
-                ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*objCIdVarPattern->varDecl), curFile)),
-                    ctx.factory.CreateGetProtoCall(targetName, curFile), curFile
-            );
+            checkCall = ctx.deprecatedFactory.CreateObjCConformsToProtocolCall(
+                ctx.deprecatedFactory.CreateNativeHandleExpr(
+                    WithinFile(CreateRefExpr(*objCIdVarPattern->varDecl), curFile)),
+                ctx.deprecatedFactory.CreateGetProtoCall(targetName, curFile), curFile);
             break;
         default:
             return; // do not desugar if right side not class or protocol
     }
     CJC_ASSERT(checkCall); // should not reach, safeguard
 
-    auto nativeHandle = ctx.factory.CreateNativeHandleExpr(
-        WithinFile(CreateRefExpr(*objCIdVarPattern->varDecl), curFile)
-    );
+    auto nativeHandle =
+        ctx.deprecatedFactory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*objCIdVarPattern->varDecl), curFile));
 
     auto objCIdType = CreateType(objCIdDecl->GetTy());
     auto objCIdTypePattern = CreateTypePattern(std::move(objCIdVarPattern),
@@ -184,14 +181,16 @@ void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
 
     // We use objc_retain here, because a successfull typecast creates a new @ObjCMirror object that will call
     // objCRelease in its finalizer.
-    OwnedPtr<Expr> objCIdBranch = ctx.factory.WrapEntity(std::move(nativeHandle), *castResultTy, Retain::RETAINED);
+    OwnedPtr<Expr> objCIdBranch =
+        ctx.deprecatedFactory.WrapEntity(std::move(nativeHandle), *castResultTy, Retain::RETAINED);
 
     auto objCIdMatchCase = CreateMatchCase(std::move(objCIdTypePattern), std::move(objCIdBranch));
     objCIdMatchCase->patternGuard = std::move(checkCall);
     matchCases.emplace_back(std::move(objCIdMatchCase));
 
     // case _ => false
-    auto wildcardMatchCase = CreateMatchCase(MakeOwned<WildcardPattern>(), ctx.factory.CreateOptionNoneRef(type));
+    auto wildcardMatchCase =
+        CreateMatchCase(MakeOwned<WildcardPattern>(), ctx.deprecatedFactory.CreateOptionNoneRef(type));
     matchCases.emplace_back(std::move(wildcardMatchCase));
 
     expr.desugarExpr = WithinFile(
@@ -199,16 +198,16 @@ void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
     );
 }
 
-std::vector<Ptr<TypePattern>> CollectTypePatternWithObjCClass(InteropContext& ctx, Ptr<Pattern> pat)
+std::vector<Ptr<TypePattern>> CollectTypePatternWithObjCClass(Ptr<Pattern> pat)
 {
     std::vector<Ptr<TypePattern>> res;
-    Walker(pat, [&res, &ctx](auto node) {
+    Walker(pat, [&res](auto node) {
         CJC_ASSERT(node);
         if (auto tpat = As<ASTKind::TYPE_PATTERN>(node.get())) {
             auto decl = Ty::GetDeclOfTy(tpat->type->GetTy());
 
-            if (decl && decl->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE)) {
-                if (!ctx.typeMapper.IsObjCId(*decl)) {
+            if (decl && decl->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_IMPL)) {
+                if (!IsObjCId(*decl)) {
                     res.push_back(tpat);
                 }
             }
@@ -239,7 +238,7 @@ std::vector<Ptr<TypePattern>> CollectTypePatternWithObjCClass(InteropContext& ct
             }
         }
 
-        auto pats = CollectTypePatternWithObjCClass(ctx, pat.get());
+        auto pats = CollectTypePatternWithObjCClass(pat.get());
         std::move(pats.begin(), pats.end(), std::back_inserter(res));
     }
 
@@ -267,10 +266,11 @@ OwnedPtr<Block> CastAndSubstitudeVars(
         auto castDecl = DynamicCast<ClassLikeDecl>(Ty::GetDeclOfTy(castTy));
         CJC_ASSERT(castDecl);
 
-        auto nativeHandle = ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*varDecl), curFile));
+        auto nativeHandle = ctx.deprecatedFactory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*varDecl), curFile));
         // We use objc_retain here, because a successfull typecast creates a new @ObjCMirror object that will call
         // objCRelease in its finalizer.
-        OwnedPtr<Expr> initializer = ctx.factory.WrapEntity(std::move(nativeHandle), *castTy, Retain::RETAINED);
+        OwnedPtr<Expr> initializer =
+            ctx.deprecatedFactory.WrapEntity(std::move(nativeHandle), *castTy, Retain::RETAINED);
         auto castedVar = WithinFile(CreateTmpVarDecl(CreateType(castDecl->GetTy()), std::move(initializer)), curFile);
         varsMapping[varDecl] = castedVar;
         varsBlock->body.emplace_back(std::move(castedVar));
@@ -296,7 +296,7 @@ OwnedPtr<Block> CastAndSubstitudeVars(
 void DesugarMatchCaseExpr(InteropContext& ctx, MatchCase& expr)
 {
     std::vector<Ptr<TypePattern>> typePatterns = CollectTypePatternWithObjCClass(ctx, expr.patterns);
-    
+
     if (typePatterns.empty()) { return; }
 
     auto objCIdDecl = ctx.bridge.GetObjCIdDecl();
@@ -327,16 +327,16 @@ void DesugarMatchCaseExpr(InteropContext& ctx, MatchCase& expr)
         OwnedPtr<Cangjie::AST::Expr> checkCall = nullptr;
         switch (originalTy->kind) {
             case TypeKind::TYPE_CLASS:
-                checkCall = ctx.factory.CreateObjCIsKindOfClassCall(
-                    ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*varPat->varDecl), expr.curFile)),
-                        ctx.factory.CreateGetCachedClassAccess(targetName, expr.curFile), expr.curFile
-                );
+                checkCall = ctx.deprecatedFactory.CreateObjCIsKindOfClassCall(
+                    ctx.deprecatedFactory.CreateNativeHandleExpr(
+                        WithinFile(CreateRefExpr(*varPat->varDecl), expr.curFile)),
+                    ctx.deprecatedFactory.CreateGetCachedClassAccess(targetName, expr.curFile), expr.curFile);
                 break;
             case TypeKind::TYPE_INTERFACE:
-                checkCall = ctx.factory.CreateObjCConformsToProtocolCall(
-                    ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*varPat->varDecl), expr.curFile)),
-                        ctx.factory.CreateGetProtoCall(targetName, expr.curFile), expr.curFile
-                );
+                checkCall = ctx.deprecatedFactory.CreateObjCConformsToProtocolCall(
+                    ctx.deprecatedFactory.CreateNativeHandleExpr(
+                        WithinFile(CreateRefExpr(*varPat->varDecl), expr.curFile)),
+                    ctx.deprecatedFactory.CreateGetProtoCall(targetName, expr.curFile), expr.curFile);
                 break;
             default:
                 return; // do not desugar if right side not class or protocol
@@ -375,7 +375,7 @@ void DesugarLetDestructorExpr(InteropContext& ctx, IfExpr& expr)
 {
     if (auto lpat = As<ASTKind::LET_PATTERN_DESTRUCTOR>(expr.condExpr)) {
         std::vector<Ptr<TypePattern>> typePatterns = CollectTypePatternWithObjCClass(ctx, lpat->patterns);
-        
+
         if (typePatterns.empty()) { return; }
 
         CJC_ASSERT(typePatterns.size() == 1); // if (let a : M <- N)
@@ -404,22 +404,22 @@ void DesugarLetDestructorExpr(InteropContext& ctx, IfExpr& expr)
         OwnedPtr<Cangjie::AST::Expr> checkCall = nullptr;
         switch (originalTy->kind) {
             case TypeKind::TYPE_CLASS:
-                checkCall = ctx.factory.CreateObjCIsKindOfClassCall(
-                    ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*varPat->varDecl), expr.curFile)),
-                        ctx.factory.CreateGetCachedClassAccess(targetName, expr.curFile), expr.curFile
-                );
+                checkCall = ctx.deprecatedFactory.CreateObjCIsKindOfClassCall(
+                    ctx.deprecatedFactory.CreateNativeHandleExpr(
+                        WithinFile(CreateRefExpr(*varPat->varDecl), expr.curFile)),
+                    ctx.deprecatedFactory.CreateGetCachedClassAccess(targetName, expr.curFile), expr.curFile);
                 break;
             case TypeKind::TYPE_INTERFACE:
-                checkCall = ctx.factory.CreateObjCConformsToProtocolCall(
-                    ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*varPat->varDecl), expr.curFile)),
-                        ctx.factory.CreateGetProtoCall(targetName, expr.curFile), expr.curFile
-                );
+                checkCall = ctx.deprecatedFactory.CreateObjCConformsToProtocolCall(
+                    ctx.deprecatedFactory.CreateNativeHandleExpr(
+                        WithinFile(CreateRefExpr(*varPat->varDecl), expr.curFile)),
+                    ctx.deprecatedFactory.CreateGetProtoCall(targetName, expr.curFile), expr.curFile);
                 break;
             default:
                 return; // do not desugar if right side not class or protocol
         }
         CJC_ASSERT(checkCall); // should not reach, safeguard
-        
+
         auto varDecl = varPat->varDecl.get();
         patternVars.emplace_back(varDecl, originalTy);
         auto bodyVarsBlock = CastAndSubstitudeVars(ctx, *expr.thenBody, patternVars);
@@ -464,16 +464,16 @@ void DesugarWhileExpr(InteropContext& ctx, WhileExpr& expr)
         OwnedPtr<Cangjie::AST::Expr> checkCall = nullptr;
         switch (originalTy->kind) {
             case TypeKind::TYPE_CLASS:
-                checkCall = ctx.factory.CreateObjCIsKindOfClassCall(
-                    ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*varPat->varDecl), expr.curFile)),
-                        ctx.factory.CreateGetCachedClassAccess(targetName, expr.curFile), expr.curFile
-                );
+                checkCall = ctx.deprecatedFactory.CreateObjCIsKindOfClassCall(
+                    ctx.deprecatedFactory.CreateNativeHandleExpr(
+                        WithinFile(CreateRefExpr(*varPat->varDecl), expr.curFile)),
+                    ctx.deprecatedFactory.CreateGetCachedClassAccess(targetName, expr.curFile), expr.curFile);
                 break;
             case TypeKind::TYPE_INTERFACE:
-                checkCall = ctx.factory.CreateObjCConformsToProtocolCall(
-                    ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*varPat->varDecl), expr.curFile)),
-                        ctx.factory.CreateGetProtoCall(targetName, expr.curFile), expr.curFile
-                );
+                checkCall = ctx.deprecatedFactory.CreateObjCConformsToProtocolCall(
+                    ctx.deprecatedFactory.CreateNativeHandleExpr(
+                        WithinFile(CreateRefExpr(*varPat->varDecl), expr.curFile)),
+                    ctx.deprecatedFactory.CreateGetProtoCall(targetName, expr.curFile), expr.curFile);
                 break;
             default:
                 return; // do not desugar if right side not class or protocol
