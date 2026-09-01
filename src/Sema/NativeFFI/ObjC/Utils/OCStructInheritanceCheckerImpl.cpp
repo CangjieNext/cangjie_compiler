@@ -82,10 +82,10 @@ bool NeedCheckForeignName(const MemberSignature& parent, const MemberSignature& 
     }
     CJC_ASSERT(child.decl->IsFuncOrProp());
 
-    if (!parent.decl->outerDecl->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE)) {
+    if (!parent.decl->outerDecl->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_IMPL)) {
         return false;
     }
-    if (!child.decl->outerDecl->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE)) {
+    if (!child.decl->outerDecl->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_IMPL)) {
         // @ObjCMirror anottation might be missing here, will report it later
         return false;
     }

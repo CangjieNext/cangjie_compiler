@@ -23,7 +23,7 @@ public:
     void HandleImpl(TypeCheckContext& ctx);
 };
 
-class CheckMirrorSubtypeAttr : public Handler<CheckMirrorSubtypeAttr, TypeCheckContext> {
+class CheckImplAttr : public Handler<CheckImplAttr, TypeCheckContext> {
 public:
     void HandleImpl(TypeCheckContext& ctx);
 };
@@ -45,9 +45,6 @@ public:
 
 class CheckMemberTypes : public Handler<CheckMemberTypes, TypeCheckContext> {
 public:
-    explicit CheckMemberTypes()
-    {
-    }
     void HandleImpl(TypeCheckContext& ctx);
 
 private:
