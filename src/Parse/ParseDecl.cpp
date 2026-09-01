@@ -572,7 +572,7 @@ void ParserImpl::CheckJavaInteropMember(Decl& decl)
 
 void ParserImpl::CheckObjCInteropMember(Decl& member)
 {
-    if (member.outerDecl->TestAttr(Attribute::OBJ_C_MIRROR_SUBTYPE)) {
+    if (member.outerDecl->TestAttr(Attribute::OBJ_C_IMPL)) {
         if (member.GetGeneric() != nullptr) {
             member.outerDecl->EnableAttr(Attribute::IS_BROKEN);
             member.EnableAttr(Attribute::IS_BROKEN);
@@ -1411,10 +1411,6 @@ OwnedPtr<InterfaceDecl> ParserImpl::ParseInterfaceDecl(
     ret->end = lastToken.End();
     ret->annotations = std::move(annos);
 
-    if (Interop::ObjC::IsDeclAppropriateForSyntheticClassGeneration(*ret)) {
-        Interop::ObjC::InsertSyntheticClassDecl(*ret, *currentFile);
-    }
-
     return ret;
 }
 
@@ -2087,7 +2083,6 @@ void ParserImpl::CheckClassLikeFuncBodyAbstractness(FuncDecl& decl)
     bool inAbstract = HasModifier(outerModifiers, TokenKind::ABSTRACT);
     bool inCJMP = HasModifier(outerModifiers, TokenKind::SPECIFIC) || HasModifier(outerModifiers, TokenKind::COMMON);
     bool inAbstractCJMP = inAbstract && inCJMP;
-    bool inObjCMirror = decl.outerDecl->TestAttr(Attribute::OBJ_C_MIRROR);
 
     bool isJavaMirrorOrJavaImpl = decl.outerDecl->IsJavaMirror() || decl.outerDecl->IsJavaImpl();
     // explicit ABSTRACT modifier allowed only in COMMON ABSTRACT class or in JFFI
@@ -2106,6 +2101,7 @@ void ParserImpl::CheckClassLikeFuncBodyAbstractness(FuncDecl& decl)
         return;
     }
 
+    bool inObjCMirror = decl.outerDecl->TestAttr(Attribute::OBJ_C_MIRROR);
     if (inObjCMirror) {
         decl.DisableAttr(Attribute::ABSTRACT);
         return;

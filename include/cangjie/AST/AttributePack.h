@@ -596,11 +596,11 @@ enum class Attribute {
      */
     OBJ_C_MIRROR,
     /**
-     * Mark whether a class is a successor of an Objective-C mirror (direct or indirect child of an Objective-C class).
+     * Mark whether a Cangjie class is exported to Objective-C (successor of an Objective-C mirror).
      * W: Parser.
      * R: Sema.
      */
-    OBJ_C_MIRROR_SUBTYPE,
+    OBJ_C_IMPL,
     /**
      * Marks whether a cangjie method is an Objective-C init.
      * W: Parser.
@@ -663,11 +663,11 @@ enum class Attribute {
     HAS_INITED_FIELD,
 
     /**
-     * Mark whether a class is a wrapper synthetic class generated for every mirror interface.
-     * W: Parser.
+     * Mark whether a class is a handle wrapper class generated for each mirror interface.
+     * W: Sema.
      * R: Sema.
      */
-    OBJ_C_MIRROR_SYNTHETIC_WRAPPER,
+    OBJ_C_MIRROR_INTERFACE_HANDLE_WRAPPER,
 
     /**
      * Mark whether a function in interface-forward class is a default implementation of cj-mapping interface.
@@ -712,6 +712,13 @@ enum class Attribute {
      * R: Sema.
      */
     DOES_NOT_THROW,
+
+    /**
+     * Mark whether a class is a registry companion class generated for each @ObjCImpl declaration.
+     * W: Sema.
+     * R: Sema.
+     */
+    OBJ_C_IMPL_REGISTRY_COMPANION,
 
     AST_ATTR_END,
 };
