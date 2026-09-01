@@ -34,52 +34,37 @@ Utils::Utils(ImportManager& importManager, TypeManager& typeManager)
 
 Ptr<Ty> Utils::GetOptionTy(Ptr<Ty> ty)
 {
-    return typeManager.GetEnumTy(*GetOptionDecl(), {ty});
+    return Native::FFI::GetOptionTy(importManager, typeManager, ty);
 }
 
 Ptr<EnumDecl> Utils::GetOptionDecl()
 {
-    static auto decl = importManager.GetCoreDecl<EnumDecl>(STD_LIB_OPTION);
-    return decl;
+    return Native::FFI::GetOptionDecl(importManager);
 }
 
 Ptr<Decl> Utils::GetOptionSomeDecl()
 {
-    static auto someDecl = Sema::Desugar::AfterTypeCheck::LookupEnumMember(GetOptionDecl(), OPTION_VALUE_CTOR);
-    return someDecl;
+    return Native::FFI::GetOptionSomeDecl(importManager);
 }
 
 Ptr<Decl> Utils::GetOptionNoneDecl()
 {
-    static auto noneDecl = Sema::Desugar::AfterTypeCheck::LookupEnumMember(GetOptionDecl(), OPTION_NONE_CTOR);
-    return noneDecl;
+    return Native::FFI::GetOptionNoneDecl(importManager);
 }
 
 OwnedPtr<Expr> Utils::CreateOptionSomeRef(Ptr<Ty> ty)
 {
-    auto someDeclRef = CreateRefExpr(*GetOptionSomeDecl());
-    auto optionActualTy = GetOptionTy(ty);
-    someDeclRef->SetTy(typeManager.GetFunctionTy({ty}, optionActualTy));
-    return someDeclRef;
+    return Native::FFI::CreateOptionSomeRef(importManager, typeManager, ty);
 }
 
 OwnedPtr<Expr> Utils::CreateOptionNoneRef(Ptr<Ty> ty)
 {
-    auto noneDeclRef = CreateRefExpr(*GetOptionNoneDecl());
-    auto optionActualTy = GetOptionTy(ty);
-    noneDeclRef->SetTy(optionActualTy);
-    return noneDeclRef;
+    return Native::FFI::CreateOptionNoneRef(importManager, typeManager, ty);
 }
 
 OwnedPtr<Expr> Utils::CreateOptionSomeCall(OwnedPtr<Expr> expr, Ptr<Ty> ty)
 {
-    std::vector<OwnedPtr<FuncArg>> someDeclCallArgs{};
-    someDeclCallArgs.emplace_back(CreateFuncArg(std::move(expr)));
-    auto someDeclCall = CreateCallExpr(CreateOptionSomeRef(ty), std::move(someDeclCallArgs));
-    someDeclCall->SetTy(GetOptionTy(ty));
-    someDeclCall->resolvedFunction = As<ASTKind::FUNC_DECL>(GetOptionSomeDecl());
-    someDeclCall->callKind = CallKind::CALL_DECLARED_FUNCTION;
-    return someDeclCall;
+    return Native::FFI::CreateOptionSomeCall(importManager, typeManager, std::move(expr), ty);
 }
 
 Ptr<ClassLikeDecl> Utils::GetJObjectDecl()

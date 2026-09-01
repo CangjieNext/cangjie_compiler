@@ -18,6 +18,7 @@
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
+#include "Desugar/AfterTypeCheck.h"
 #include <sys/types.h>
 
 namespace Cangjie::Native::FFI {
@@ -330,63 +331,6 @@ Ptr<std::string> GetSingleArgumentAnnotationValue(const Decl& target, Annotation
     return nullptr;
 }
 
-std::string GetObjCMirrorForeignName(const ClassLikeDecl& target)
-{
-    if (auto customName = GetSingleArgumentAnnotationValue(target, AnnotationKind::OBJ_C_MIRROR)) {
-        return *customName;
-    }
-    return target.identifier.Val();
-}
-
-bool IsObjCGeneratedNSStringCtor(const Decl& target)
-{
-    auto funcDecl = DynamicCast<const FuncDecl>(&target);
-    if (!funcDecl || funcDecl->identifier.Val() != INIT_IDENT ||
-        !funcDecl->TestAttr(Attribute::CONSTRUCTOR, Attribute::COMPILER_ADD)) {
-        return false;
-    }
-
-    CJC_ASSERT(funcDecl->funcBody);
-    auto& paramLists = funcDecl->funcBody->paramLists;
-    CJC_ASSERT(paramLists.size() > 0);
-    auto& params = paramLists[0]->params;
-    if (params.size() != 1 || params[0]->type->symbol->name != STD_LIB_STRING) {
-        return false;
-    }
-
-    return true;
-}
-
-bool IsObjCGeneratedNSObjectToString(const Decl& target)
-{
-    auto funcDecl = DynamicCast<const FuncDecl>(&target);
-    if (!funcDecl || funcDecl->identifier.Val() != TOSTRING_METHOD_IDENT ||
-        !funcDecl->TestAttr(Attribute::COMPILER_ADD) || !funcDecl->funcBody) {
-        return false;
-    }
-
-    CJC_ASSERT(funcDecl->funcBody);
-    auto& paramLists = funcDecl->funcBody->paramLists;
-    CJC_ASSERT(paramLists.size() > 0);
-    auto& params = paramLists[0]->params;
-    if (params.size() != 0) {
-        return false;
-    }
-
-    return true;
-}
-
-bool IsObjCGeneratedMember(const Decl& target)
-{
-    auto classLikeDecl = DynamicCast<const ClassLikeDecl>(target.outerDecl);
-    if (!classLikeDecl) {
-        return false;
-    }
-    auto foreignName = GetObjCMirrorForeignName(*classLikeDecl);
-    return (foreignName == NSSTRING_CLASS_IDENT && IsObjCGeneratedNSStringCtor(target)) ||
-        (foreignName == NSOBJECT_CLASS_IDENT && IsObjCGeneratedNSObjectToString(target));
-}
-
 OwnedPtr<PrimitiveType> GetPrimitiveType(std::string typeName, AST::TypeKind typekind)
 {
     OwnedPtr<PrimitiveType> type = MakeOwned<PrimitiveType>();
@@ -545,6 +489,80 @@ void RebindClonedStubToSynthetic(Decl& stub, ClassDecl& synthetic)
         }
         return VisitAction::WALK_CHILDREN;
     }).Walk();
+}
+
+OwnedPtr<Expr> CreateZeroValue(const ImportManager& importManager, TypeManager& typeManager, Ty& ty)
+{
+    static constexpr std::string_view ZERO_VALUE_INTRINSIC_NAME = "zeroValue";
+    auto zeroValueDecl = importManager.GetCoreDecl<FuncDecl>(std::string(ZERO_VALUE_INTRINSIC_NAME));
+    CJC_ASSERT(zeroValueDecl);
+    auto zeroValueCall = MakeOwned<CallExpr>();
+
+    auto fdRef = CreateRefExpr(*zeroValueDecl);
+    fdRef->instTys.push_back(&ty);
+    auto refTy = typeManager.GetInstantiatedTy(
+        zeroValueDecl->GetTy(), TypeCheckUtil::GenerateTypeMapping(*zeroValueDecl, fdRef->instTys));
+    fdRef->SetTy(refTy);
+
+    zeroValueCall->baseFunc = std::move(fdRef);
+    zeroValueCall->SetTy(&ty);
+    zeroValueCall->callKind = CallKind::CALL_INTRINSIC_FUNCTION;
+    zeroValueCall->resolvedFunction = zeroValueDecl;
+    return zeroValueCall;
+}
+
+Ptr<Ty> GetOptionTy(const ImportManager& importManager, TypeManager& typeManager, Ptr<Ty> ty)
+{
+    return typeManager.GetEnumTy(*GetOptionDecl(importManager), {ty});
+}
+
+Ptr<EnumDecl> GetOptionDecl(const ImportManager& importManager)
+{
+    static auto decl = importManager.GetCoreDecl<EnumDecl>(STD_LIB_OPTION);
+    return decl;
+}
+
+Ptr<Decl> GetOptionSomeDecl(const ImportManager& importManager)
+{
+    static auto someDecl =
+        Sema::Desugar::AfterTypeCheck::LookupEnumMember(GetOptionDecl(importManager), OPTION_VALUE_CTOR);
+    return someDecl;
+}
+
+Ptr<Decl> GetOptionNoneDecl(const ImportManager& importManager)
+{
+    static auto noneDecl =
+        Sema::Desugar::AfterTypeCheck::LookupEnumMember(GetOptionDecl(importManager), OPTION_NONE_CTOR);
+    return noneDecl;
+}
+
+OwnedPtr<Expr> CreateOptionSomeRef(const ImportManager& importManager, TypeManager& typeManager, Ptr<Ty> ty)
+{
+    auto someDeclRef = CreateRefExpr(*GetOptionSomeDecl(importManager));
+    auto optionActualTy = GetOptionTy(importManager, typeManager, ty);
+    someDeclRef->SetTy(typeManager.GetFunctionTy({ty}, optionActualTy));
+    return someDeclRef;
+}
+
+OwnedPtr<Expr> CreateOptionNoneRef(const ImportManager& importManager, TypeManager& typeManager, Ptr<Ty> ty)
+{
+    auto noneDeclRef = CreateRefExpr(*GetOptionNoneDecl(importManager));
+    auto optionActualTy = GetOptionTy(importManager, typeManager, ty);
+    noneDeclRef->SetTy(optionActualTy);
+    return noneDeclRef;
+}
+
+OwnedPtr<Expr> CreateOptionSomeCall(
+    const ImportManager& importManager, TypeManager& typeManager, OwnedPtr<Expr> expr, Ptr<Ty> ty)
+{
+    std::vector<OwnedPtr<FuncArg>> someDeclCallArgs{};
+    someDeclCallArgs.emplace_back(CreateFuncArg(std::move(expr)));
+    auto someDeclCall =
+        CreateCallExpr(CreateOptionSomeRef(importManager, typeManager, ty), std::move(someDeclCallArgs));
+    someDeclCall->SetTy(GetOptionTy(importManager, typeManager, ty));
+    someDeclCall->resolvedFunction = As<ASTKind::FUNC_DECL>(GetOptionSomeDecl(importManager));
+    someDeclCall->callKind = CallKind::CALL_DECLARED_FUNCTION;
+    return someDeclCall;
 }
 
 } // namespace Cangjie::Native::FFI
