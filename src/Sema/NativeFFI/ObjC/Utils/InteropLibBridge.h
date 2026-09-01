@@ -30,14 +30,14 @@ public:
      * Gets NativeObjCId declaration.
      * id or Instance Method Pointer type.
      */
-    Ptr<AST::TypeAliasDecl> GetNativeObjCIdDecl();
+    Ptr<AST::TypeAliasDecl> GetNativeObjCIdDecl() const noexcept;
 
     Ptr<AST::InterfaceDecl> GetObjCIdDecl();
 
     /**
      * Gets NativeObjCId semantic type.
      */
-    Ptr<AST::Ty> GetNativeObjCIdTy();
+    Ptr<AST::Ty> GetNativeObjCIdTy() const noexcept;
 
     /**
      * Gets NativeObjCSel declaration.
@@ -67,12 +67,12 @@ public:
      * Gets RegistryId declaration.
      * An opaque identifier for Cangjie mirror objects.
      */
-    Ptr<AST::TypeAliasDecl> GetRegistryIdDecl();
+    Ptr<AST::TypeAliasDecl> GetRegistryIdDecl() const noexcept;
 
     /**
      * Gets RegistryId semantic type.
      */
-    Ptr<AST::Ty> GetRegistryIdTy();
+    Ptr<AST::Ty> GetRegistryIdTy() const noexcept;
 
     /**
      * Gets ObjCUnreachableCodeException declaration.
@@ -86,15 +86,13 @@ public:
 
     Ptr<AST::ClassDecl> GetObjCInitException();
 
-    Ptr<AST::FuncDecl> GetGetFromRegistryByNativeHandleDecl();
+    Ptr<AST::FuncDecl> GetGetFromRegistryByIdDecl() const noexcept;
 
-    Ptr<AST::FuncDecl> GetGetFromRegistryByIdDecl();
-
-    Ptr<AST::FuncDecl> GetPutToRegistryDecl();
+    Ptr<AST::FuncDecl> GetPutToRegistryDecl() const noexcept;
 
     Ptr<AST::FuncDecl> GetRemoveFromRegistryDecl();
 
-    Ptr<AST::FuncDecl> GetAllocDecl();
+    Ptr<AST::FuncDecl> GetAllocDecl() const noexcept;
 
     Ptr<AST::FuncDecl> GetWithAutoreleasePoolDecl();
 
@@ -138,7 +136,11 @@ public:
 
     Ptr<AST::FuncDecl> GetDescriptionAsStringDecl();
 
-    Ptr<AST::FuncDecl> GetObjCRetainAutoreleasedReturnValue();
+    Ptr<AST::FuncDecl> GetObjCRetainAutoreleasedReturnValueDecl();
+
+    Ptr<AST::FuncDecl> GetSetRegistryIdDecl() const noexcept;
+
+    Ptr<AST::FuncDecl> GetGetRegistryIdDecl() const noexcept;
 
     /**
      * Get objc.lang.ObjCPointer declaration
@@ -178,7 +180,7 @@ public:
 private:
     static constexpr auto INTEROPLIB_PACKAGE_NAME = "objc.internal";
 
-    template <AST::ASTKind K = AST::ASTKind::DECL> auto GetInteropLibDecl(const std::string& ident)
+    template <AST::ASTKind K = AST::ASTKind::DECL> auto GetInteropLibDecl(const std::string& ident) const noexcept
     {
         auto decl = importManager.GetImportedDecl(INTEROPLIB_PACKAGE_NAME, ident);
         if (!decl) {

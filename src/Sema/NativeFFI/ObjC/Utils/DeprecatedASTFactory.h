@@ -10,8 +10,8 @@
  * This file declares a factory class for creating AST nodes.
  */
 
-#ifndef CANGJIE_SEMA_OBJ_C_UTILS_AST_FACTORY_H
-#define CANGJIE_SEMA_OBJ_C_UTILS_AST_FACTORY_H
+#ifndef CANGJIE_SEMA_OBJ_C_UTILS_DEPRECATED_AST_FACTORY_H
+#define CANGJIE_SEMA_OBJ_C_UTILS_DEPRECATED_AST_FACTORY_H
 
 #include "InteropLibBridge.h"
 #include "NameGenerator.h"
@@ -35,9 +35,10 @@ enum class Retain {
     RETAIN_AUTORELEASED_RETURN_VALUE
 };
 
-class ASTFactory {
+/** @deprecated use Create + Transform + Insert instead */
+class DeprecatedASTFactory {
 public:
-    explicit ASTFactory(InteropLibBridge& bridge, TypeManager& typeManager, NameGenerator& nameGenerator,
+    DeprecatedASTFactory(InteropLibBridge& bridge, TypeManager& typeManager, NameGenerator& nameGenerator,
         TypeMapper& typeMapper, ImportManager& importManager, DeclarationCache& declarationCache)
         : bridge(bridge),
           typeManager(typeManager),
@@ -59,13 +60,12 @@ public:
      * Returns obj-c compatible expression over `expr` of CType:
      * - for primitive value: the value itself
      * - for CPointer<Unit> (mirror class M): constructor call `M(expr)`
-     * - for CPointer<Unit> (mirror interface M): constructor call `M$impl(expr)`
-     * - for CPointer<Unit> (impl I): call to retrieve corresponding instance from registry for `expr`
+     * - for CPointer<Unit> (mirror interface M): constructor call `M$wrap(expr)`
+     * - for CPointer<Unit> (impl I): constructor call `I(expr, getRegistryId(expr))`
      *
-     * If `withRetain == Retain::RETAINED`, then `objCRetain(expr)` is called additionally. Only affects ObjCMirrors
-     * currently.
+     * If `withRetain == Retain::RETAINED`, then `objCRetain(expr)` is called additionally.
      * If `withRetain == Retain::RETAIN_AUTORELEASED_RETURN_VALUE`, then `objCRetainAutoreleasedReturnValue(expr)` is
-     * called additionally. Only affects ObjCMirrors currently.
+     * called additionally.
      */
     OwnedPtr<AST::Expr> WrapEntity(OwnedPtr<AST::Expr> expr, AST::Ty& wrapTy, Retain withRetain = Retain::UNRETAINED);
 
@@ -99,42 +99,23 @@ public:
     OwnedPtr<AST::VarDecl> CreateNativeHandleField(AST::ClassDecl& target);
     OwnedPtr<AST::FuncDecl> CreateGetObjCClassDecl(AST::ClassLikeDecl& target);
     OwnedPtr<AST::FuncDecl> CreateGetObjCClass(AST::ClassLikeDecl& target);
-    OwnedPtr<AST::FuncDecl> CreateInitCjObjectReturningObjCSelf(const AST::Decl& target, AST::FuncDecl& ctor);
-    OwnedPtr<AST::FuncDecl> CreateInitCjObject(
-        AST::Decl& target, AST::FuncDecl& ctor, bool generateForOneWayMapping = false);
-    /**
-     * @C
-     * public func CJImpl_ObjC_PackageName_VarDeclNameInitCJObject() : RegistryID {
-     *     let tu = EnumName.VarDeclName
-     *     putToRegistry(tu)
-     * }
-     */
-    OwnedPtr<AST::FuncDecl> CreateInitCjObjectForEnumNoParams(AST::EnumDecl& target, AST::VarDecl& ctor);
+    OwnedPtr<AST::FuncDecl> CreateInitCjObjectReturningObjCSelf(
+        const AST::ClassDecl& impl, const AST::ClassDecl& regComp, AST::FuncDecl& ctor);
     OwnedPtr<AST::FuncDecl> CreateDeleteCjObject(AST::Decl& target);
     /**
      * Returns generated top-level @C function (callable from obj-c) that calls @ObjCImpl `originMethod`.
      */
-    OwnedPtr<AST::FuncDecl> CreateMethodWrapper(AST::FuncDecl& method);
-    OwnedPtr<AST::FuncDecl> CreateGetterWrapper(AST::PropDecl& prop);
-    OwnedPtr<AST::FuncDecl> CreateSetterWrapper(AST::PropDecl& prop);
-    OwnedPtr<AST::FuncDecl> CreateGetterWrapper(AST::VarDecl& field);
-    OwnedPtr<AST::FuncDecl> CreateSetterWrapper(AST::VarDecl& field);
+    OwnedPtr<AST::FuncDecl> CreateMethodWrapper(AST::FuncDecl& method, AST::ClassDecl& impl);
+    OwnedPtr<AST::FuncDecl> CreateGetterWrapper(AST::PropDecl& prop, AST::ClassDecl& impl);
+    OwnedPtr<AST::FuncDecl> CreateSetterWrapper(AST::PropDecl& prop, AST::ClassDecl& impl);
+    OwnedPtr<AST::FuncDecl> CreateGetterWrapper(AST::VarDecl& field, AST::ClassDecl& impl);
+    OwnedPtr<AST::FuncDecl> CreateSetterWrapper(AST::VarDecl& field, AST::ClassDecl& impl);
     OwnedPtr<AST::ThrowExpr> CreateObjCInitException(AST::File& file, AST::ClassLikeDecl& cls);
     OwnedPtr<AST::ThrowExpr> CreateThrowUnreachableCodeExpr(AST::File& file);
     OwnedPtr<AST::ThrowExpr> CreateThrowOptionalMethodUnimplemented(AST::File& file);
     OwnedPtr<AST::ThrowExpr> CreateThrowStaticMethodCallOnInterfaceExpr(AST::File& file);
     std::set<Ptr<AST::FuncDecl>> GetAllParentCtors(AST::ClassDecl& target) const;
-    OwnedPtr<AST::FuncDecl> CreateImplCtor(AST::FuncDecl& from);
     OwnedPtr<AST::FuncDecl> CreateBaseCtorDecl(AST::ClassDecl& target);
-    bool IsGeneratedMember(const AST::Decl& decl) const;
-    bool IsGeneratedNativeHandleField(const AST::Decl& decl) const;
-    bool IsGeneratedGetObjCClassFunction(const AST::Decl& decl) const;
-    bool IsGeneratedHasInitedField(const AST::Decl& decl) const;
-    bool IsGeneratedCtor(const AST::Decl& decl) const;
-    bool IsGeneratedBaseCtor(const AST::Decl& decl) const;
-    bool IsGeneratedNativeHandleGetter(const AST::Decl& decl) const;
-    Ptr<AST::FuncDecl> GetGeneratedBaseCtor(AST::Decl& decl);
-    Ptr<AST::FuncDecl> GetGeneratedImplCtor(const AST::Decl& declArg, const AST::FuncDecl& origin);
     OwnedPtr<AST::CallExpr> CreateObjCMsgSendCall(OwnedPtr<AST::Expr> nativeHandle, const std::string& selector,
         Ptr<AST::Ty> retTy, std::vector<OwnedPtr<AST::Expr>> args);
     OwnedPtr<AST::CallExpr> CreateObjCMsgSendCall(
@@ -142,23 +123,9 @@ public:
     OwnedPtr<AST::CallExpr> CreateGetInstanceVariableCall(const AST::PropDecl& field, OwnedPtr<AST::Expr> nativeHandle);
     OwnedPtr<AST::CallExpr> CreateSetInstanceVariableCall(
         const AST::PropDecl& field, OwnedPtr<AST::Expr> nativeHandle, OwnedPtr<AST::Expr> value);
-    OwnedPtr<AST::CallExpr> CreateRegisterNameCall(OwnedPtr<AST::Expr> selectorExpr);
-    OwnedPtr<AST::CallExpr> CreateRegisterNameCall(const std::string& selector, Ptr<AST::File> curFile);
-    OwnedPtr<AST::Expr> CreateGetClassCall(const AST::ClassLikeDecl& ty, Ptr<AST::File> curFile);
-    OwnedPtr<AST::Expr> CreateGetClassCall(AST::ClassLikeTy& ty, Ptr<AST::File> curFile);
-    OwnedPtr<AST::Expr> CreateGetClassCall(std::string& className, Ptr<AST::File> curFile);
     OwnedPtr<AST::Expr> CreateGetProtoCall(std::string& protoName, Ptr<AST::File> curFile);
     OwnedPtr<AST::Expr> CreateObjCRespondsToSelectorCall(OwnedPtr<AST::Expr> id, OwnedPtr<AST::Expr> sel, Ptr<AST::File> file);
     OwnedPtr<AST::Expr> CreateGetSuperClassExpr(OwnedPtr<AST::Expr> objCSuper, Ptr<AST::File> file);
-
-    /**
-     * alloc($classHandle)
-     */
-    OwnedPtr<AST::CallExpr> CreateAllocCall(OwnedPtr<AST::Expr> className);
-    /**
-     * alloc(decl)
-     */
-    OwnedPtr<AST::CallExpr> CreateAllocCall(AST::Decl& decl, Ptr<AST::File> curFile);
 
     OwnedPtr<AST::Expr> CreateMethodCallViaMsgSend(
         AST::FuncDecl& fd, OwnedPtr<AST::Expr> nativeHandle, std::vector<OwnedPtr<AST::Expr>> rawArgs);
@@ -262,14 +229,13 @@ public:
     OwnedPtr<AST::Expr> CreateGetCachedClassAccess(std::string selector, Ptr<AST::File> curFile);
     OwnedPtr<AST::Expr> CreateGetCachedClassAccess(AST::ClassLikeTy& ty, Ptr<AST::File> curFile);
 
+    OwnedPtr<AST::Expr> CreateGetRegistryIdCall(OwnedPtr<AST::Expr> id);
+
 private:
     void PutDeclToClassLikeBody(AST::Decl& decl, AST::ClassLikeDecl& target);
     void PutDeclToClassBody(AST::Decl& decl, AST::ClassDecl& target);
     void PutDeclToInterfaceBody(AST::Decl& decl, AST::InterfaceDecl& target);
     void PutDeclToFile(AST::Decl& decl, AST::File& target);
-
-    OwnedPtr<AST::CallExpr> CreateGetFromRegistryByNativeHandleCall(
-        OwnedPtr<AST::Expr> nativeHandle, OwnedPtr<AST::Type> typeArg);
 
     /**
      * removeFromRegistry(registryId)
@@ -279,6 +245,31 @@ private:
         const std::string& selector, Ptr<AST::Ty> retTy, std::vector<OwnedPtr<AST::Expr>> rawArgs);
     OwnedPtr<AST::CallExpr> CreateObjCMsgSendSuperCall(OwnedPtr<AST::Expr> objCSuper, OwnedPtr<AST::Expr> sel,
         Ptr<AST::FuncTy> ty, OwnedPtr<AST::FuncType> funcType, std::vector<OwnedPtr<AST::Expr>> funcArgs);
+
+    /**
+     * Raw, uncached Objective-C runtime accessors: `registerName("sel")` and `getClass("Cls")`.
+     *
+     * Generated code must never call these directly: every selector and class handle is obtained through
+     * CreateGetCachedSelectorAccess / CreateGetCachedClassAccess, which resolve the entity once and memoize it
+     * in a package-level variable.
+     */
+    OwnedPtr<AST::CallExpr> CreateRegisterNameCall(OwnedPtr<AST::Expr> selectorExpr);
+    OwnedPtr<AST::CallExpr> CreateRegisterNameCall(const std::string& selector, Ptr<AST::File> curFile);
+    OwnedPtr<AST::Expr> CreateGetClassCall(std::string& className, Ptr<AST::File> curFile);
+
+    /**
+     * `Cls.$getObjCClass()`, i.e. the generated accessor whose body is the cached class access.
+     */
+    OwnedPtr<AST::Expr> CreateGetClassCall(const AST::ClassLikeDecl& cls, Ptr<AST::File> curFile);
+
+    /**
+     * objCAlloc($classHandle), where $classHandle must be a NativeObjCClass expression.
+     */
+    OwnedPtr<AST::CallExpr> CreateAllocCall(OwnedPtr<AST::Expr> nativeClassExpr);
+    /**
+     * objCAlloc(decl), taking the class handle from the cache.
+     */
+    OwnedPtr<AST::CallExpr> CreateAllocCall(AST::Decl& decl, Ptr<AST::File> curFile);
 
     InteropLibBridge& bridge;
     TypeManager& typeManager;
@@ -290,4 +281,4 @@ private:
 
 } // namespace Cangjie::Interop::ObjC
 
-#endif // CANGJIE_SEMA_OBJ_C_UTILS_AST_FACTORY_H
+#endif // CANGJIE_SEMA_OBJ_C_UTILS_DEPRECATED_AST_FACTORY_H

@@ -673,7 +673,7 @@ OwnedPtr<IfExpr> CreateIfExpr(
     return ret;
 }
 
-OwnedPtr<SubscriptExpr> CreateTupleAccess(OwnedPtr<Expr> expr, size_t index)
+OwnedPtr<SubscriptExpr> CreateTupleAccess(OwnedPtr<Expr> expr, size_t index, Ptr<Ty> indexTy)
 {
     auto elem = MakeOwned<SubscriptExpr>();
     if (auto type = DynamicCast<TupleTy*>(expr->GetTy())) {
@@ -681,6 +681,9 @@ OwnedPtr<SubscriptExpr> CreateTupleAccess(OwnedPtr<Expr> expr, size_t index)
         elem->SetTy(type->typeArgs[index]);
         elem->baseExpr = std::move(expr);
         elem->indexExprs.emplace_back(MakeOwned<LitConstExpr>(LitConstKind::INTEGER, std::to_string(index)));
+        if (Ty::IsTyCorrect(indexTy)) {
+            elem->indexExprs[0]->SetTy(indexTy);
+        }
         elem->indexExprs[0]->constNumValue.asInt.SetUint64(index);
         return elem;
     }
@@ -752,4 +755,13 @@ OwnedPtr<ImportSpec> CreateImportSpec(const std::string& fullPackageName, const 
     import->EnableAttr(Attribute::COMPILER_ADD, Attribute::IMPLICIT_ADD, Attribute::PRIVATE);
     return import;
 }
+
+OwnedPtr<PropDecl> CreatePropDecl() noexcept
+{
+    auto pd = MakeOwned<PropDecl>();
+    pd->EnableAttr(Attribute::COMPILER_ADD, Attribute::IMPLICIT_ADD);
+    pd->toBeCompiled = true; // For incremental compilation.
+    return pd;
+}
+
 } // namespace Cangjie::AST
