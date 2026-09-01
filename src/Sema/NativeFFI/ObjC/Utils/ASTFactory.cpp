@@ -2109,7 +2109,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateFinalizer(ClassDecl& target)
     fbody->body->body.emplace_back(std::move(releaseCall));
     auto fd = CreateFuncDecl(FINALIZER_IDENT, std::move(fbody), typeManager.GetFunctionTy({}, unitTy));
     PutDeclToClassLikeBody(*fd, target);
-    fd->EnableAttr(Attribute::PRIVATE, Attribute::FINALIZER);
+    fd->EnableAttr(Attribute::PRIVATE, Attribute::FINALIZER, Attribute::DOES_NOT_THROW);
     fd->linkage = Linkage::EXTERNAL;
     fd->funcBody->funcDecl = fd.get();
 

@@ -67,6 +67,7 @@ enum class Attribute {
     HAS_INITED_FIELD, ///< Mark whether a node is a special flag, which marks the class instance as initialized.
     JAVA_HAS_DEFAULT, ///< Mark whether JAVA_MIRROR interface has default method.
     PREVIOUSLY_DESERIALIZED, /// Mark that deserialization occurs not in the newly created node, but in an existing one.
+    DOES_NOT_THROW,   ///< Mark that the function does not throw any exceptions by construction.
 
     ATTR_END
 };
@@ -87,7 +88,9 @@ const std::unordered_map<Attribute, std::string> ATTR_TO_STRING{{Attribute::STAT
     {Attribute::INITIALIZER, "initializer"},
     {Attribute::UNSAFE, "unsafe"}, {Attribute::JAVA_MIRROR, "javaMirror"}, {Attribute::JAVA_IMPL, "javaImpl"},
     {Attribute::OBJ_C_MIRROR, "objCMirror"}, {Attribute::HAS_INITED_FIELD, "hasInitedField"},
-    {Attribute::JAVA_HAS_DEFAULT, "javaHasDefault"}, {Attribute::PREVIOUSLY_DESERIALIZED, "previouslyDeserialized"}};
+    {Attribute::JAVA_HAS_DEFAULT, "javaHasDefault"}, {Attribute::PREVIOUSLY_DESERIALIZED, "previouslyDeserialized"},
+    {Attribute::DOES_NOT_THROW, "doesNotThrow"}
+};
 
 constexpr uint64_t ATTR_SIZE = 64;
 

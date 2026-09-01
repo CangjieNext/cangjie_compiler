@@ -705,6 +705,14 @@ enum class Attribute {
      */
     JAVA_IMPL_REGISTRY_COMPANION,
 
+    /**
+     * Mark that the function does not throw any exceptions.
+     * Should be used only on generated functions that are generated as non-throwing.
+     * W: Sema.
+     * R: Sema.
+     */
+    DOES_NOT_THROW,
+
     AST_ATTR_END,
 };
 

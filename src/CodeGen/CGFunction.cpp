@@ -148,6 +148,10 @@ CGFunction::CGFunction(
         function->addAttributeAtIndex(static_cast<unsigned>(llvm::AttributeList::FunctionIndex),
             llvm::Attribute::get(function->getContext(), CJ2C_ATTR));
     }
+    if (chirFunc->TestAttr(CHIR::Attribute::DOES_NOT_THROW)) {
+        function->addAttributeAtIndex(static_cast<unsigned>(llvm::AttributeList::FunctionIndex),
+            llvm::Attribute::get(function->getContext(), llvm::Attribute::NoUnwind));
+    }
 
     if (cgType->IsCFunc()) {
         return;
