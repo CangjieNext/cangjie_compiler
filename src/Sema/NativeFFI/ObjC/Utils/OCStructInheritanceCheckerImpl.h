@@ -13,7 +13,6 @@
 #ifndef CANGJIE_SEMA_OBJ_C_UTILS_STRUCT_INHERITANCE_CHECKER_IMPL_H
 #define CANGJIE_SEMA_OBJ_C_UTILS_STRUCT_INHERITANCE_CHECKER_IMPL_H
 
-#include "Common.h"
 #include "InheritanceChecker/StructInheritanceChecker.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"

@@ -52,7 +52,7 @@ public:
         FunctionListFormat format = FunctionListFormat::DECLARATION,
         const ObjCFunctionType type = ObjCFunctionType::INSTANCE,
         bool hasForeignNameAnno = true);
-    static std::string GenerateArgumentCast(const AST::Ty& retTy, std::string value);
+    static std::string GenerateArgumentCast(const AST::Ty& paramTy, std::string value);
     static std::string MapCJTypeToObjCType(std::vector<std::string>& typedefs, const AST::Ty& ty);
     static std::string MapCJTypeToObjCType(std::vector<std::string>& typedefs,
         const Ptr<AST::Type>& type);
@@ -76,19 +76,6 @@ public:
     );
 
     inline static const std::string ID_TYPE = "id";
-private:
-    inline static const std::string CAST_TO_VOID_PTR = "(__bridge void*)";
-    inline static const std::string CAST_TO_VOID_PTR_RETAINED = "(__bridge_retained void*)";
-    inline static const std::string CAST_TO_VOID_PTR_UNSAFE = "(void*)";
-
-    inline static const std::string REGISTRY_ID = "$registryId";
-    inline static const std::string SELF_NAME = "self";
-
-    inline static const std::string UNSUPPORTED_TYPE = "UNSUPPORTED_TYPE";
-    inline static const std::string INT64_T = "int64_t";
-    inline static const std::string SETTER_PARAM_NAME = "value";
-    inline static const std::string VOID_TYPE = "void";
-    inline static const std::string VOID_POINTER_TYPE = VOID_TYPE + "*";
 };
 
 } // namespace Cangjie::Interop::ObjC

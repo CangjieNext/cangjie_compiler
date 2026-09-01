@@ -10,7 +10,7 @@
  * This file implements inserting $getObjCClass function in Objective-C mirrors and impls
  */
 
-#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "Handlers.h"
 
 using namespace Cangjie::AST;
@@ -26,15 +26,15 @@ void InsertGetObjCClass::HandleImpl(InteropContext& ctx)
 
         if (mirror->astKind == ASTKind::INTERFACE_DECL) {
             auto interfaceMirror = As<ASTKind::INTERFACE_DECL>(mirror);
-            auto getObjCClassDecl = ctx.factory.CreateGetObjCClassDecl(*interfaceMirror);
+            auto getObjCClassDecl = ctx.deprecatedFactory.CreateGetObjCClassDecl(*interfaceMirror);
             CJC_NULLPTR_CHECK(getObjCClassDecl);
             getObjCClassDecl->funcBody->body =
-                CreateBlock(Nodes(ctx.factory.CreateThrowStaticMethodCallOnInterfaceExpr(*mirror->curFile)),
+                CreateBlock(Nodes(ctx.deprecatedFactory.CreateThrowStaticMethodCallOnInterfaceExpr(*mirror->curFile)),
                     getObjCClassDecl->GetTy());
             interfaceMirror->body->decls.emplace_back(std::move(getObjCClassDecl));
         } else if (mirror->astKind == ASTKind::CLASS_DECL) {
             auto classMirror = As<ASTKind::CLASS_DECL>(mirror);
-            auto getObjCClassFunc = ctx.factory.CreateGetObjCClass(*classMirror);
+            auto getObjCClassFunc = ctx.deprecatedFactory.CreateGetObjCClass(*classMirror);
             CJC_NULLPTR_CHECK(getObjCClassFunc);
             classMirror->body->decls.emplace_back(std::move(getObjCClassFunc));
         }
@@ -45,7 +45,7 @@ void InsertGetObjCClass::HandleImpl(InteropContext& ctx)
             continue;
         }
 
-        auto getObjCClassFunc = ctx.factory.CreateGetObjCClass(*impl);
+        auto getObjCClassFunc = ctx.deprecatedFactory.CreateGetObjCClass(*impl);
         CJC_NULLPTR_CHECK(getObjCClassFunc);
         impl->body->decls.emplace_back(std::move(getObjCClassFunc));
     }

@@ -1188,7 +1188,7 @@ void TypeChecker::TypeCheckerImpl::AddSuperInterfaceForClassLikeDecl(ASTContext&
     std::vector<Symbol*> syms = SearchSymbol::GetAllDecls(ctx);
     for (auto& sym : syms) {
         CJC_ASSERT(sym && sym->node);
-        if (!sym->node->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE)) {
+        if (!sym->node->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_IMPL)) {
             continue;
         }
 

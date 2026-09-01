@@ -10,8 +10,9 @@
  * This file implements checks of types used with ObjCPointer
  */
 
+
 #include "NativeFFI/Utils.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "cangjie/AST/Walker.h"
 #include "Handlers.h"
 
@@ -79,12 +80,12 @@ void CheckObjCPointerTypeArguments::CheckTypeUsage(InteropContext& ctx, Type& ty
     }
     auto ty = typeUsage.GetTy();
     CJC_NULLPTR_CHECK(ty);
-    if (ty->typeArgs.size() != 1 || !ctx.typeMapper.IsObjCPointer(*ty)) {
+    if (ty->typeArgs.size() != 1 || !IsObjCPointer(*ty)) {
         return;
     }
     auto tyArg = ty->typeArgs.front();
     CJC_NULLPTR_CHECK(tyArg);
-    if (ctx.typeMapper.IsObjCCompatible(*tyArg)) {
+    if (IsObjCCompatible(*tyArg)) {
         // everything is fine
         return;
     }
@@ -107,12 +108,12 @@ void CheckObjCPointerTypeArguments::CheckConstructorCall(InteropContext& ctx, Ca
     }
     auto ty = call.GetTy();
     CJC_NULLPTR_CHECK(ty);
-    if (ty->typeArgs.size() != 1 || !ctx.typeMapper.IsObjCPointer(*ty)) {
+    if (ty->typeArgs.size() != 1 || !IsObjCPointer(*ty)) {
         return;
     }
     auto tyArg = ty->typeArgs.front();
     CJC_NULLPTR_CHECK(tyArg);
-    if (ctx.typeMapper.IsObjCCompatible(*tyArg)) {
+    if (IsObjCCompatible(*tyArg)) {
         // everything is fine
         return;
     }

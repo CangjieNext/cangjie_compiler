@@ -330,63 +330,6 @@ Ptr<std::string> GetSingleArgumentAnnotationValue(const Decl& target, Annotation
     return nullptr;
 }
 
-std::string GetObjCMirrorForeignName(const ClassLikeDecl& target)
-{
-    if (auto customName = GetSingleArgumentAnnotationValue(target, AnnotationKind::OBJ_C_MIRROR)) {
-        return *customName;
-    }
-    return target.identifier.Val();
-}
-
-bool IsObjCGeneratedNSStringCtor(const Decl& target)
-{
-    auto funcDecl = DynamicCast<const FuncDecl>(&target);
-    if (!funcDecl || funcDecl->identifier.Val() != INIT_IDENT ||
-        !funcDecl->TestAttr(Attribute::CONSTRUCTOR, Attribute::COMPILER_ADD)) {
-        return false;
-    }
-
-    CJC_ASSERT(funcDecl->funcBody);
-    auto& paramLists = funcDecl->funcBody->paramLists;
-    CJC_ASSERT(paramLists.size() > 0);
-    auto& params = paramLists[0]->params;
-    if (params.size() != 1 || params[0]->type->symbol->name != STD_LIB_STRING) {
-        return false;
-    }
-
-    return true;
-}
-
-bool IsObjCGeneratedNSObjectToString(const Decl& target)
-{
-    auto funcDecl = DynamicCast<const FuncDecl>(&target);
-    if (!funcDecl || funcDecl->identifier.Val() != TOSTRING_METHOD_IDENT ||
-        !funcDecl->TestAttr(Attribute::COMPILER_ADD) || !funcDecl->funcBody) {
-        return false;
-    }
-
-    CJC_ASSERT(funcDecl->funcBody);
-    auto& paramLists = funcDecl->funcBody->paramLists;
-    CJC_ASSERT(paramLists.size() > 0);
-    auto& params = paramLists[0]->params;
-    if (params.size() != 0) {
-        return false;
-    }
-
-    return true;
-}
-
-bool IsObjCGeneratedMember(const Decl& target)
-{
-    auto classLikeDecl = DynamicCast<const ClassLikeDecl>(target.outerDecl);
-    if (!classLikeDecl) {
-        return false;
-    }
-    auto foreignName = GetObjCMirrorForeignName(*classLikeDecl);
-    return (foreignName == NSSTRING_CLASS_IDENT && IsObjCGeneratedNSStringCtor(target)) ||
-        (foreignName == NSOBJECT_CLASS_IDENT && IsObjCGeneratedNSObjectToString(target));
-}
-
 OwnedPtr<PrimitiveType> GetPrimitiveType(std::string typeName, AST::TypeKind typekind)
 {
     OwnedPtr<PrimitiveType> type = MakeOwned<PrimitiveType>();
@@ -545,6 +488,26 @@ void RebindClonedStubToSynthetic(Decl& stub, ClassDecl& synthetic)
         }
         return VisitAction::WALK_CHILDREN;
     }).Walk();
+}
+
+OwnedPtr<Expr> CreateZeroValue(const ImportManager& importManager, TypeManager& typeManager, Ty& ty)
+{
+    static constexpr std::string_view ZERO_VALUE_INTRINSIC_NAME = "zeroValue";
+    auto zeroValueDecl = importManager.GetCoreDecl<FuncDecl>(std::string(ZERO_VALUE_INTRINSIC_NAME));
+    CJC_ASSERT(zeroValueDecl);
+    auto zeroValueCall = MakeOwned<CallExpr>();
+
+    auto fdRef = CreateRefExpr(*zeroValueDecl);
+    fdRef->instTys.push_back(&ty);
+    auto refTy = typeManager.GetInstantiatedTy(
+        zeroValueDecl->GetTy(), TypeCheckUtil::GenerateTypeMapping(*zeroValueDecl, fdRef->instTys));
+    fdRef->SetTy(refTy);
+
+    zeroValueCall->baseFunc = std::move(fdRef);
+    zeroValueCall->SetTy(&ty);
+    zeroValueCall->callKind = CallKind::CALL_INTRINSIC_FUNCTION;
+    zeroValueCall->resolvedFunction = zeroValueDecl;
+    return zeroValueCall;
 }
 
 } // namespace Cangjie::Native::FFI
