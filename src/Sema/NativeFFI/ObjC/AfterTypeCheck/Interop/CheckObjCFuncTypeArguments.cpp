@@ -11,10 +11,9 @@
  */
 
 
-#include "NativeFFI/Utils.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
 #include "cangjie/AST/Walker.h"
 #include "Handlers.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 
 using namespace Cangjie;
 using namespace Cangjie::AST;
@@ -29,11 +28,11 @@ void ReportObjCIncompatibleType(const InteropContext& ctx, Ptr<Type> typeUsage) 
         auto tyArg = typeUsage->GetTypeArgs()[0];
         errorRef = tyArg;
         if (auto fTy = As<ASTKind::FUNC_TYPE>(tyArg)) {
-            if (!ctx.typeMapper.IsObjCCompatible(*fTy->retType->GetTy())) {
+            if (!IsObjCCompatible(*fTy->retType->GetTy())) {
                 errorRef = fTy->retType;
             }
             for (Ptr<Type> arg : fTy->paramTypes) {
-                if (!ctx.typeMapper.IsObjCCompatible(*arg->GetTy())) {
+                if (!IsObjCCompatible(*arg->GetTy())) {
                     errorRef = arg;
                     break;
                 }
@@ -55,7 +54,7 @@ void CheckObjCFuncTypeArguments::HandleImpl(InteropContext& ctx)
                 return VisitAction::WALK_CHILDREN;
             }
             if (Ptr<Decl> decl = As<ASTKind::DECL>(node);
-                decl && ctx.typeMapper.IsObjCFuncOrBlock(*decl)) {
+                decl && IsObjCFuncOrBlock(*decl)) {
                 return VisitAction::SKIP_CHILDREN;
             }
             Ptr<Type> typeUsage = As<ASTKind::TYPE>(node);
@@ -63,12 +62,12 @@ void CheckObjCFuncTypeArguments::HandleImpl(InteropContext& ctx)
                 return VisitAction::SKIP_CHILDREN;
             }
             if (typeUsage && typeUsage->GetTy() && typeUsage->GetTy()->typeArgs.size() == 1 &&
-                ctx.typeMapper.IsObjCFuncOrBlock(*typeUsage->GetTy())) {
+                IsObjCFuncOrBlock(*typeUsage->GetTy())) {
                 auto tyArg = typeUsage->GetTy()->typeArgs[0];
                 auto valid = tyArg->IsFunc();
-                valid &= !tyArg->IsCFunc();
+                valid = valid && !tyArg->IsCFunc();
                 for (auto subTy : tyArg->typeArgs) {
-                    valid &= ctx.typeMapper.IsObjCCompatible(*subTy);
+                    valid = valid && IsObjCCompatible(*subTy);
                 }
                 if (!valid) {
                     ReportObjCIncompatibleType(ctx, typeUsage);

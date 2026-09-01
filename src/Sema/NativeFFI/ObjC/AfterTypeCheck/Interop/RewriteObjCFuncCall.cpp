@@ -12,7 +12,7 @@
 
 
 #include "NativeFFI/Utils.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/AST/Match.h"
@@ -53,7 +53,7 @@ enum class ObjCFTypeKind {
     BLOCK, FUNCPTR, NONE
 };
 
-ObjCFTypeKind FTypeKindByCallPropertyDecl(TypeMapper& tm, Ptr<Decl> decl)
+ObjCFTypeKind FTypeKindByCallPropertyDecl(Ptr<Decl> decl)
 {
     if (decl == nullptr
      || decl->astKind != ASTKind::PROP_DECL
@@ -62,10 +62,10 @@ ObjCFTypeKind FTypeKindByCallPropertyDecl(TypeMapper& tm, Ptr<Decl> decl)
         return ObjCFTypeKind::NONE;
     }
     auto typeDecl = decl->outerDecl;
-    if (tm.IsObjCFunc(*typeDecl)) {
+    if (IsObjCFunc(*typeDecl)) {
         return ObjCFTypeKind::FUNCPTR;
     }
-    if (tm.IsObjCBlock(*typeDecl)) {
+    if (IsObjCBlock(*typeDecl)) {
         return ObjCFTypeKind::BLOCK;
     }
 
@@ -92,7 +92,7 @@ void RewriteObjCFuncCall::HandleImpl(InteropContext& ctx)
             }
             auto decl = GetDirectlyReferencedMemberDecl(StaticCast<Expr>(node));
 
-            if (FTypeKindByCallPropertyDecl(ctx.typeMapper, decl) != ObjCFTypeKind::NONE) {
+            if (FTypeKindByCallPropertyDecl(decl) != ObjCFTypeKind::NONE) {
                 ctx.diag.DiagnoseRefactor(
                     DiagKindRefactor::sema_objc_func_call_property_can_only_be_called,
                     *node,
@@ -108,7 +108,7 @@ void RewriteObjCFuncCall::HandleImpl(InteropContext& ctx)
 
             auto& ma = callExpr->baseFunc;
             Ptr<Decl> referencedDecl = GetDirectlyReferencedMemberDecl(ma);
-            auto fTypeKind = FTypeKindByCallPropertyDecl(ctx.typeMapper, referencedDecl);
+            auto fTypeKind = FTypeKindByCallPropertyDecl(referencedDecl);
             if (fTypeKind == ObjCFTypeKind::NONE) {
                 return VisitAction::WALK_CHILDREN;
             }
@@ -124,12 +124,12 @@ void RewriteObjCFuncCall::HandleImpl(InteropContext& ctx)
             for (auto& originalArg : callExpr->args) {
                 OwnedPtr<Expr> cloned = ASTCloner::Clone(originalArg->expr.get());
                 unwrappedArguments.push_back(
-                    ctx.factory.UnwrapEntity(std::move(cloned)));
+                    ctx.deprecatedFactory.UnwrapEntity(std::move(cloned)));
             }
             auto fptrAccessor = fTypeKind == ObjCFTypeKind::BLOCK ?
                 ctx.bridge.GetObjCBlockFPointerAccessor() : ctx.bridge.GetObjCFuncFPointerAccessor();
 
-            auto call = ctx.factory.CreateFuncCallViaOpaquePointer(
+            auto call = ctx.deprecatedFactory.CreateFuncCallViaOpaquePointer(
                 CreateMemberCall(WithinFile(CreateRefExpr(*tmpVar), node->curFile), fptrAccessor),
                 ctx.typeMapper.Cj2CType(callExpr->GetTy()), std::move(unwrappedArguments));
             call->curFile = node->curFile;
@@ -137,8 +137,8 @@ void RewriteObjCFuncCall::HandleImpl(InteropContext& ctx)
             block.emplace_back(std::move(tmpVar));
             // We use objc_retain here, because we don't know in advance if
             // ARC applied objc_autoreleaseReturnValue to the result of the ObjCFunc
-            block.push_back(ctx.factory.WrapEntity(std::move(call), *callExpr->GetTy(), Retain::RETAINED));
-            ctx.factory.SetDesugarExpr(
+            block.push_back(ctx.deprecatedFactory.WrapEntity(std::move(call), *callExpr->GetTy(), Retain::RETAINED));
+            ctx.deprecatedFactory.SetDesugarExpr(
                 callExpr,
                 WrapReturningLambdaCall(
                     ctx.typeManager,

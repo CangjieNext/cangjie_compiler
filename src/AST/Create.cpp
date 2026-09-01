@@ -752,4 +752,13 @@ OwnedPtr<ImportSpec> CreateImportSpec(const std::string& fullPackageName, const 
     import->EnableAttr(Attribute::COMPILER_ADD, Attribute::IMPLICIT_ADD, Attribute::PRIVATE);
     return import;
 }
+
+OwnedPtr<PropDecl> CreatePropDecl() noexcept
+{
+    auto pd = MakeOwned<PropDecl>();
+    pd->EnableAttr(Attribute::COMPILER_ADD, Attribute::IMPLICIT_ADD);
+    pd->toBeCompiled = true; // For incremental compilation.
+    return pd;
+}
+
 } // namespace Cangjie::AST

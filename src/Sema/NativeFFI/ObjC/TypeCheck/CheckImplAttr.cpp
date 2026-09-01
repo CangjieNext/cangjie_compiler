@@ -12,19 +12,19 @@
  */
 
 #include "Handlers.h"
-#include "cangjie/AST/Match.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
 
-void CheckMirrorSubtypeAttr::HandleImpl(TypeCheckContext& ctx)
+void CheckImplAttr::HandleImpl(TypeCheckContext& ctx)
 {
     auto& ty = *ctx.target.GetTy();
-    if (!ctx.typeMapper.IsValidObjCMirrorSubtype(ty)) {
+    if (!IsObjCMirrorSubtype(ty)) {
         return;
     }
 
-    if ((ctx.typeMapper.IsValidObjCMirror(ty) || ctx.typeMapper.IsObjCImpl(ty))) {
+    if (IsObjCMirror(ty) || IsObjCImpl(ty)) {
         return;
     }
 
