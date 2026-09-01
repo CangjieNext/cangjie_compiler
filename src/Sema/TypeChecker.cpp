@@ -2087,7 +2087,7 @@ void TypeChecker::TypeCheckerImpl::PrepareTypeCheck(ASTContext& ctx, Package& pk
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     Utils::ProfileRecorder::Start("PrepareTypeCheck", "InteropPrepare");
     Cangjie::Native::FFI::Java::PrepareTypeCheck(pkg, importManager, typeManager);
-    Interop::ObjC::PrepareTypeCheck(pkg);
+    Interop::ObjC::PrepareTypeCheck(pkg, importManager, typeManager);
     Utils::ProfileRecorder::Stop("PrepareTypeCheck", "InteropPrepare");
 #endif
 

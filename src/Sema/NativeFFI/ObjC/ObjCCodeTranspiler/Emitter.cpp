@@ -12,13 +12,7 @@
 
 #include "Transpiler.h"
 #include "Emitter.h"
-#include "NativeFFI/ObjC/Utils/ASTFactory.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
-#include "NativeFFI/Utils.h"
-#include "cangjie/Sema/TypeManager.h"
-#include "cangjie/Utils/FileUtil.h"
 #include <iostream>
-#include <set>
 
 namespace Cangjie::Interop::ObjC {
 

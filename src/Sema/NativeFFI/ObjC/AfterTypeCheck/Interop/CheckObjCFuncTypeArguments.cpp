@@ -11,9 +11,9 @@
  */
 
 #include "NativeFFI/Utils.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
 #include "cangjie/AST/Walker.h"
 #include "Handlers.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 
 using namespace Cangjie;
 using namespace Cangjie::AST;
@@ -21,16 +21,16 @@ using namespace Cangjie::Interop::ObjC;
 
 namespace {
 
-Ptr<Type> FindIncompatibleTypeNode(const InteropContext& ctx, Ptr<Type> tyArg)
+Ptr<Type> FindIncompatibleTypeNode(Ptr<Type> tyArg)
 {
     CJC_NULLPTR_CHECK(tyArg);
     Ptr<Type> errorRef = tyArg;
     if (auto fTy = As<ASTKind::FUNC_TYPE>(tyArg)) {
-        if (!ctx.typeMapper.IsObjCCompatible(*fTy->retType->GetTy())) {
+        if (!IsObjCCompatible(*fTy->retType->GetTy())) {
             errorRef = fTy->retType;
         }
         for (Ptr<Type> arg : fTy->paramTypes) {
-            if (!ctx.typeMapper.IsObjCCompatible(*arg->GetTy())) {
+            if (!IsObjCCompatible(*arg->GetTy())) {
                 errorRef = arg;
                 break;
             }
@@ -45,7 +45,7 @@ void ReportObjCIncompatibleTypeUsage(const InteropContext& ctx, Ptr<Type> typeUs
     Ptr<Node> errorRef = typeUsage;
     auto typeArgs = typeUsage->GetTypeArgs();
     if (typeArgs.size() > 0) {
-        errorRef = FindIncompatibleTypeNode(ctx, typeArgs.front());
+        errorRef = FindIncompatibleTypeNode(typeArgs.front());
         CJC_NULLPTR_CHECK(errorRef);
     }
     auto interopDecl = Ty::GetDeclOfTy(typeUsage->GetTy());
@@ -64,7 +64,7 @@ void ReportObjCIncompatibleConstructorCall(const InteropContext& ctx, Ptr<CallEx
     auto typeArgs = refExpr->GetTypeArgs();
     // ObjCBlock<T>(x) ==> report error on "T"
     if (typeArgs.size() > 0) {
-        errorRef = FindIncompatibleTypeNode(ctx, typeArgs.front());
+        errorRef = FindIncompatibleTypeNode(typeArgs.front());
     } else {
         // ObjCBlock(x) ==> report error on "x"
         auto&& args = callExpr->args;
@@ -91,7 +91,7 @@ void CheckObjCFuncTypeArguments::HandleImpl(InteropContext& ctx)
                 return VisitAction::WALK_CHILDREN;
             }
             if (Ptr<Decl> decl = As<ASTKind::DECL>(node);
-                decl && ctx.typeMapper.IsObjCFuncOrBlock(*decl)) {
+                decl && IsObjCFuncOrBlock(*decl)) {
                 return VisitAction::SKIP_CHILDREN;
             }
 
@@ -115,12 +115,12 @@ void CheckObjCFuncTypeArguments::CheckTypeUsage(InteropContext& ctx, Type& typeU
     }
     auto ty = typeUsage.GetTy();
     CJC_NULLPTR_CHECK(ty);
-    if (ty->typeArgs.size() != 1 || !ctx.typeMapper.IsObjCFuncOrBlock(*ty)) {
+    if (ty->typeArgs.size() != 1 || !IsObjCFuncOrBlock(*ty)) {
         return;
     }
     auto tyArg = ty->typeArgs.front();
     CJC_NULLPTR_CHECK(tyArg);
-    if (ctx.typeMapper.IsObjCCompatibleFuncTy(*tyArg)) {
+    if (IsObjCCompatibleFuncTy(*tyArg)) {
         // everything is fine
         return;
     }
@@ -143,12 +143,12 @@ void CheckObjCFuncTypeArguments::CheckConstructorCall(InteropContext& ctx, CallE
     }
     auto ty = call.GetTy();
     CJC_NULLPTR_CHECK(ty);
-    if (ty->typeArgs.size() != 1 || !ctx.typeMapper.IsObjCFuncOrBlock(*ty)) {
+    if (ty->typeArgs.size() != 1 || !IsObjCFuncOrBlock(*ty)) {
         return;
     }
     auto tyArg = ty->typeArgs.front();
     CJC_NULLPTR_CHECK(tyArg);
-    if (ctx.typeMapper.IsObjCCompatibleFuncTy(*tyArg)) {
+    if (IsObjCCompatibleFuncTy(*tyArg)) {
         // everything is fine
         return;
     }
