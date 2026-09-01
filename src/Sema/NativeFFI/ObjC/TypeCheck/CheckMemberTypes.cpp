@@ -14,6 +14,7 @@
 #include "NativeFFI/Utils.h"
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
@@ -21,7 +22,7 @@ using namespace Cangjie::Native::FFI;
 
 void CheckMemberTypes::HandleImpl(TypeCheckContext& ctx)
 {
-    auto isImpl = ctx.typeMapper.IsObjCImpl(*ctx.target.GetTy());
+    auto isImpl = IsObjCImpl(*ctx.target.GetTy());
     for (auto& decl : ctx.target.GetMemberDeclPtrs()) {
         // Only public members of exported declarations must be checked.
         if (isImpl && !decl->TestAttr(Attribute::PUBLIC)) {
@@ -46,7 +47,7 @@ void CheckMemberTypes::HandleImpl(TypeCheckContext& ctx)
 
 void CheckMemberTypes::CheckPropTypes(PropDecl& pd, TypeCheckContext& ctx)
 {
-    if (ctx.typeMapper.IsObjCCompatible(*pd.GetTy())) {
+    if (IsObjCCompatible(*pd.GetTy())) {
         return;
     }
 
@@ -58,7 +59,7 @@ void CheckMemberTypes::CheckPropTypes(PropDecl& pd, TypeCheckContext& ctx)
 
 void CheckMemberTypes::CheckVarTypes(VarDecl& vd, TypeCheckContext& ctx)
 {
-    if (ctx.typeMapper.IsObjCCompatible(*vd.GetTy())) {
+    if (IsObjCCompatible(*vd.GetTy())) {
         return;
     }
 
@@ -70,7 +71,7 @@ void CheckMemberTypes::CheckVarTypes(VarDecl& vd, TypeCheckContext& ctx)
 
 void CheckMemberTypes::CheckFuncTypes(FuncDecl& fd, TypeCheckContext& ctx)
 {
-    if (!fd.funcBody || IsObjCGeneratedMember(fd)) {
+    if (!fd.funcBody || IsGeneratedMember(fd)) {
         return;
     }
 
@@ -83,7 +84,7 @@ void CheckMemberTypes::CheckFuncTypes(FuncDecl& fd, TypeCheckContext& ctx)
 
 void CheckMemberTypes::CheckFuncRetType(FuncDecl& fd, TypeCheckContext& ctx)
 {
-    if (fd.funcBody->retType && !ctx.typeMapper.IsObjCCompatible(*fd.funcBody->retType->GetTy())) {
+    if (fd.funcBody->retType && !IsObjCCompatible(*fd.funcBody->retType->GetTy())) {
         ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_interop_method_ret_must_be_objc_compatible,
             *fd.funcBody->retType, GetDeclInteropName());
 
@@ -100,7 +101,7 @@ void CheckMemberTypes::CheckFuncParamTypes(FuncDecl& fd, TypeCheckContext& ctx)
 
     for (auto& paramList : fd.funcBody->paramLists) {
         for (auto& param : paramList->params) {
-            if (ctx.typeMapper.IsObjCCompatible(*param->GetTy())) {
+            if (IsObjCCompatible(*param->GetTy())) {
                 continue;
             }
 

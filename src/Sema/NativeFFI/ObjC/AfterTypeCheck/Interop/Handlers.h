@@ -45,15 +45,53 @@ public:
 };
 
 /**
+ * Caches @ObjCImpl classes to their corresponding registry companion class decls.
+ * It helps to avoid unnecessary package lookups.
+ */
+class MapImplToRegCompanion : public Handler<MapImplToRegCompanion, InteropContext> {
+public:
+    void HandleImpl(InteropContext& ctx);
+};
+
+/**
+ * Restores registry companion classes hierarchy.
+ * It's done, because we need access to **all** fields of @ObjCImpls. Then their corresponding
+ * companions must mirror the @ObjCImpl classes inheritance chain.
+ * @note it can't be done before typecheck, because we can't tell if the parent class of an @ObjCImpl decl is another
+ * @ObjCImpl
+ */
+class RestoreRegCompanionsTypeHierarchy : public Handler<RestoreRegCompanionsTypeHierarchy, InteropContext> {
+public:
+    void HandleImpl(InteropContext& ctx);
+};
+
+/**
+ * Moves each instance field and finalizer (if presented) from @ObjCImpl to its corresponding registry companion.
+ * It's necessary, because we need to transfer ownership of the fields to a registry companion in order to make garbage
+ * collection work properly.
+ */
+class MoveImplMembersToRegCompanion : public Handler<MoveImplMembersToRegCompanion, InteropContext> {
+public:
+    void HandleImpl(InteropContext& ctx);
+};
+
+/**
  * Creates and inserts a field of type `NativeObjCId` in all hierarchy root @ObjCMirror declarations.
  *
  * `public var $obj: NativeObjCId`
  */
 class InsertNativeHandleField : public Handler<InsertNativeHandleField, InteropContext> {
 public:
-    explicit InsertNativeHandleField()
-    {
-    }
+    void HandleImpl(InteropContext& ctx);
+};
+
+/**
+ * Creates and inserts a field of type `<typename>$reg` for each @ObjCImpl declarations.
+ *
+ * `private var $reg: Impl$reg`
+ */
+class InsertObjCImplRegCompanionField : public Handler<InsertObjCImplRegCompanionField, InteropContext> {
+public:
     void HandleImpl(InteropContext& ctx);
 };
 
@@ -65,9 +103,6 @@ public:
  */
 class InsertNativeHandleGetterDecl : public Handler<InsertNativeHandleGetterDecl, InteropContext> {
 public:
-    explicit InsertNativeHandleGetterDecl()
-    {
-    }
     void HandleImpl(InteropContext& ctx);
 };
 
@@ -83,9 +118,6 @@ public:
  */
 class InsertNativeHandleGetterBody : public Handler<InsertNativeHandleGetterBody, InteropContext> {
 public:
-    explicit InsertNativeHandleGetterBody()
-    {
-    }
     void HandleImpl(InteropContext& ctx);
 };
 
@@ -110,9 +142,6 @@ public:
  */
 class InsertBaseCtorDecl : public Handler<InsertBaseCtorDecl, InteropContext> {
 public:
-    explicit InsertBaseCtorDecl()
-    {
-    }
     void HandleImpl(InteropContext& ctx);
 };
 
@@ -133,9 +162,6 @@ public:
  */
 class InsertBaseCtorBody : public Handler<InsertBaseCtorBody, InteropContext> {
 public:
-    explicit InsertBaseCtorBody()
-    {
-    }
     void HandleImpl(InteropContext& ctx);
 };
 
@@ -150,9 +176,6 @@ public:
  */
 class InsertFinalizer : public Handler<InsertFinalizer, InteropContext> {
 public:
-    explicit InsertFinalizer()
-    {
-    }
     void HandleImpl(InteropContext& ctx);
 };
 
@@ -162,16 +185,13 @@ public:
  */
 class GenerateDeleteCJObjectMethod : public Handler<GenerateDeleteCJObjectMethod, InteropContext> {
 public:
-    explicit GenerateDeleteCJObjectMethod()
-    {
-    }
     void HandleImpl(InteropContext& ctx);
 };
 
 /**
- * Inserts stubs for members of synthetic wrapper classes.
+ * Inserts stubs for members of mirror interface handle wrapper classes.
  */
-class GenerateInSyntheticWrappers : public Handler<GenerateInSyntheticWrappers, InteropContext> {
+class GenerateInMirrorInterfaceHandleWrappers : public Handler<GenerateInMirrorInterfaceHandleWrappers, InteropContext> {
 public:
     void HandleImpl(InteropContext& ctx);
 };
@@ -221,9 +241,6 @@ public:
  */
 class DesugarMirrors : public Handler<DesugarMirrors, InteropContext> {
 public:
-    explicit DesugarMirrors()
-    {
-    }
     void HandleImpl(InteropContext& ctx);
 
 private:
@@ -238,7 +255,7 @@ private:
     void DesugarField(InteropContext& ctx, AST::ClassLikeDecl& mirror, AST::PropDecl& field);
 };
 
-class DesugarSyntheticWrappers : public Handler<DesugarSyntheticWrappers, InteropContext> {
+class DesugarMirrorInterfaceHandleWrappers : public Handler<DesugarMirrorInterfaceHandleWrappers, InteropContext> {
 public:
     void HandleImpl(InteropContext& ctx);
 };
@@ -250,9 +267,6 @@ public:
 class GenerateObjCImplMembers : public Handler<GenerateObjCImplMembers, InteropContext> {
 public:
     void HandleImpl(InteropContext& ctx);
-
-private:
-    void GenerateCtor(InteropContext& ctx, AST::ClassDecl& target, AST::FuncDecl& from);
 };
 
 /**
@@ -261,9 +275,6 @@ private:
  */
 class GenerateInitCJObjectMethods : public Handler<GenerateInitCJObjectMethods, InteropContext> {
 public:
-    explicit GenerateInitCJObjectMethods()
-    {
-    }
     void HandleImpl(InteropContext& ctx);
 
 private:
@@ -301,18 +312,15 @@ private:
  */
 class GenerateWrappers : public Handler<GenerateWrappers, InteropContext> {
 public:
-    explicit GenerateWrappers()
-    {
-    }
     void HandleImpl(InteropContext& ctx);
 
 private:
-    void GenerateWrapper(InteropContext& ctx, AST::FuncDecl& method);
+    void GenerateWrapper(InteropContext& ctx, AST::ClassDecl& impl, AST::FuncDecl& method);
     // Generic methods for prop and field with SFINAE?
-    void GenerateWrapper(InteropContext& ctx, AST::PropDecl& prop);
-    void GenerateSetterWrapper(InteropContext& ctx, AST::PropDecl& prop);
-    void GenerateWrapper(InteropContext& ctx, AST::VarDecl& field);
-    void GenerateSetterWrapper(InteropContext& ctx, AST::VarDecl& field);
+    void GenerateWrapper(InteropContext& ctx, AST::ClassDecl& impl, AST::PropDecl& prop);
+    void GenerateSetterWrapper(InteropContext& ctx, AST::ClassDecl& impl, AST::PropDecl& prop);
+    void GenerateWrapper(InteropContext& ctx, AST::ClassDecl& impl, AST::VarDecl& field);
+    void GenerateSetterWrapper(InteropContext& ctx, AST::ClassDecl& impl, AST::VarDecl& field);
 };
 
 /**
@@ -323,9 +331,6 @@ private:
  */
 class GenerateGlueCode : public Handler<GenerateGlueCode, InteropContext> {
 public:
-    explicit GenerateGlueCode()
-    {
-    }
     void HandleImpl(InteropContext& ctx);
 };
 
@@ -413,6 +418,11 @@ public:
  * ```
  */
 class InsertStringConversions : public Handler<InsertStringConversions, InteropContext> {
+public:
+    void HandleImpl(InteropContext& ctx);
+};
+
+class RestoreCurFile: public Handler<RestoreCurFile, InteropContext> {
 public:
     void HandleImpl(InteropContext& ctx);
 };
