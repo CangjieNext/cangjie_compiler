@@ -671,7 +671,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateInitCjObjectReturningObjCSelf(const Decl& t
     for (size_t i = 0; i < ctorParams.size(); i++) {
         auto& ctorParam = ctorParams[i];
         if (ctorParam->identifier.Val() == NATIVE_HANDLE_MARKER) {
-            auto callArg = CreateFuncArg(CreateNativeHandleMarker());
+            auto callArg = CreateFuncArg(CreateNativeHandleMarker(*curFile));
             ctorCallArgs.emplace_back(std::move(callArg));
             offset = 1;
             continue;
@@ -1349,9 +1349,9 @@ OwnedPtr<FuncDecl> ASTFactory::CreateBaseCtorDecl(ClassDecl& target)
     return ctor;
 }
 
-OwnedPtr<RefExpr> ASTFactory::CreateNativeHandleMarker()
+OwnedPtr<RefExpr> ASTFactory::CreateNativeHandleMarker(File& curFile)
 {
-    return CreateRefExpr(*bridge.GetNativeObjCIdMarkerInstance());
+    return WithinFile(CreateRefExpr(*bridge.GetNativeObjCIdMarkerInstance()), &curFile);
 }
 
 OwnedPtr<FuncDecl> ASTFactory::CreateImplCtor(FuncDecl& from)
@@ -1469,12 +1469,12 @@ bool ASTFactory::IsGeneratedCtor(const Decl& decl) const
     // taking first param list probably is not the best idea
     auto& params = paramLists[0]->params;
 
-    if (params.size() < 1) {
+    if (params.empty()) {
         return false;
     }
 
     // Any constructor with $obj as first parameter is generated assuming user can't name first
-    // argument with a dollar sign. Partually BACKCOMPAT as we try to support possible compiled
+    // argument with a dollar sign. Partially BACKCOMPAT as we try to support possible compiled
     // mirrors without $mrk as argument
     return params[0]->identifier == NATIVE_HANDLE_IDENT;
 }
@@ -1527,12 +1527,10 @@ Ptr<FuncDecl> ASTFactory::GetGeneratedBaseCtor(Decl& decl)
 void ASTFactory::AddMarkerToCallIfNeeded(CallExpr& callExpr)
 {
     auto& ctor = callExpr.resolvedFunction;
+    CJC_NULLPTR_CHECK(ctor);
     CJC_ASSERT(ctor->TestAttr(Attribute::CONSTRUCTOR));
-    CJC_ASSERT(ctor && ctor->funcBody && !ctor->funcBody->paramLists.empty());
-    auto& params = ctor->funcBody->paramLists[0]->params;
-    if (params.size() == INTERNAL_CTOR_PARAMS && params[0]->identifier == NATIVE_HANDLE_IDENT &&
-        params[1]->identifier == NATIVE_HANDLE_MARKER) {
-        callExpr.args.push_back(CreateFuncArg(CreateNativeHandleMarker()));
+    if (IsGeneratedBaseCtor(*ctor)) {
+        callExpr.args.push_back(CreateFuncArg(CreateNativeHandleMarker(*callExpr.curFile)));
     }
 }
 

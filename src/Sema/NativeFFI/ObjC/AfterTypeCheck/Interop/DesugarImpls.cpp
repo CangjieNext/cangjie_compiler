@@ -101,7 +101,7 @@ void DesugarSuperCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
     if (HasImplSuperClass(impl)) {
         std::vector<OwnedPtr<FuncArg>> args;
         args.push_back(CreateFuncArg(std::move(objCSelf)));
-        auto marker = ctx.factory.CreateNativeHandleMarker();
+        auto marker = ctx.factory.CreateNativeHandleMarker(*curFile);
         args.push_back(CreateFuncArg(std::move(marker)));
         args.insert(args.end(), std::make_move_iterator(ce->args.begin()), std::make_move_iterator(ce->args.end()));
 
@@ -172,21 +172,21 @@ void DesugarThisCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
      * if is in generated ctor:
      * this($obj, ...args)
      */
-     auto curFile = ce->curFile;
-     auto targetFd = ce->resolvedFunction;
-     auto& methodParams = ctor.funcBody->paramLists[0]->params;
-     CJC_ASSERT(methodParams.size() > 0);
-     auto objCSelf = CreateRefExpr(*methodParams[0]);
+    auto curFile = ce->curFile;
+    auto targetFd = ce->resolvedFunction;
+    auto& methodParams = ctor.funcBody->paramLists[0]->params;
+    CJC_ASSERT(methodParams.size() > 0);
+    auto objCSelf = CreateRefExpr(*methodParams[0]);
 
-     std::vector<OwnedPtr<FuncArg>> args;
-     args.push_back(CreateFuncArg(std::move(objCSelf)));
-     auto marker = ctx.factory.CreateNativeHandleMarker();
-     args.push_back(CreateFuncArg(std::move(marker)));
-     args.insert(args.end(), std::make_move_iterator(ce->args.begin()), std::make_move_iterator(ce->args.end()));
+    std::vector<OwnedPtr<FuncArg>> args;
+    args.push_back(CreateFuncArg(std::move(objCSelf)));
+    auto marker = ctx.factory.CreateNativeHandleMarker(*curFile);
+    args.push_back(CreateFuncArg(std::move(marker)));
+    args.insert(args.end(), std::make_move_iterator(ce->args.begin()), std::make_move_iterator(ce->args.end()));
 
-     auto realTarget = ctx.factory.GetGeneratedImplCtor(impl, *targetFd);
-     auto realTargetTy = StaticCast<FuncTy>(realTarget->GetTy());
-     ce->desugarExpr = CreateThisCall(impl, *realTarget, realTargetTy, curFile, std::move(args));
+    auto realTarget = ctx.factory.GetGeneratedImplCtor(impl, *targetFd);
+    auto realTargetTy = StaticCast<FuncTy>(realTarget->GetTy());
+    ce->desugarExpr = CreateThisCall(impl, *realTarget, realTargetTy, curFile, std::move(args));
 }
 } // namespace
 
