@@ -50,6 +50,36 @@ void AddAttributeForWrapper(const IRBuilder2& builder, const CHIR::FuncType& fun
     }
 
     if (options.target.arch == Triple::ArchType::AARCH64) {
+        // A function-pointer type cannot carry parameter attributes, so sub-word
+        // integer arguments would be forwarded raw (Int8 -2 as 0xFE) while the CFunc
+        // target follows the signext/zeroext contract (MacAArch64CJNativeCGCFFI::
+        // AddFunctionAttr) and misreads them at -O2. Add the attributes to the call
+        // only: the wrapper signature stays attribute-free since its caller (the GC
+        // stub path) never extends; codegen then extends inside the wrapper (sxtb/uxtb).
+        const unsigned int SMALL_INT_THRESHOLD = 32;
+        unsigned argIdx = sret ? 1U : 0U;
+        for (auto chirParamTy : funcTy.GetParamTypes()) {
+            CJC_ASSERT(chirParamTy);
+            if (IsZeroSizedTypeInC(cgMod, *chirParamTy)) {
+                continue;  // no register slot (GetCFuncType skips it too)
+            }
+            if (argIdx < callInst.arg_size()) {
+                auto argTy = llvm::dyn_cast<llvm::IntegerType>(callInst.getArgOperand(argIdx)->getType());
+                if ((chirParamTy->IsBoolean() || chirParamTy->IsInteger()) && argTy &&
+                    argTy->getBitWidth() < SMALL_INT_THRESHOLD) {
+                    auto attr = chirParamTy->IsSignedInteger() ? llvm::Attribute::SExt : llvm::Attribute::ZExt;
+                    AddParamAttr(&callInst, argIdx, llvm::Attribute::NoUndef);
+                    AddParamAttr(&callInst, argIdx, attr);
+                }
+            }
+            argIdx++;
+        }
+        if (auto retTy = funcTy.GetReturnType(); retTy->IsBoolean() || retTy->IsInteger()) {
+            auto intRetTy = llvm::dyn_cast<llvm::IntegerType>(func->getReturnType());
+            if (intRetTy && intRetTy->getBitWidth() < SMALL_INT_THRESHOLD) {
+                AddRetAttr(&callInst, retTy->IsSignedInteger() ? llvm::Attribute::SExt : llvm::Attribute::ZExt);
+            }
+        }
         return;
     } else if (func->getReturnType()->isIntegerTy(1)) {
         AddRetAttr(func, llvm::Attribute::ZExt);
