@@ -10,12 +10,12 @@
 
 #include <array>
 #ifndef BUILD_LIB_CANGJIE_DEMANGLE
-#include <vector>
 #include "Base/CString.h"
 #endif
 #ifdef BUILD_LIB_CANGJIE_DEMANGLE
 #include <string>
 #endif
+#include <vector>
 #include <functional>
 #include <cassert>
 #include <cstdint>

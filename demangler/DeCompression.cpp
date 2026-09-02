@@ -53,7 +53,7 @@ inline size_t StripCangjiePrefix(T& identifier, size_t idx)
 {
     if (idx + MANGLE_CHAR_LEN < identifier.Length() && identifier[idx] == MANGLE_UNDERSCORE_PREFIX &&
         identifier[idx + MANGLE_CHAR_LEN] == 'C') {
-        if(idx + MANGLE_CHAR_LEN  * 2 < identifier.Length() && identifier[idx + MANGLE_CHAR_LEN  * 2] == 'V') {
+        if (idx + MANGLE_CHAR_LEN  * 2 < identifier.Length() && identifier[idx + MANGLE_CHAR_LEN  * 2] == 'V') {
             return idx + PREFIX_LEN + MANGLE_CHAR_LEN;
         } else {
             return idx + PREFIX_LEN;
@@ -364,8 +364,8 @@ size_t DeCompression<T>::ForwardClassType(T& mangled, size_t& cnt, size_t idx)
     size_t curIdx = idx;
     size_t curCnt = cnt;
     // Skip 'CN' 'RN' 'NN'
-    if (idx + PREFIX_LEN < mangled.Length() && (mangled[idx] == 'C' || mangled[idx] == 'R' || mangled[idx] == 'N')
-        && mangled[idx + MANGLE_CHAR_LEN] == MANGLE_NESTED_PREFIX[0]) {
+    if (idx + PREFIX_LEN < mangled.Length() && (mangled[idx] == 'C' || mangled[idx] == 'R' || mangled[idx] == 'N') &&
+        mangled[idx + MANGLE_CHAR_LEN] == MANGLE_NESTED_PREFIX[0]) {
         curIdx += PREFIX_LEN;
     } else {
         return idx;
@@ -589,14 +589,72 @@ void DeCompression<T>::TreeIdMapAssign(T& mangled, T& mangledCopy, size_t mapId,
     }
 }
 
+// Forward compound type encodes: class ('CN'/'RN'/'NN'), function (F0/FC),
+// tuple ('T'), C pointer ('P'), array ('A'/'V') and generic ('G').
+// Returns idx when the encode is unknown.
+template<typename T>
+size_t DeCompression<T>::ForwardCompoundType(T& mangled, size_t& cnt, char ch, size_t idx)
+{
+    switch (ch) {
+        case 'C':
+        case 'R':
+        case 'N':
+            return ForwardClassType(mangled, cnt, idx);
+        case 'F': {
+            // The function type prefix is F0/FC.
+            if (idx + MANGLE_CHAR_LEN < mangled.Length() &&
+                (mangled[idx + MANGLE_CHAR_LEN] == '0' || mangled[idx + MANGLE_CHAR_LEN] == 'C')) {
+                return ForwardFunctionType(mangled, cnt, idx);
+            }
+            return idx;
+        }
+        case 'T':
+            return ForwardTupleType(mangled, cnt, idx);
+        case 'P':
+            return ForwardCPointer(mangled, cnt, idx);
+        case 'A':
+        case 'V':
+            return ForwardArrayType(mangled, cnt, idx);
+        case 'G':
+            return ForwardGenericType(mangled, cnt, idx);
+        default:
+            return idx;
+    }
+}
+
+// Forward compressed type reference, Y<number>. The reference is replaced by the span
+// recorded in treeIdMap, and no span is recorded for the reference itself.
+template<typename T>
+size_t DeCompression<T>::ForwardCompressedType(T& mangled, size_t& cnt, size_t curCnt, size_t idx)
+{
+    size_t nextIdx = ForwardNumber(mangled, idx + MANGLE_CHAR_LEN);
+    std::tuple<size_t, size_t> updateRes{0, nextIdx};
+    if (nextIdx != idx) {
+        updateRes = UpdateCompressedName(mangled, idx);
+    }
+    if (this->isRecord) {
+        TreeIdMapPop(cnt, curCnt);
+    }
+    return std::get<0>(updateRes) == 0 ? idx : std::get<1>(updateRes);
+}
+
+// Pop the placeholder record pushed for the current type and return the forwarding
+// result. Used by the encodes that record no span, e.g. 'k' and primitive types.
+template<typename T>
+size_t DeCompression<T>::PopRecordedType(size_t& cnt, size_t curCnt, size_t nextIdx)
+{
+    if (this->isRecord) {
+        TreeIdMapPop(cnt, curCnt);
+    }
+    return nextIdx;
+}
+
 template<typename T>
 size_t DeCompression<T>::ForwardType(T& mangled, size_t& cnt, size_t idx)
 {
     if (idx >= mangled.Length()) {
         return idx;
     }
-    char ch = mangled[idx];
-    size_t nextIdx = idx;
     size_t curCnt = cnt;
     T mangledCopy = mangled;
     // Record current treeIdMap's index after treeIdMap pushed type
@@ -606,66 +664,19 @@ size_t DeCompression<T>::ForwardType(T& mangled, size_t& cnt, size_t idx)
         bool isPush = TreeIdMapPushBack(mangled, pos);
         cnt = isPush ? cnt + 1 : cnt;
     }
-    switch (ch) {
-        case 'C':
-        case 'R':
-        case 'N':
-            nextIdx = ForwardClassType(mangled, cnt, idx);
-            break;
-        case 'F': {
-            // The function type prefix is F0/FC.
-            if (idx + MANGLE_CHAR_LEN < mangled.Length() &&
-                (mangled[idx + MANGLE_CHAR_LEN] == '0' || mangled[idx + MANGLE_CHAR_LEN] == 'C')) {
-                nextIdx = ForwardFunctionType(mangled, cnt, idx);
-            } else {
-                nextIdx = idx;
-            }
-            break;
-        }
-        case 'T':
-            nextIdx = ForwardTupleType(mangled, cnt, idx);
-            break;
-        case 'P':
-            nextIdx = ForwardCPointer(mangled, cnt, idx);
-            break;
-        case 'A':
-        case 'V':
-            nextIdx = ForwardArrayType(mangled, cnt, idx);
-            break;
-        case 'k': {
-            nextIdx = idx + MANGLE_CHAR_LEN;
-            if (this->isRecord) {
-                TreeIdMapPop(cnt, curCnt);
-            }
-            return nextIdx;
-        }
-        case 'G':
-            nextIdx = ForwardGenericType(mangled, cnt, idx);
-            break;
-        case 'Y': {
-            nextIdx = ForwardNumber(mangled, idx + MANGLE_CHAR_LEN);
-            std::tuple<size_t, size_t> updateRes{0, nextIdx};
-            if (nextIdx != idx) {
-                updateRes = UpdateCompressedName(mangled, idx);
-            }
-            if (this->isRecord) {
-                TreeIdMapPop(cnt, curCnt);
-            }
-            return std::get<0>(updateRes) == 0 ? idx : std::get<1>(updateRes);
-        }
-        default: {
-            if (IsPrimitiveType(ch)) {
-                nextIdx = ForwardPrimitiveType(mangled, idx);
-                if (this->isRecord) {
-                    TreeIdMapPop(cnt, curCnt);
-                }
-                return nextIdx;
-            } else {
-                nextIdx = idx;
-            }
-            break;
-        }
+    char ch = mangled[idx];
+    // The CString ('k'), compressed ('Y') and primitive type encodes record no span:
+    // they pop the placeholder record and return directly.
+    if (ch == 'k') {
+        return PopRecordedType(cnt, curCnt, idx + MANGLE_CHAR_LEN);
     }
+    if (ch == MANGLE_COMPRESS_PREFIX) {
+        return ForwardCompressedType(mangled, cnt, curCnt, idx);
+    }
+    if (IsPrimitiveType(ch)) {
+        return PopRecordedType(cnt, curCnt, ForwardPrimitiveType(mangled, idx));
+    }
+    size_t nextIdx = ForwardCompoundType(mangled, cnt, ch, idx);
     if (this->isRecord && nextIdx != idx) {
         std::tuple<size_t, size_t> eleInfo(idx, nextIdx);
         TreeIdMapAssign(mangled, mangledCopy, mapId, cnt, eleInfo);
