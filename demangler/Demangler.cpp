@@ -329,7 +329,7 @@ bool Demangler<T>::IsCFunctionWrapper() const
 }
 
 template<typename T>
-bool Demangler<T>::IsWrappedFunction() const 
+bool Demangler<T>::IsWrappedFunction() const
 {
     return mangledName.Find(MANGLE_WRAPPED_FUNCTION_PREFIX, 0) == 0;
 }
@@ -565,7 +565,8 @@ T DemangleInfo<T>::GetArgTypesName(const uint32_t argsNum) const
 template<typename T>
 bool DemangleInfo<T>::IsFunctionLike() const
 {
-    return type == TypeKind::FUNCTION_DECL || type == TypeKind::LAMBDA_FUNCTION || type == TypeKind::FUNCTION || type == TypeKind::WRAPPED_FUNCTION;
+    return type == TypeKind::FUNCTION_DECL || type == TypeKind::LAMBDA_FUNCTION ||
+        type == TypeKind::FUNCTION || type == TypeKind::WRAPPED_FUNCTION;
 }
 
 template<typename T>
@@ -693,7 +694,7 @@ DemangleInfo<T> Demangler<T>::Demangle(bool isType)
                                 TypeKind::NAME, isValid };
     }
     // Wrapped func like ""_CVN7default1S4testHv$N7default1SE$CN7default1IE""
-    if(IsWrappedFunction()) {
+    if (IsWrappedFunction()) {
         return DemangleWrappedFunction();
     }
     return DemangleDecl();
@@ -1175,7 +1176,7 @@ DemangleInfo<T> Demangler<T>::DemangleCommonDecl(bool isClass)
     auto pkgDi = DemanglePackageName();
     di.pkgName = pkgDi.pkgName;
     di.isPrivateDeclaration = pkgDi.isPrivateDeclaration;
-    
+
     // Take the part before E as identifier and concatenate with scope resolution.
     DemangleInfo<T> nestedDi = DemangleNestedDecls(isClass);
     di.demangled = nestedDi.demangled;
@@ -1385,14 +1386,14 @@ DemangleInfo<T> Demangler<T>::DemangleInnerFunction()
 }
 
 template<typename T>
-DemangleInfo<T> Demangler<T>::DemangleWrappedFunction() 
+DemangleInfo<T> Demangler<T>::DemangleWrappedFunction()
 {
     auto endIndex = mangledName.Find(MANGLE_END, currentIndex);
     auto prefixIndex = currentIndex + strlen(MANGLE_WRAPPED_FUNCTION_PREFIX);
     mangledName = T(MANGLE_CANGJIE_PREFIX) + mangledName.SubStr(prefixIndex, endIndex - prefixIndex);
     auto di = DemangleDecl();
     di.demangled += WRAPPED_FUNCTION_SUFFIX_INFO;
-    di.type = TypeKind::WRAPPED_FUNCTION;    
+    di.type = TypeKind::WRAPPED_FUNCTION;
     return di;
 }
 
