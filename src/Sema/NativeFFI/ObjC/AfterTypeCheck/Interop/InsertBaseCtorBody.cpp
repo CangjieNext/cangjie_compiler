@@ -40,7 +40,7 @@ void InsertBaseCtorBody::HandleImpl(InteropContext& ctx)
 
         if (HasMirrorSuperClass(*mirrorClass)) {
             auto superCtor = ctx.factory.GetGeneratedBaseCtor(*mirrorClass->GetSuperClassDecl());
-            auto superCall = CreateSuperCall(*mirrorClass, *superCtor, superCtor->GetTy());
+            auto superCall = WithinFile(CreateSuperCall(*mirrorClass, *superCtor, superCtor->GetTy()), curFile);
             superCall->args.emplace_back(CreateFuncArg(std::move(handleParam)));
             ctx.factory.AddMarkerToCallIfNeeded(*superCall);
             ctor->funcBody->body->body.emplace_back(std::move(superCall));
