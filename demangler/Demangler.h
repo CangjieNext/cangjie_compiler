@@ -8,14 +8,13 @@
 #ifndef CANGJIE_DEMANGLER_H
 #define CANGJIE_DEMANGLER_H
 
-#include <array>
 #ifndef BUILD_LIB_CANGJIE_DEMANGLE
-#include <vector>
 #include "Base/CString.h"
-#endif
-#ifdef BUILD_LIB_CANGJIE_DEMANGLE
+#else
 #include <string>
+#include <vector>
 #endif
+#include <array>
 #include <functional>
 #include <cassert>
 #include <cstdint>
