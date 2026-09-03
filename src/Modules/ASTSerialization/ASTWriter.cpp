@@ -26,6 +26,7 @@
 #include "cangjie/Mangle/ASTMangler.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/CjoManager.h"
+#include "cangjie/Modules/CjoVersion.h"
 #include "cangjie/Utils/CheckUtils.h"
 
 using namespace Cangjie;

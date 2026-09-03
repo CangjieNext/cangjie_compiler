@@ -84,11 +84,50 @@ public:
     std::string GetImportedPackageName() const;
     void SetImportSourceCode(bool enable) const;
     const std::vector<std::string> GetDependentPackageNames() const;
+
+    /**
+     * @brief Query the version of the cjo currently being loaded.
+     *
+     * After the package header has been read (i.e. one of LoadPackageDependencies /
+     * PreloadCommonPartOfPackage / LoadPackageDepInfo / LoadCachedTypeForPackage has been entered
+     * and the version check passed), these give access to the cjo's format version so that
+     * version-branching semantic logic can be written on the reader side: a newer compiler may
+     * branch on the cjo version to handle older semantics correctly.
+     *
+     * @return the (major, minor, patch) triple carried by the loaded cjo. Returns
+     *         {0, 0, 0} when the version is absent (pre-versioning cjo); callers that need to
+     *         distinguish "absent" from "0.0.0" should use HasCjoVersion().
+     */
+    struct CjoVersionTriplet {
+        uint8_t major{0};
+        uint8_t minor{0};
+        uint8_t patch{0};
+    };
+    CjoVersionTriplet GetCjoVersion() const;
+    /** Whether the loaded cjo carries a cjo format version at all. */
+    bool HasCjoVersion() const;
+    /**
+     * @brief Whether the loaded cjo's version is at least @p requiredMajor.@p requiredMinor.
+     *
+     * This is the main entry point for version-branching semantic logic on the reader side: a
+     * newer compiler asks "does this cjo carry at least the version that introduced semantics X?"
+     * to decide whether to apply the new or the old semantic. Returns false when the cjo has no
+     * version or its major differs from @p requiredMajor (a cross-major version cannot satisfy an
+     * in-major requirement). patch is never part of the requirement.
+     */
+    bool IsCjoVersionAtLeast(uint8_t requiredMajor, uint8_t requiredMinor) const;
+    /** @brief Whether the loaded cjo's version is at most @p requiredMajor.@p requiredMinor. */
+    bool IsCjoVersionAtMost(uint8_t requiredMajor, uint8_t requiredMinor) const;
+    /** @brief Whether the loaded cjo's version is exactly @p requiredMajor.@p requiredMinor. */
+    bool IsCjoVersionExactly(uint8_t requiredMajor, uint8_t requiredMinor) const;
     // Add for cjmp
     bool PreloadCommonPartOfPackage(AST::Package& pkg) const;
     std::vector<std::string> ReadFileNames() const;
 
     Ptr<AST::Ty> LoadType(FormattedIndex type) const;
+    // Record the file path the cjo was read from, so diagnostics can name the offending file
+    // when the loader was constructed without a package name (the dep-info path).
+    void SetCjoPath(std::string path);
     // A flag to avoid conflicts when we are reusing the AST serialiser from CHIR
     void SetIsChirNow(bool isChirNow = false);
 

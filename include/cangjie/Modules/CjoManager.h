@@ -20,12 +20,6 @@
 namespace Cangjie {
 class ASTLoader;
 
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-const uint8_t CJO_MAJOR_VERSION = 0;
-const uint8_t CJO_MINOR_VERSION = 1;
-const uint8_t CJO_PATCH_VERSION = 0;
-#endif
-
 class CjoManager {
 public:
     struct Config {
