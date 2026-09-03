@@ -78,7 +78,9 @@ Ptr<Value> Translator::Visit(const AST::Block& b)
             return TranslateSubExprAsValue(*nodes[i]);
         } else {
             TranslateSubExprToDiscarded(*nodes[i]);
-            StartUnreachableContinuation(*nodes[i]);
+            if (!currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION)) {
+                StartUnreachableContinuation(*nodes[i]);
+            }
         }
     }
 

@@ -670,6 +670,10 @@ Block* Block::Clone(CHIRBuilder& builder, BlockGroup& newGroup) const
 {
     auto newBlock = builder.CreateBlock(&newGroup);
     newBlock->AppendAttributeInfo(GetAttributeInfo());
+    auto warningLocation = Get<DebugLocationInfoForWarning>();
+    if (!warningLocation.IsInvalidPos()) {
+        newBlock->Set<DebugLocationInfoForWarning>(warningLocation);
+    }
     if (exceptions.has_value()) {
         newBlock->SetExceptions(exceptions.value());
     }

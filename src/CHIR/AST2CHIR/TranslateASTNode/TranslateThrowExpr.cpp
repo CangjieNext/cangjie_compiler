@@ -15,11 +15,6 @@ Ptr<Value> Translator::Visit(const AST::ThrowExpr& throwExpr)
     CJC_NULLPTR_CHECK(throwExpr.expr);
     auto eVal = TranslateExprArg(*throwExpr.expr);
     if (eVal->GetType()->IsNothing()) {
-        // The operand has already transferred control to its own continuation, so this outer throw is never
-        // evaluated. Do not turn its synthetic Exit into another diagnostic root.
-        maybeUnreachable.erase(currentBlock);
-        CreateAndAppendTerminator<Exit>(loc, currentBlock);
-        currentBlock = CreateBlock();
         return eVal;
     }
     Ptr<Expression> terminator = nullptr;
