@@ -500,21 +500,9 @@ Ptr<Ty> GetInstantyForGenericTy(
 
 ClassDecl& GetExceptionDecl(const ImportManager& importManager)
 {
-    const static auto exception = [&] {
-        const auto exceptionDecl = importManager.GetCoreDecl("Exception");
-        CJC_NULLPTR_CHECK(exceptionDecl);
-
-        ClassDecl* res = nullptr;
-        if (auto ex = As<ASTKind::CLASS_DECL>(exceptionDecl)) {
-            res = ex;
-        } else {
-            CJC_ABORT_WITH_MSG("'Exception' declaration expected to be 'ClassDecl'");
-        }
-
-        return res;
-    }();
-
-    return *exception;
+    static const auto exceptionDecl = importManager.GetCoreDecl<ClassDecl>("Exception");
+    CJC_NULLPTR_CHECK(exceptionDecl);
+    return *exceptionDecl;
 }
 
 OwnedPtr<ThrowExpr> CreateThrowExceptionCall(const ImportManager& importManager,

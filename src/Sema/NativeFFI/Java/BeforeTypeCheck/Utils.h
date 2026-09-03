@@ -24,8 +24,6 @@ OwnedPtr<AST::ClassDecl> CloneClassSkeleton(AST::ClassLikeDecl& sample, std::str
 
 void InsertMethodStub(AST::FuncDecl& fd, const ImportManager& importManager, TypeManager& typeManager);
 
-AST::ClassDecl& GetExceptionDecl(const ImportManager& importManager);
-
 } // namespace Cangjie::Native::FFI::Java
 
 #endif // CANGJIE_SEMA_NATIVE_FFI_JAVA_BEFORE_TYPE_CHECK_UTILS
