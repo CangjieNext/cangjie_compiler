@@ -15,7 +15,6 @@
 #include <queue>
 
 #include "CjoManagerImpl.h"
-#include "cangjie/AST/ASTCasting.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Modules/ASTSerialization.h"

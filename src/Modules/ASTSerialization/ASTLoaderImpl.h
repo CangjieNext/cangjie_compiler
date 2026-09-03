@@ -13,12 +13,10 @@
 #ifndef CANGJIE_MODULES_ASTSERIALIZATION_ASTLOADER_IMPL_H
 #define CANGJIE_MODULES_ASTSERIALIZATION_ASTLOADER_IMPL_H
 
-#include "cangjie/Option/Option.h"
-#include "flatbuffers/CjoFormat_generated.h"
-
-#include "cangjie/AST/ASTCasting.h"
 #include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/CjoManager.h"
+#include "cangjie/Option/Option.h"
+#include "flatbuffers/CjoFormat_generated.h"
 
 #include "ASTSerializeUtils.h"
 
@@ -106,6 +104,22 @@ private:
 
     // Verify legality of data.
     bool VerifyForData(const std::string& id);
+    // Check the cjo format version carried by 'package' against the version the current
+    // compiler supports. Returns false when the cjo is incompatible (major mismatch or minor
+    // produced by a newer compiler). 'id' is used in the diagnostic to identify the offending
+    // cjo file/package. When 'diagnose' is false the check is silent — the caller handles
+    // incompatibility by degrading (e.g. the incremental-compilation cache falls back to a
+    // full recompile without reporting an error).
+    bool CheckCjoVersion(const std::string& id, bool diagnose = true);
+    // Emit the version-mismatch diagnostic (module_version_not_identical) for the cjo.
+    // Reports compiler versions rather than the internal cjo format version, which users
+    // do not perceive: the producer version comes from the cjo's 'version' field, the
+    // current one from CANGJIE_VERSION.
+    void DiagnoseVersionMismatch(const std::string& id);
+    // Query the cjo format version carried by 'package'. Used by the reader-side
+    // version-branching API exposed on ASTLoader. 'package' must have been assigned by the
+    // caller. Returns {0,0,0} and outOk=false when the cjo carries no version.
+    ASTLoader::CjoVersionTriplet GetCjoVersion(bool& hasVersion) const;
     // Methods for loading cache during incremental compilation.
     void PrepareForLoadTypeCache(const AST::Package& pkg);
     void ClearInstantiatedCache(const std::vector<uoffset_t>& instantiatedDeclIndexes,

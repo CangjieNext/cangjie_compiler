@@ -20,11 +20,15 @@
 namespace Cangjie {
 class ASTLoader;
 
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+// cjo format version. It is a contract over the serialized structure of the .cjo file,
+// independent of the codegen backend. Bumping rules:
+//  - major: exact match, any mismatch rejects the cjo (no forward/backward compatibility);
+//  - minor: only backward compatible, the compiler refuses a cjo whose minor is greater than
+//           the current one (i.e. a cjo produced by a newer compiler);
+//  - patch: not checked, always compatible both ways.
 const uint8_t CJO_MAJOR_VERSION = 0;
 const uint8_t CJO_MINOR_VERSION = 1;
 const uint8_t CJO_PATCH_VERSION = 0;
-#endif
 
 class CjoManager {
 public:
