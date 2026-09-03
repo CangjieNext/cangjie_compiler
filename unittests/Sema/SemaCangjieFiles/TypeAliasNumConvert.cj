@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -17,6 +17,9 @@ type myUInt8 = UInt8
 
 // Chained type alias
 type myWord = word
+
+// Nested type alias (alias of alias)
+type nestedInt64 = myInt64
 
 main(): Int64 {
     // === Basic numeric type alias conversion ===
@@ -54,6 +57,12 @@ main(): Int64 {
     // === Chained type alias: myWord → word → UInt16 ===
     var k = myWord(42)
     if (typeid(k) != typeid(UInt16)) { return 11 }
+
+    // === Nested type alias: nestedInt64 -> myInt64 -> Int64 ===
+    var t = nestedInt64(1)
+    if (t != 1) { return 23 }
+    var u = nestedInt64(-5)
+    if (u != -5) { return 24 }
 
     // === Usage in expressions ===
     var l = word(10) + word(20)

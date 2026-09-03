@@ -2376,17 +2376,22 @@ bool TypeChecker::TypeCheckerImpl::CheckRefConstructor(const ASTContext& ctx, co
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::TryResolveTypeAliasNumConv(CallExpr& ce, RefExpr& re)
+bool TypeChecker::TypeCheckerImpl::TryResolveTypeAliasNumConv(CallExpr& ce, Expr& baseExpr)
 {
-    auto callTarget = GetRealTarget(&re, re.ref.target);
-    if (!callTarget || callTarget->astKind != ASTKind::TYPE_ALIAS_DECL) {
+    // The base of the call must be a type alias; only a type alias can act as a numeric conversion.
+    Ptr<Decl> aliasDecl = nullptr;
+    if (auto re = DynamicCast<RefExpr>(&baseExpr)) {
+        aliasDecl = re->ref.target;
+    } else if (auto ma = DynamicCast<MemberAccess>(&baseExpr)) {
+        aliasDecl = ma->target;
+    }
+    if (!aliasDecl || aliasDecl->astKind != ASTKind::TYPE_ALIAS_DECL) {
         return false;
     }
-    auto& aliasDecl = static_cast<const TypeAliasDecl&>(*callTarget);
-    if (!aliasDecl.type) {
-        return false;
-    }
-    auto origTy = aliasDecl.type->GetTy();
+    // Resolve through the (possibly nested) alias chain to the final underlying type, so that
+    // `type word1 = Int64; type word = word1; word(1)` works (Issue #375).
+    auto realTarget = TypeCheckUtil::GetRealTarget(aliasDecl);
+    auto origTy = realTarget ? realTarget->GetTy() : nullptr;
     if (!origTy || !(origTy->IsNumeric() || origTy->kind == TypeKind::TYPE_RUNE)) {
         return false;
     }
@@ -2440,7 +2445,12 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseMemberAccess(
         }
         return false;
     } else {
-        return GetCallBaseCandidates(ctx, ce, *ma, target, candidates);
+        // Issue #375: a member access whose field is a type alias (e.g. an imported
+        // `pkg.alias(1)`) is treated as a type conversion, mirroring the RefExpr path.
+        if (GetCallBaseCandidates(ctx, ce, *ma, target, candidates)) {
+            return true;
+        }
+        return TryResolveTypeAliasNumConv(ce, *ma);
     }
 }
 
