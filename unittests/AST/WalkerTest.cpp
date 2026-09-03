@@ -233,7 +233,8 @@ protected:
         // of bogus position diagnostics and drop the top-level decls, leaving an
         // empty File. Passing `sm` directly keeps Lexer and SourceManager on the
         // same (default) fileID, so positions are self-consistent.
-        Parser parser(RICH_SRC, diag, sm);
+        static const std::string src(RICH_SRC);
+        Parser parser(src, diag, sm);
         file = parser.ParseTopLevel();
         ASSERT_NE(file, nullptr);
     }
