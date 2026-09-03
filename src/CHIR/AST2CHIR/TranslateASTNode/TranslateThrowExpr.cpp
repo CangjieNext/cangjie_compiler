@@ -17,7 +17,8 @@ Ptr<Value> Translator::Visit(const AST::ThrowExpr& throwExpr)
     if (eVal->GetType()->IsNothing()) {
         // The operand has already transferred control to its own continuation, so this outer throw is never
         // evaluated. Do not turn its synthetic Exit into another diagnostic root.
-        maybeUnreachable.erase(currentBlock);
+        currentBlock->DisableAttr(Attribute::UNREACHABLE_CONTINUATION);
+        currentBlock->Remove<DebugLocationInfoForWarning>();
         CreateAndAppendTerminator<Exit>(loc, currentBlock);
         currentBlock = CreateBlock();
         return eVal;

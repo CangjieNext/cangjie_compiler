@@ -656,28 +656,25 @@ void DeadCodeElimination::UnreachableBlockElimination(const std::vector<const Fu
     }
 }
 
-void DeadCodeElimination::UnreachableBlockWarningReporter(const Package& package,
-    size_t threadsNum, const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks)
+void DeadCodeElimination::UnreachableBlockWarningReporter(const Package& package, size_t threadsNum)
 {
+    auto unreachableBlocks = UnreachableBlockAnalysis::Parse(package);
     if (threadsNum == 1) {
-        UnreachableBlockWarningReporterInSerial(package, maybeUnreachableBlocks);
+        UnreachableBlockWarningReporterInSerial(package, unreachableBlocks);
     } else {
-        UnreachableBlockWarningReporterInParallel(package, threadsNum, maybeUnreachableBlocks);
+        UnreachableBlockWarningReporterInParallel(package, threadsNum, unreachableBlocks);
     }
 }
 
 void DeadCodeElimination::UnreachableBlockWarningReporterInSerial(
-    const Package& package, const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks)
+    const Package& package, const UnreachableBlockMap& unreachableBlocks)
 {
     for (auto func : package.GetGlobalFuncsWithBody()) {
         bool isPrinted = false;
-        Visitor::Visit(*func, [this, &isPrinted, &maybeUnreachableBlocks](Block& block) {
-            auto it = maybeUnreachableBlocks.find(&block);
-            if (it != maybeUnreachableBlocks.end()) {
-                auto terminator = it->second;
-                if (CheckUselessBlock(block)) {
-                    PrintUnreachableBlockWarning(block, *terminator, isPrinted);
-                }
+        Visitor::Visit(*func, [this, &isPrinted, &unreachableBlocks](Block& block) {
+            auto it = unreachableBlocks.find(&block);
+            if (it != unreachableBlocks.end() && CheckUselessBlock(block)) {
+                PrintUnreachableBlockWarning(block, it->second, isPrinted);
             }
             return VisitResult::CONTINUE;
         });
@@ -685,7 +682,7 @@ void DeadCodeElimination::UnreachableBlockWarningReporterInSerial(
 }
 
 void DeadCodeElimination::UnreachableBlockWarningReporterInParallel(const Package& package,
-    size_t threadsNum, const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks)
+    size_t threadsNum, const UnreachableBlockMap& unreachableBlocks)
 {
     Utils::TaskQueue taskQueue(threadsNum);
     for (auto func : package.GetGlobalFuncsWithBody()) {
@@ -694,15 +691,12 @@ void DeadCodeElimination::UnreachableBlockWarningReporterInParallel(const Packag
             continue; // Nothing to visit
         }
 
-        taskQueue.AddTask<void>([this, func, &maybeUnreachableBlocks]() {
+        taskQueue.AddTask<void>([this, func, &unreachableBlocks]() {
             bool isPrinted = false;
-            Visitor::Visit(*func, [this, &isPrinted, &maybeUnreachableBlocks](Block& block) {
-                auto it = maybeUnreachableBlocks.find(&block);
-                if (it != maybeUnreachableBlocks.end()) {
-                    auto terminator = it->second;
-                    if (CheckUselessBlock(block)) {
-                        PrintUnreachableBlockWarning(block, *terminator, isPrinted);
-                    }
+            Visitor::Visit(*func, [this, &isPrinted, &unreachableBlocks](Block& block) {
+                auto it = unreachableBlocks.find(&block);
+                if (it != unreachableBlocks.end() && CheckUselessBlock(block)) {
+                    PrintUnreachableBlockWarning(block, it->second, isPrinted);
                 }
                 return VisitResult::CONTINUE;
             });
@@ -980,11 +974,10 @@ Ptr<Expression> DeadCodeElimination::GetUnreachableExpression(const CHIR::Block&
 }
 
 void DeadCodeElimination::PrintUnreachableBlockWarning(
-    const CHIR::Block& block, const CHIR::Expression& terminator, bool& isPrinted)
+    const CHIR::Block& block, const DebugLocation& rootLocation, bool& isPrinted)
 {
     // Get position of nothing type node.
-    auto& debugInfo = terminator.GetDebugLocation();
-    auto [res, terminalNodeRange] = ToRangeIfNotZero(debugInfo);
+    auto [res, terminalNodeRange] = ToRangeIfNotZero(rootLocation);
 
     if (res && !isPrinted) {
         auto expressions = block.GetExpressions();

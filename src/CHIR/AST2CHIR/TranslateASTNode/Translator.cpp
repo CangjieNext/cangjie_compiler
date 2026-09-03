@@ -342,10 +342,6 @@ void Translator::TranslateSubExprToDiscarded(const AST::Node& node)
 
 void Translator::StartUnreachableContinuation(const AST::Node& node)
 {
-    if (maybeUnreachable.find(currentBlock) != maybeUnreachable.end()) {
-        return;
-    }
-
     CJC_ASSERT(currentBlock->GetTerminator() == nullptr);
     CJC_ASSERT(node.GetTy());
     if (!node.GetTy()->IsNothing()) {
@@ -359,13 +355,12 @@ void Translator::StartUnreachableContinuation(const AST::Node& node)
 void Translator::CreateUnreachableContinuation(Expression& terminator)
 {
     currentBlock = CreateBlock();
-    maybeUnreachable.emplace(currentBlock, &terminator);
+    currentBlock->EnableAttr(Attribute::UNREACHABLE_CONTINUATION);
+    currentBlock->Set<DebugLocationInfoForWarning>(terminator.GetDebugLocation());
 }
 
 void Translator::FinishUnreachableContinuation(const DebugLocation& loc)
 {
-    if (maybeUnreachable.find(currentBlock) != maybeUnreachable.end() && currentBlock->GetTerminator() == nullptr) {
-        auto exit = CreateAndAppendTerminator<Exit>(loc, currentBlock);
-        exit->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
-    }
+    auto exit = CreateAndAppendTerminator<Exit>(loc, currentBlock);
+    exit->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
 }
