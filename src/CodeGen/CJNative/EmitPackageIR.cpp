@@ -717,67 +717,65 @@ void InitializeCjStringLiteral(const CGModule& cgMod)
         return;
     }
 
-    // 1. Traverse all cj string literals' data, concatenate them as a big string named rawData
-    std::set<std::string> cjStringContents{};
-    // 1.1 Sort and deduplicate cjStringContents to obtain the minimum rawData
-    for (auto iter = cjStrings.begin(); iter != cjStrings.end(); ++iter) {
-        auto& cjStringName = iter->first;
-        auto& cjStringContent = iter->second;
-        if (cgMod.GetLLVMModule()->getNamedValue(cjStringName)) {
-            cjStringContents.emplace(cjStringContent);
-        } else {
-            // cjString may be codeGen built-in data and optimized.
-        }
-    }
-    // 1.1 Smaller rawData can be obtained by reverse order
-    std::string rawData = "";
-    for (auto iter = cjStringContents.crbegin(); iter != cjStringContents.crend(); ++iter) {
-        auto& cjStringContent = *iter;
-        if (rawData.find(cjStringContent) == std::string::npos) {
-            rawData.append(cjStringContent);
-        }
-    }
-
-    // 2. Construct RawArray which stores all cj string literal data
-    auto strContent = llvm::ConstantDataArray::getString(ctx, rawData, false);
-    // RawArray's memory layout is struct {i8* ArrayKlassInfo, i64 length, [? x i8] rawdata}
-    std::vector<llvm::Type*> elemTypes{int8PtrType, int64Type, strContent->getType()};
-    auto rawArrayType = llvm::StructType::get(ctx, elemTypes);
     auto arrayKlassInfo = GetReadOnlyArrayKlassInfo(cgMod);
-    auto rawArrayData = llvm::ConstantStruct::get(rawArrayType,
-        {llvm::ConstantExpr::getBitCast(arrayKlassInfo, int8PtrType),
-            llvm::ConstantInt::getSigned(int64Type, static_cast<int64_t>(rawData.size())), strContent});
-
-    std::string cjStringDataName = GetCjStringDataLiteralName(rawData);
-    auto gvRawData =
-        llvm::cast<llvm::GlobalVariable>(cgMod.GetLLVMModule()->getOrInsertGlobal(cjStringDataName, rawArrayType));
-    CJC_NULLPTR_CHECK(gvRawData);
-    gvRawData->setInitializer(rawArrayData);
-    gvRawData->setConstant(true);
-    gvRawData->addAttribute(CJSTRING_DATA_ATTR);
-    gvRawData->setLinkage(llvm::GlobalValue::PrivateLinkage);
-
-    // 3. Set Initializer for all cj string literal
     auto cjStringType = cgMod.GetCGContext().GetCjStringType();
-    auto i8Ptr = llvm::ConstantExpr::getBitCast(gvRawData, int8PtrType);
-    auto i8PtrAddr1 = llvm::ConstantExpr::getAddrSpaceCast(i8Ptr, llvm::Type::getInt8PtrTy(ctx, 1u));
 
+    // Deferred pooling: do NOT concatenate all literals into one per-package byte pool here.
+    // Each distinct string content gets its own RawArray buffer (deduplicated by the
+    // content-hash name) and every literal points at its buffer with offset 0. Keeping all
+    // offsets 0 is what makes the buffers safely mergeable by a later LLVM pass: CodeGen
+    // may bake a literal's pool offset into plain integer instructions, and only 0 survives
+    // repointing.
     for (const auto& cjStringIter : cjStrings) {
         auto& cjStringName = cjStringIter.first;
         auto& cjStringContent = cjStringIter.second;
-        size_t pos = rawData.find(cjStringContent);
-        if (!cgMod.GetLLVMModule()->getNamedValue(cjStringName) || pos == std::string::npos) {
+        auto* gv = llvm::dyn_cast_or_null<llvm::GlobalVariable>(cgMod.GetLLVMModule()->getNamedValue(cjStringName));
+        if (!gv) {
             // cjString may have been optimized and deleted.
             continue;
         }
 
-        auto dataStart = llvm::ConstantInt::getSigned(int32Type, static_cast<int32_t>(pos));
+        auto strContent = llvm::ConstantDataArray::getString(ctx, cjStringContent, false);
+        // RawArray's memory layout is struct {i8* ArrayKlassInfo, i64 length, [? x i8] rawdata}
+        auto rawArrayType =
+            llvm::StructType::get(ctx, {int8PtrType, int64Type, strContent->getType()});
+
+        auto baseName = GetCjStringDataLiteralName(cjStringContent);
+        std::string bufName = baseName;
+        llvm::GlobalVariable* gvRawData = nullptr;
+        for (size_t collisionId = 1;; ++collisionId) {
+            auto* existing = cgMod.GetLLVMModule()->getNamedValue(bufName);
+            if (!existing) {
+                break;
+            }
+            auto* existingGv = llvm::dyn_cast<llvm::GlobalVariable>(existing);
+            auto* existingInit = existingGv ? llvm::dyn_cast_or_null<llvm::ConstantStruct>(existingGv->getInitializer())
+                                            : nullptr;
+            auto* existingData = existingInit && existingInit->getNumOperands() == 3
+                ? llvm::dyn_cast<llvm::ConstantDataArray>(existingInit->getOperand(2)) : nullptr;
+            if (existingData && existingData->getAsString() == cjStringContent) {
+                gvRawData = existingGv;
+                break;
+            }
+            // Hash collision: same name but different content, try a suffixed name.
+            bufName = baseName + "." + std::to_string(collisionId);
+        }
+        if (!gvRawData) {
+            auto rawArrayData = llvm::ConstantStruct::get(rawArrayType,
+                {llvm::ConstantExpr::getBitCast(arrayKlassInfo, int8PtrType),
+                    llvm::ConstantInt::getSigned(int64Type, static_cast<int64_t>(cjStringContent.size())), strContent});
+            gvRawData = new llvm::GlobalVariable(*cgMod.GetLLVMModule(), rawArrayType, true,
+                llvm::GlobalValue::PrivateLinkage, rawArrayData, bufName);
+            gvRawData->addAttribute(CJSTRING_DATA_ATTR);
+        }
+
+        auto i8Ptr = llvm::ConstantExpr::getBitCast(gvRawData, int8PtrType);
+        auto i8PtrAddr1 = llvm::ConstantExpr::getAddrSpaceCast(i8Ptr, llvm::Type::getInt8PtrTy(ctx, 1u));
+        auto dataStart = llvm::ConstantInt::getSigned(int32Type, 0);
         auto strSize = llvm::ConstantInt::getSigned(int32Type, static_cast<int32_t>(cjStringContent.size()));
         // in LLVM IR:
         // cj string = type { i8 addrspace(1)*, i32, i32 }
         auto cjStringInit = llvm::ConstantStruct::get(cjStringType, {i8PtrAddr1, dataStart, strSize});
-        auto gv = llvm::cast<llvm::GlobalVariable>(cgMod.GetLLVMModule()->getNamedValue(cjStringName));
-        CJC_NULLPTR_CHECK(gv);
         gv->setInitializer(cjStringInit);
     }
 }
