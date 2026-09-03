@@ -16,8 +16,6 @@
 #include <unordered_map>
 
 namespace Cangjie::CHIR {
-struct FuncCallContext;
-
 class Devirtualization {
 public:
     /**
