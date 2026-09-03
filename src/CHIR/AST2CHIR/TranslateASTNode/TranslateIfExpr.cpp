@@ -367,7 +367,7 @@ protected:
     void CreateGotoIfCurrentBlockIsReachable(CHIR::Block& dest)
     {
         if (tr.currentBlock->GetTerminator() == nullptr &&
-            tr.maybeUnreachable.find(tr.currentBlock) == tr.maybeUnreachable.end()) {
+            !tr.currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION)) {
             CreateGoto(dest, *tr.currentBlock);
         }
     }
@@ -500,7 +500,10 @@ protected:
                 trueBlock->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
             }
         }
-        FinishUnreachableContinuation(tr.TranslateLocation(*e->thenBody));
+        if (tr.GetCurrentBlock()->TestAttr(Attribute::UNREACHABLE_CONTINUATION) &&
+            tr.GetCurrentBlock()->GetTerminator() == nullptr) {
+            FinishUnreachableContinuation(tr.TranslateLocation(*e->thenBody));
+        }
         CreateGotoIfCurrentBlockIsReachable(*endBlock);
         return trueBlock;
     }
@@ -521,7 +524,10 @@ protected:
                 tr.TranslateSubExprToLoc(*e->elseBody, retVal);
             }
             falseBlock->SetDebugLocation(tr.TranslateLocation(*e->elseBody));
-            FinishUnreachableContinuation(tr.TranslateLocation(*e->elseBody));
+            if (tr.GetCurrentBlock()->TestAttr(Attribute::UNREACHABLE_CONTINUATION) &&
+                tr.GetCurrentBlock()->GetTerminator() == nullptr) {
+                FinishUnreachableContinuation(tr.TranslateLocation(*e->elseBody));
+            }
             CreateGotoIfCurrentBlockIsReachable(*endBlock);
         } else {
             falseBlock = endBlock;

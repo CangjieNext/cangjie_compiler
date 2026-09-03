@@ -39,8 +39,8 @@ Ptr<Value> Translator::Visit(const AST::TryExpr& tryExpr)
         auto baseBlock = currentBlock;
         auto tryVal = TranslateSubExprAsValue(*tryExpr.tryBlock);
         CreateAndAppendTerminator<GoTo>(loc, GetBlockByAST(*tryExpr.tryBlock), baseBlock);
-        if (currentBlock->GetTerminator() == nullptr && maybeUnreachable.find(currentBlock) == maybeUnreachable.end() &&
-            retVal) {
+        if (currentBlock->GetTerminator() == nullptr &&
+            !currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION) && retVal) {
             if (!tryVal) {
                 CJC_ASSERT(tryExpr.tryBlock->GetTy()->IsUnit());
                 tryVal = CreateAndAppendConstantExpression<UnitLiteral>(
@@ -58,10 +58,13 @@ Ptr<Value> Translator::Visit(const AST::TryExpr& tryExpr)
             }
             CreateAndAppendWrappedStore(*GetDerefedValue(tryVal, valLoc), *retVal, valLoc);
         }
-        if (currentBlock->GetTerminator() == nullptr && maybeUnreachable.find(currentBlock) == maybeUnreachable.end()) {
+        if (currentBlock->GetTerminator() == nullptr &&
+            !currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION)) {
             CreateAndAppendTerminator<GoTo>(loc, endBlock, currentBlock)->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
         }
-        FinishUnreachableContinuation(loc);
+        if (currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION) && currentBlock->GetTerminator() == nullptr) {
+            FinishUnreachableContinuation(loc);
+        }
         tryCatchContext.pop();
     }
 
@@ -147,7 +150,10 @@ void Translator::TranslateFinallyRethrowFlows(const AST::Block& finally)
     auto eVal = CreateAndAppendExpression<Intrinsic>(baseETy, callContext, currentBlock)->GetResult();
     // Generate rethrow finally block.
     exceptionTrans.TranslateSubExprAsValue(finally);
-    exceptionTrans.FinishUnreachableContinuation(TranslateLocation(finally));
+    if (exceptionTrans.currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION) &&
+        exceptionTrans.currentBlock->GetTerminator() == nullptr) {
+        exceptionTrans.FinishUnreachableContinuation(TranslateLocation(finally));
+    }
     auto finallyBlock = exceptionTrans.GetBlockByAST(finally);
     CreateAndAppendTerminator<GoTo>(finallyBlock, exceptionBlock);
     auto endCatchBB = CreateBlock();
@@ -179,14 +185,17 @@ void Translator::TranslateFinallyNormalFlows(const AST::Block& finally, const Fi
         for (auto [prevBlock, nextBlock] : info) {
             Translator normalTrans = *this; // Copy a translator for normal finally.
             normalTrans.TranslateSubExprAsValue(finally);
-            normalTrans.FinishUnreachableContinuation(TranslateLocation(finally));
+            if (normalTrans.currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION) &&
+                normalTrans.currentBlock->GetTerminator() == nullptr) {
+                normalTrans.FinishUnreachableContinuation(TranslateLocation(finally));
+            }
             auto finallyBlock = normalTrans.GetBlockByAST(finally);
             CreateAndAppendTerminator<GoTo>(finallyBlock, prevBlock);
             finallyBlock->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
             prevBlock->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
             bool isNormalCase = i == static_cast<uint8_t>(ControlType::NORMAL);
             if (normalTrans.currentBlock->GetTerminator() != nullptr ||
-                normalTrans.maybeUnreachable.find(normalTrans.currentBlock) != normalTrans.maybeUnreachable.end()) {
+                normalTrans.currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION)) {
                 finallyContext = normalTrans.finallyContext;
                 continue;
             }
