@@ -37,7 +37,7 @@ public:
         const ElementList<Ptr<const AST::FuncDecl>>& localConstFuncs, const IncreKind& kind,
         const std::unordered_map<std::string, Value*>& deserializedVals,
         std::vector<std::pair<const AST::Decl*, Function*>>& annoFactories,
-        std::unordered_map<Block*, Expression*>& maybeUnreachable, bool computeAnnotations,
+        bool computeAnnotations,
         std::vector<CHIR::Function*>& initFuncForAnnoFactory, Cangjie::TypeManager& typeManager)
         : builder(builder),
           chirTy(chirTy),
@@ -50,7 +50,6 @@ public:
           mergingSpecific(opts.IsCompilingCJMPSpecific()),
           deserializedVals(deserializedVals),
           annoFactoryFuncs(annoFactories),
-          maybeUnreachable(maybeUnreachable),
           isComputingAnnos{computeAnnotations},
           initFuncsForAnnoFactory{initFuncForAnnoFactory},
           typeManager{typeManager}
@@ -602,7 +601,6 @@ private:
     const bool mergingSpecific; // add by cjmp
     const std::unordered_map<std::string, Value*>& deserializedVals; // add by cjmp
     std::vector<std::pair<const AST::Decl*, Function*>>& annoFactoryFuncs;
-    std::unordered_map<Block*, Expression*>& maybeUnreachable;
     bool isComputingAnnos{};
     std::vector<CHIR::Function*>& initFuncsForAnnoFactory;
     Cangjie::TypeManager& typeManager;
@@ -646,8 +644,9 @@ private:
     Block* CreateBlock()
     {
         auto block = builder.CreateBlock(blockGroupStack.back());
-        if (auto it = maybeUnreachable.find(currentBlock); it != maybeUnreachable.end()) {
-            maybeUnreachable.emplace(block, it->second);
+        if (currentBlock && currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION)) {
+            block->EnableAttr(Attribute::UNREACHABLE_CONTINUATION);
+            block->Set<DebugLocationInfoForWarning>(currentBlock->Get<DebugLocationInfoForWarning>());
         }
         return block;
     }
