@@ -272,6 +272,14 @@ std::unordered_set<std::string> ASTLoader::ASTLoaderImpl::LoadCachedTypeForPacka
     }
     CacheLoadingStatus ctx(isLoadCache);
     package = PackageFormat::GetPackage(data.data());
+    // The incremental-compilation cache is written by this compiler's earlier runs, so an
+    // incompatible version there (e.g. the compiler was downgraded) only means the cache
+    // cannot be reused: skip consuming any cached type (no decl is removed, sema still runs
+    // incrementally) and stay silent — an unusable cache is not a compilation error, so no
+    // diagnostic is emitted. Returning here does NOT roll back to a full recompile.
+    if (!CheckCjoVersion(false)) {
+        return {};
+    }
     // 2. Prepare cache for file ids.
     // NOTE: 'ASTDiff' guarantees files in previous compilation are same as the current compilation.
     //       So the 'fileID' is same with the 'fileIndex'.

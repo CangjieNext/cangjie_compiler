@@ -4,6 +4,10 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+// WARNING: Changes to this schema or its serialization algorithm must be
+// reflected in include/cangjie/Modules/CjoVersion.h. See that file for
+// versioning rules.
+
 // This is actually a package format
 namespace PackageFormat;
 

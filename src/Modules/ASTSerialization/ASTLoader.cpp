@@ -9,27 +9,110 @@
  * This file implements the AST Loader related classes.
  */
 
-#include "ASTLoaderCJMP.h"
 #include "ASTLoaderImpl.h"
 
+#include "cangjie/AST/ASTCasting.h"
 #include "cangjie/AST/Node.h"
-#include "cangjie/AST/Walker.h"
+#include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
+#include "cangjie/Basic/Version.h"
+#include "cangjie/Modules/CjoVersion.h"
 #include "cangjie/Option/Option.h"
+#include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ICEUtil.h"
 #include "flatbuffers/CjoFormat_generated.h"
-
-#include "cangjie/AST/ASTCasting.h"
-#include "cangjie/AST/Create.h"
-#include "cangjie/AST/Utils.h"
-#include "cangjie/Basic/Version.h"
-#include "cangjie/Lex/Token.h"
-#include "cangjie/Utils/CheckUtils.h"
 
 using namespace Cangjie;
 using namespace AST;
 
 namespace Cangjie {
+namespace {
+// Result of comparing a cjo file's version against the version the current compiler supports.
+enum class CjoVersionCompat : uint8_t {
+    // Same major and cjo's minor <= compiler's minor: the cjo can be read.
+    COMPATIBLE,
+    // cjo's major differs from the compiler's: neither forward nor backward compatible.
+    MAJOR_MISMATCH,
+    // Same major but cjo's minor is greater than the compiler's: produced by a newer compiler,
+    // the current compiler cannot read it.
+    MINOR_TOO_NEW,
+};
+
+// Outcome of ordering two cjo versions for semantic branching.
+enum class CjoVersionOrder : uint8_t {
+    // 'lhs' is older than 'rhs' on the compatibility line: same major and lhs.minor < rhs.minor.
+    OLDER,
+    // 'lhs' and 'rhs' are the same on the compatibility line: same major and lhs.minor == rhs.minor.
+    EQUAL,
+    // 'lhs' is newer than 'rhs' on the compatibility line: same major and lhs.minor > rhs.minor.
+    NEWER,
+    // 'lhs' and 'rhs' belong to different majors: incomparable for semantic branching.
+    DIFFERENT_MAJOR,
+};
+
+// Version rule applied by ASTLoaderImpl::CheckCjoVersion as one step of the load pipeline.
+// major is exact match: any mismatch (older or newer) is incompatible. Same major: only backward
+// compatible, a cjo whose minor is greater than the compiler's was produced by a newer compiler
+// and must be refused. patch is not part of the compatibility contract.
+CjoVersionCompat CheckCjoVersionCompat(uint8_t cjoMajor, uint8_t cjoMinor)
+{
+    if (cjoMajor != CJO_MAJOR_VERSION) {
+        return CjoVersionCompat::MAJOR_MISMATCH;
+    }
+    if (cjoMinor > CJO_MINOR_VERSION) {
+        return CjoVersionCompat::MINOR_TOO_NEW;
+    }
+    return CjoVersionCompat::COMPATIBLE;
+}
+
+// Order two cjo versions along the compatibility line: versions on different majors are
+// incomparable; within the same major only the minor segment orders versions; patch is
+// intentionally ignored, so two versions that differ only in patch are EQUAL. This is the
+// primitive behind ASTLoader's "is the loaded cjo at least / at most / exactly version X"
+// queries: a newer compiler may branch on the cjo version it reads to apply the right
+// semantic for older formats.
+CjoVersionOrder CompareCjoVersion(uint8_t lhsMajor, uint8_t lhsMinor, uint8_t rhsMajor, uint8_t rhsMinor)
+{
+    if (lhsMajor != rhsMajor) {
+        return CjoVersionOrder::DIFFERENT_MAJOR;
+    }
+    if (lhsMinor < rhsMinor) {
+        return CjoVersionOrder::OLDER;
+    }
+    if (lhsMinor > rhsMinor) {
+        return CjoVersionOrder::NEWER;
+    }
+    return CjoVersionOrder::EQUAL;
+}
+
+// Whether the cjo version (cjoMajor, cjoMinor) satisfies an in-major requirement
+// (requiredMajor, requiredMinor). They return false when the majors differ, since a cross-major
+// version has no defined ordering and cannot satisfy an in-major requirement.
+//   - VersionAtLeast: same major and cjo's minor >= requiredMinor (a cjo produced by a
+//     compiler at or after the required version; the semantics introduced at 'requiredMinor'
+//     are guaranteed present).
+//   - VersionAtMost:  same major and cjo's minor <= requiredMinor (a cjo produced before
+//     or at the required version; semantics removed/changed after 'requiredMinor' are absent).
+//   - VersionExactly: same major and cjo's minor == requiredMinor.
+// patch is not a parameter: it never participates in the compatibility contract.
+bool VersionAtLeast(uint8_t cjoMajor, uint8_t cjoMinor, uint8_t requiredMajor, uint8_t requiredMinor)
+{
+    auto order = CompareCjoVersion(cjoMajor, cjoMinor, requiredMajor, requiredMinor);
+    return order == CjoVersionOrder::EQUAL || order == CjoVersionOrder::NEWER;
+}
+
+bool VersionAtMost(uint8_t cjoMajor, uint8_t cjoMinor, uint8_t requiredMajor, uint8_t requiredMinor)
+{
+    auto order = CompareCjoVersion(cjoMajor, cjoMinor, requiredMajor, requiredMinor);
+    return order == CjoVersionOrder::EQUAL || order == CjoVersionOrder::OLDER;
+}
+
+bool VersionExactly(uint8_t cjoMajor, uint8_t cjoMinor, uint8_t requiredMajor, uint8_t requiredMinor)
+{
+    return CompareCjoVersion(cjoMajor, cjoMinor, requiredMajor, requiredMinor) == CjoVersionOrder::EQUAL;
+}
+} // namespace
+
 const std::unordered_map<PackageFormat::AccessLevel, AST::AccessLevel> ACCESS_LEVEL_RMAP = {
 #define ACCESS_LEVEL(AST_KIND, FBS_KIND) {PackageFormat::AccessLevel_##FBS_KIND, AST::AccessLevel::AST_KIND},
 #include "Mapping.h"
@@ -204,6 +287,55 @@ const std::vector<std::string> ASTLoader::GetDependentPackageNames() const
     return dep;
 }
 
+ASTLoader::CjoVersionTriplet ASTLoader::GetCjoVersion() const
+{
+    CJC_NULLPTR_CHECK(pImpl);
+    bool unused = false;
+    return pImpl->GetCjoVersion(unused);
+}
+
+bool ASTLoader::HasCjoVersion() const
+{
+    CJC_NULLPTR_CHECK(pImpl);
+    bool hasVersion = false;
+    (void)pImpl->GetCjoVersion(hasVersion);
+    return hasVersion;
+}
+
+bool ASTLoader::IsCjoVersionAtLeast(uint8_t requiredMajor, uint8_t requiredMinor) const
+{
+    CJC_NULLPTR_CHECK(pImpl);
+    bool hasVersion = false;
+    auto ver = pImpl->GetCjoVersion(hasVersion);
+    if (!hasVersion) {
+        // A cjo without a version cannot be proven to satisfy any in-major requirement.
+        return false;
+    }
+    return VersionAtLeast(ver.major, ver.minor, requiredMajor, requiredMinor);
+}
+
+bool ASTLoader::IsCjoVersionAtMost(uint8_t requiredMajor, uint8_t requiredMinor) const
+{
+    CJC_NULLPTR_CHECK(pImpl);
+    bool hasVersion = false;
+    auto ver = pImpl->GetCjoVersion(hasVersion);
+    if (!hasVersion) {
+        return false;
+    }
+    return VersionAtMost(ver.major, ver.minor, requiredMajor, requiredMinor);
+}
+
+bool ASTLoader::IsCjoVersionExactly(uint8_t requiredMajor, uint8_t requiredMinor) const
+{
+    CJC_NULLPTR_CHECK(pImpl);
+    bool hasVersion = false;
+    auto ver = pImpl->GetCjoVersion(hasVersion);
+    if (!hasVersion) {
+        return false;
+    }
+    return VersionExactly(ver.major, ver.minor, requiredMajor, requiredMinor);
+}
+
 bool ASTLoader::ASTLoaderImpl::VerifyForData(const std::string& id)
 {
     size_t size = data.size();
@@ -215,6 +347,64 @@ bool ASTLoader::ASTLoaderImpl::VerifyForData(const std::string& id)
         return false;
     }
     return true;
+}
+
+bool ASTLoader::ASTLoaderImpl::CheckCjoVersion(bool diagnose)
+{
+    // 'package' must have been assigned by the caller right after VerifyForData succeeded.
+    CJC_NULLPTR_CHECK(package);
+    auto* cjoVer = package->cjoVersion();
+    if (cjoVer == nullptr) {
+        // A cjo without a cjo version is structurally valid (produced by a pre-versioning
+        // compiler, or a malformed file that passed the Verifier). The cjo format version is
+        // part of the contract; treat its absence as a mismatch so it is never silently
+        // consumed as the current version.
+        if (diagnose) {
+            DiagnoseVersionMismatch();
+        }
+        return false;
+    }
+    auto compat = CheckCjoVersionCompat(cjoVer->major_num(), cjoVer->minor_num());
+    if (compat == CjoVersionCompat::COMPATIBLE) {
+        return true;
+    }
+
+    if (diagnose) {
+        DiagnoseVersionMismatch();
+    }
+    return false;
+}
+
+void ASTLoader::ASTLoaderImpl::DiagnoseVersionMismatch()
+{
+    // Users do not perceive the internal cjo format version, so the diagnostic reports the
+    // compiler versions instead: the cjo's own 'version' field records the cjc that produced
+    // it; fall back to 'unknown' when that is absent too.
+    auto producerVer = package->version() ? package->version()->str() : "unknown";
+    auto fullPackageName = package->fullPkgName() ? package->fullPkgName()->str() : "unknown package name";
+    std::string currentVer = CANGJIE_VERSION;
+    diag.DiagnoseRefactor(DiagKindRefactor::module_version_not_identical, DEFAULT_POSITION, cjoPath, fullPackageName,
+        producerVer, currentVer);
+}
+
+ASTLoader::CjoVersionTriplet ASTLoader::ASTLoaderImpl::GetCjoVersion(bool& hasVersion) const
+{
+    hasVersion = false;
+    ASTLoader::CjoVersionTriplet result;
+    // 'package' may be null if the caller asks before the header has been read. In that case the
+    // cjo carries no version we can report; return the default {0,0,0} with hasVersion=false.
+    if (package == nullptr) {
+        return result;
+    }
+    auto* cjoVer = package->cjoVersion();
+    if (cjoVer == nullptr) {
+        return result;
+    }
+    hasVersion = true;
+    result.major = cjoVer->major_num();
+    result.minor = cjoVer->minor_num();
+    result.patch = cjoVer->patch_num();
+    return result;
 }
 
 std::string ASTLoader::LoadPackageDepInfo() const
@@ -229,6 +419,9 @@ std::string ASTLoader::ASTLoaderImpl::LoadPackageDepInfo()
         return "";
     }
     package = PackageFormat::GetPackage(data.data());
+    if (!CheckCjoVersion()) {
+        return "";
+    }
     return package->pkgDepInfo()->str();
 }
 
@@ -241,6 +434,12 @@ OwnedPtr<Package> ASTLoader::LoadPackageDependencies() const
 OwnedPtr<Package> ASTLoader::ASTLoaderImpl::LoadPackageDependencies()
 {
     if (!VerifyForData("ast")) {
+        return {};
+    }
+    // Validate the cjo format version before deserializing any content. PreLoadImportedPackageNode
+    // also assigns 'package', but we set it here first so the version check has access to it.
+    package = PackageFormat::GetPackage(data.data());
+    if (!CheckCjoVersion()) {
         return {};
     }
     return PreLoadImportedPackageNode();
@@ -361,7 +560,6 @@ OwnedPtr<AST::File> ASTLoader::ASTLoaderImpl::CreateFileNode(
 OwnedPtr<AST::Package> ASTLoader::ASTLoaderImpl::PreLoadImportedPackageNode()
 {
     // Begin to parse the flatbuffer.
-    package = PackageFormat::GetPackage(data.data());
     CJC_NULLPTR_CHECK(package);
     // Imported package is PackageDecl Node.
     OwnedPtr<Package> packageNode = MakeOwned<Package>();
