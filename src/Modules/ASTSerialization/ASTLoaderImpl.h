@@ -13,12 +13,10 @@
 #ifndef CANGJIE_MODULES_ASTSERIALIZATION_ASTLOADER_IMPL_H
 #define CANGJIE_MODULES_ASTSERIALIZATION_ASTLOADER_IMPL_H
 
-#include "cangjie/Option/Option.h"
-#include "flatbuffers/CjoFormat_generated.h"
-
-#include "cangjie/AST/ASTCasting.h"
 #include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/CjoManager.h"
+#include "cangjie/Option/Option.h"
+#include "flatbuffers/CjoFormat_generated.h"
 
 #include "ASTSerializeUtils.h"
 
@@ -57,6 +55,12 @@ public:
     {
         importSrcCode = enable;
     }
+    // Record the file path the cjo was read from, so diagnostics can name the offending file
+    // when the loader was constructed without a package name (the dep-info path).
+    void SetCjoPath(std::string path)
+    {
+        cjoPath = std::move(path);
+    }
 
     std::string importedPackageName;
     Ptr<AST::Ty> LoadType(FormattedIndex type);
@@ -71,6 +75,7 @@ private:
     SourceManager& sourceManager;
     const CjoManager& cjoManager;
     const GlobalOptions& opts;
+    std::string cjoPath;
     const PackageFormat::Package* package{nullptr};
     // Store dependent package names in loading index order.
     std::vector<std::string> importedFullPackageNames;
@@ -106,6 +111,21 @@ private:
 
     // Verify legality of data.
     bool VerifyForData(const std::string& id);
+    // Check the cjo format version carried by 'package' against the version the current
+    // compiler supports. Returns false when the cjo is incompatible (major mismatch or minor
+    // produced by a newer compiler). When 'diagnose' is false the check is silent — the caller
+    // handles incompatibility by skipping the read (e.g. the incremental-compilation cache simply
+    // consumes no cached type, without reporting an error).
+    bool CheckCjoVersion(bool diagnose = true);
+    // Emit the version-mismatch diagnostic (module_version_not_identical) for the cjo.
+    // Reports compiler versions rather than the internal cjo format version, which users
+    // do not perceive: the producer version comes from the cjo's 'version' field, the
+    // current one from CANGJIE_VERSION.
+    void DiagnoseVersionMismatch();
+    // Query the cjo format version carried by 'package'. Used by the reader-side
+    // version-branching API exposed on ASTLoader. 'package' must have been assigned by the
+    // caller. Returns {0,0,0} and outOk=false when the cjo carries no version.
+    ASTLoader::CjoVersionTriplet GetCjoVersion(bool& hasVersion) const;
     // Methods for loading cache during incremental compilation.
     void PrepareForLoadTypeCache(const AST::Package& pkg);
     void ClearInstantiatedCache(const std::vector<uoffset_t>& instantiatedDeclIndexes,

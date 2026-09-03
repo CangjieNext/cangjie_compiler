@@ -213,6 +213,12 @@ void ASTLoader::SetIsChirNow(bool isChirNow)
     pImpl->isChirNow = isChirNow;
 }
 
+void ASTLoader::SetCjoPath(std::string path)
+{
+    CJC_NULLPTR_CHECK(pImpl);
+    pImpl->SetCjoPath(std::move(path));
+}
+
 void ASTLoader::ASTLoaderImpl::InitializeTypeLoader()
 {
     tyLoaderMap = {

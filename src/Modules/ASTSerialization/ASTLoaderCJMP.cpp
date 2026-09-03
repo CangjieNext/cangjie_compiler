@@ -190,6 +190,9 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
 
     package = PackageFormat::GetPackage(data.data());
     CJC_NULLPTR_CHECK(package);
+    if (!CheckCjoVersion()) {
+        return false;
+    }
     CJC_NULLPTR_CHECK(package->fullPkgName());
 
     curPackage = &pkg;

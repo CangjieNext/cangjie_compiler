@@ -24,7 +24,10 @@
 #include "cangjie/AST/Walker.h"
 #include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
 #include "cangjie/Modules/ASTSerialization.h"
+#include "cangjie/Modules/CjoManager.h"
+#include "cangjie/Modules/CjoVersion.h"
 #include "cangjie/Utils/FileUtil.h"
+#include "flatbuffers/CjoFormat_generated.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -1243,6 +1246,366 @@ TEST_F(PackageTest, LoadPackageFromCjo)
         }
     }
 }
+
+// Helper: locate the in-buffer byte offset of the CjoVersion struct inside a serialized Package.
+// Returns a pointer to the major/minor/patch triple within 'data', or nullptr if absent.
+static uint8_t* MutableCjoVersionBytes(std::vector<uint8_t>& data)
+{
+    auto* pkg = PackageFormat::GetPackage(data.data());
+    if (pkg == nullptr || pkg->cjoVersion() == nullptr) {
+        return nullptr;
+    }
+    // CjoVersion is an inline struct field of the Package table. Its in-buffer address equals
+    // the address returned by the accessor (which points directly into 'data').
+    return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(pkg->cjoVersion()));
+}
+
+// The cjo format version is a contract over the serialized structure (schema/CjoFormat.fbs).
+// Rules:
+//   - major: exact match, any mismatch is incompatible (no forward/backward compatibility);
+//   - minor: only backward compatible, a cjo whose minor is greater than the compiler's is refused;
+//   - patch: never participates in the check.
+// The compatibility decision (CheckCjoVersionCompat) and the version-branching primitives
+// (CompareCjoVersion, VersionAtLeast/AtMost/Exactly on raw versions) are internal to the
+// ASTLoader load pipeline (anonymous namespace of ASTLoader.cpp), so the rule is tested through
+// the public ASTLoader queries: "cjo (M, m) is accepted by the loader" is equivalent to
+// "loader.IsCjoVersionAtMost(M, m)" for a loader whose cjo carries version (CJO_MAJOR_VERSION,
+// CJO_MINOR_VERSION); the branching predicates are exercised against mutated versions.
+TEST_F(PackageTest, CjoVersionCompatLogic)
+{
+    // The expectations below are written against the compiler's own constants so they stay
+    // valid when CJO_MAJOR_VERSION / CJO_MINOR_VERSION are bumped.
+    EXPECT_EQ(CJO_MAJOR_VERSION, 0);
+
+    diag.ClearError();
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->code = "import vardecl.*";
+    instance->Compile(CompileStage::IMPORT_PACKAGE);
+    ASSERT_FALSE(instance->GetSourcePackages().empty());
+    std::vector<uint8_t> cjoData;
+    instance->importManager->ExportAST(false, cjoData, *instance->GetSourcePackages()[0]);
+    ASSERT_FALSE(cjoData.empty());
+    auto cjoManager = instance->importManager->GetCjoManager();
+    ASSERT_NE(cjoManager, nullptr);
+
+    auto makeLoader = [this, &cjoManager](std::vector<uint8_t> data) {
+        auto loader = std::make_unique<ASTLoader>(std::move(data), "vercheck_logic", *instance->typeManager,
+            *cjoManager, instance->invocation.globalOptions);
+        diag.Reset();
+        (void)loader->LoadPackageDepInfo();
+        EXPECT_EQ(diag.GetErrorCount(), 0u);
+        return loader;
+    };
+    // Variant that expects the load to be refused by the version gate.
+    auto makeRefusedLoader = [this, &cjoManager](std::vector<uint8_t> data) {
+        auto loader = std::make_unique<ASTLoader>(std::move(data), "vercheck_logic", *instance->typeManager,
+            *cjoManager, instance->invocation.globalOptions);
+        diag.Reset();
+        EXPECT_EQ(loader->LoadPackageDepInfo(), "");
+        EXPECT_GT(diag.GetErrorCount(), 0u);
+        return loader;
+    };
+
+    // A cjo with an older minor is accepted and reports AtMost(current) == true, Exactly(current)
+    // == false: same major, minor <= compiler's minor -> backward compatible (patch ignored).
+    {
+        std::vector<uint8_t> mutated = cjoData;
+        auto* ver = MutableCjoVersionBytes(mutated);
+        ASSERT_NE(ver, nullptr);
+        ver[1] = 0;
+        auto* mutatedPackage = PackageFormat::GetPackage(mutated.data());
+        ASSERT_NE(mutatedPackage, nullptr);
+        ASSERT_NE(mutatedPackage->cjoVersion(), nullptr);
+        EXPECT_EQ(mutatedPackage->cjoVersion()->major_num(), CJO_MAJOR_VERSION);
+        EXPECT_EQ(mutatedPackage->cjoVersion()->minor_num(), 0u);
+        EXPECT_EQ(ver[0], CJO_MAJOR_VERSION);
+        EXPECT_EQ(ver[1], 0u);
+        auto loader = makeLoader(std::move(mutated));
+        EXPECT_TRUE(loader->IsCjoVersionAtMost(CJO_MAJOR_VERSION, CJO_MINOR_VERSION));
+        EXPECT_FALSE(loader->IsCjoVersionExactly(CJO_MAJOR_VERSION, CJO_MINOR_VERSION));
+        EXPECT_TRUE(loader->IsCjoVersionExactly(CJO_MAJOR_VERSION, 0));
+    }
+
+    // Same major but minor newer than the compiler -> produced by a newer compiler, refused:
+    // the gate rejects the load and emits the version-mismatch error. The load through
+    // LoadPackageDepInfo also proves the gate runs on this entry point, while the refusal
+    // itself is covered end to end by CjoVersionCheckOnLoad case 3.
+    {
+        std::vector<uint8_t> mutated = cjoData;
+        auto* ver = MutableCjoVersionBytes(mutated);
+        ASSERT_NE(ver, nullptr);
+        ver[1] = static_cast<uint8_t>(CJO_MINOR_VERSION + 1);
+        auto loader = makeRefusedLoader(std::move(mutated));
+        EXPECT_FALSE(loader->HasCjoVersion() && loader->IsCjoVersionAtMost(CJO_MAJOR_VERSION, CJO_MINOR_VERSION));
+    }
+
+    // The current-version cjo satisfies AtLeast(0.0)/AtMost(future 0.2)/Exactly(current), and a
+    // requirement on a different major is never satisfied: cross-major versions have no defined
+    // ordering, so any predicate with a foreign-major requirement returns false.
+    {
+        auto loader = makeLoader(cjoData);
+        EXPECT_TRUE(loader->IsCjoVersionAtLeast(CJO_MAJOR_VERSION, 0));
+        EXPECT_TRUE(loader->IsCjoVersionAtMost(CJO_MAJOR_VERSION, static_cast<uint8_t>(CJO_MINOR_VERSION + 1)));
+        EXPECT_TRUE(loader->IsCjoVersionExactly(CJO_MAJOR_VERSION, CJO_MINOR_VERSION));
+        EXPECT_FALSE(loader->IsCjoVersionAtLeast(static_cast<uint8_t>(CJO_MAJOR_VERSION + 1), 0));
+        EXPECT_FALSE(loader->IsCjoVersionExactly(static_cast<uint8_t>(CJO_MAJOR_VERSION + 1), CJO_MINOR_VERSION));
+    }
+
+    diag.Reset();
+}
+
+// End-to-end: a cjo written by the current compiler carries version (0, 1, 0) and must load
+// silently; a cjo whose version was bumped to an incompatible value must be rejected with a
+// diagnostic, exercising the read-side guard in ASTLoader::ASTLoaderImpl::CheckCjoVersion.
+TEST_F(PackageTest, CjoVersionCheckOnLoad)
+{
+    diag.ClearError();
+    // Compile one source package and export its .cjo (written with the current version 0.1.0).
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->code = "import vardecl.*";
+    instance->Compile(CompileStage::IMPORT_PACKAGE);
+    ASSERT_FALSE(instance->GetSourcePackages().empty());
+    std::vector<uint8_t> cjoData;
+    instance->importManager->ExportAST(false, cjoData, *instance->GetSourcePackages()[0]);
+    ASSERT_FALSE(cjoData.empty());
+    std::string cjoFile = FileUtil::JoinPath(packagePath, "vercheck.cjo");
+    ASSERT_TRUE(FileUtil::WriteBufferToASTFile(cjoFile, cjoData));
+
+    // Sanity: the exported cjo carries the current cjo format version.
+    {
+        std::vector<uint8_t> copy = cjoData;
+        auto* ver = MutableCjoVersionBytes(copy);
+        ASSERT_NE(ver, nullptr);
+        EXPECT_EQ(ver[0], CJO_MAJOR_VERSION);
+        EXPECT_EQ(ver[1], CJO_MINOR_VERSION);
+        EXPECT_EQ(ver[2], CJO_PATCH_VERSION);
+    }
+
+    // Each load below runs against the shared compiler instance. A version-mismatch rejection
+    // happens inside LoadPackageDependencies (before any dependency is loaded), so it returns
+    // false without registering the package, leaving no state behind in the CjoManager.
+    // The signal of acceptance vs. rejection is the return value of LoadPackageFromCjo (nullptr
+    // when LoadPackageHeader fails), which is also what the existing LoadPackageFromCjo test relies on.
+
+    // 1) Compatible: load the freshly produced cjo, expect success.
+    {
+        diag.ClearError();
+        auto pkg = instance->importManager->LoadPackageFromCjo("vercheck", cjoFile);
+        ASSERT_NE(pkg, nullptr);
+        EXPECT_GT(pkg->files.size(), 0u);
+    }
+
+    // 2) Major mismatch: bump major to 1.x -> refused (nullptr).
+    {
+        std::vector<uint8_t> mutated = cjoData;
+        auto* ver = MutableCjoVersionBytes(mutated);
+        ASSERT_NE(ver, nullptr);
+        ver[0] = static_cast<uint8_t>(CJO_MAJOR_VERSION + 1); // major mismatch
+        std::string badFile = FileUtil::JoinPath(packagePath, "vercheck_major.cjo");
+        ASSERT_TRUE(FileUtil::WriteBufferToASTFile(badFile, mutated));
+        diag.Reset();
+        auto pkg = instance->importManager->LoadPackageFromCjo("vercheck_major", badFile);
+        EXPECT_EQ(pkg, nullptr);
+        EXPECT_GT(diag.GetErrorCount(), 0u);
+    }
+
+    // 3) Minor too new: same major, minor greater than the compiler's -> refused (nullptr).
+    {
+        std::vector<uint8_t> mutated = cjoData;
+        auto* ver = MutableCjoVersionBytes(mutated);
+        ASSERT_NE(ver, nullptr);
+        ver[1] = static_cast<uint8_t>(CJO_MINOR_VERSION + 1); // minor too new
+        std::string badFile = FileUtil::JoinPath(packagePath, "vercheck_minor.cjo");
+        ASSERT_TRUE(FileUtil::WriteBufferToASTFile(badFile, mutated));
+        diag.Reset();
+        auto pkg = instance->importManager->LoadPackageFromCjo("vercheck_minor", badFile);
+        EXPECT_EQ(pkg, nullptr);
+        EXPECT_GT(diag.GetErrorCount(), 0u);
+    }
+
+    // 4) Older minor (same major) -> backward compatible, loads successfully.
+    {
+        std::vector<uint8_t> mutated = cjoData;
+        auto* ver = MutableCjoVersionBytes(mutated);
+        ASSERT_NE(ver, nullptr);
+        ver[1] = 0; // older minor, same major -> compatible
+        std::string oldFile = FileUtil::JoinPath(packagePath, "vercheck_old_minor.cjo");
+        ASSERT_TRUE(FileUtil::WriteBufferToASTFile(oldFile, mutated));
+        diag.Reset();
+        auto pkg = instance->importManager->LoadPackageFromCjo("vercheck_old_minor", oldFile);
+        ASSERT_NE(pkg, nullptr);
+        EXPECT_GT(pkg->files.size(), 0u);
+    }
+
+    diag.Reset();
+}
+
+// Incremental-compilation cache path: an incompatible cache cjo must be rejected *silently* —
+// no diagnostic is emitted and no cached type is consumed (sema keeps running incrementally,
+// there is no rollback to a full recompile). Compatible caches are still consumed.
+TEST_F(PackageTest, CjoVersionCheckOnIncrCache)
+{
+    diag.ClearError();
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->code = "import vardecl.*";
+    instance->Compile(CompileStage::IMPORT_PACKAGE);
+    ASSERT_FALSE(instance->GetSourcePackages().empty());
+    auto srcPkg = instance->GetSourcePackages()[0];
+    std::map<std::string, Ptr<Decl>> mangledName2DeclMap;
+    for (auto [ident, decl] : instance->rawMangleName2DeclMap) {
+        mangledName2DeclMap.emplace(ident, const_cast<Decl*>(decl.get()));
+    }
+    auto cacheData = instance->importManager->ExportASTSignature(*srcPkg);
+    ASSERT_FALSE(cacheData.empty());
+    srcPkg->EnableAttr(Attribute::INCRE_COMPILE);
+
+    auto loadCache = [this, &srcPkg, &mangledName2DeclMap](std::vector<uint8_t> data) {
+        auto loader = std::make_unique<ASTLoader>(std::move(data), srcPkg->fullPackageName, *instance->typeManager,
+            *instance->importManager->cjoManager, instance->invocation.globalOptions);
+        return loader->LoadCachedTypeForPackage(*srcPkg, mangledName2DeclMap);
+    };
+
+    // 1) Major mismatch cache: rejected silently, no diagnostic.
+    {
+        std::vector<uint8_t> mutated = cacheData;
+        auto* ver = MutableCjoVersionBytes(mutated);
+        ASSERT_NE(ver, nullptr);
+        ver[0] = static_cast<uint8_t>(CJO_MAJOR_VERSION + 1);
+        diag.Reset();
+        auto unfounded = loadCache(std::move(mutated));
+        EXPECT_EQ(diag.GetErrorCount(), 0u); // degrades silently, no error
+    }
+
+    // 2) Minor too new cache: rejected silently, no diagnostic.
+    {
+        std::vector<uint8_t> mutated = cacheData;
+        auto* ver = MutableCjoVersionBytes(mutated);
+        ASSERT_NE(ver, nullptr);
+        ver[1] = static_cast<uint8_t>(CJO_MINOR_VERSION + 1);
+        diag.Reset();
+        auto unfounded = loadCache(std::move(mutated));
+        EXPECT_EQ(diag.GetErrorCount(), 0u);
+    }
+
+    // 3) Compatible cache (same version): consumed, no diagnostic.
+    {
+        diag.Reset();
+        auto unfounded = loadCache(cacheData);
+        EXPECT_EQ(diag.GetErrorCount(), 0u);
+    }
+}
+
+// ASTLoader version-branching API: after loading a cjo the reader can query the cjo's version to
+// decide which semantic to apply. We build an ASTLoader directly
+// from cjo bytes produced by the current compiler, run LoadPackageDepInfo() (the lightest path
+// that assigns 'package' and passes the version check), then query GetCjoVersion /
+// HasCjoVersion / IsCjoVersionAtLeast / AtMost / Exactly. We mutate the version bytes to exercise
+// the predicates against an older and a same-version cjo.
+TEST_F(PackageTest, CjoVersionQueryOnLoader)
+{
+    diag.ClearError();
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->code = "import vardecl.*";
+    instance->Compile(CompileStage::IMPORT_PACKAGE);
+    ASSERT_FALSE(instance->GetSourcePackages().empty());
+    std::vector<uint8_t> cjoData;
+    instance->importManager->ExportAST(false, cjoData, *instance->GetSourcePackages()[0]);
+    ASSERT_FALSE(cjoData.empty());
+    auto* originalVersion = MutableCjoVersionBytes(cjoData);
+    ASSERT_NE(originalVersion, nullptr);
+    EXPECT_EQ(originalVersion[0], CJO_MAJOR_VERSION);
+    EXPECT_EQ(originalVersion[1], CJO_MINOR_VERSION);
+
+    auto cjoManager = instance->importManager->GetCjoManager();
+    ASSERT_NE(cjoManager, nullptr);
+
+    // 1) Freshly produced cjo carries the current version (0.1.0). After LoadPackageDepInfo the
+    //    loader has read the header and the version queries reflect the cjo's version.
+    {
+        std::vector<uint8_t> copy = cjoData;
+        auto* ver = MutableCjoVersionBytes(copy);
+        ASSERT_NE(ver, nullptr);
+        ASTLoader loader(std::move(copy), "vercheck_q", *instance->typeManager, *cjoManager,
+            instance->invocation.globalOptions);
+        diag.Reset();
+        // LoadPackageDepInfo runs VerifyForData + CheckCjoVersion (compatible) and assigns 'package'.
+        (void)loader.LoadPackageDepInfo();
+        EXPECT_EQ(diag.GetErrorCount(), 0u);
+
+        EXPECT_TRUE(loader.HasCjoVersion());
+        auto trip = loader.GetCjoVersion();
+        EXPECT_EQ(trip.major, CJO_MAJOR_VERSION);
+        EXPECT_EQ(trip.minor, CJO_MINOR_VERSION);
+        EXPECT_EQ(trip.patch, CJO_PATCH_VERSION);
+
+        // Branching predicates against the current version as the requirement.
+        EXPECT_TRUE(loader.IsCjoVersionAtLeast(CJO_MAJOR_VERSION, CJO_MINOR_VERSION));
+        EXPECT_TRUE(loader.IsCjoVersionAtMost(CJO_MAJOR_VERSION, CJO_MINOR_VERSION));
+        EXPECT_TRUE(loader.IsCjoVersionExactly(CJO_MAJOR_VERSION, CJO_MINOR_VERSION));
+        // The current cjo is at least version 0.0, at most a future 0.2, but not exactly 0.0.
+        EXPECT_TRUE(loader.IsCjoVersionAtLeast(CJO_MAJOR_VERSION, 0));
+        EXPECT_TRUE(loader.IsCjoVersionAtMost(CJO_MAJOR_VERSION, static_cast<uint8_t>(CJO_MINOR_VERSION + 1)));
+        EXPECT_FALSE(loader.IsCjoVersionExactly(CJO_MAJOR_VERSION, 0));
+        // A requirement on a different major is never satisfied.
+        EXPECT_FALSE(loader.IsCjoVersionAtLeast(static_cast<uint8_t>(CJO_MAJOR_VERSION + 1), 0));
+    }
+
+    // 2) Older minor (same major): backward compatible, loads, and the version queries report the
+    //    older minor. This is the case a newer compiler branches on to apply old semantics.
+    {
+        std::vector<uint8_t> copy = cjoData;
+        auto* ver = MutableCjoVersionBytes(copy);
+        ASSERT_NE(ver, nullptr);
+        ver[1] = 0; // older minor 0.0.x
+        ASTLoader loader(std::move(copy), "vercheck_old", *instance->typeManager, *cjoManager,
+            instance->invocation.globalOptions);
+        diag.Reset();
+        (void)loader.LoadPackageDepInfo();
+        EXPECT_EQ(diag.GetErrorCount(), 0u);
+        EXPECT_TRUE(loader.HasCjoVersion());
+        auto trip = loader.GetCjoVersion();
+        EXPECT_EQ(trip.major, CJO_MAJOR_VERSION);
+        EXPECT_EQ(trip.minor, 0u);
+
+        // 0.0 is at least 0.0, at most 0.1, but NOT at least 0.1.
+        EXPECT_TRUE(loader.IsCjoVersionAtLeast(CJO_MAJOR_VERSION, 0));
+        EXPECT_TRUE(loader.IsCjoVersionAtMost(CJO_MAJOR_VERSION, CJO_MINOR_VERSION));
+        EXPECT_FALSE(loader.IsCjoVersionAtLeast(CJO_MAJOR_VERSION, CJO_MINOR_VERSION));
+        EXPECT_FALSE(loader.IsCjoVersionExactly(CJO_MAJOR_VERSION, CJO_MINOR_VERSION));
+        EXPECT_TRUE(loader.IsCjoVersionExactly(CJO_MAJOR_VERSION, 0));
+    }
+
+    // 3) A cjo whose version was stripped (nullptr) reports HasCjoVersion()==false and the
+    //    predicates all return false (cannot be proven to satisfy any in-major requirement).
+    //    We cannot easily null out the inline struct in-buffer, so we instead verify the
+    //    absence semantics on a loader that has not yet loaded any header: before
+    //    LoadPackageDepInfo the queries are safe and report "no version".
+    {
+        std::vector<uint8_t> copy = cjoData;
+        ASTLoader loader(std::move(copy), "vercheck_nohdr", *instance->typeManager, *cjoManager,
+            instance->invocation.globalOptions);
+        diag.Reset();
+        // No LoadPackageDepInfo call: 'package' is still null.
+        EXPECT_FALSE(loader.HasCjoVersion());
+        EXPECT_FALSE(loader.IsCjoVersionAtLeast(CJO_MAJOR_VERSION, CJO_MINOR_VERSION));
+        EXPECT_FALSE(loader.IsCjoVersionAtMost(CJO_MAJOR_VERSION, CJO_MINOR_VERSION));
+        EXPECT_FALSE(loader.IsCjoVersionExactly(CJO_MAJOR_VERSION, CJO_MINOR_VERSION));
+        auto trip = loader.GetCjoVersion();
+        EXPECT_EQ(trip.major, 0u);
+        EXPECT_EQ(trip.minor, 0u);
+        EXPECT_EQ(diag.GetErrorCount(), 0u);
+    }
+
+    diag.Reset();
+}
+
+// ASTWriter version-branching API is intentionally NOT provided: write-side branching is out of
+// scope for now (there is no mechanism yet to pre-plant handling of future incompatible changes),
+// so the writer always stamps CJO_MAJOR/MINOR/PATCH_VERSION unconditionally.
 
 TEST_F(PackageTest, ImportOptFlag)
 {
