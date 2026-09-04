@@ -37,7 +37,7 @@ public:
         const ElementList<Ptr<const AST::FuncDecl>>& localConstFuncs, const IncreKind& kind,
         const std::unordered_map<std::string, Value*>& deserializedVals,
         std::vector<std::pair<const AST::Decl*, Function*>>& annoFactories,
-        std::unordered_map<Block*, Expression*>& maybeUnreachable, bool computeAnnotations,
+        bool computeAnnotations,
         std::vector<CHIR::Function*>& initFuncForAnnoFactory, Cangjie::TypeManager& typeManager)
         : builder(builder),
           chirTy(chirTy),
@@ -50,7 +50,6 @@ public:
           mergingSpecific(opts.IsCompilingCJMPSpecific()),
           deserializedVals(deserializedVals),
           annoFactoryFuncs(annoFactories),
-          maybeUnreachable(maybeUnreachable),
           isComputingAnnos{computeAnnotations},
           initFuncsForAnnoFactory{initFuncForAnnoFactory},
           typeManager{typeManager}
@@ -602,7 +601,6 @@ private:
     const bool mergingSpecific; // add by cjmp
     const std::unordered_map<std::string, Value*>& deserializedVals; // add by cjmp
     std::vector<std::pair<const AST::Decl*, Function*>>& annoFactoryFuncs;
-    std::unordered_map<Block*, Expression*>& maybeUnreachable;
     bool isComputingAnnos{};
     std::vector<CHIR::Function*>& initFuncsForAnnoFactory;
     Cangjie::TypeManager& typeManager;
@@ -763,7 +761,6 @@ private:
     Ptr<Value> TranslateConstructorFuncInline(const AST::Decl& parent, const AST::FuncBody& funcBody);
     // Check whether the member of decl should be translated.
     bool ShouldTranslateMember(const AST::Decl& decl, const AST::Decl& member) const;
-
     Ptr<Value> Visit(const AST::ArrayExpr& array);
     Ptr<Value> Visit(const AST::ArrayLit& array);
     Ptr<Value> Visit(const AST::AssignExpr& assign);

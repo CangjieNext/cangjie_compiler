@@ -207,7 +207,6 @@ private:
     std::unordered_set<ClassDef*> uselessClasses;
     std::unordered_set<Function*> uselessLambda;
     std::vector<CHIR::Function*> initFuncsForConstVar;
-    std::unordered_map<Block*, Expression*> maybeUnreachable;
     /// Whether this CHIR convertor is translating Annotations
     bool isComputingAnnos{false};
     std::vector<std::pair<const AST::Decl*, Function*>> annoFactoryFuncs;
