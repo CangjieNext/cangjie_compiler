@@ -21,20 +21,17 @@ public:
     Package* DeserializePluginResult(
         std::unordered_set<Function*>& srcCodeImportedFuncs,
         std::unordered_set<GlobalVar*>& srcCodeImportedVars,
-        std::vector<Function*>& initFuncsForConstVar,
-        std::unordered_map<Block*, Expression*>& maybeUnreachable);
+        std::vector<Function*>& initFuncsForConstVar);
     bool FreeCachedData();
 private:
     void CHIRPtrToString(
         std::unordered_set<Function*>& srcCodeImportedFuncs,
         std::unordered_set<GlobalVar*>& srcCodeImportedVars,
-        std::vector<Function*>& initFuncsForConstVar,
-        std::unordered_map<Block*, Expression*>& maybeUnreachable);
+        std::vector<Function*>& initFuncsForConstVar);
     void StringToCHIRPtr(
         std::unordered_set<Function*>& srcCodeImportedFuncs,
         std::unordered_set<GlobalVar*>& srcCodeImportedVars,
-        std::vector<Function*>& initFuncsForConstVar,
-        std::unordered_map<Block*, Expression*>& maybeUnreachable);
+        std::vector<Function*>& initFuncsForConstVar);
 
     struct PluginResult {
         uint8_t* data{nullptr};
@@ -49,7 +46,6 @@ private:
     std::unordered_set<std::string> srcCodeImportedFuncNames;
     std::unordered_set<std::string> srcCodeImportedVarNames;
     std::vector<std::string> initFuncsForConstVarNames;
-    std::unordered_map<std::string, std::pair<std::string, std::string>> unreachableBlockNames;
 };
 }
 }
