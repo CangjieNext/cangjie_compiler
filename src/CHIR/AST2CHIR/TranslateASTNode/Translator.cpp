@@ -7,8 +7,16 @@
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 
+#include <algorithm>
+
 using namespace Cangjie::CHIR;
 using namespace Cangjie;
+
+bool Translator::IsBlockReachable(Block& entry, const Block& target)
+{
+    auto reachableBlocks = TopologicalSort(&entry);
+    return std::find(reachableBlocks.begin(), reachableBlocks.end(), &target) != reachableBlocks.end();
+}
 
 void Translator::SetSymbolTable(const AST::Node& node, Value& val, bool isLocal)
 {
