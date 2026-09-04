@@ -670,6 +670,7 @@ Block* Block::Clone(CHIRBuilder& builder, BlockGroup& newGroup) const
 {
     auto newBlock = builder.CreateBlock(&newGroup);
     newBlock->AppendAttributeInfo(GetAttributeInfo());
+    newBlock->CopyBaseInfoFrom(*this);
     if (exceptions.has_value()) {
         newBlock->SetExceptions(exceptions.value());
     }

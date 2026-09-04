@@ -80,5 +80,8 @@ Ptr<Value> Translator::Visit(const AST::Block& b)
             TranslateSubExprToDiscarded(*nodes[i]);
         }
     }
+    if (b.GetTy()->IsNothing() && currentBlock->GetTerminator() == nullptr) {
+        CreateAndAppendTerminator<Exit>(TranslateLocation(b), currentBlock);
+    }
     return nullptr;
 }
