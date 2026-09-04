@@ -286,7 +286,7 @@ void AST2CHIR::SetInitFuncForStaticVar()
 Translator AST2CHIR::CreateTranslator()
 {
     return Translator{builder, chirType, opts, gim, globalCache, localConstVars, localConstFuncs, kind,
-        deserializedVals, annoFactoryFuncs, maybeUnreachable, isComputingAnnos, initFuncsForAnnoFactory, types};
+        deserializedVals, annoFactoryFuncs, isComputingAnnos, initFuncsForAnnoFactory, types};
 }
 
 void AST2CHIR::TranslateInitOfGlobalVars(const AST::Package& pkg, const InitOrder& initOrder)
@@ -449,8 +449,8 @@ void AST2CHIR::TranslateInParallel(const std::vector<Ptr<const AST::Decl>>& decl
 {
     Utils::ParallelUtil allDeclsParallel(builder, opts.GetJobs());
     allDeclsParallel.RunAST2CHIRInParallel(decls, chirType, opts, gim, globalCache, localConstVars, localConstFuncs,
-        kind, deserializedVals, Translator::TranslateASTNode, maybeUnreachable, isComputingAnnos,
-        initFuncsForAnnoFactory, types, annoFactoryFuncs);
+        kind, deserializedVals, Translator::TranslateASTNode, isComputingAnnos, initFuncsForAnnoFactory, types,
+        annoFactoryFuncs);
 }
 
 void AST2CHIR::TranslateTopLevelDeclsInParallel()
