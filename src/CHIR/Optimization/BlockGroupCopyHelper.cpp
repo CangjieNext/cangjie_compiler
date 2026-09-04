@@ -25,7 +25,12 @@ std::pair<std::vector<Block*>, LocalVar*> BlockGroupCopyHelper::CloneBlockGroup(
 {
     std::vector<Block*> newBlocks;
     for (auto block : oldBG.GetBlocks()) {
-        newBlocks.emplace_back(block->Clone(builder, newBG));
+        auto newBlock = block->Clone(builder, newBG);
+        auto warningLocation = block->Get<DebugLocationInfoForWarning>();
+        if (!warningLocation.IsInvalidPos()) {
+            newBlock->Set<DebugLocationInfoForWarning>(warningLocation);
+        }
+        newBlocks.emplace_back(newBlock);
     }
     InstBlockGroup(newBlocks);
     // including local var and param

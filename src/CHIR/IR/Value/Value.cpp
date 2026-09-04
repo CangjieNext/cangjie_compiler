@@ -873,6 +873,10 @@ void BlockGroup::CloneBlocks(CHIRBuilder& builder, BlockGroup& parent) const
     CJC_ASSERT(parent.GetEntryBlock() == nullptr);
     for (auto block : blocks) {
         Block* newBlock = block->Clone(builder, parent);
+        auto warningLocation = block->Get<DebugLocationInfoForWarning>();
+        if (!warningLocation.IsInvalidPos()) {
+            newBlock->Set<DebugLocationInfoForWarning>(warningLocation);
+        }
         if (block == entryBlock) {
             parent.SetEntryBlock(newBlock);
         }
