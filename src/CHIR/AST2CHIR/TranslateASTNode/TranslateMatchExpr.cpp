@@ -6,6 +6,8 @@
 
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 
+#include <unordered_set>
+
 using namespace Cangjie::CHIR;
 using namespace Cangjie;
 
@@ -69,6 +71,26 @@ bool Translator::CanOptimizeMatchToSwitch(const AST::MatchExpr& matchExpr)
 }
 
 namespace {
+/** Check whether @p target is reachable from @p entry through CFG successor edges. */
+bool IsBlockReachable(Block& entry, const Block& target)
+{
+    std::vector<Block*> workList{&entry};
+    std::unordered_set<const Block*> visited{&entry};
+    while (!workList.empty()) {
+        auto block = workList.back();
+        workList.pop_back();
+        if (block == &target) {
+            return true;
+        }
+        for (auto successor : block->GetSuccessors()) {
+            if (visited.emplace(successor).second) {
+                workList.emplace_back(successor);
+            }
+        }
+    }
+    return false;
+}
+
 void PrintDebugMessage(bool isDebug, const AST::Node& node)
 {
     if (!isDebug) {
@@ -198,7 +220,13 @@ Block* Translator::TranslateMatchCaseBody(
         : TranslateLocation(*caseBody.body.back()) : TranslateLocation(caseBody);
     TranslateSubExprToLoc(caseBody, retVal, loc);
     auto currentBody = GetBlockByAST(caseBody);
-    CreateAndAppendTerminator<GoTo>(endBlock, currentBlock);
+    if (currentBlock->GetTerminator() == nullptr) {
+        if (IsBlockReachable(*currentBody, *currentBlock)) {
+            CreateAndAppendTerminator<GoTo>(endBlock, currentBlock);
+        } else {
+            CreateAndAppendTerminator<Exit>(currentBlock);
+        }
+    }
     // Return the free block for connecting control flow at outside.
     return currentBody;
 }
