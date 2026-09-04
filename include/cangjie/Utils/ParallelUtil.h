@@ -34,8 +34,8 @@ public:
         const ElementList<Ptr<const AST::Decl>>& localConstVars,
         const ElementList<Ptr<const AST::FuncDecl>>& localConstFuncs, IncreKind& kind,
         const std::unordered_map<std::string, Value*>& deserializedVals,
-        const TranslateASTNodeFunc& funcForTranlateASTNode, std::unordered_map<Block*, Expression*>& maybeUnreachable,
-        bool computeAnnotations, std::vector<CHIR::Function*>& initFuncsForAnnoFactory,
+        const TranslateASTNodeFunc& funcForTranlateASTNode, bool computeAnnotations,
+        std::vector<CHIR::Function*>& initFuncsForAnnoFactory,
         Cangjie::TypeManager& typeManager, std::vector<std::pair<const AST::Decl*, Function*>>& annoFactoryFuncs)
     {
         size_t funcNum = decls.size();
@@ -44,15 +44,13 @@ public:
         std::vector<std::unique_ptr<Translator>> trans;
         std::vector<std::unique_ptr<CHIR::CHIRType>> chirTypes;
         CHIR::CHIRTypeCache chirTypeCache(chirType.GetTypeMap(), chirType.GetGlobalNominalCache());
-        std::vector<std::unordered_map<Block*, Expression*>> maybeUnreachableBlocks;
-        maybeUnreachableBlocks.resize(funcNum);
         for (size_t idx = 0; idx < funcNum; ++idx) {
             auto decl = decls.at(idx);
             auto subChirType = std::make_unique<CHIRType>(*builderList[idx], chirTypeCache);
             auto tran = std::make_unique<Translator>(
                 *builderList[idx], *subChirType, opts, gim, globalCache, localConstVars,
-                localConstFuncs, kind, deserializedVals, annoFactoryFuncs, maybeUnreachableBlocks[idx],
-                computeAnnotations, initFuncsForAnnoFactory, typeManager);
+                localConstFuncs, kind, deserializedVals, annoFactoryFuncs, computeAnnotations,
+                initFuncsForAnnoFactory, typeManager);
             tran->SetTopLevel(*decl);
             taskQueue.AddTask<void>(
                 [translator = tran.get(), decl, &funcForTranlateASTNode]() {
@@ -66,9 +64,6 @@ public:
             (*subBd).MergeAllocatedInstance();
         }
         builder.GetChirContext().MergeTypes();
-        for (auto& it : maybeUnreachableBlocks) {
-            maybeUnreachable.merge(it);
-        }
         // If the function RunAST2CHIRInParallel is invoked again, we need revert chirTypePool to the inital state.
     }
 
