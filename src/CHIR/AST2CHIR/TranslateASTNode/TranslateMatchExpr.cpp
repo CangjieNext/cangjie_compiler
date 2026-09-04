@@ -6,6 +6,8 @@
 
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 
+#include <unordered_set>
+
 using namespace Cangjie::CHIR;
 using namespace Cangjie;
 
@@ -198,7 +200,24 @@ Block* Translator::TranslateMatchCaseBody(
         : TranslateLocation(*caseBody.body.back()) : TranslateLocation(caseBody);
     TranslateSubExprToLoc(caseBody, retVal, loc);
     auto currentBody = GetBlockByAST(caseBody);
-    CreateAndAppendTerminator<GoTo>(endBlock, currentBlock);
+    if (currentBlock->GetTerminator() == nullptr) {
+        std::vector<Block*> workList{currentBody};
+        std::unordered_set<Block*> visited{currentBody};
+        while (!workList.empty() && visited.find(currentBlock) == visited.end()) {
+            auto block = workList.back();
+            workList.pop_back();
+            for (auto successor : block->GetSuccessors()) {
+                if (visited.emplace(successor).second) {
+                    workList.emplace_back(successor);
+                }
+            }
+        }
+        if (visited.find(currentBlock) != visited.end()) {
+            CreateAndAppendTerminator<GoTo>(endBlock, currentBlock);
+        } else {
+            CreateAndAppendTerminator<Exit>(currentBlock);
+        }
+    }
     // Return the free block for connecting control flow at outside.
     return currentBody;
 }
