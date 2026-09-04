@@ -339,3 +339,31 @@ void Translator::TranslateSubExprToDiscarded(const AST::Node& node)
         }
     }
 }
+
+void Translator::StartUnreachableContinuation(const AST::Node& node)
+{
+    CJC_ASSERT(currentBlock->GetTerminator() == nullptr);
+    CJC_ASSERT(node.GetTy());
+    if (!node.GetTy()->IsNothing()) {
+        return;
+    }
+
+    auto terminator = CreateAndAppendTerminator<Exit>(TranslateLocation(node), currentBlock);
+    CreateUnreachableContinuation(*terminator);
+}
+
+void Translator::CreateUnreachableContinuation(Expression& terminator)
+{
+    auto rootLocation = currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION)
+        ? currentBlock->Get<DebugLocationInfoForWarning>()
+        : terminator.GetDebugLocation();
+    currentBlock = CreateBlock();
+    currentBlock->EnableAttr(Attribute::UNREACHABLE_CONTINUATION);
+    currentBlock->Set<DebugLocationInfoForWarning>(rootLocation);
+}
+
+void Translator::FinishUnreachableContinuation(const DebugLocation& loc)
+{
+    auto exit = CreateAndAppendTerminator<Exit>(loc, currentBlock);
+    exit->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+}
