@@ -7738,10 +7738,10 @@ index c437624d1..b1ceae050 100644
    SymbolContextScope *GetSymbolContextScope() const { return m_owner_scope; }
 diff --git a/lldb/include/lldb/Target/CJDynamicRegisterInfo.h b/lldb/include/lldb/Target/CJDynamicRegisterInfo.h
 new file mode 100644
-index 000000000..03c7d4dbf
+index 000000000..7376af0a1
 --- /dev/null
 +++ b/lldb/include/lldb/Target/CJDynamicRegisterInfo.h
-@@ -0,0 +1,223 @@
+@@ -0,0 +1,224 @@
 +//===-- CJDynamicRegisterInfo.h -----------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
@@ -7928,6 +7928,7 @@ index 000000000..03c7d4dbf
 +      regValMap[ConstString("d13")] = RegisterValue(ReadWithByteOrder<uint64_t>(&this->d13, byte_order));
 +      regValMap[ConstString("d14")] = RegisterValue(ReadWithByteOrder<uint64_t>(&this->d14, byte_order));
 +      regValMap[ConstString("d15")] = RegisterValue(ReadWithByteOrder<uint64_t>(&this->d15, byte_order));
++      regValMap[ConstString("fpcr")] = RegisterValue(ReadWithByteOrder<uint32_t>(&this->fpcr, byte_order));
 +    }
 +};
 +
@@ -7965,7 +7966,6 @@ index 000000000..03c7d4dbf
 +} // namespace lldb_private
 +
 +#endif // LLDB_TARGET_CJDYNAMICREGISTERINFO_H
-\ No newline at end of file
 diff --git a/lldb/include/lldb/Target/CJRegisterContext.h b/lldb/include/lldb/Target/CJRegisterContext.h
 new file mode 100644
 index 000000000..c0d257eb9
@@ -28943,10 +28943,47 @@ index 5804c13fe..ed28e2969 100644
  
  GDBRemoteCommunication::PacketResult
 diff --git a/lldb/source/Plugins/Process/gdb-remote/ProcessGDBRemote.cpp b/lldb/source/Plugins/Process/gdb-remote/ProcessGDBRemote.cpp
-index 3e1a6fb66..6f93efa7f 100644
+index 3e1a6fb66..581f1a4e2 100644
 --- a/lldb/source/Plugins/Process/gdb-remote/ProcessGDBRemote.cpp
 +++ b/lldb/source/Plugins/Process/gdb-remote/ProcessGDBRemote.cpp
-@@ -5367,3 +5367,25 @@ void ProcessGDBRemote::DidExec() {
+@@ -1809,12 +1809,32 @@ ThreadSP ProcessGDBRemote::SetThreadStopInfo(
+                   watch_id = wp_sp->GetID();
+                 }
+               }
+-              if (watch_id == LLDB_INVALID_WATCH_ID) {
++              if (watch_id != LLDB_INVALID_WATCH_ID) {
++                thread_sp->SetStopInfo(
++                    StopInfo::CreateStopReasonWithWatchpointID(
++                        *thread_sp, watch_id, wp_hit_addr));
++              } else {
+                 Log *log(GetLog(GDBRLog::Watchpoints));
+-                LLDB_LOGF(log, "failed to find watchpoint");
++                LLDB_LOG(log,
++                         "remote reported an unknown watchpoint: address = "
++                         "{0:x}, hardware index = {1}, hit address = {2:x}; "
++                         "treating the stop as a trace event",
++                         wp_addr, wp_index, wp_hit_addr);
++
++                // A remote stub can report a stale hardware watchpoint after
++                // the corresponding watchpoint has already been removed (or
++                // when the kernel reports stale debug-register state).  Never
++                // manufacture watchpoint ID 0: StopInfoWatchpoint treats it as
++                // a real, stopping watchpoint and consequently interrupts
++                // thread plans such as "finish".  Keep the standard trace
++                // reason so the active step/finish plan can consume the stop,
++                // but suppress the intermediate stop notification so the
++                // user does not see "stop reason = trace".
++                StopInfoSP trace_stop_info_sp =
++                    StopInfo::CreateStopReasonToTrace(*thread_sp);
++                trace_stop_info_sp->OverrideShouldNotify(false);
++                thread_sp->SetStopInfo(trace_stop_info_sp);
+               }
+-              thread_sp->SetStopInfo(StopInfo::CreateStopReasonWithWatchpointID(
+-                  *thread_sp, watch_id, wp_hit_addr));
+               handled = true;
+             } else if (reason == "exception") {
+               thread_sp->SetStopInfo(StopInfo::CreateStopReasonWithException(
+@@ -5367,3 +5387,25 @@ void ProcessGDBRemote::DidExec() {
      m_vfork_in_progress = false;
    Process::DidExec();
  }
@@ -28972,7 +29009,6 @@ index 3e1a6fb66..6f93efa7f 100644
 +  }
 +  return object_sp;
 +}
-\ No newline at end of file
 diff --git a/lldb/source/Plugins/Process/gdb-remote/ProcessGDBRemote.h b/lldb/source/Plugins/Process/gdb-remote/ProcessGDBRemote.h
 index 50cef8e49..0e2ce65e3 100644
 --- a/lldb/source/Plugins/Process/gdb-remote/ProcessGDBRemote.h
@@ -29920,10 +29956,10 @@ index 000000000..b8e5b7ef4
 +}
 diff --git a/lldb/source/Target/CJThread.cpp b/lldb/source/Target/CJThread.cpp
 new file mode 100644
-index 000000000..04684edc5
+index 000000000..7267e4684
 --- /dev/null
 +++ b/lldb/source/Target/CJThread.cpp
-@@ -0,0 +1,687 @@
+@@ -0,0 +1,712 @@
 +//===-- CJThread.cpp ---------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
@@ -30033,6 +30069,19 @@ index 000000000..04684edc5
 +    .offset_of_boundCJThread = 320
 +};
 +
++constexpr CJThreadLayoutOffsets offsets_aarch64_android = {
++    .offset_of_ScheduleManager_dot_allCJThreadList = 128,
++    .offset_of_CJThread_dot_allCJThreadDulink = 240,
++    .offset_of_CJThread_dot_context = 24,
++    .offset_of_CJThread_dot_thread = 16,
++    .offset_of_CJThread_dot_state = 216,
++    .offset_of_CJThread_dot_id = 456,
++    .offset_of_CJThread_dot_name = 464,
++    .offset_of_Thread_dot_tid = 88,
++    .offset_of_boundThread = 432,
++    .offset_of_boundCJThread = 304
++};
++
 +constexpr CJThreadLayoutOffsets offsets_aarch64_darwin = {
 +    .offset_of_ScheduleManager_dot_allCJThreadList = 176,
 +    .offset_of_CJThread_dot_allCJThreadDulink = 240,
@@ -30062,8 +30111,9 @@ index 000000000..04684edc5
 +      offsets = offsets_aarch64_darwin;
 +      return true;
 +    } else if (triple.getOS() == llvm::Triple::OSType::Linux) {
-+      auto env = triple.getEnvironmentName();
-+      if (env.equals("ohos")) {
++      if (triple.isAndroid()) {
++        offsets = offsets_aarch64_android;
++      } else if (triple.getEnvironmentName().equals("ohos")) {
 +        offsets = offsets_aarch64_linux_ohos;
 +      } else {
 +        offsets = offsets_aarch64_linux;
@@ -30220,12 +30270,23 @@ index 000000000..04684edc5
 +    // Thread::tid (if thread_ptr is valid)
 +    overview.tid = 0;
 +    if (overview.thread_ptr != 0) {
-+      uint64_t tid_val = 0;
-+      if (!ReadMemoryChecked(process,
-+                             overview.thread_ptr + offsets.offset_of_Thread_dot_tid,
-+                             &tid_val, sizeof(tid_val), status))
-+        break;
-+      overview.tid = tid_val;
++      if (process.GetSystemArchitecture().GetTriple().isOSDarwin()) {
++        uint64_t tid_val = 0;
++        if (!ReadMemoryChecked(
++                process,
++                overview.thread_ptr + offsets.offset_of_Thread_dot_tid,
++                &tid_val, sizeof(tid_val), status))
++          break;
++        overview.tid = tid_val;
++      } else {
++        uint32_t tid_val = 0;
++        if (!ReadMemoryChecked(
++                process,
++                overview.thread_ptr + offsets.offset_of_Thread_dot_tid,
++                &tid_val, sizeof(tid_val), status))
++          break;
++        overview.tid = tid_val;
++      }
 +    }
 +
 +    results.push_back(overview);
@@ -32121,7 +32182,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..0b2926411 100644
+index b391fe1ea..640548237 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -32177,7 +32238,7 @@ index b391fe1ea..0b2926411 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.2.0-beta.rc3";
++    g_version_str += "\n  cangjie 1.2.0";
    }
  
    return g_version_str.c_str();
