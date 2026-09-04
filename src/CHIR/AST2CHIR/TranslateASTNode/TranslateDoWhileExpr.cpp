@@ -47,8 +47,10 @@ Ptr<Value> Translator::Visit(const AST::DoWhileExpr& doWhileExpr)
     TranslateSubExprToDiscarded(*doWhileExpr.body);
     Ptr<Block> trueBlock = GetBlockByAST(*doWhileExpr.body);
     // 2. goto conditionBlock.
-    CreateAndAppendTerminator<GoTo>(whileLoc, conditionBlock, currentBlock)
-                        ->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+    if (currentBlock->GetTerminator() == nullptr) {
+        CreateAndAppendTerminator<GoTo>(whileLoc, conditionBlock, currentBlock)
+                            ->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+    }
     currentBlock = conditionBlock;
     // 3. translate condition.
     Ptr<Value> condtion = TranslateExprArg(*doWhileExpr.condExpr);
