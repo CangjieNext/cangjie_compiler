@@ -10,8 +10,10 @@
 #include "cangjie/CHIR/Analysis/CallGraphAnalysis.h"
 #include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
 #include "cangjie/CHIR/Analysis/DevirtualizationInfo.h"
+#include "cangjie/CHIR/Analysis/UnreachableBlockAnalysis.h"
 #include "cangjie/CHIR/Checker/CHIRChecker.h"
 #include "cangjie/CHIR/Checker/AnnotationChecker.h"
+#include "cangjie/CHIR/Checker/UnreachableBlockCheck.h"
 #include "cangjie/CHIR/Checker/UnreachableBranchCheck.h"
 #include "cangjie/CHIR/Checker/VarInitCheck.h"
 #include "cangjie/CHIR/Interpreter/ConstEval.h"
@@ -259,8 +261,9 @@ void ToCHIR::DoClosureConversion()
 void ToCHIR::UnreachableBlockReporter()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "UnreachableBlockWarningReporter");
-    auto dce = DeadCodeElimination(builder, diag, *chirPkg);
-    dce.UnreachableBlockWarningReporter(*chirPkg, opts.GetJobs(), maybeUnreachable);
+    auto regions = UnreachableBlockAnalysis::Parse(*chirPkg);
+    auto check = CHIR::UnreachableBlockCheck(diag, chirPkg->GetName());
+    check.RunOnPackage(*chirPkg, regions, opts.GetJobs());
 }
 
 void ToCHIR::UnreachableBlockElimination()
@@ -1224,7 +1227,7 @@ bool ToCHIR::ExecuteCjPlugins()
     // 3. deserialize plugin result, get new package of cpp
     if (succeed) {
         if (auto newPackage = executePlugin.DeserializePluginResult(
-            srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar, maybeUnreachable)) {
+            srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar)) {
             chirPkg = newPackage;
         } else {
             succeed = false;
@@ -1333,7 +1336,6 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
     srcCodeImportedFuncs = ast2CHIR.GetSrcCodeImportedFuncs();
     srcCodeImportedVars = ast2CHIR.GetSrcCodeImportedVars();
     initFuncsForConstVar = ast2CHIR.GetInitFuncsForConstVar();
-    maybeUnreachable = ast2CHIR.GetMaybeUnreachableBlocks();
     if (isComputingAnnos) {
         annoFactoryFuncs = ast2CHIR.GetAnnoFactoryFuncs();
         globalNominalCache = std::move(chirTypeCache.globalNominalCache);
