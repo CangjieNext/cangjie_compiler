@@ -9,6 +9,15 @@
 using namespace Cangjie::CHIR;
 using namespace Cangjie;
 
+namespace {
+void SetSkipDceWarning(const AST::MatchCase& matchCase, Block& body)
+{
+    if (matchCase.TestAttr(AST::Attribute::UNREACHABLE)) {
+        body.Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+    }
+}
+} // namespace
+
 bool Translator::CanOptimizeMatchToSwitch(const AST::MatchExpr& matchExpr)
 {
     // The enum pattern and const pattern which match the rules below can be optimized using switch node:
@@ -163,6 +172,7 @@ void Translator::TranslateMatchWithSelector(const AST::MatchExpr& matchExpr, Ptr
             trueBlock->GetPredecessors()[0]->SetDebugLocation(loc2);
         }
         auto currentBody = TranslateMatchCaseBody(*current->exprOrDecls, retVal, endBlock);
+        SetSkipDceWarning(*current, *currentBody);
         CreateAndAppendTerminator<GoTo>(currentBody, trueBlock);
         if (i == caseNum - 1) {
             CreateAndAppendTerminator<GoTo>(endBlock, falseBlock);
@@ -743,6 +753,7 @@ void Translator::TranslateTrivialMatchAsTable(
     for (auto& curCase : match.matchCases) {
         context.ScopePlus();
         auto currentBody = TranslateMatchCaseBody(*curCase->exprOrDecls, retVal, endBlock);
+        SetSkipDceWarning(*curCase, *currentBody);
         CJC_ASSERT(!curCase->patterns.empty());
         if (!isStillReachable) {
             continue; // All cases after wildcard pattern are unreachable pattern which do no need predecessor.
@@ -812,6 +823,7 @@ void Translator::TranslateEnumPatternMatchAsTable(const AST::MatchExpr& match, P
             // NOTE: only should to collect first visited wildcard pattern.
             // The sub pattern may contains varPattern, translate when binding second level table.
             firstDefaultBlock = TranslateMatchCaseBody(*matchCase.exprOrDecls, retVal, endBlock);
+            SetSkipDceWarning(matchCase, *firstDefaultBlock);
             const auto& loc = TranslateLocation(matchCase.patterns[0]->begin, matchCase.patterns[0]->end);
             firstDefaultBlock->SetDebugLocation(loc);
             wildcardIdx = i;
@@ -838,6 +850,7 @@ void Translator::TranslateEnumPatternMatchAsTable(const AST::MatchExpr& match, P
             continue;
         }
         auto bodyBlock = TranslateMatchCaseBody(*match.matchCases[i]->exprOrDecls, retVal, endBlock);
+        SetSkipDceWarning(*match.matchCases[i], *bodyBlock);
         for (auto& block : std::as_const(branchInfos[i])) {
             CreateAndAppendTerminator<GoTo>(bodyBlock, block);
         }
