@@ -56,7 +56,7 @@ Ptr<Value> Translator::Visit(const AST::LambdaExpr& lambdaExpr)
 Translator Translator::Copy() const
 {
     return {builder, chirTy, opts, gim, globalSymbolTable, localConstVars, localConstFuncs, increKind,
-        deserializedVals, annoFactoryFuncs, maybeUnreachable, isComputingAnnos, initFuncsForAnnoFactory, typeManager};
+        deserializedVals, annoFactoryFuncs, isComputingAnnos, initFuncsForAnnoFactory, typeManager};
 }
 
 Translator Translator::SetupContextForLambda(const AST::Block& body)
@@ -110,6 +110,7 @@ Ptr<Value> Translator::TranslateLambdaBody(
     blockGroupStack.emplace_back(blockGroup);
     auto entry = builder.CreateBlock(blockGroup);
     blockGroup->SetEntryBlock(entry);
+    SetCurrentBlock(*entry);
     BindingFuncParam(*funcBody.paramLists[0], *lambda->GetBody(), config);
     // Set return value.
     auto retType = lambda->GetReturnType();

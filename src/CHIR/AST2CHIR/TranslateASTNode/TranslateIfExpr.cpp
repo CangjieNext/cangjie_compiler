@@ -170,14 +170,31 @@ protected:
 
     DanglingBlock TranslateLetPattern(const LetPatternDestructor& let, bool isRightmost)
     {
+        DanglingBlock result;
         if (tr.CanOptimizeToSwitch(let)) {
-            return TranslateLetPatternAsTable(let, isRightmost);
+            result = TranslateLetPatternAsTable(let);
         } else {
-            return TranslateLetPatternAsMatch(let, isRightmost);
+            result = TranslateLetPatternAsMatch(let);
         }
+        if (!isRightmost) {
+            return result;
+        }
+        auto tb = TranslateTrueBlock();
+        auto fb = TranslateFalseBlock();
+        // Pattern-dispatch blocks are lowering-only bridges. Keep their diagnostic roots on the enclosing
+        // conditional branches so the warning highlights the source body rather than a pattern token.
+        result.tb->SetDebugLocation(tb->GetDebugLocation());
+        if (result.fb) {
+            result.fb->SetDebugLocation(fb->GetDebugLocation());
+        }
+        CreateGoto(*tb, *result.tb);
+        if (result.fb) {
+            CreateGoto(*fb, *result.fb);
+        }
+        return {};
     }
 
-    DanglingBlock TranslateLetPatternAsMatch(const LetPatternDestructor& let, bool isRightmost)
+    DanglingBlock TranslateLetPatternAsMatch(const LetPatternDestructor& let)
     {
         // translate initializer
         auto selectorVal = tr.TranslateExprArg(*let.initializer);
@@ -187,22 +204,14 @@ protected:
             // translate let pattern
             context.ScopePlus();
             auto [patternFalseBlock, patternTrueBlock] = let.patterns.size() == 1
-                ? tr.TranslateNestingCasePattern(*let.patterns[0], selectorVal, originLoc, SourceExpr::IF_EXPR)
+                ? tr.TranslateNestingCasePattern(*let.patterns[0], selectorVal, originLoc, GetSourceExpr())
                 : tr.TranslateOrPattern(let.patterns, selectorVal, originLoc);
 
-            // translate pattern not match block
-            if (isRightmost) {
-                auto tb = TranslateTrueBlock();
-                auto fb = TranslateFalseBlock();
-                CreateGoto(*tb, *patternTrueBlock);
-                CreateGoto(*fb, *patternFalseBlock);
-                return {};
-            }
             return {patternTrueBlock, patternFalseBlock};
         }
     }
 
-    DanglingBlock TranslateLetPatternAsTable(const LetPatternDestructor& let, bool isRightmost)
+    DanglingBlock TranslateLetPatternAsTable(const LetPatternDestructor& let)
     {
         auto selectorTy = let.initializer->GetTy();
         auto selectorVal = tr.TranslateExprArg(*let.initializer);
@@ -218,16 +227,6 @@ protected:
                 let, *GetEnumIDValue(*selectorTy, *selectorVal), enumDecl->constructors.size());
         } else {
             res = TranslateEnumPatternMatchAsTable(let, *selectorVal);
-        }
-        // translate pattern not match block
-        if (isRightmost) {
-            auto tb = TranslateTrueBlock();
-            auto fb = TranslateFalseBlock();
-            CreateGoto(*tb, *res.tb);
-            if (res.fb) {
-                CreateGoto(*fb, *res.fb);
-            }
-            return {};
         }
         return res;
     }
@@ -351,7 +350,8 @@ protected:
     }
     Block* CreateBlock()
     {
-        return tr.CreateBlock();
+        return tr.currentBlock && tr.currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION)
+            ? tr.CreateUnreachableContinuationBlock() : tr.CreateBlock();
     }
     CHIRBuilder& Builder()
     {
@@ -364,6 +364,22 @@ protected:
     Ptr<Block> GetBlockByAST(const AST::Block& block)
     {
         return tr.GetBlockByAST(block);
+    }
+    void CreateGotoIfCurrentBlockIsReachable(CHIR::Block& dest)
+    {
+        if (tr.currentBlock->GetTerminator() == nullptr &&
+            !tr.currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION)) {
+            CreateGoto(dest, *tr.currentBlock);
+        }
+    }
+    void CreateExitAndUnreachableContinuation(const DebugLocation& loc)
+    {
+        auto exit = tr.CreateAndAppendTerminator<Exit>(loc, tr.GetCurrentBlock());
+        tr.CreateUnreachableContinuation(*exit);
+    }
+    void FinishUnreachableContinuation(const DebugLocation& loc)
+    {
+        tr.FinishUnreachableContinuation(loc);
     }
     ///@}
 
@@ -442,6 +458,10 @@ public:
             CreateGoto(*falseBlock, *topRes.fb);
         }
         tr.SetCurrentBlock(*endBlock);
+        if (e->elseBody && endBlock->GetPredecessors().empty()) {
+            CreateExitAndUnreachableContinuation(tr.TranslateLocation(e1));
+            return nullptr;
+        }
         if (retVal) {
             auto ret = tr.GetDerefedValue(retVal, tr.TranslateLocation(e1));
             if (forceGenerateUnit) {
@@ -481,7 +501,8 @@ protected:
                 trueBlock->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
             }
         }
-        CreateGoto(*endBlock, *tr.GetCurrentBlock())->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+        FinishUnreachableContinuation(tr.TranslateLocation(*e->thenBody));
+        CreateGotoIfCurrentBlockIsReachable(*endBlock);
         return trueBlock;
     }
 
@@ -490,6 +511,7 @@ protected:
         CJC_ASSERT(!falseBlock);
         CJC_ASSERT(endBlock);
         if (e->elseBody) {
+            tr.SetCurrentBlock(*endBlock);
             auto loc = tr.TranslateLocation(*e);
             if (auto block = DynamicCast<AST::Block>(e->elseBody.get())) {
                 tr.TranslateSubExprToLoc(*block, retVal);
@@ -500,7 +522,8 @@ protected:
                 tr.TranslateSubExprToLoc(*e->elseBody, retVal);
             }
             falseBlock->SetDebugLocation(tr.TranslateLocation(*e->elseBody));
-            CreateGoto(*endBlock, *tr.GetCurrentBlock())->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+            FinishUnreachableContinuation(tr.TranslateLocation(*e->elseBody));
+            CreateGotoIfCurrentBlockIsReachable(*endBlock);
         } else {
             falseBlock = endBlock;
         }

@@ -63,7 +63,8 @@ static std::vector<Ptr<AST::Node>> CollectBlockBodyNodes(
 Ptr<Value> Translator::Visit(const AST::Block& b)
 {
     CJC_ASSERT(!blockGroupStack.empty());
-    auto block = CreateBlock();
+    auto block = currentBlock && currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION)
+        ? CreateUnreachableContinuationBlock() : CreateBlock();
     // Current block may be changed during translation,
     // store AST block 'b' related CHIR block for caller to generate goto or branch.
     SetSymbolTable(b, *block);
@@ -78,6 +79,9 @@ Ptr<Value> Translator::Visit(const AST::Block& b)
             return TranslateSubExprAsValue(*nodes[i]);
         } else {
             TranslateSubExprToDiscarded(*nodes[i]);
+            if (!currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION)) {
+                StartUnreachableContinuation(*nodes[i]);
+            }
         }
     }
     return nullptr;
