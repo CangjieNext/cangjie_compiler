@@ -79,6 +79,11 @@ Expression* Translator::CreateAndAppendApplyCallFromCallExpr(
             funcCall->Set<DebugLocationInfoForWarning>(loc);
         }
     }
+    if (instFuncTy.GetReturnType()->IsNothing()) {
+        CreateAndAppendTerminator<Exit>(loc, currentBlock);
+        currentBlock = CreateBlock();
+        currentBlock->SetDebugLocation(loc);
+    }
     return funcCall;
 }
 

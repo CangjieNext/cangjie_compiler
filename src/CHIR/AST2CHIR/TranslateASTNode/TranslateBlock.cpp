@@ -70,9 +70,9 @@ Ptr<Value> Translator::Visit(const AST::Block& b)
 
     currentBlock = block;
     // Since cangjie's block has value, return the value of last block node.
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     std::vector<Ptr<AST::Node>> nodes = CollectBlockBodyNodes(b, gim);
-#endif
+    #endif
     for (size_t i = 0; i < nodes.size(); ++i) {
         if (i == nodes.size() - 1) {
             return TranslateSubExprAsValue(*nodes[i]);
