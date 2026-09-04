@@ -205,6 +205,7 @@ Ptr<Value> Translator::Visit(const AST::FuncDecl& func)
     blockGroupStack.emplace_back(body);
     auto entry = builder.CreateBlock(body);
     body->SetEntryBlock(entry);
+    SetCurrentBlock(*entry);
     if (NeedCreateDebugForFirstParam(*curFunc)) {
         auto thisVar = curFunc->GetParam(0);
         CreateAndAppendExpression<Debug>(builder.GetUnitTy(), thisVar, "this", curFunc->GetEntryBlock());
