@@ -14,6 +14,9 @@ Ptr<Value> Translator::Visit(const AST::ThrowExpr& throwExpr)
     auto loc = TranslateLocation(throwExpr.begin, throwExpr.end);
     CJC_NULLPTR_CHECK(throwExpr.expr);
     auto eVal = TranslateExprArg(*throwExpr.expr);
+    if (eVal->GetType()->IsNothing()) {
+        return eVal;
+    }
     Ptr<Expression> terminator = nullptr;
     if (tryCatchContext.empty()) {
         terminator = CreateAndAppendTerminator<RaiseException>(loc, eVal, currentBlock);
@@ -22,7 +25,6 @@ Ptr<Value> Translator::Visit(const AST::ThrowExpr& throwExpr)
         terminator = CreateAndAppendTerminator<RaiseException>(loc, eVal, errBB, currentBlock);
     }
     // For following unreachable expressions, and throw also has value of type 'Nothing'.
-    currentBlock = CreateBlock();
-    maybeUnreachable.emplace(currentBlock, terminator);
+    CreateUnreachableContinuation(*terminator);
     return nullptr;
 }

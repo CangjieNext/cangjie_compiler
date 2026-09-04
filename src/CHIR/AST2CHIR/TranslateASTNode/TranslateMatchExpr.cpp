@@ -198,7 +198,11 @@ Block* Translator::TranslateMatchCaseBody(
         : TranslateLocation(*caseBody.body.back()) : TranslateLocation(caseBody);
     TranslateSubExprToLoc(caseBody, retVal, loc);
     auto currentBody = GetBlockByAST(caseBody);
-    CreateAndAppendTerminator<GoTo>(endBlock, currentBlock);
+    if (currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION) && currentBlock->GetTerminator() == nullptr) {
+        FinishUnreachableContinuation(loc);
+    } else if (!currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION)) {
+        CreateAndAppendTerminator<GoTo>(endBlock, currentBlock);
+    }
     // Return the free block for connecting control flow at outside.
     return currentBody;
 }
