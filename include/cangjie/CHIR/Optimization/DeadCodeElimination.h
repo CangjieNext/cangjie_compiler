@@ -8,6 +8,7 @@
 #define CANGJIE_CHIR_TRANSFORMATION_DEAD_CODE_ELIMINATION_H
 
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
+#include "cangjie/CHIR/Analysis/UnreachableBlockAnalysis.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Package.h"
@@ -65,10 +66,8 @@ public:
      * @brief process to report unreachable block warning.
      * @param package package to report warning.
      * @param threadsNum threads num join to do this pass.
-     * @param maybeUnreachableBlocks may be unreachable blocks to report.
      */
-    void UnreachableBlockWarningReporter(const Package& package,
-        size_t threadsNum, const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks);
+    void UnreachableBlockWarningReporter(const Package& package, size_t threadsNum);
 
     /**
      * @brief process to remove blocks which is marked unreachable.
@@ -113,8 +112,7 @@ private:
 
     // =============== Functions for Debug Message Dump =============== //
     Ptr<Expression> GetUnreachableExpression(const CHIR::Block& block, bool& isNormal) const;
-    void PrintUnreachableBlockWarning(
-        const CHIR::Block& block, const CHIR::Expression& terminator, bool& isPrinted);
+    void PrintUnreachableBlockWarning(const CHIR::Block& block, const DebugLocation& rootLocation, bool& isPrinted);
 
     // =============== Functions for dce reporter =============== //
     void TryReportUnusedOnExpr(Expression& expr, const GlobalOptions& opts, bool blockUsed);
@@ -131,10 +129,12 @@ private:
 
     // ============== Functions for clean code in parallel ===========//
     void ReportUnusedCodeInFunc(const BlockGroup& body, const GlobalOptions& opts);
+    void UnreachableBlockWarningReporterForFunc(
+        Function& func, const UnreachableBlockMap& unreachableBlocks);
     void UnreachableBlockWarningReporterInSerial(
-        const Package& package, const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks);
-    void UnreachableBlockWarningReporterInParallel(const Package& package,
-        size_t threadsNum, const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks);
+        const Package& package, const UnreachableBlockMap& unreachableBlocks);
+    void UnreachableBlockWarningReporterInParallel(const Package& package, size_t threadsNum,
+        const UnreachableBlockMap& unreachableBlocks);
 };
 } // namespace Cangjie::CHIR
 #endif

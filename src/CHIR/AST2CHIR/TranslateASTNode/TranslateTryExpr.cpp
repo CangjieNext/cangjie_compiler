@@ -9,19 +9,6 @@
 using namespace Cangjie::CHIR;
 using namespace Cangjie;
 
-/**
- * Type of try expression may be type of expected target,
- * we need to check try body and all catch blocks for real nothing typed control flow.
- */
-static inline bool HasTypeOfNothing(const AST::TryExpr& tryExpr)
-{
-    if (!tryExpr.tryBlock->GetTy()->IsNothing()) {
-        return false;
-    }
-    return std::all_of(
-        tryExpr.catchBlocks.cbegin(), tryExpr.catchBlocks.cend(), [](auto& it) { return it->GetTy()->IsNothing(); });
-}
-
 Ptr<Value> Translator::Visit(const AST::TryExpr& tryExpr)
 {
     // Try must have at least one catch block or finally block.
@@ -50,9 +37,15 @@ Ptr<Value> Translator::Visit(const AST::TryExpr& tryExpr)
             CreateAndAppendGVInitFuncCall(*pkgInit);
         }
         auto baseBlock = currentBlock;
-        auto tryVal = TranslateExprArg(*tryExpr.tryBlock);
+        auto tryVal = TranslateSubExprAsValue(*tryExpr.tryBlock);
         CreateAndAppendTerminator<GoTo>(loc, GetBlockByAST(*tryExpr.tryBlock), baseBlock);
-        if (!HasTypeOfNothing(tryExpr)) {
+        if (currentBlock->GetTerminator() == nullptr &&
+            !currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION) && retVal) {
+            if (!tryVal) {
+                CJC_ASSERT(tryExpr.tryBlock->GetTy()->IsUnit());
+                tryVal = CreateAndAppendConstantExpression<UnitLiteral>(
+                    builder.GetUnitTy(), *currentBlock)->GetResult();
+            }
             // Add location for print warning.
             // example code:
             // var a = try{throw A();1} catch (a:A){2}   ----> the const `1` have a user:`store`, so we shoule add loc
@@ -63,11 +56,15 @@ Ptr<Value> Translator::Visit(const AST::TryExpr& tryExpr)
             } else {
                 valLoc = TranslateLocation(*tryExpr.tryBlock);
             }
-            if (retVal) {
-                CreateAndAppendWrappedStore(*GetDerefedValue(tryVal, valLoc), *retVal, valLoc);
-            }
+            CreateAndAppendWrappedStore(*GetDerefedValue(tryVal, valLoc), *retVal, valLoc);
         }
-        CreateAndAppendTerminator<GoTo>(loc, endBlock, currentBlock)->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+        if (currentBlock->GetTerminator() == nullptr &&
+            !currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION)) {
+            CreateAndAppendTerminator<GoTo>(loc, endBlock, currentBlock)->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+        }
+        if (currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION) && currentBlock->GetTerminator() == nullptr) {
+            FinishUnreachableContinuation(loc);
+        }
         tryCatchContext.pop();
     }
 
@@ -89,7 +86,9 @@ Ptr<Value> Translator::Visit(const AST::TryExpr& tryExpr)
     }
     tryBodyContext.pop_back();
     currentBlock = endBlock;
-    if (HasTypeOfNothing(tryExpr)) {
+    if (endBlock->GetPredecessors().empty()) {
+        auto exit = CreateAndAppendTerminator<Exit>(loc, currentBlock);
+        CreateUnreachableContinuation(*exit);
         return nullptr;
     }
     if (!retVal) {
@@ -148,22 +147,26 @@ void Translator::TranslateFinallyRethrowFlows(const AST::Block& finally)
     };
     auto eVal = CreateAndAppendExpression<Intrinsic>(baseETy, callContext, currentBlock)->GetResult();
     // Generate rethrow finally block.
-    TranslateASTNode(finally, exceptionTrans);
+    exceptionTrans.TranslateSubExprAsValue(finally);
+    if (exceptionTrans.currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION) &&
+        exceptionTrans.currentBlock->GetTerminator() == nullptr) {
+        exceptionTrans.FinishUnreachableContinuation(TranslateLocation(finally));
+    }
     auto finallyBlock = exceptionTrans.GetBlockByAST(finally);
     CreateAndAppendTerminator<GoTo>(finallyBlock, exceptionBlock);
     auto endCatchBB = CreateBlock();
-    CreateAndAppendTerminator<GoTo>(endCatchBB, exceptionTrans.currentBlock);
+    if (exceptionTrans.currentBlock->GetTerminator() == nullptr) {
+        CreateAndAppendTerminator<GoTo>(endCatchBB, exceptionTrans.currentBlock);
+    }
     if (tryCatchContext.empty()) {
         CreateAndAppendTerminator<RaiseException>(eVal, endCatchBB);
     } else {
         auto errBB = tryCatchContext.top();
         CreateAndAppendTerminator<RaiseException>(eVal, errBB, endCatchBB);
     }
-    // The control flows recorded during generating rethrow finally should be redirected to end of rethrow.
-    auto& [_, outerControlBlocks] = exceptionTrans.finallyContext.top();
-    for (size_t i = 0; i < outerControlBlocks.size(); ++i) {
-        auto& info = outerControlBlocks[i];
-        // Generate goto rethrow exception for other type of control flows.
+    // A pending exception remains active through finally. Delayed control flows only enter the rethrow path.
+    auto& [_, controlBlocks] = exceptionTrans.finallyContext.top();
+    for (auto& info : controlBlocks) {
         for (auto [prevBlock, _1] : info) {
             CreateAndAppendTerminator<GoTo>(endCatchBB, prevBlock);
         }
@@ -179,12 +182,21 @@ void Translator::TranslateFinallyNormalFlows(const AST::Block& finally, const Fi
         }
         for (auto [prevBlock, nextBlock] : info) {
             Translator normalTrans = *this; // Copy a translator for normal finally.
-            TranslateASTNode(finally, normalTrans);
+            normalTrans.TranslateSubExprAsValue(finally);
+            if (normalTrans.currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION) &&
+                normalTrans.currentBlock->GetTerminator() == nullptr) {
+                normalTrans.FinishUnreachableContinuation(TranslateLocation(finally));
+            }
             auto finallyBlock = normalTrans.GetBlockByAST(finally);
             CreateAndAppendTerminator<GoTo>(finallyBlock, prevBlock);
             finallyBlock->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
             prevBlock->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
             bool isNormalCase = i == static_cast<uint8_t>(ControlType::NORMAL);
+            if (normalTrans.currentBlock->GetTerminator() != nullptr ||
+                normalTrans.currentBlock->TestAttr(Attribute::UNREACHABLE_CONTINUATION)) {
+                finallyContext = normalTrans.finallyContext;
+                continue;
+            }
             if (normalTrans.finallyContext.empty() || isNormalCase) {
                 CreateAndAppendTerminator<GoTo>(nextBlock, normalTrans.currentBlock);
             } else {
