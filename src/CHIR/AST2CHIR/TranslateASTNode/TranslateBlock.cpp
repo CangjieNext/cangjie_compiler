@@ -74,10 +74,18 @@ Ptr<Value> Translator::Visit(const AST::Block& b)
     std::vector<Ptr<AST::Node>> nodes = CollectBlockBodyNodes(b, gim);
 #endif
     for (size_t i = 0; i < nodes.size(); ++i) {
+        if (i != 0 && currentBlock->GetTerminator() != nullptr) {
+            currentBlock = CreateBlock();
+            currentBlock->SetDebugLocation(TranslateLocation(*nodes[i - 1]));
+        }
         if (i == nodes.size() - 1) {
             return TranslateSubExprAsValue(*nodes[i]);
         } else {
             TranslateSubExprToDiscarded(*nodes[i]);
+            if (DynamicCast<AST::CallExpr*>(nodes[i].get()) != nullptr && nodes[i]->GetTy()->IsNothing() &&
+                currentBlock->GetTerminator() == nullptr) {
+                CreateAndAppendTerminator<Exit>(TranslateLocation(*nodes[i]), currentBlock);
+            }
         }
     }
     return nullptr;
