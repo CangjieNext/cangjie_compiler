@@ -161,7 +161,9 @@ public:
     /** APIs to check type relations. */
     bool IsSubtype(AST::ModalTy leaf, AST::ModalTy root, bool implicitBoxed = true, bool allowOptionBox = true,
         ModalMatchMode modalMatchMode = ModalMatchMode::SUBTYPE);
-    bool IsSubtype(AST::DataTy leaf, AST::DataTy root, bool implicitBoxed = true, bool allowOptionBox = true);
+    bool IsSubtype(AST::DataTy leaf, AST::DataTy root, bool implicitBoxed = true, bool allowOptionBox = true,
+        std::optional<Cangjie::ModalInfo> leafModal = std::nullopt,
+        std::optional<Cangjie::ModalInfo> rootModal = std::nullopt);
     bool IsFuncSubtype(const AST::Ty& leaf, const AST::Ty& root);
     bool IsFuncParametersSubtype(const AST::FuncTy& leaf, const AST::FuncTy& root);
     bool IsTupleSubtype(const AST::Ty& leaf, const AST::Ty& root);
@@ -616,7 +618,9 @@ private:
         const AST::Ty& nominalTy, const TypeSubst& typeMapping, std::unordered_set<AST::DataTy>& tyList);
     bool HasNominalSuperTy(AST::Ty& nominalTy, AST::Ty& superTy, const TypeSubst& typeMapping);
 
-    bool IsPlaceholderSubtype(AST::Ty& leaf, AST::Ty& root);
+    bool IsPlaceholderSubtype(AST::Ty& leaf, AST::Ty& root,
+        std::optional<Cangjie::ModalInfo> leafModal = std::nullopt,
+        std::optional<Cangjie::ModalInfo> rootModal = std::nullopt);
     bool IsGenericSubtype(AST::Ty& leaf, AST::Ty& root, bool implicitBoxed, bool allowOptionBox);
     bool IsClassLikeSubtype(AST::Ty& leaf, AST::Ty& root, bool implicitBoxed, bool allowOptionBox);
     bool IsStructOrEnumSubtype(AST::Ty& leaf, AST::Ty& root, bool implicitBoxed, bool allowOptionBox);

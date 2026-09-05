@@ -665,7 +665,13 @@ private:
             return;
         }
         auto funcSym = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, scopeName);
-        if (!funcSym || !funcSym->node || !FuncLikeSignatureAllowsExclave(*funcSym->node)) {
+        // Use refFuncBody (the actual enclosing func body) instead of funcSym->node (which
+        // may be an outer function when the lambda is not registered as a FUNC_LIKE symbol).
+        auto allowsExclave = funcSym && funcSym->node ? FuncLikeSignatureAllowsExclave(*funcSym->node) : false;
+        if (!allowsExclave && refFuncBody) {
+            allowsExclave = FuncLikeSignatureAllowsExclave(*refFuncBody);
+        }
+        if (!allowsExclave) {
             DiagExclaveInvalidFuncSignature(expr);
         }
     }
@@ -705,6 +711,11 @@ private:
         };
         for (auto& paramTy : funcTy->paramTys) {
             if (isNonCopyLocalFull(paramTy)) {
+                return true;
+            }
+            // A placeholder parameter (unsolved lambda parameter) may be inferred as
+            // @local! from the callee's formal type, so allow exclave during inference.
+            if (paramTy.Ty() && paramTy.Ty()->IsPlaceholder()) {
                 return true;
             }
         }
@@ -1524,7 +1535,15 @@ ModalTy TypeChecker::TypeCheckerImpl::SynExclaveExpr(ASTContext& ctx, ExclaveExp
             auto target = funcBodyTy->retTy;
             if (!target.Ty() || target->kind == TypeKind::TYPE_QUEST) {
                 SynBlock({ctx, SynPos::EXPR_ARG}, *expr.body);
-                expr.SetTy(ModalTy{TypeManager::GetNothingTy()});
+                // Use body type instead of Nothing when it is correct and has no QuestTy/
+                // IdealTy/IdealModal, so CalcFuncRetTyFromBody can infer the return type
+                // when the enclosing function's return type is still QuestTy (being inferred).
+                auto bodyTy = expr.body->GetTy();
+                if (bodyTy.IsCorrect() && !bodyTy->HasQuestTy() && !bodyTy->HasIdealTy() && !bodyTy->HasIdealModal()) {
+                    expr.SetTy(bodyTy);
+                } else {
+                    expr.SetTy(ModalTy{TypeManager::GetNothingTy()});
+                }
                 return expr.GetTy();
             }
             auto fun = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, expr.scopeName);

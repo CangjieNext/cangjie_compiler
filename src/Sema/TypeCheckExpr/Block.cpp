@@ -17,7 +17,12 @@ bool TypeChecker::TypeCheckerImpl::SynthesizeAndReplaceIdealTy(const CheckerCont
     // Call `Synthesize` on declares containing invalid types may return valid types.
     // Therefore, we need to know if there are any errors during the inference process.
     auto ds = DiagSuppressor(diag);
-    bool valid = Synthesize(ctx, &node).IsCorrect() && !ds.HasError();
+    auto synTy = Synthesize(ctx, &node);
+    // For expressions, HasError() can be true from call-site trial matching
+    // (MatchFunctionForCall) even when the synthesized type is correct. Ignore
+    // HasError for expressions whose type is correct, so the body is not marked
+    // invalid by spurious trial errors.
+    bool valid = synTy.IsCorrect() && (!ds.HasError() || (node.IsExpr() && synTy.IsCorrect()));
     // Keep ideal literal types pending for the implicit-return expression of a lambda that is a
     // direct argument of a generic call, so generic type argument inference can unify it against
     // the expected contextual type (e.g. `TypeTest({=> 0})` where the expected type is

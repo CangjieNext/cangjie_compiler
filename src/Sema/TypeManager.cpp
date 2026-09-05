@@ -743,9 +743,20 @@ bool TypeManager::IsCoreFutureType(const Ty& ty)
         declPtr->curFile->curPackage->fullPackageName == CORE_PACKAGE_NAME && ty.typeArgs.size() == 1;
 }
 
-bool TypeManager::IsPlaceholderSubtype(Ty& leaf, Ty& root)
+bool TypeManager::IsPlaceholderSubtype(
+    Ty& leaf, Ty& root, std::optional<ModalInfo> leafModal, std::optional<ModalInfo> rootModal)
 {
     if (leaf.IsPlaceholder() || root.IsPlaceholder()) {
+        // Carry the modals into the Unify bounds only when one side is IDEAL (pending,
+        // awaiting inference): then UnifyOne's IDEAL pass-through lets the constraint set
+        // record the concrete formal's modal (e.g. @local!), which SolveLamExprParamTys
+        // re-applies after solving. For concrete-vs-concrete checks keep the legacy
+        // modal-less (NOT) bounds so Unify's modal check behaves exactly as before.
+        if ((leafModal && leafModal->local == Mode::IDEAL) || (rootModal && rootModal->local == Mode::IDEAL)) {
+            auto lv = ModalTy{&leaf, leafModal.value_or(ModalInfo{})};
+            auto rv = ModalTy{&root, rootModal.value_or(ModalInfo{})};
+            return LocalTypeArgumentSynthesis::Unify(*this, constraints, lv, rv);
+        }
         return LocalTypeArgumentSynthesis::Unify(*this, constraints, {&leaf}, {&root});
     }
     return false;
@@ -1086,10 +1097,18 @@ bool TypeManager::IsSubtype(
     if (ImplementsCopyInterface(leaf.Ty())) {
         modalSubtyping = true;
     }
+    // Pass the modals down so IsPlaceholderSubtype can record the concrete type (with modal)
+    // as the placeholder's upper bound for SolveLamExprParamTys's modal re-application.
+    if (modalSubtyping && (leaf.Ty()->IsPlaceholder() || root.Ty()->IsPlaceholder())) {
+        return modalSubtyping &&
+            IsSubtype(leaf.Ty(), root.Ty(), implicitBoxed, allowOptionBox, leaf.Mode(), root.Mode());
+    }
     return modalSubtyping && IsSubtype(leaf.Ty(), root.Ty(), implicitBoxed, allowOptionBox);
 }
 
-bool TypeManager::IsSubtype(DataTy leaf, DataTy root, bool implicitBoxed, bool allowOptionBox)
+bool TypeManager::IsSubtype(
+    DataTy leaf, DataTy root, bool implicitBoxed, bool allowOptionBox, std::optional<ModalInfo> leafModal,
+    std::optional<ModalInfo> rootModal)
 {
     // NOTE: all cffi types are not classLike type, so using conditions as below.
     bool ffiFastCheck = (leaf->IsMetCType() && root->IsCType());
@@ -1114,7 +1133,7 @@ bool TypeManager::IsSubtype(DataTy leaf, DataTy root, bool implicitBoxed, bool a
     auto cacheEntry = subtypeCache.emplace(std::make_pair(cacheKey, false)).first;
     if (IsCommonAndSpecificRelation(*leaf, *root)) {
         cacheEntry->second = true;
-    } else if (IsPlaceholderSubtype(*leaf, *root)) {
+    } else if (IsPlaceholderSubtype(*leaf, *root, leafModal, rootModal)) {
         cacheEntry->second = true;
     } else if (IsGenericSubtype(*leaf, *root, implicitBoxed, allowOptionBox)) {
         cacheEntry->second = true;
