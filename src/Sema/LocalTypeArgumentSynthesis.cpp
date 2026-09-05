@@ -239,8 +239,11 @@ bool LocalTypeArgumentSynthesis::UnifyOne(const Tracked<ModalTy>& argTTy, const 
         return true;
     }
     // the mode of placeholder is meaningless
-    if (!argTTy.ty.Mode().IsSubModal(paramTTy.ty.Mode()) && !tyMgr.ImplementsCopyInterface(argTTy.ty.Ty()) &&
-        !paramTTy.ty->IsPlaceholder()) {
+    // An IDEAL modal (pending, awaiting inference) unifies with any concrete modal: the
+    // constraint set records the concrete bound's modal, resolved when the placeholder
+    // is solved (or defaulted to ~local by ReplaceIdealTy if never constrained).
+    if (argTTy.ty.Mode().local != Mode::IDEAL && !argTTy.ty.Mode().IsSubModal(paramTTy.ty.Mode()) &&
+        !tyMgr.ImplementsCopyInterface(argTTy.ty.Ty()) && !paramTTy.ty->IsPlaceholder()) {
         return false;
     }
     // Handle the base case.
@@ -271,6 +274,14 @@ bool LocalTypeArgumentSynthesis::UnifyOne(const Tracked<ModalTy>& argTTy, const 
     if ((paramTy.IsGeneric() && StaticCast<TyVar*>(&paramTy)->isPlaceholder) ||
         (argTy.IsGeneric() && StaticCast<TyVar*>(&argTy)->isPlaceholder)) {
         memo.insert(inProcessing);
+        // Preserve the modals when handing off to UnifyTyVar only if one side is IDEAL
+        // (pending, awaiting inference): then the bounds keep the concrete formal's modal
+        // (e.g. @local!) for SolveLamExprParamTys to re-apply. Otherwise keep the legacy
+        // modal-less (NOT) bounds so the recorded constraints behave exactly as before.
+        if (argTTy.ty.Mode().local == Mode::IDEAL || paramTTy.ty.Mode().local == Mode::IDEAL) {
+            return UnifyTyVar({ModalTy{&argTy, argTTy.ty.Mode()}, argTTy.blames},
+                {ModalTy{&paramTy, paramTTy.ty.Mode()}, paramTTy.blames});
+        }
         return UnifyTyVar({{&argTy}, argTTy.blames}, {{&paramTy}, paramTTy.blames});
     }
 
@@ -430,8 +441,11 @@ bool LocalTypeArgumentSynthesis::UnifyTyVarCollectConstraints(
             }
         }
     }
-    // with known sum, but the sum doesn't include eq
-    if (deterministic && !tyMgr.TyVarHasNoSum(tyVar)) {
+    // with known sum, but the sum doesn't include eq.
+    // Skip when tyVarsToSolve is empty (IsPlaceholderSubtype's Unify uses a dummy pack):
+    // the eq-set is populated by IsGreedySolution but the sum-set is not synchronized,
+    // causing a spurious false that blocks placeholder <: concrete subtype inference.
+    if (deterministic && !tyMgr.TyVarHasNoSum(tyVar) && !argPack.tyVarsToSolve.empty()) {
         auto& sum = c[&tyVar].sum;
         auto& eq = c[&tyVar].eq;
         if (!eq.empty() && !eq.begin()->Ty()->IsNothing() && sum.count(*eq.begin()) == 0) {
