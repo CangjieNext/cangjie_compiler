@@ -983,6 +983,9 @@ private:
         std::unordered_map<Ptr<AST::FuncDecl>, int64_t>& fdScopeLevelMap) const;
     std::vector<Ptr<AST::FuncDecl>> MatchFunctionForCall(ASTContext& ctx, std::vector<Ptr<AST::FuncDecl>>& candidates,
         AST::CallExpr& ce, AST::ModalTy target, SubstPack& typeMapping);
+    std::vector<Ptr<AST::FuncDecl>> MatchCallCandidates(ASTContext& ctx, std::vector<Ptr<AST::FuncDecl>>& candidates,
+        AST::CallExpr& ce, AST::ModalTy target, SubstPack& typeMapping, bool maybeEnumOrVariadic,
+        std::vector<Diagnostic>& diagnostics);
     /**
      * Get valid function types for given candidates of @p expr
      * returns: genericIgnored, std::vector<function, function type, type mapping>.

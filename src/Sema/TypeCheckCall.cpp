@@ -2473,6 +2473,20 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::MatchFunctionForCall(
     return filterSum(CheckMatchResult(ctx, ce, legals, illegals, target));
 }
 
+std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::MatchCallCandidates(ASTContext& ctx,
+    std::vector<Ptr<FuncDecl>>& candidates, CallExpr& ce, ModalTy target, SubstPack& typeMapping,
+    bool maybeEnumOrVariadic, std::vector<Diagnostic>& diagnostics)
+{
+    bool suppressDiag = maybeEnumOrVariadic || !typeManager.GetUnsolvedTyVars().empty();
+    if (suppressDiag) {
+        auto ds = DiagSuppressor(diag);
+        auto result = MatchFunctionForCall(ctx, candidates, ce, target, typeMapping);
+        diagnostics = ds.GetSuppressedDiag();
+        return result;
+    }
+    return MatchFunctionForCall(ctx, candidates, ce, target, typeMapping);
+}
+
 void TypeChecker::TypeCheckerImpl::ReInferCallArgs(
     ASTContext& ctx, const CallExpr& ce, const FunctionMatchingUnit& legal, ModalTy target)
 {
@@ -3538,13 +3552,7 @@ bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, ModalTy target, 
     std::vector<Ptr<FuncDecl>> result;
     std::vector<Diagnostic> diagnostics;
     PData::CommitScope cs(typeManager.constraints);
-    if (maybeEnumOrVariadic) {
-        auto ds = DiagSuppressor(diag);
-        result = MatchFunctionForCall(ctx, candidates, ce, target, typeMapping);
-        diagnostics = ds.GetSuppressedDiag();
-    } else {
-        result = MatchFunctionForCall(ctx, candidates, ce, target, typeMapping);
-    }
+    result = MatchCallCandidates(ctx, candidates, ce, target, typeMapping, maybeEnumOrVariadic, diagnostics);
     ce.SetTy(TypeManager::GetNonNullTy(ce.GetTy()));
     if (result.size() == 1) {
         return PostCheckCallExpr(ctx, ce, *result[0], typeMapping);
