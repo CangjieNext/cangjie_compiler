@@ -19,11 +19,12 @@
 
 namespace Cangjie {
 enum class Mode : uint8_t {
-    IDEAL = 0, // Pending modal of an unsolved literal in a func-arg lambda's implicit-return
-               // position. Mirrors IDEAL_INT/IDEAL_FLOAT: kept pending so generic type argument
+    IDEAL = 0, // Pending modal awaiting type inference, used wherever the modal is not yet
+               // determined: a func-arg lambda's implicit-return literal, or an unannotated
+               // lambda/placeholder parameter. Mirrors IDEAL_INT/IDEAL_FLOAT: kept pending so
                // inference can unify it against the expected contextual modal. Must be resolved
-               // (to a concrete modal, defaulting to NOT) before Sema ends; reaching the back end
-               // or serialization is a bug.
+               // (to a concrete modal, defaulting to NOT) before Sema ends; reaching the back
+               // end or serialization is a bug.
     NOT = 1,   // @~local
     FULL = 2,  // @local!
     HALF = 3,  // @local?
