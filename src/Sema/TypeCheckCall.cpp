@@ -3577,7 +3577,16 @@ bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, ModalTy target, 
         result = MatchFunctionForCall(ctx, candidates, ce, target, typeMapping);
         diagnostics = ds.GetSuppressedDiag();
     } else {
-        result = MatchFunctionForCall(ctx, candidates, ce, target, typeMapping);
+        // Suppress diagnostics when there are unsolved type variables: placeholder arguments
+        // may cause trial-matching failures producing spurious mismatched-types errors that
+        // would mark the enclosing lambda body invalid via HasError().
+        if (!typeManager.GetUnsolvedTyVars().empty()) {
+            auto ds = DiagSuppressor(diag);
+            result = MatchFunctionForCall(ctx, candidates, ce, target, typeMapping);
+            diagnostics = ds.GetSuppressedDiag();
+        } else {
+            result = MatchFunctionForCall(ctx, candidates, ce, target, typeMapping);
+        }
     }
     ce.SetTy(TypeManager::GetNonNullTy(ce.GetTy()));
     if (result.size() == 1) {

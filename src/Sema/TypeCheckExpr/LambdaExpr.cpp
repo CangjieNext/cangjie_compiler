@@ -8,8 +8,10 @@
 
 #include "DiagSuppressor.h"
 #include "Diags.h"
+#include "JoinAndMeet.h"
 #include "TypeCheckUtil.h"
 #include "ExtraScopes.h"
+#include "cangjie/AST/ModalInfo.h"
 
 #include "cangjie/Frontend/CompilerInstance.h"
 
@@ -306,7 +308,22 @@ bool TypeChecker::TypeCheckerImpl::SolveLamExprParamTys(ASTContext& ctx, AST::La
     if (sol && !HasUnsolvedTyVars(*sol, tyVars)) {
         ResetLambdaForReinfer(ctx, le);
         for (auto& node : le.funcBody->paramLists[0]->params) {
-            node->SetTy(typeManager.GetInstantiatedTy(node->GetTy(), *sol));
+            auto instTy = typeManager.GetInstantiatedTy(node->GetTy(), *sol);
+            // TypeSubst stores only DataTy, so the instantiated modal is the placeholder's
+            // own (IDEAL). The concrete modal recorded during inference (e.g. foo's @local!
+            // formal) lives in the constraint set's lower bounds; re-apply it here. Any
+            // modal still IDEAL (never constrained) defaults to ~local per spec: "If a
+            // mode cannot be inferred from context, then it defaults to ~local."
+            if (auto tv = DynamicCast<GenericsTy*>(node->GetTy().Ty().get())) {
+                auto it = typeManager.constraints.find(tv);
+                if (it != typeManager.constraints.end() && !it->second.lbs.empty()) {
+                    auto lbModal = JoinAndMeet::JoinMode(typeManager, it->second.lbs.raw());
+                    if (lbModal.local != Mode::IDEAL && lbModal.local != Mode::NOT) {
+                        instTy = instTy.With(lbModal);
+                    }
+                }
+            }
+            node->SetTy(typeManager.ReplaceIdealTy(instTy));
         }
         if (Synthesize({ctx, SynPos::EXPR_ARG}, le.funcBody.get()).IsCorrect() && le.funcBody->body &&
             le.funcBody->body->GetTy().IsCorrect()) {
@@ -429,7 +446,10 @@ ModalTy TypeChecker::TypeCheckerImpl::SynLamExpr(ASTContext& ctx, LambdaExpr& le
         if (Ty::IsTyCorrect(ty)) {
             node->SetTy(ty);
         } else if (ctx.funcArgReachable.count(&le) == 0 && !node->type) {
-            node->SetTy({typeManager.AllocTyVar("T-Lam", true)});
+            // The unannotated lambda parameter's modal starts as IDEAL (pending, awaiting
+            // inference): it unifies with any concrete formal modal and is defaulted back to
+            // ~local by ReplaceIdealTy if inference never constrains it.
+            node->SetTy({typeManager.AllocTyVar("T-Lam", true), Mode::IDEAL});
         } else {
             diag.DiagnoseRefactor(DiagKindRefactor::sema_lambdaExpr_must_have_type_annotation, *node);
             le.SetTy({TypeManager::GetInvalidTy()});
