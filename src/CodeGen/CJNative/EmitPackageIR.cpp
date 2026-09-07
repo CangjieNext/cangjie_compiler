@@ -724,6 +724,10 @@ llvm::GlobalVariable* FindOrCreateStringBuffer(llvm::Module& mod, const std::str
             auto* gvRawData = new llvm::GlobalVariable(
                 mod, rawArrayType, true, llvm::GlobalValue::PrivateLinkage, rawArrayData, bufName);
             gvRawData->addAttribute(CJSTRING_DATA_ATTR);
+            // Marker for CJStringPoolMerge: only deferred-pooling buffers
+            // (this attribute) may be merged; legacy per-package pools must
+            // stay untouched.
+            gvRawData->addAttribute(CJSTRING_DEFERRED_ATTR);
             return gvRawData;
         }
         auto* existingGv = llvm::dyn_cast<llvm::GlobalVariable>(existing);
