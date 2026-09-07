@@ -59,6 +59,10 @@ const std::string CJSTRING_LITERAL_PREFIX = "$const_cjstring.";
 const std::string CJSTRING_DATA_PREFIX = "$const_cjstring_data.";
 const std::string CJSTRING_LITERAL_ATTR = "cjstring_literal";
 const std::string CJSTRING_DATA_ATTR = "cjstring_data";
+// Marks per-string buffers emitted by the deferred-pooling CodeGen; the
+// backend CJStringPoolMerge pass merges only buffers with this attribute
+// and leaves legacy per-package pools (old compilers) untouched.
+const std::string CJSTRING_DEFERRED_ATTR = "cjstring_deferred";
 const std::string CJGLOBAL_VALUE_ATTR = "CJGlobalValue";
 const std::string CJTYPE_NAME_ATTR = "CJTypeName";
 const std::string CJTI_OFFSETS_ATTR = "CJTIOffsets";
