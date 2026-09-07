@@ -27,33 +27,25 @@ using namespace Cangjie::CHIR;
 
 // Set the threshold value of inlined call in one function to avoid code expansion
 constexpr static size_t INLINED_COUNT_THRESHOLD = 20;
-// This is for efficiency and avoid overflowing on `size`, we will
-// terminate the counting if the size is already 3 times of the threshold.
-// Bumped from 60 (=INIT*3) to 200 after the cost metric switched to asm-weighted
-// counting (Phase 1): weighted per-expr cost is 0..4, so the old 60 cut-off starved
-// medium functions. Kept as a hard cap to bound counting on huge functions.
-constexpr static size_t SEARCH_THRESHOLD = 200;
-
-// Phase 2: caller-bloat guard (D1). When a caller's asm-weighted size grows past
-// CALLER_SIZE_TRIGGER_O2 by inlining small callees into itself, stamp OPTSIZE so the
-// LLVM backend clamps that caller's subsequent callsite thresholds (225->50) and runs
-// size-first codegen on it. Only -O2 in Phase 2 (-Os/-Oz baseline deferred to Phase 4).
-constexpr static size_t CALLER_SIZE_TRIGGER_O2 = 300;   // K_size: 10x the O2 callee base (30)
-// Cap for CountCallerSize early-abort. Must be > K_size + max-overshoot(~4) so the
-// >= K_size trigger check sees a real value past the trigger rather than a clamped one.
-// Reusing CountFuncSize's 200 cap would clamp every caller at ~200 and K_size=300 never fire.
-constexpr static size_t CALLER_SIZE_SEARCH_CAP = 400;
-
+// Everything below scales from the per-level base threshold — no independent absolute
+// caps, so tuning one root value moves the whole chain coherently.
+//
 // Phase 1: per-optLevel base inline threshold for the #4 front-end decision.
 // Lower than the LLVM back-end thresholds (O2=225/Os=50/Oz=5) on purpose:
 // the front-end #4 only inlines small functions to expose cross-
 // function optimizations; the back-end owns the real machine-cost inlining decision.
-constexpr static size_t BASE_THRESHOLD_O0 = 0;   // no front-end inline
-constexpr static size_t BASE_THRESHOLD_O1 = 0;    // disabled for now (same as O0)
-constexpr static size_t BASE_THRESHOLD_O2 = 30;   // tightened from 50; stdx codesize/build-time regression deemed too large
-constexpr static size_t BASE_THRESHOLD_O3 = 60;  // perf-first tier, more aggressive than O2; lowered from 80
-constexpr static size_t BASE_THRESHOLD_OS = 20;   // ~2/3 of O2 (size-aware); lowered from 24
-constexpr static size_t BASE_THRESHOLD_OZ = 16;   // most conservative; kept at design baseline 16
+// O0/O1 never reach this pass (SetOptimizationLevel enables FUNC_INLINING only at >=O2);
+// base 0 via `default:` is purely a defense for a manual --fchir-function-inlining.
+// Values tightened 2026-09-05, codesize-driven: 30/60/20/16 -> 20/40/16/10.
+constexpr static size_t BASE_THRESHOLD_O2 = 20;   // codesize-driven: 50 -> 30 -> 20
+constexpr static size_t BASE_THRESHOLD_O3 = 40;   // perf-first tier: 80 -> 60 -> 40
+constexpr static size_t BASE_THRESHOLD_OS = 16;   // size-aware: 24 -> 20 -> 16
+constexpr static size_t BASE_THRESHOLD_OZ = 10;   // most conservative: 16 -> 10
+
+// Derived knobs (multipliers over the base threshold):
+constexpr static size_t CALLEE_SEARCH_MULTIPLIER = 3;    // CountFuncSize early-abort = 3x base (restores the legacy INIT*3 design)
+constexpr static size_t THRESHOLD_CAP_MULTIPLIER = 3;    // post-bonus threshold cap = 3x base (>= 2x max bonus, so it never binds today)
+constexpr static size_t CALLER_TRIGGER_MULTIPLIER = 15;  // D1 caller-bloat trigger K_size = 15x base (= 300 at O2 base 20, the shipped value)
 
 // Bonus multipliers are expressed as fractions over the base threshold (numerator/
 // denominator). The old code used `=` assignment which wiped earlier bonuses; we now
@@ -62,8 +54,9 @@ constexpr static size_t BONUS_NUMERATOR_ONLY_CALLED_ONCE = 25;   // +25%  (was +
 constexpr static size_t BONUS_DENOMINATOR = 100;
 constexpr static size_t BONUS_NUMERATOR_HOTSPOT = 25;            // +25%
 constexpr static size_t BONUS_NUMERATOR_LAMBDA_ARG = 50;            // +50% (was *2 in legacy, +100% in Phase1 baseline); lowered from 100 to curb stdx callback-heavy bloat
-// Hard cap on the post-bonus threshold so a tiny base cannot balloon unboundedly.
-constexpr static size_t THRESHOLD_HARD_CAP = 200;
+// Hard cap on the post-bonus threshold is THRESHOLD_CAP_MULTIPLIER * base (derived,
+// no absolute constant): bonus numerators sum to at most 100 (= +100%), so 3x base
+// can never bind today; it exists as a guard against future bonus/multiplier growth.
 
 // --- Legacy (pre-Phase1) decision constants, used only under --chir-inline-legacy. ---
 // Restored verbatim from the Phase 0 baseline so the legacy path is a faithful A/B reference.
@@ -232,13 +225,12 @@ static bool FunctionWithLambdaArg(const Function& func)
 
 // Phase 1: base inline threshold by optLevel, with optional CLI override.
 // Honors --chir-inline-threshold=base_<level>=<val> from the global options' override map.
+// O0/O1 fall through to base 0 (never reach this pass anyway — see BASE_THRESHOLD_O2 comment).
 static size_t GetBaseThreshold(const Cangjie::GlobalOptions::OptimizationLevel& optLevel,
                                const std::unordered_map<std::string, size_t>& overrides)
 {
     size_t base = 0;
     switch (optLevel) {
-        case Cangjie::GlobalOptions::OptimizationLevel::O0: base = BASE_THRESHOLD_O0; break;
-        case Cangjie::GlobalOptions::OptimizationLevel::O1: base = BASE_THRESHOLD_O1; break;
         case Cangjie::GlobalOptions::OptimizationLevel::O2: base = BASE_THRESHOLD_O2; break;
         case Cangjie::GlobalOptions::OptimizationLevel::O3: base = BASE_THRESHOLD_O3; break;
         case Cangjie::GlobalOptions::OptimizationLevel::Os: base = BASE_THRESHOLD_OS; break;
@@ -261,16 +253,22 @@ static size_t GetBaseThreshold(const Cangjie::GlobalOptions::OptimizationLevel& 
     return base;
 }
 
-// Phase 2: caller-bloat trigger by optLevel, with optional CLI override.
-// Honors --chir-inline-threshold=caller_size_o2=<val>. Only -O2 stamps OPTSIZE in Phase 2
-// (-Os/-Oz baseline is deferred to Phase 4 as a measured item); other levels return SIZE_MAX
-// so the trigger never fires (CountCallerSize can never be >= SIZE_MAX).
+// Phase 2: caller-bloat trigger K_size by optLevel, derived as CALLER_TRIGGER_MULTIPLIER x base
+// (15x: 300 at O2 base 20 — the previously shipped absolute value, so D1 behavior is
+// numerically unchanged by the derivation), with an optional CLI override.
+// Honors --chir-inline-threshold=caller_size_o2=<val>: a user-supplied value replaces the
+// derived default (the override no longer has a separate cap to desynchronize from — the
+// same value serves as both the trigger line and CountCallerSize's early-abort bound, so
+// the >= comparison can never be fed a clamped reading below the trigger).
+// Only -O2 stamps OPTSIZE in Phase 2 (-Os/-Oz baseline is deferred to Phase 4 as a measured
+// item); other levels return SIZE_MAX so the trigger never fires (CountCallerSize can
+// never be >= SIZE_MAX).
 static size_t GetCallerSizeTrigger(const Cangjie::GlobalOptions::OptimizationLevel& optLevel,
                                    const std::unordered_map<std::string, size_t>& overrides)
 {
     size_t trigger = SIZE_MAX;  // default: never trigger
     if (optLevel == Cangjie::GlobalOptions::OptimizationLevel::O2) {
-        trigger = CALLER_SIZE_TRIGGER_O2;
+        trigger = GetBaseThreshold(optLevel, overrides) * CALLER_TRIGGER_MULTIPLIER;
     }
     auto it = overrides.find("caller_size_o2");
     if (it != overrides.end()) {
@@ -290,7 +288,7 @@ static size_t ApplyBonusAdjustments(size_t base, const Function& func,
         return 0;  // O0: no front-end inline regardless of bonuses.
     }
     if (optLevel >= Cangjie::GlobalOptions::OptimizationLevel::Os) {
-        return std::min(base, THRESHOLD_HARD_CAP);  // size levels: no speed bonuses.
+        return base;  // size levels: no speed bonuses (base <= 3x base trivially, no cap needed).
     }
     // Each bonus is an additive fraction of the base; they stack (no longer clobber).
     size_t numerator = 0;
@@ -304,7 +302,7 @@ static size_t ApplyBonusAdjustments(size_t base, const Function& func,
         numerator += BONUS_NUMERATOR_LAMBDA_ARG;
     }
     size_t adjusted = base + base * numerator / BONUS_DENOMINATOR;
-    return std::min(adjusted, THRESHOLD_HARD_CAP);
+    return std::min(adjusted, base * THRESHOLD_CAP_MULTIPLIER);
 }
 
 // --- Legacy (pre-Phase1) decision path, active under --chir-inline-legacy. ---
@@ -415,33 +413,40 @@ static size_t GetAsmWeightedCost(const Expression& expr)
     }
 }
 
-static size_t CountFuncSize(const Function& func)
+// searchCap = 3x base threshold (restores the legacy INIT*3 derived design): bounds the
+// counting on huge callees for compile time. An early-abort at cap >= every reachable
+// threshold means the truncated reading is always strictly above threshold, so the
+// `size <= threshold` decision is unaffected — only big callees are measured coarsely.
+static size_t CountFuncSize(const Function& func, size_t searchCap)
 {
     size_t funcSize = 0;
     for (auto block : func.GetBody()->GetBlocks()) {
         for (auto e : block->GetExpressions()) {
             funcSize += GetAsmWeightedCost(*e);
-            if (funcSize >= SEARCH_THRESHOLD) {
-                break;
+            if (funcSize >= searchCap) {
+                return funcSize;  // fully abort (a `break` here would keep walking outer blocks)
             }
         }
     }
     return funcSize;
 }
 
-// Phase 2 (D1): capped-count of a caller's CURRENT asm-weighted size. Unlike CountFuncSize
-// (which sizes a callee with a 200 early-abort to bound counting on huge callees), this uses
-// CALLER_SIZE_SEARCH_CAP (400) — must exceed K_size (300) + max-overshoot so the >= K_size
-// trigger at the stamp site sees a real value past the trigger. The caller grows live during
-// #4 (DoFunctionInline clones the callee body into it immediately), so this is recomputed
-// per callsite after each inline rather than cached in funcSizeMap (which caches callee sizes).
-static size_t CountCallerSize(const Function& caller)
+// Phase 2 (D1): capped-count of a caller's CURRENT asm-weighted size, with kSize (the D1
+// trigger line) as the early-abort bound. cap == trigger is exactly sufficient for the
+// `>= kSize` predicate: an early-abort reading is the accumulated sum itself (>= kSize),
+// and a full count returns the exact size — the two are indistinguishable to the caller.
+// No separate SEARCH_CAP constant: a cap and a trigger that can drift apart (via CLI
+// override or retuning) is exactly the desync bug this collapse removes. The caller grows
+// live during #4 (DoFunctionInline clones the callee body into it immediately), so this is
+// recomputed per callsite after each inline rather than cached in funcSizeMap (which
+// caches callee sizes).
+static size_t CountCallerSize(const Function& caller, size_t kSize)
 {
     size_t funcSize = 0;
     for (auto block : caller.GetBody()->GetBlocks()) {
         for (auto e : block->GetExpressions()) {
             funcSize += GetAsmWeightedCost(*e);
-            if (funcSize >= CALLER_SIZE_SEARCH_CAP) {
+            if (funcSize >= kSize) {
                 return funcSize;  // already big enough to trigger, stop counting
             }
         }
@@ -526,8 +531,11 @@ bool FunctionInline::CheckCanRewrite(const Apply& apply)
         // Phase 1 path: asm-weighted cost + graded threshold + multiplicative bonuses.
         size_t baseThreshold = GetBaseThreshold(optLevel, globalOpts.inlineThresholdOverrides);
         realThreshold = ApplyBonusAdjustments(baseThreshold, *func, optLevel);
+        if (realThreshold == 0) {
+            return false;  // base 0 (O0/O1 manual enable): everything is "too big" — no measurable win
+        }
         if (res.second) {
-            res.first->second = CountFuncSize(*func);
+            res.first->second = CountFuncSize(*func, baseThreshold * CALLEE_SEARCH_MULTIPLIER);
         }
     }
     if (res.first->second <= realThreshold) {
@@ -541,7 +549,7 @@ bool FunctionInline::CheckCanRewrite(const Apply& apply)
         // A/B baseline, so D1 is skipped under --chir-inline-legacy.
         if (!globalOpts.chirInlineLegacy && !globalOpts.chirInlineNoSizeAttr) {
             size_t callerTrigger = GetCallerSizeTrigger(optLevel, globalOpts.inlineThresholdOverrides);
-            if (CountCallerSize(*globalFunc) >= callerTrigger) {
+            if (CountCallerSize(*globalFunc, callerTrigger) >= callerTrigger) {
                 if (!globalFunc->TestAttr(Attribute::OPTSIZE)) {
                     globalFunc->EnableAttr(Attribute::OPTSIZE);
                     ++GetStats().optsizeStamped;
