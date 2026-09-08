@@ -35,9 +35,6 @@ void InsertBaseCtorDecl::HandleImpl(InteropContext& ctx)
     }
 
     for (auto& wrapper : ctx.mirrorInterfaceHandleWrappers) {
-        if (wrapper->TestAttr(Attribute::IS_BROKEN)) {
-            continue;
-        }
         auto ctor = ctx.factory.CreateBaseCtorDecl(*wrapper);
         wrapper->body->decls.emplace_back(std::move(ctor));
     }

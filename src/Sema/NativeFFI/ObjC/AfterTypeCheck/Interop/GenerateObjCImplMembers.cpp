@@ -27,7 +27,7 @@ void GenerateObjCImplMembers::HandleImpl(InteropContext& ctx)
             continue;
         }
 
-        auto regComp = ctx.implToRegCompanion[impl];
+        auto regComp = ctx.implToRegCompanion.at(impl);
 
         // Collect user constructors first (to avoid iterator invalidation during insertion)
         // Skip the generated base ctor

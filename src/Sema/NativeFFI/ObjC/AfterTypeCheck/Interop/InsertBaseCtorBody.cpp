@@ -53,9 +53,6 @@ void InsertBaseCtorBody::HandleImpl(InteropContext& ctx)
     }
 
     for (auto& wrapper : ctx.mirrorInterfaceHandleWrappers) {
-        if (wrapper->TestAttr(Attribute::IS_BROKEN)) {
-            continue;
-        }
         auto ctor = GetObjCMirrorInterfaceHandleWrapperBaseCtor(*wrapper);
         CJC_NULLPTR_CHECK(ctor);
         auto curFile = ctor->curFile;
@@ -74,7 +71,7 @@ void InsertBaseCtorBody::HandleImpl(InteropContext& ctx)
 
         auto ctor = GetObjCImplBaseCtor(*impl);
         CJC_ASSERT_WITH_MSG(ctor, "expected base ctor in the @ObjCImpl class");
-        ctx.astTransformer.TransformToObjCImplBaseCtorBody(*ctor->funcBody, *impl, *ctx.implToRegCompanion[impl]);
+        ctx.astTransformer.TransformToObjCImplBaseCtorBody(*ctor->funcBody, *impl, *ctx.implToRegCompanion.at(impl));
     }
 
     for (auto& regComp : ctx.regCompanions) {
