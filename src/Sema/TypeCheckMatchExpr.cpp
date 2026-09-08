@@ -129,15 +129,8 @@ ModalTy TypeChecker::TypeCheckerImpl::SynNormalMatchCaseBody(ASTContext& ctx, Ma
     auto [optErrs, joinedMeTy] = JoinAndMeet::SetJoinedType(me.GetTy(), joinRes);
     me.SetTy(joinedMeTy);
     if (optErrs) {
-        if (me.sugarKind == Expr::SugarKind::IF_LET) {
-            auto builder = diag.Diagnose(me, DiagKind::sema_diag_report_error_message,
-                "types " + me.matchCases[0]->GetTy().String() + " and " + me.matchCases[1]->GetTy().String() +
-                    " of the two branches of this 'if' expression mismatch");
-            builder.AddNote(*optErrs);
-        } else {
-            auto builder = diag.Diagnose(me, DiagKind::sema_type_incompatible, "MatchCase");
-            builder.AddNote(*optErrs);
-        }
+        auto builder = diag.Diagnose(me, DiagKind::sema_type_incompatible, "MatchCase");
+        builder.AddNote(*optErrs);
     }
 
     // Check pattern exhaustiveness and set unreachable attr of match cases.

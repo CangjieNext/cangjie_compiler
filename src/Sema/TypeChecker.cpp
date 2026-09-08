@@ -828,10 +828,6 @@ ModalTy TypeChecker::TypeCheckerImpl::Synthesize(const CheckerContext& ctx, Ptr<
             node->SetTy(SynBlock(newCtx, *StaticAs<ASTKind::BLOCK>(node)));
             break;
         }
-        case ASTKind::FUNC_PARAM_LIST: {
-            CheckFuncParamList(*curCtx, *StaticAs<ASTKind::FUNC_PARAM_LIST>(node));
-            break;
-        }
         case ASTKind::FUNC_PARAM: {
             node->SetTy(SynFuncParam(*curCtx, *StaticAs<ASTKind::FUNC_PARAM>(node)));
             break;
@@ -941,10 +937,6 @@ ModalTy TypeChecker::TypeCheckerImpl::Synthesize(const CheckerContext& ctx, Ptr<
             } else {
                 CJC_ABORT();
             }
-            break;
-        }
-        case ASTKind::POINTER_EXPR: {
-            node->SetTy(SynPointerExpr(*curCtx, *StaticAs<ASTKind::POINTER_EXPR>(node)));
             break;
         }
         case ASTKind::MATCH_EXPR: {
@@ -1070,15 +1062,12 @@ ModalTy TypeChecker::TypeCheckerImpl::Synthesize(const CheckerContext& ctx, Ptr<
             CheckMacroCall(*curCtx, *node);
             break;
         }
-        case ASTKind::INVALID_EXPR: {
-            node->SetTy({TypeManager::GetInvalidTy()});
-            break;
-        }
         case ASTKind::EXCLAVE_EXPR: {
             node->SetTy(SynExclaveExpr(*curCtx, *StaticAs<ASTKind::EXCLAVE_EXPR>(node)));
             break;
         }
         default: {
+            node->SetTy({TypeManager::GetInvalidTy()});
             break;
         }
     }
@@ -1179,11 +1168,8 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, ModalTy target, Ptr<No
             }
             case ASTKind::ARRAY_EXPR: {
                 auto ae = StaticAs<ASTKind::ARRAY_EXPR>(node);
-                if (ae->isValueArray) {
-                    chkRet = ChkVArrayExpr(*curCtx, realTarget, *ae);
-                } else {
-                    CJC_ABORT();
-                }
+                CJC_ASSERT(ae->isValueArray);
+                chkRet = ChkVArrayExpr(*curCtx, realTarget, *ae);
                 break;
             }
             case ASTKind::POINTER_EXPR: {
@@ -1292,11 +1278,6 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, ModalTy target, Ptr<No
             }
             case ASTKind::FUNC_PARAM: {
                 chkRet = ChkFuncParam(*curCtx, realTarget, *StaticAs<ASTKind::FUNC_PARAM>(node));
-                break;
-            }
-            case ASTKind::THIS_PARAM: {
-                SynThisParam(*curCtx, *StaticAs<ASTKind::THIS_PARAM>(node));
-                chkRet = node->GetTy().IsCorrect();
                 break;
             }
             case ASTKind::FUNC_ARG: {

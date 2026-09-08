@@ -107,28 +107,6 @@ VisitAction ExtendBoxMarker::MarkBoxPointHandleArrayExpr(ArrayExpr& ae)
         }
         return VisitAction::WALK_CHILDREN;
     }
-    // For 'RawArray(size, item: T)' constructor may need auto box.
-    if (ae.args.size() > 1) {
-        if (NeedAutoBox(ae.args[1]->DataTy(), typeManager->GetTypeArgs(*ae.GetTy())[0])) {
-            ae.EnableAttr(Attribute::NEED_AUTO_BOX);
-        }
-        return VisitAction::WALK_CHILDREN;
-    }
-    // For 'RawArray(Collection)' constructor may need auto box.
-    DataTy argTy = ae.args[0]->DataTy();
-    if (!Ty::IsTyCorrect(argTy)) {
-        return VisitAction::WALK_CHILDREN;
-    }
-    auto iface = DynamicCast<InterfaceTy*>(argTy.get());
-    if (!iface || !iface->decl || iface->decl->identifier != "Collection") {
-        return VisitAction::WALK_CHILDREN;
-    }
-    Ptr<InterfaceDecl> collDecl = iface->GetGenericTy() ? iface->GetGenericTy()->decl : iface->decl;
-    DataTy eleTy = typeManager->GetTypeArgs(*ae.GetTy())[0];
-    DataTy expectedColl = typeManager->GetInterfaceTy(*collDecl, {eleTy});
-    if (NeedAutoBox(argTy, expectedColl)) {
-        ae.EnableAttr(Attribute::NEED_AUTO_BOX);
-    }
     return VisitAction::WALK_CHILDREN;
 }
 

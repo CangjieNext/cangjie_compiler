@@ -947,14 +947,6 @@ void Collector::BuildSymbolTable(ASTContext& ctx, Ptr<Node> node, bool buildTrie
             }
             break;
         }
-        case ASTKind::POINTER_EXPR: {
-            auto cpe = StaticAs<ASTKind::POINTER_EXPR>(node);
-            auto nodeInfo = NodeInfo(*cpe, "", ctx.currentScopeLevel, ctx.currentScopeName);
-            AddSymbol(ctx, nodeInfo, buildTrie);
-            BuildSymbolTable(ctx, cpe->type.get(), buildTrie);
-            BuildSymbolTable(ctx, cpe->arg.get(), buildTrie);
-            break;
-        }
         case ASTKind::TUPLE_LIT: {
             auto tl = StaticAs<ASTKind::TUPLE_LIT>(node);
             auto nodeInfo = NodeInfo(*tl, "", ctx.currentScopeLevel, ctx.currentScopeName);

@@ -135,12 +135,6 @@ private:
         }
     }
 
-    ModalTy RawArrayInstTy(BuiltInDecl& bid, ModalInfo modal)
-    {
-        auto elemTy = tm.GetGenericsTy(*bid.generic->typeParameters[0]);
-        return c.GetBuiltInArrayType({elemTy}, modal);
-    }
-
     void AddCtorThisParam(FuncDecl& fd, BuiltInDecl& bid, ModalInfo modal)
     {
         if (modal == ModalInfo{}) {
@@ -155,7 +149,8 @@ private:
         thisParam->modal.SetLocal(ToLocalModalAST(modal), {SYN_LINE, column++});
         thisParam->outerDecl = &bid;
         thisParam->end = {SYN_LINE, column++};
-        thisParam->SetTy(RawArrayInstTy(bid, modal));
+        auto elemTy = tm.GetGenericsTy(*bid.generic->typeParameters[0]);
+        thisParam->SetTy(c.GetBuiltInArrayType({elemTy}, modal));
         pl.thisParam = std::move(thisParam);
     }
 
