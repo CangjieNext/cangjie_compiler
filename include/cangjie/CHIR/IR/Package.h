@@ -13,6 +13,7 @@
 #include "cangjie/CHIR/IR/Type/StructDef.h"
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace Cangjie::CHIR {
@@ -58,8 +59,8 @@ public:
     // Global Function API
     // ===--------------------------------------------------------------------===//
     void AddGlobalFunc(Function* item);
+    // Lookup by CHIR identifier (i.e. GLOBAL_VALUE_PREFIX + mangled name). Backed by `globalFuncIndex` map
     Function* TryGetGlobalFunc(const std::string& identifier);
-    
     // including:
     // 1. imported function, excluding src code imported function
     // 2. pure abstract function, including declared in current package and imported package
@@ -153,6 +154,9 @@ private:
     // decls in current package
     std::vector<GlobalVar*> globalVars;
     std::vector<Function*> globalFuncs;
+    // Identifier -> first function with that identifier in `globalFuncs`.
+    // Kept in sync by `AddGlobalFunc`, rebuilt by `SetAllGlobalFuncs`
+    std::unordered_map<std::string, Function*> globalFuncIndex;
     std::vector<StructDef*> structs;
     std::vector<ClassDef*> classes;
     std::vector<EnumDef*> enums;
