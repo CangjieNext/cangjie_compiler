@@ -680,13 +680,11 @@ OwnedPtr<SubscriptExpr> CreateTupleAccess(OwnedPtr<Expr> expr, size_t index, Ptr
         elem->isTupleAccess = true;
         elem->SetTy(type->typeArgs[index]);
         elem->baseExpr = std::move(expr);
-        if (!Ty::IsTyCorrect(indexTy)) {
-            elem->indexExprs.emplace_back(MakeOwned<LitConstExpr>(LitConstKind::INTEGER, std::to_string(index)));
-            elem->indexExprs[0]->constNumValue.asInt.SetUint64(index);
-        } else {
-            auto indexExpr = CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(index), indexTy);
-            elem->indexExprs.push_back(std::move(indexExpr));
+        elem->indexExprs.emplace_back(MakeOwned<LitConstExpr>(LitConstKind::INTEGER, std::to_string(index)));
+        if (Ty::IsTyCorrect(indexTy)) {
+            elem->indexExprs[0]->SetTy(indexTy);
         }
+        elem->indexExprs[0]->constNumValue.asInt.SetUint64(index);
         return elem;
     }
     CJC_ABORT();

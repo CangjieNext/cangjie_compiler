@@ -720,6 +720,16 @@ enum class Attribute {
      */
     OBJ_C_IMPL_REGISTRY_COMPANION,
 
+    /**
+     * Mark a member of an @ObjCImpl that stands in for one moved to the registry companion: the property a
+     * moved field is now read through, its accessors, and the forwarder left behind by a moved static
+     * function. Such a member is a desugaring of what the user wrote, so the rules that tell a property from
+     * a field must keep seeing the field.
+     * W: Sema.
+     * R: Sema.
+     */
+    OBJ_C_IMPL_MOVED_MEMBER_PROXY,
+
     AST_ATTR_END,
 };
 

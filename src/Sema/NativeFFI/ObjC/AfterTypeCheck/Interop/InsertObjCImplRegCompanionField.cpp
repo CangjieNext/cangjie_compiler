@@ -25,7 +25,7 @@ void InsertObjCImplRegCompanionField::HandleImpl(InteropContext& ctx)
             continue;
         }
 
-        auto regCompanion = ctx.implToRegCompanion[impl];
+        auto regCompanion = ctx.implToRegCompanion.at(impl);
         // Transform function will set the identifier
         auto regField = CreateVarDecl("");
         ctx.astTransformer.TransformToObjCImplRegCompanionField(*regField, *regCompanion);

@@ -41,9 +41,6 @@ void InsertNativeHandleGetterBody::HandleImpl(InteropContext& ctx)
     }
 
     for (auto& wrapper : ctx.mirrorInterfaceHandleWrappers) {
-        if (wrapper->TestAttr(Attribute::IS_BROKEN)) {
-            continue;
-        }
         auto getterDecl = GetNativeHandleGetter(*wrapper);
         auto nativeHandleFieldExpr = ctx.factory.CreateNativeHandleFieldExpr(*wrapper);
         getterDecl->funcBody->body->body.emplace_back(std::move(nativeHandleFieldExpr));
