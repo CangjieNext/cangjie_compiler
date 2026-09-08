@@ -347,7 +347,7 @@ void MoveImplMembersToRegCompanion::HandleImpl(InteropContext& ctx)
             continue;
         }
 
-        auto regCompanion = ctx.implToRegCompanion[impl];
+        auto regCompanion = ctx.implToRegCompanion.at(impl);
         CJC_NULLPTR_CHECK(regCompanion);
         auto regCompanionField = GetObjCImplRegCompanionField(*impl);
         CJC_NULLPTR_CHECK(regCompanionField);

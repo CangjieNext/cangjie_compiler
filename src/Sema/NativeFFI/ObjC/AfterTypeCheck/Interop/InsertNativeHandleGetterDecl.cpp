@@ -53,10 +53,6 @@ void InsertNativeHandleGetterDecl::HandleImpl(InteropContext& ctx)
     }
 
     for (auto& wrapper : ctx.mirrorInterfaceHandleWrappers) {
-        if (wrapper->TestAttr(Attribute::IS_BROKEN)) {
-            continue;
-        }
-
         auto nativeHandleGetterDecl = ctx.factory.CreateNativeHandleGetterDecl(*wrapper);
         wrapper->body->decls.push_back(std::move(nativeHandleGetterDecl));
     }
