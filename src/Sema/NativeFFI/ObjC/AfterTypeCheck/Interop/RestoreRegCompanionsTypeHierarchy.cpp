@@ -25,6 +25,13 @@ Ptr<ClassDecl> GetRegistryCompanionClass(InteropContext& ctx, const ClassDecl& i
         impl.fullPackageName, ctx.nameGenerator.GenerateRegistryCompanionName(impl));
 }
 
+Ptr<ClassDecl> FindRegistryCompanionDecl(const InteropContext& ctx, const Ptr<ClassDecl> impl) noexcept
+{
+    auto found = ctx.implToRegCompanion.find(impl);
+
+    return found == ctx.implToRegCompanion.end() ? nullptr : found->second;
+}
+
 void ReplaceSuperClassDecl(ClassDecl& target, ClassDecl& newSuperClass) noexcept
 {
     for (auto& it : target.inheritedTypes) {
@@ -47,14 +54,17 @@ void RestoreRegCompanionsTypeHierarchy::HandleImpl(InteropContext& ctx)
         if (!implParent) {
             continue;
         }
-        Ptr<ClassDecl> parentRegCompanionDecl;
-        if (implParent->IsSamePackage(*impl)) {
-            parentRegCompanionDecl = ctx.implToRegCompanion[implParent];
-        } else {
-            parentRegCompanionDecl = GetRegistryCompanionClass(ctx, *implParent);
+        auto parentRegCompanionDecl = implParent->IsSamePackage(*impl)
+            ? FindRegistryCompanionDecl(ctx, implParent)
+            : GetRegistryCompanionClass(ctx, *implParent);
+        auto regCompanionDecl = FindRegistryCompanionDecl(ctx, impl);
+        // A same-package parent marked `IS_BROKEN` gets no companion in `MapImplToRegCompanion`, and an imported
+        // one may be missing from the package it was loaded from. Neither leaves anything to restore, so skip the
+        // subtype instead of desugaring it against a companion that does not exist.
+        if (!parentRegCompanionDecl || !regCompanionDecl) {
+            continue;
         }
 
-        auto regCompanionDecl = ctx.implToRegCompanion[impl];
         ReplaceSuperClassDecl(*regCompanionDecl, *parentRegCompanionDecl);
         parentRegCompanionDecl->subDecls.insert(regCompanionDecl);
     }
