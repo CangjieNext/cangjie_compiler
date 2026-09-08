@@ -61,6 +61,8 @@ void AfterTypeCheckASTTransformer::TransformToObjCImplStaticProxyFunc(
     CJC_ASSERT_WITH_MSG(origin.TestAttr(Attribute::STATIC), "expected static function to be proxied");
     CJC_ASSERT_WITH_MSG(!origin.funcBody->paramLists.empty(), "expected at least one param list");
 
+    proxy.EnableAttr(Attribute::OBJ_C_IMPL_MOVED_MEMBER_PROXY);
+
     auto& params = proxy.funcBody->paramLists[0]->params;
     std::vector<OwnedPtr<FuncArg>> originCallArgs;
     std::transform(params.begin(), params.end(), std::back_inserter(originCallArgs),
@@ -83,6 +85,8 @@ void AfterTypeCheckASTTransformer::TransformToObjCImplProxyProp(
     pd.SetTy(vd.GetTy());
     pd.CloneAttrs(vd);
     pd.EnableAttr(Attribute::COMPILER_ADD);
+    // Set before the accessors are filled in below, which clone the property's attributes.
+    pd.EnableAttr(Attribute::OBJ_C_IMPL_MOVED_MEMBER_PROXY);
     pd.isVar = vd.isVar;
     pd.modifiers.insert(vd.modifiers.begin(), vd.modifiers.end());
     for (auto& anno : vd.annotations) {

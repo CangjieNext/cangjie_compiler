@@ -28,6 +28,22 @@ bool IsLocalDeclOutOfFuncBody(const Decl& decl, const FuncBody& curFuncBody)
     // Return true if the decl is not toplevel (which scope level is 0) and not in funcBody.
     return decl.scopeLevel > 0 && decl.scopeLevel < curFuncBody.scopeLevel;
 }
+
+/**
+ * Whether @p decl is a function or a property the user declared as one.
+ *
+ * A field of an @ObjCImpl moves to the registry companion and is left standing as a generated property, which
+ * is what another package sees of it. That desugaring must not narrow what the language allows, so the rules
+ * that tell a property from a field keep seeing the field.
+ *
+ * A field of an @ObjCMirror is not the same case, even though it too is written as one and desugared into a
+ * property: it names an instance variable of the Objective-C object the mirror stands for, and reading it is
+ * a call against that object's handle. So actually, it is a member of another object, not declared by the user.
+ */
+bool IsDeclaredFuncOrProp(const Decl& decl)
+{
+    return decl.IsFuncOrProp() && !decl.TestAttr(Attribute::OBJ_C_IMPL_MOVED_MEMBER_PROXY);
+}
 } // namespace
 
 void TypeChecker::TypeCheckerImpl::UpdateAnyTy()
@@ -181,8 +197,7 @@ void TypeChecker::TypeCheckerImpl::CanTargetOfRefBeCapturedCaseMutFunc(
         }
         if (fd->IsFinalizer() &&
             decl.TestAnyAttr(AST::Attribute::IN_CLASSLIKE, AST::Attribute::IN_EXTEND) &&
-            !decl.TestAttr(AST::Attribute::CONSTRUCTOR) &&
-            (decl.astKind == ASTKind::FUNC_DECL || decl.astKind == ASTKind::PROP_DECL) &&
+            !decl.TestAttr(AST::Attribute::CONSTRUCTOR) && IsDeclaredFuncOrProp(decl) &&
             !decl.TestAttr(AST::Attribute::STATIC)) {
             diag.Diagnose(
                 nre, DiagKind::sema_capture_this_or_instance_field_in_func, decl.identifier.Val(), "finalizer");
@@ -210,7 +225,7 @@ void TypeChecker::TypeCheckerImpl::CheckImmutableFuncAccessMutableFunc(
 void TypeChecker::TypeCheckerImpl::CheckForbiddenFuncReferenceAccess(
     const Position& pos, const FuncDecl& fd, const Decl& decl) const
 {
-    if (!fd.outerDecl || !decl.outerDecl || !decl.IsFuncOrProp() ||
+    if (!fd.outerDecl || !decl.outerDecl || !IsDeclaredFuncOrProp(decl) ||
         decl.TestAnyAttr(Attribute::CONSTRUCTOR, Attribute::STATIC)) {
         return; // Only check for instance function and property, except constructor and static member.
     }
@@ -225,7 +240,11 @@ void TypeChecker::TypeCheckerImpl::CheckForbiddenFuncReferenceAccess(
     // Finalizer is only allowed in class.
     // spec rule: this.xx, super.xx or current member (function or property) is forbidden in class finalizer.
     if (fd.IsFinalizer() && typeManager.IsSubtype(fd.outerDecl->GetTy(), decl.outerDecl->GetTy())) {
-        std::string type = decl.astKind == ASTKind::PROP_DECL ? "property" : "function";
+        // A mirror's field reads as a field but is state of the Objective-C object behind the mirror, so
+        // naming what it really is beats reporting the property it was desugared into.
+        std::string type = decl.TestAttr(Attribute::OBJ_C_MIRROR, Attribute::DESUGARED_MIRROR_FIELD)
+            ? "field of an Objective-C mirror"
+            : (decl.astKind == ASTKind::PROP_DECL ? "property" : "function");
         diag.DiagnoseRefactor(DiagKindRefactor::sema_instance_func_cannot_be_used_in_finalizer, pos, type);
     }
 }

@@ -21,9 +21,6 @@ using namespace Cangjie::Native::FFI;
 void DesugarMirrorInterfaceHandleWrappers::HandleImpl(InteropContext& ctx)
 {
     for (auto& wrapper : ctx.mirrorInterfaceHandleWrappers) {
-        if (wrapper->TestAnyAttr(Attribute::IS_BROKEN, Attribute::HAS_BROKEN)) {
-            continue;
-        }
         wrapper->DisableAttr(Attribute::ABSTRACT);
     }
 }

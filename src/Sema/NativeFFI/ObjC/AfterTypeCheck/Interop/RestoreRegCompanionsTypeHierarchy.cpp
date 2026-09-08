@@ -19,12 +19,6 @@ using namespace Cangjie::Interop::ObjC;
 
 namespace {
 
-Ptr<ClassDecl> GetRegistryCompanionClass(InteropContext& ctx, const ClassDecl& impl) noexcept
-{
-    return ctx.importManager.GetImportedDecl<ClassDecl>(
-        impl.fullPackageName, ctx.nameGenerator.GenerateRegistryCompanionName(impl));
-}
-
 void ReplaceSuperClassDecl(ClassDecl& target, ClassDecl& newSuperClass) noexcept
 {
     for (auto& it : target.inheritedTypes) {
@@ -47,14 +41,15 @@ void RestoreRegCompanionsTypeHierarchy::HandleImpl(InteropContext& ctx)
         if (!implParent) {
             continue;
         }
-        Ptr<ClassDecl> parentRegCompanionDecl;
-        if (implParent->IsSamePackage(*impl)) {
-            parentRegCompanionDecl = ctx.implToRegCompanion[implParent];
-        } else {
-            parentRegCompanionDecl = GetRegistryCompanionClass(ctx, *implParent);
+        auto parentRegCompanionDecl = ctx.GetRegCompanion(*implParent);
+        auto regCompanionDecl = ctx.GetRegCompanion(*impl);
+        // A same-package parent marked `IS_BROKEN` gets no companion in `MapImplToRegCompanion`, and an imported
+        // one may be missing from the package it was loaded from. Neither leaves anything to restore, so skip the
+        // subtype instead of desugaring it against a companion that does not exist.
+        if (!parentRegCompanionDecl || !regCompanionDecl) {
+            continue;
         }
 
-        auto regCompanionDecl = ctx.implToRegCompanion[impl];
         ReplaceSuperClassDecl(*regCompanionDecl, *parentRegCompanionDecl);
         parentRegCompanionDecl->subDecls.insert(regCompanionDecl);
     }

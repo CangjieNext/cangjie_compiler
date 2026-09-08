@@ -219,6 +219,108 @@ void RequalifyToRegCompanion(const InteropContext& ctx, Node& node)
 }
 
 /**
+ * The member a call names on the object of the enclosing class, or nullptr when it names something else.
+ *
+ * A bare name resolves against that class, and inside a registry companion `this` and `super` denote the
+ * very same object, so all three read alike. A call that names a class or another instance carries a
+ * receiver of its own, which stays the one the user wrote.
+ */
+Ptr<Decl> GetCalleeNamedOnSelf(const CallExpr& call) noexcept
+{
+    if (auto ref = As<ASTKind::REF_EXPR>(call.baseFunc.get())) {
+        return ref->ref.target;
+    }
+
+    auto ma = As<ASTKind::MEMBER_ACCESS>(call.baseFunc.get());
+    auto base = ma ? As<ASTKind::REF_EXPR>(ma->baseExpr.get()) : nullptr;
+    return base && (base->isThis || base->isSuper) ? ma->target : nullptr;
+}
+
+/**
+ * The declaration in an imported @ObjCImpl's registry companion that one of its proxies stands in for.
+ *
+ * A field is proxied by a property of the same name, so an accessor leads back to the field that moved; a
+ * static function is proxied by a forwarder of the same name and signature.
+ */
+Ptr<Decl> FindImportedMovedMember(const InteropContext& ctx, ClassDecl& impl, Decl& proxy) noexcept
+{
+    auto regCompanion = ctx.GetRegCompanion(impl);
+    if (!regCompanion) {
+        return nullptr;
+    }
+
+    if (auto accessor = As<ASTKind::FUNC_DECL>(&proxy); accessor && accessor->propDecl) {
+        const auto& movedName = accessor->propDecl->identifier.Val();
+        return GetMemberDecl<ASTKind::VAR_DECL>(
+            *regCompanion, [&movedName](const VarDecl& moved) { return moved.identifier.Val() == movedName; });
+    }
+
+    return GetMemberDecl<ASTKind::FUNC_DECL>(*regCompanion, [&proxy](const FuncDecl& moved) {
+        return moved.identifier.Val() == proxy.identifier.Val() && moved.GetTy() == proxy.GetTy();
+    });
+}
+
+void RetargetCallee(CallExpr& call, FuncDecl& callee) noexcept
+{
+    if (auto ref = As<ASTKind::REF_EXPR>(call.baseFunc.get())) {
+        ref->ref.target = &callee;
+    } else {
+        StaticAs<ASTKind::MEMBER_ACCESS>(call.baseFunc.get())->target = &callee;
+    }
+    call.resolvedFunction = &callee;
+}
+
+/**
+ * Resolves a call naming a proxy of an imported @ObjCImpl to the declaration that proxy stands in for.
+ *
+ * An imported impl went through this handler in its own package, so a name from here lands on the proxy it
+ * left behind, which the impl still owns. Everywhere else in this package that owner is a supertype of
+ * whatever the call is made on, but the companions inherit from one another and never from the impls, so
+ * from inside one the proxy is out of reach - while the declaration it stands for is not, having been
+ * inherited along with the parent companion. Resolving to it is what a name of an in-package impl does here
+ * already, and it spares the moved member the hop back out through its proxy.
+ *
+ * A field ends up read straight from the companion again, so the accessor call the property desugaring left
+ * behind is replaced whole: by the field for a read, by an assignment to it for a write.
+ */
+void ResolveToImportedMovedMember(const InteropContext& ctx, CallExpr& call)
+{
+    auto proxy = GetCalleeNamedOnSelf(call);
+    if (!proxy || !IsObjCImplMovedMemberProxy(*proxy)) {
+        return;
+    }
+
+    // A proxy of this package is not concerned: a name of one still points at the moved declaration itself,
+    // which is where `proxied` below leaves it.
+    auto impl = GetOwnerClass(*proxy);
+    if (!impl || impl->fullPackageName == ctx.pkg.fullPackageName) {
+        return;
+    }
+
+    auto moved = FindImportedMovedMember(ctx, *impl, *proxy);
+    if (!moved) {
+        return;
+    }
+
+    if (auto movedFunc = As<ASTKind::FUNC_DECL>(moved.get())) {
+        RetargetCallee(call, *movedFunc);
+        return;
+    }
+
+    auto field = WithinFile(CreateRefExpr(*StaticAs<ASTKind::VAR_DECL>(moved.get())), call.curFile);
+    OwnedPtr<Expr> access = std::move(field);
+    if (StaticAs<ASTKind::FUNC_DECL>(proxy.get())->isSetter) {
+        CJC_ASSERT_WITH_MSG(!call.args.empty(), "expected the value a property setter is called with");
+        access = CreateAssignExpr(
+            std::move(access), std::move(call.args[0]->expr), TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+        access->curFile = call.curFile;
+    }
+
+    access->sourceExpr = &call;
+    call.desugarExpr = std::move(access);
+}
+
+/**
  * `Impl.<field>` -> `Impl$reg.<field>`, `this.<field>` -> `$reg.<field>`.
  *
  * Reports whether the access was rewritten: a field named on some other instance - `other.<field>` - has no
@@ -280,10 +382,12 @@ void RewriteObjCImplMembersAccess(InteropContext& ctx, const ProxiedMembers& pro
 
             // A call keeps its own reference to the callee, besides the one in its base expression. Inside a
             // companion both have to stay pointed at the moved declaration itself, or the call would forward
-            // back out to the proxy it is standing next to.
-            if (auto call = As<ASTKind::CALL_EXPR>(node);
-                call && call->resolvedFunction && region != Region::REG_COMPANION) {
-                if (auto proxy = proxied.Find(call->resolvedFunction)) {
+            // back out to the proxy it is standing next to - and a member that moved out of an imported impl
+            // has to be resolved there in the first place.
+            if (auto call = As<ASTKind::CALL_EXPR>(node); call && call->resolvedFunction) {
+                if (region == Region::REG_COMPANION) {
+                    ResolveToImportedMovedMember(ctx, *call);
+                } else if (auto proxy = proxied.Find(call->resolvedFunction)) {
                     call->resolvedFunction = StaticAs<ASTKind::FUNC_DECL>(proxy);
                 }
             }
@@ -347,7 +451,7 @@ void MoveImplMembersToRegCompanion::HandleImpl(InteropContext& ctx)
             continue;
         }
 
-        auto regCompanion = ctx.implToRegCompanion[impl];
+        auto regCompanion = ctx.implToRegCompanion.at(impl);
         CJC_NULLPTR_CHECK(regCompanion);
         auto regCompanionField = GetObjCImplRegCompanionField(*impl);
         CJC_NULLPTR_CHECK(regCompanionField);

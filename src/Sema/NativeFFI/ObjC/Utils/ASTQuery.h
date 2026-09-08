@@ -76,6 +76,13 @@ Ptr<AST::VarDecl> GetObjCImplRegCompanionField(const AST::ClassDecl& decl) noexc
 bool IsObjCImplRegistryCompanionField(const AST::Decl& decl) noexcept;
 
 /**
+ * @returns true for a member left behind in an @ObjCImpl to stand in for one moved to its registry
+ *          companion: the property a moved field is read through, either of its accessors, and the forwarder
+ *          of a moved static function.
+ */
+bool IsObjCImplMovedMemberProxy(const AST::Decl& decl) noexcept;
+
+/**
  * @returns the first member of @p decl of AST kind @p K satisfying @p pred, or nullptr if there is none.
  */
 template <AST::ASTKind K = AST::ASTKind::DECL, typename Pred>
