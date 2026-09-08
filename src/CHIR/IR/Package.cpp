@@ -44,18 +44,15 @@ void Package::AddGlobalVar(GlobalVar* item)
 
 Function* Package::TryGetGlobalFunc(const std::string& identifier)
 {
-    for (auto func : globalFuncs) {
-        if (func->GetIdentifier() == identifier) {
-            return func;
-        }
-    }
-
-    return nullptr;
+    auto found = globalFuncIndex.find(identifier);
+    return found == globalFuncIndex.end() ? nullptr : found->second;
 }
 
 void Package::AddGlobalFunc(Function* item)
 {
     globalFuncs.emplace_back(item);
+    // `emplace` keeps the entry added first, matching the "first match wins" order of a scan over `globalFuncs`.
+    globalFuncIndex.emplace(item->GetIdentifier(), item);
 }
 
 void Package::AddClass(ClassDef* item)
@@ -310,6 +307,11 @@ std::vector<Function*> Package::GetGlobalFuncsWithoutBody(bool includePureAbstra
 void Package::SetAllGlobalFuncs(std::vector<Function*>&& funcs)
 {
     globalFuncs = std::move(funcs);
+    // Callers use this to drop functions from the package, so the index cannot be updated incrementally.
+    globalFuncIndex.clear();
+    for (auto func : globalFuncs) {
+        globalFuncIndex.emplace(func->GetIdentifier(), func);
+    }
 }
 
 std::vector<Function*> Package::GetGlobalFunctions(bool includePureAbstract) const
