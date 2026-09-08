@@ -257,6 +257,9 @@ Symbol* ScopeManager::GetCurSymbolByKind(
         case SymbolKind::TOPLEVEL:
             finder = [](const Symbol& sym) { return sym.scopeLevel == 0; };
             break;
+        default:
+            CJC_ABORT();
+            break;
     }
     return GetCurSatisfiedSymbolUntilTopLevel(ctx, scopeName, finder);
 }

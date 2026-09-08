@@ -57,7 +57,7 @@ bool IsInvokeStatic(const AST::CallExpr& callExpr)
     if (auto refExpr = DynamicCast<AST::RefExpr*>(callExpr.baseFunc.get()); refExpr) {
         auto parent = resolvedFunction->outerDecl;
         // static function introduced in extend cannot be redef'ed in subclass
-        if (auto extend = DynamicCast<AST::ExtendDecl>(parent)) {
+        if (Is<AST::ExtendDecl>(parent)) {
             return false;
         }
         if (parent->IsOpen()) {
@@ -1148,8 +1148,8 @@ Value* Translator::TranslateStaticMemberFuncCall(const AST::CallExpr& expr)
         FuncCallType funcCallType{funcName, instTargetFuncTy, funcInstTypeArgs};
         auto vtableRes = GetFuncIndexInVTable(*thisType, funcCallType, true)[0];
         auto useThisType = [thisType, &expr]() {
-            if (auto thisCustomType = DynamicCast<CustomType*>(thisType)) {
-                if (auto outerInterface = DynamicCast<ClassDef*>(thisCustomType->GetCustomTypeDef())) {
+            if (auto thisCustomType = DynamicCast<CustomType>(thisType)) {
+                if (Is<ClassDef>(thisCustomType->GetCustomTypeDef())) {
                     // invoke static function without prefix equals using This. prefix
                     // (to be done after 'This' proposals)
                     if (expr.baseFunc->astKind == AST::ASTKind::REF_EXPR) {

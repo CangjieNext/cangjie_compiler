@@ -125,6 +125,9 @@ bool DeserializeInputCHIR(const std::string& path)
             return false;
         case FileUtil::AccessResultType::OK:
             break;
+        default:
+            CJC_ABORT();
+            break;
     }
     std::unordered_map<unsigned int, std::string> fileNameMap;
     CHIR::CHIRContext cctx(&fileNameMap);

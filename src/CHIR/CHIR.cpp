@@ -736,6 +736,9 @@ bool ToCHIR::RunIRChecker(const Phase& phase) const
         case Phase::ANALYSIS_FOR_CJLINT:
             suffix = "after analysis for cjlint";
             break;
+        default:
+            CJC_ABORT();
+            break;
     }
     Utils::ProfileRecorder recorder("CHIR", "IRCheck " + suffix);
     CJC_NULLPTR_CHECK(chirPkg);

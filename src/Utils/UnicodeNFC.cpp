@@ -183,27 +183,6 @@ struct Range {
     T end;
 };
 
-template <class T>
-std::ostream& operator<<(std::ostream& out, const std::optional<T>& value)
-{
-    if (value) {
-        out << std::string_view{"Some("};
-        out << *value;
-        out << std::string_view{")"};
-    } else {
-        out << std::string_view{"None"};
-    }
-    return out;
-}
-template <class T>
-std::ostream& operator<<(std::ostream& out, const std::vector<T>& value)
-{
-    for (auto v:value) {
-        out<<v<<',';
-    }
-    return out;
-}
-
 struct Decompositions {
     const UTF8* begin;
     const UTF8* end;
@@ -428,6 +407,9 @@ private:
                     } else {
                         return buffer[state.sz++];
                     }
+                default:
+                    CJC_ABORT();
+                    break;
             }
         }
 #if defined __GNUC__ && not defined __clang__

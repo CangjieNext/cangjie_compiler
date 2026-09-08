@@ -109,6 +109,7 @@ std::string Triple::BackendToString(const BackendType& backend)
             return "cjnative";
         case BackendType::UNKNOWN:
         default:
+            CJC_ABORT();
             break;
     }
     return "unknown";
@@ -783,6 +784,9 @@ void GlobalOptions::CollectOrderedInputFiles(ArgInstance& arg, uint64_t idx)
             }
             break;
         }
+        default:
+            CJC_ABORT();
+            break;
     }
 }
 
@@ -812,6 +816,9 @@ bool GlobalOptions::ParseFromArgs(ArgList& argList)
                 skipParsing = skipParsing || skip;
                 break;
             }
+            default:
+                CJC_ABORT();
+                break;
         }
         CollectOrderedInputFiles(*arg.get(), inputIdx);
         inputIdx++;
@@ -865,6 +872,9 @@ std::vector<std::string> GlobalOptions::GenerateFrontendOptions() const
                 // All constructors of ArgInstanceType are handled here. Without `default` case,
                 // exhaustive type checking could help detect potential errors.
             }
+            default:
+                CJC_ABORT();
+                break;
         }
     }
     bool multiBC = aggressiveParallelCompile.value_or(1) > 1;

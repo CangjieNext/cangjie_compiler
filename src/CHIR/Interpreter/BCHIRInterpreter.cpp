@@ -1143,7 +1143,7 @@ template <OpCode op, typename T, typename S> bool BCHIRInterpreter::BinOpInt(Can
         return PushIfNotOverflow<T, S>(overflow, res, strat);
     } else if constexpr (op == OpCode::UN_BITNOT) {
         auto a1 = interpStack.ArgsPop<T>();
-        S res = ~a1.content;
+        S res = static_cast<S>(~a1.content);
         interpStack.ArgsPush(IValUtils::PrimitiveValue<T, S>(res));
         return false;
     } else if constexpr (op == OpCode::BIN_LSHIFT || op == OpCode::BIN_RSHIFT || op == OpCode::BIN_LSHIFT_EXC ||
@@ -1152,29 +1152,6 @@ template <OpCode op, typename T, typename S> bool BCHIRInterpreter::BinOpInt(Can
     } else {
         return BinRegOpInt<op, T, S>(strat);
     }
-}
-
-template <typename T> static bool IsOverflowAfterExp(T x, T y, Cangjie::OverflowStrategy strategy, T* res)
-{
-    CJC_NULLPTR_CHECK(res);
-    *res = 1;
-    bool isOverflow = false;
-    for (T j = 1; j <= y; j++) {
-        if (__builtin_mul_overflow(x, *res, res) && !isOverflow) {
-            isOverflow = true;
-        }
-    }
-    if (isOverflow && strategy == Cangjie::OverflowStrategy::SATURATING) {
-        T magicNumber = 2;
-        if (x < 0 && (y % magicNumber == 0)) {
-            *res = std::numeric_limits<T>::max();
-        } else if (x < 0 && (y % magicNumber == 1)) {
-            *res = std::numeric_limits<T>::min();
-        } else {
-            *res = std::numeric_limits<T>::max();
-        }
-    }
-    return isOverflow;
 }
 
 bool BCHIRInterpreter::BinExpOpInt(Cangjie::OverflowStrategy strat)

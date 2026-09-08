@@ -20,13 +20,34 @@ if(${CMAKE_SYSTEM_NAME} EQUAL Darwin)
     # mac headers have warning on undefed macro(s) (FFI_GO_CLOSURES), so use -Wno-undef
     set(CJC_EXTRA_WARNINGS ${CJC_EXTRA_WARNINGS} -Wno-undef)
 endif()
-    # g++ on some platform has harsher check on -Werror=shadow, in that it does not allow function parameters to share the same name with class members, which is actually bad in constructor. So we disable this on some platform.
-    set(CJC_EXTRA_WARNINGS ${CJC_EXTRA_WARNINGS} -Wshadow)
+# g++ on some platform has harsher check on -Werror=shadow, in that it does not allow function parameters to share the same name with class members, which is actually bad in constructor. So we disable this on some platform.
+set(CJC_EXTRA_WARNINGS ${CJC_EXTRA_WARNINGS} -Wshadow)
 
 # when including llvm header files, the following warnings have to be excluded
 set(CJC_WITH_LLVM_EXTRA_WARNINGS ${CJC_EXTRA_WARNINGS} -Wno-sign-conversion -Wno-unused-parameter -Wno-float-conversion -Wno-shadow)
 # gcc on some platform does not recognise these options
 set(CJC_WITH_LLVM_EXTRA_WARNINGS ${CJC_WITH_LLVM_EXTRA_WARNINGS} -Wno-implicit-int-conversion -Wno-shorten-64-to-32 -Wno-implicit-int-float-conversion)
+function(cjc_clang_major_at_least min_major out_var)
+    set(${out_var} FALSE PARENT_SCOPE)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        return()
+    endif()
+    set(predef_src "${CMAKE_BINARY_DIR}/CMakeFiles/cjc_clang_predef.cpp")
+    file(WRITE "${predef_src}" "")
+    execute_process(
+        COMMAND ${CMAKE_CXX_COMPILER} -dM -E -x c++ "${predef_src}"
+        OUTPUT_VARIABLE clang_predef
+        ERROR_QUIET)
+    string(REGEX MATCH "#define __clang_major__ ([0-9]+)" clang_major_match "${clang_predef}")
+    if(clang_major_match AND CMAKE_MATCH_1 GREATER_EQUAL ${min_major})
+        set(${out_var} TRUE PARENT_SCOPE)
+    endif()
+endfunction()
+cjc_clang_major_at_least(23 CJC_CLANG_GE_23)
+if(CJC_CLANG_GE_23)
+    set(CJC_WITH_LLVM_EXTRA_WARNINGS ${CJC_WITH_LLVM_EXTRA_WARNINGS} -Wno-switch-default
+        -Wno-unnecessary-virtual-specifier)
+endif()
 
 if(NOT CANGJIE_BUILD_CJC AND CANGJIE_BUILD_STD_SUPPORT)
     add_subdirectory(AST)

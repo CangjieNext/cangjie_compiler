@@ -2208,6 +2208,9 @@ struct LitConstExpr : Expr {
                 return "Unit";
             case LitConstKind::NONE:
                 return "None";
+            default:
+                CJC_ABORT();
+                return "";
         }
     }
     std::string ToString() const override;

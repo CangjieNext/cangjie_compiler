@@ -58,6 +58,9 @@ ConversionResult ConvertUTF8toUTF32(
             return ConversionResult::SOURCE_ILLEGAL;
         case llvm::sourceExhausted:
             return ConversionResult::SOURCE_EXHAUSTED;
+        default:
+            CJC_ABORT();
+            return ConversionResult::OK;
     }
 #if defined(__hm__) && defined(NDEBUG)
     return ConversionResult::OK;
@@ -86,6 +89,9 @@ ConversionResult ConvertUTF32toUTF8(
             return ConversionResult::SOURCE_ILLEGAL;
         case llvm::sourceExhausted:
             return ConversionResult::SOURCE_EXHAUSTED;
+        default:
+            CJC_ABORT();
+            return ConversionResult::OK;
     }
 #if defined(__hm__) && defined(NDEBUG)
     return ConversionResult::OK;
