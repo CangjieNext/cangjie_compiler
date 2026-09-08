@@ -71,10 +71,6 @@ void GenerateMirrorInterfaceHandleWrapperAbstractMemberImplStubs(ClassDecl& hand
 void GenerateInMirrorInterfaceHandleWrappers::HandleImpl(InteropContext& ctx)
 {
     for (auto& wrapper : ctx.mirrorInterfaceHandleWrappers) {
-        if (wrapper->TestAttr(Attribute::IS_BROKEN)) {
-            continue;
-        }
-
         GenerateMirrorInterfaceHandleWrapperAbstractMemberImplStubs(*wrapper, ctx.structMemberSignatures.at(wrapper));
     }
 }

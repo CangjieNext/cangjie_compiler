@@ -55,6 +55,28 @@ struct InteropContext {
     {
     }
 
+    /**
+     * The registry companion of @p impl, wherever @p impl was declared.
+     *
+     * `implToRegCompanion` holds the ones of this package; an imported impl carries its own alongside it in
+     * the package it came from, and is reached through the import manager instead.
+     *
+     * @returns nullptr when there is none - an impl of this package marked broken gets no companion, and an
+     *          imported one may be missing from the package it was loaded from.
+     */
+    Ptr<AST::ClassDecl> GetRegCompanion(AST::ClassDecl& impl) const noexcept
+    {
+        // Package names and not `Node::IsSamePackage`: a package node carries no file of its own, and that
+        // predicate answers a comparison against one with `true` whichever package the other node is in.
+        if (impl.fullPackageName != pkg.fullPackageName) {
+            return importManager.GetImportedDecl<AST::ClassDecl>(
+                impl.fullPackageName, nameGenerator.GenerateRegistryCompanionName(impl));
+        }
+
+        auto found = implToRegCompanion.find(Ptr(&impl));
+        return found == implToRegCompanion.end() ? nullptr : found->second;
+    }
+
     AST::Package& pkg;
     std::vector<Ptr<AST::ClassLikeDecl>> mirrors;
     std::vector<Ptr<AST::FuncDecl>> mirrorTopLevelFuncs;

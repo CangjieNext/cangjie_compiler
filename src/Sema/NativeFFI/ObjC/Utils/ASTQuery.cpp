@@ -403,6 +403,11 @@ bool IsObjCImplRegistryCompanionField(const Decl& decl) noexcept
     return decl.identifier == REGISTRY_COMPANION_FIELD_IDENT;
 }
 
+bool IsObjCImplMovedMemberProxy(const Decl& decl) noexcept
+{
+    return decl.TestAttr(Attribute::OBJ_C_IMPL_MOVED_MEMBER_PROXY);
+}
+
 Ptr<FuncDecl> GetFinalizer(const ClassDecl& decl) noexcept
 {
     return GetMemberDecl<ASTKind::FUNC_DECL>(decl, [](auto& fd) { return fd.IsFinalizer(); });

@@ -16,6 +16,7 @@
 #include <memory>
 #include <string>
 
+#include "Types.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Node.h"
 
@@ -72,7 +73,11 @@ OwnedPtr<LitConstExpr> CreateLitConstExpr(
 );
 OwnedPtr<TupleLit> CreateTupleLit(std::vector<OwnedPtr<Expr>> elements, Ptr<Ty> ty);
 OwnedPtr<ArrayLit> CreateArrayLit(std::vector<OwnedPtr<Expr>> elements, Ptr<Ty> ty);
-OwnedPtr<SubscriptExpr> CreateTupleAccess(OwnedPtr<Expr> expr, size_t index, Ptr<Ty> indexTy = nullptr);
+/**
+ * Create SubscriptExpr reading the \p index -th element of tuple \p expr, whose ty must be a TupleTy.
+ * \p indexTy types the generated index literal.
+ */
+OwnedPtr<SubscriptExpr> CreateTupleAccess(OwnedPtr<Expr> expr, size_t index, Ptr<Ty> indexTy);
 OwnedPtr<UnaryExpr> CreateUnaryExpr(OwnedPtr<Expr> expr, TokenKind op);
 OwnedPtr<BinaryExpr> CreateBinaryExpr(
     OwnedPtr<Expr> leftExpr, OwnedPtr<Expr> rightExpr, TokenKind op);

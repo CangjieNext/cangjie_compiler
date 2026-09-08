@@ -45,6 +45,17 @@ public:
 };
 
 /**
+ * Marks every @ObjCMirror/@ObjCImpl class that inherits a broken one broken as well. Such a subtype cannot be
+ * desugared: its parent gets none of the members the subtype's own desugaring reads back - no base constructor
+ * (`InsertBaseCtorDecl`) and, for an @ObjCImpl, no registry companion (`MapImplToRegCompanion`). The parent's
+ * diagnostic already fails the compilation, so the whole subtree is left to the later handlers to skip.
+ */
+class PropagateBrokenToSubtypes : public Handler<PropagateBrokenToSubtypes, InteropContext> {
+public:
+    void HandleImpl(InteropContext& ctx);
+};
+
+/**
  * Caches @ObjCImpl classes to their corresponding registry companion class decls.
  * It helps to avoid unnecessary package lookups.
  */

@@ -41,7 +41,7 @@ void GenerateInitCJObjectMethods::HandleImpl(InteropContext& ctx)
             }
 
             auto initCjObject = ctx.factory.CreateInitCjObjectReturningObjCSelf(
-                *impl, *ctx.implToRegCompanion[impl], *ctorDecl);
+                *impl, *ctx.implToRegCompanion.at(impl), *ctorDecl);
             CJC_ASSERT(initCjObject);
             ctx.genDecls.push_back(std::move(initCjObject));
         }

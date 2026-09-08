@@ -31,6 +31,11 @@ void FindMirrors::HandleImpl(InteropContext& ctx)
             if (auto classDecl = As<ASTKind::CLASS_DECL>(decl); classDecl) {
                 // Mirror interface handle wrappers
                 if (IsObjCMirrorInterfaceHandleWrapper(*classDecl)) {
+                    // The wrapper is generated whole by `InsertHandleWrapperDecl` and carries no user-written
+                    // code, so nothing can mark it broken. The handlers below rely on that instead of each
+                    // filtering the list on its own.
+                    CJC_ASSERT_WITH_MSG(!classDecl->TestAnyAttr(Attribute::IS_BROKEN, Attribute::HAS_BROKEN),
+                        "a generated @ObjCMirror interface handle wrapper cannot be broken");
                     ctx.mirrorInterfaceHandleWrappers.push_back(classDecl);
                     continue;
                 }
