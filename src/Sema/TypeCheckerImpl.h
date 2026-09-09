@@ -961,10 +961,13 @@ private:
     /**
      * In CallExpr, the called function may has default parameters and callExpr can omit the specification of
      * some parameters. Reorder all arguments.
+     * Side effects: sets ce.desugarArgs/defaultArgs and arg expr tys; may Check default exprs (TOOL_ADD);
+     * set ty of ce and baseFunc.
      * @param fd The target function found for callExpr.
      * @return The matched target of callExpr, may be a nullptr.
      */
-    std::vector<Ptr<AST::FuncDecl>> ReorderCallArgument(ASTContext& ctx, FunctionMatchingUnit& fmu, AST::CallExpr& ce);
+    std::vector<Ptr<AST::FuncDecl>> ReorderCallArgument(ASTContext& ctx, FunctionMatchingUnit& fmu, AST::CallExpr& ce,
+        AST::ModalTy target);
     AST::ModalTy GetCallTy(ASTContext& ctx, const AST::CallExpr& ce, const AST::FuncDecl& target) const;
     /**
      * Check whether arguments match function declare. In this case target function is not overloaded.
@@ -1086,7 +1089,7 @@ private:
      * @return empty vector if instantiation fails.
      */
     std::vector<Ptr<AST::FuncDecl>> UpdateFuncGenericType(
-        ASTContext& ctx, FunctionMatchingUnit& fmu, AST::CallExpr& ce);
+        ASTContext& ctx, FunctionMatchingUnit& fmu, AST::CallExpr& ce, AST::ModalTy target);
     void ReplaceIdealTypeInSubstPack(SubstPack& maps);
     /**
      * Replace all T according to typeMapping.
