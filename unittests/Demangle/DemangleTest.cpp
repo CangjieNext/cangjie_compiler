@@ -107,3 +107,18 @@ TEST(DemangleTest, GlobalVarInitNoParentheses)
         std::string(di.GetPkgName().Str()) + "." + std::string(di.GetFullName(demangler.ScopeResolution()).Str());
     EXPECT_STREQ(expectedFull, full.c_str());
 }
+
+TEST(DemangleTest, CallOperatorKeepsParamList)
+{
+    // The call operator's own name is "()": the double-render guard must not treat those
+    // parentheses as an already-rendered parameter list, or the real parameters are lost
+    // (`default.A.()` instead of `default.A.()(default.A)`).
+    const char* mangled = "_CN7default1AclHCNY_1AE";
+    Demangler<StdString> demangler(mangled, ".");
+    auto di = demangler.Demangle();
+    ASSERT_TRUE(di.IsValid());
+    const char* expectedFull = "default.A.()(default.A)";
+    std::string full =
+        std::string(di.GetPkgName().Str()) + "." + std::string(di.GetFullName(demangler.ScopeResolution()).Str());
+    EXPECT_STREQ(expectedFull, full.c_str());
+}

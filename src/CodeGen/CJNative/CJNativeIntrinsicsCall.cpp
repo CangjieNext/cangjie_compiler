@@ -247,8 +247,8 @@ llvm::Value* IRBuilder2::GetArrayElementAddr(
     return CreateGEP(arrayType, arrPtr, {zero, arrHeadIndex, index}, "arr.idx.get.gep");
 }
 
-void IRBuilder2::CallArrayIntrinsicSet(
-    const CHIR::RawArrayType& arrTy, llvm::Value* array, llvm::Value* index, CGValue& cgVal, bool isChecked)
+void IRBuilder2::CallArrayIntrinsicSet(const CHIR::RawArrayType& arrTy, llvm::Value* array, llvm::Value* index,
+    CGValue& cgVal, bool isChecked, ModalWriteKind writeKind)
 {
     auto elemCGType = CGType::GetOrCreate(cgMod, arrTy.GetElementType());
     auto elemType = elemCGType->GetLLVMType();
@@ -261,7 +261,7 @@ void IRBuilder2::CallArrayIntrinsicSet(
         GetCGContext().SetBasePtr(fieldAddr, array);
         auto fieldAddrCGType =
             CGType::GetOrCreate(cgMod, CGType::GetRefTypeOf(GetCGContext().GetCHIRBuilder(), *arrTy.GetElementType()));
-        CreateStore(cgVal, CGValue(fieldAddr, fieldAddrCGType));
+        CreateStore(cgVal, CGValue(fieldAddr, fieldAddrCGType), nullptr, writeKind);
         return;
     }
 
