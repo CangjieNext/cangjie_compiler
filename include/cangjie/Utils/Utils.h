@@ -32,6 +32,7 @@
 #include "cangjie/Utils/SafePointer.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
+#include "cangjie/Utils/Fnv1a.h"
 #include "cangjie/Utils/SipHash.h"
 #include "cangjie/Utils/PartiallyPersistent.h"
 
@@ -340,10 +341,11 @@ private:
 
 inline std::string HashString64(const std::string& str)
 {
-    uint64_t hash = 0xcbf29ce484222325ULL;
-    for (auto c : str) {
-        hash ^= static_cast<unsigned char>(c);
-        hash *= 0x100000001b3ULL;
+    uint64_t hash = Fnv1a64(str);
+    if (hash == 0) {
+        // Out64 prints nothing for a zero value; return a fixed digit so the
+        // generated name never degenerates to the bare prefix.
+        return "0";
     }
     Out64 printer{0, false, false};
     printer << hash;

@@ -24,6 +24,7 @@
 #include "cangjie/Driver/Toolchains/GCCPathScanner.h"
 #include "cangjie/Utils/FileUtil.h"
 #include "cangjie/Utils/FloatFormat.h"
+#include "cangjie/Utils/Fnv1a.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 #include "cangjie/Utils/SipHash.h"
 #include "cangjie/Utils/Utils.h"
@@ -985,16 +986,26 @@ TEST(UtilsTest, IsUnderFlowFloat)
     EXPECT_EQ(underUse("1.0"), false);
 }
 
+TEST(UtilsTest, Fnv1a64)
+{
+    // Published test vectors of the standard FNV-1a 64-bit algorithm.
+    EXPECT_EQ(Fnv1a64(""), 0xcbf29ce484222325ULL);
+    EXPECT_EQ(Fnv1a64("a"), 0xaf63dc4c8601ec8cULL);
+    EXPECT_EQ(Fnv1a64("foobar"), 0x85944171f73967e8ULL);
+}
+
 TEST(UtilsTest, HashString64)
 {
+    // The expected values are deliberately pinned to FNV-1a 64-bit outputs so
+    // that the result no longer depends on the platform standard library. If
+    // this test fails, the hash algorithm has changed: investigate the change
+    // instead of updating the expectations.
     EXPECT_EQ(HashString64(""), "cLODei48ycB");
     EXPECT_EQ(HashString64("altGlyph"), "5N3ZvZh0S8i");
 
-    // Collision inputs from the libc++ std::hash implementation.
-    EXPECT_NE(HashString64("altGlyph"), HashString64("altglyph"));
-    EXPECT_NE(HashString64("mmm0qrst"), HashString64("mmmpqrst"));
-
-    // Collision inputs from the repository's non-standard SipHash implementation.
+    // Collision inputs borrowed from the repository's non-standard SipHash
+    // implementation. HashString64 itself is unrelated to SipHash; these are
+    // kept as generic distinctness regression samples.
     EXPECT_NE(HashString64("Chunked"), HashString64(std::string("Chunked\0", 8)));
     EXPECT_NE(HashString64("HEAD"), HashString64(std::string("HEAD\0", 5)));
 }
