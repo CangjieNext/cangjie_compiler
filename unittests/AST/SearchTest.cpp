@@ -2007,9 +2007,9 @@ main() {
     results = instance->GetGivenReferenceTarget(ctx, scopeName, *access06, false);
     ASSERT_FALSE(results.hasDecl);
     tys = results.tys;
-    ASSERT_EQ(tys.size(), 2);
+    ASSERT_EQ(tys.size(), 4);
     auto str = Ty::GetModalTypesToStableStr(std::set<ModalTy>(tys.begin(), tys.end()), " ");
-    EXPECT_EQ(str, "Struct-String UInt8");
+    EXPECT_EQ(str, "Struct-String Struct-String @local! UInt8 UInt8 @local!");
 }
 
 // disable in modal type, this ut has random behaviour on CI but is stable on local machine.
@@ -2082,7 +2082,7 @@ main() {
     ASSERT_FALSE(results.hasDecl);
     auto tys = results.tys;
     auto str = Ty::GetModalTypesToStableStr(std::set<ModalTy>(tys.begin(), tys.end()), " ");
-    EXPECT_EQ(str, "Struct-String UInt8");
+    EXPECT_EQ(str, "Struct-String Struct-String @local! UInt8 UInt8 @local!");
 
     OwnedPtr<Expr> access02 = Parser("x[1].get(0).getOrThrow()", diag, sm).ParseExpr();
     AddCurFile(*access02, pkgs[0]->files[0].get());
@@ -2090,7 +2090,7 @@ main() {
     ASSERT_FALSE(results.hasDecl);
     tys = results.tys;
     str = Ty::GetModalTypesToStableStr(std::set<ModalTy>(tys.begin(), tys.end()), " ");
-    EXPECT_EQ(str, "Struct-String");
+    EXPECT_EQ(str, "Struct-String Struct-String @local!");
 
     OwnedPtr<Expr> access03 = Parser("A<Array<String>>([\"1\"])[1].get(0).getOrThrow()", diag, sm).ParseExpr();
     AddCurFile(*access03, pkgs[0]->files[0].get());
@@ -2098,7 +2098,7 @@ main() {
     ASSERT_FALSE(results.hasDecl);
     tys = results.tys;
     str = Ty::GetModalTypesToStableStr(std::set<ModalTy>(tys.begin(), tys.end()), " ");
-    EXPECT_EQ(str, "Struct-String");
+    EXPECT_EQ(str, "Struct-String Struct-String @local!");
 
     OwnedPtr<Expr> access04 = Parser("A<Array<String>>.test([\"1\"])[1].get(0).getOrThrow()", diag, sm).ParseExpr();
     AddCurFile(*access04, pkgs[0]->files[0].get());
@@ -2106,7 +2106,7 @@ main() {
     ASSERT_FALSE(results.hasDecl);
     tys = results.tys;
     str = Ty::GetModalTypesToStableStr(std::set<ModalTy>(tys.begin(), tys.end()), " ");
-    EXPECT_EQ(str, "Struct-String UInt8");
+    EXPECT_EQ(str, "Struct-String Struct-String @local! UInt8 UInt8 @local!");
 }
 
 TEST_F(SearchTest, SynReferenceAfterSema_FunctionCallOperator)
