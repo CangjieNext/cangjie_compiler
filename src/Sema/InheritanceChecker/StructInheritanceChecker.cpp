@@ -752,7 +752,7 @@ void StructInheritanceChecker::CheckInheritedMember(
     if (parent.decl->astKind == ASTKind::PROP_DECL) {
         if (CheckPropImplRelation(parent, child)) {
             CheckInheritanceAttributes(parent, *child.decl);
-            CheckPropertyInheritance(parent, *child.decl);
+            CheckPropertyInheritance(parent, child);
         } else {
             CheckInheritedPropOverload(parent, child);
         }
@@ -928,7 +928,7 @@ void StructInheritanceChecker::CheckInheritedInterfaces(
         if (interface.decl->astKind == ASTKind::PROP_DECL) {
             if (CheckPropImplRelation(interface, child)) {
                 CheckInheritanceForInterface(interface, child);
-                CheckPropertyInheritance(interface, *child.decl);
+                CheckPropertyInheritance(interface, child);
             } else {
                 CheckInheritedPropOverload(interface, child);
             }
@@ -1352,7 +1352,7 @@ void StructInheritanceChecker::CheckGenericTypeArgInfo(
         *parent.decl, *child.decl, parent.upperBounds, child.upperBounds, diag, typeManager);
 }
 
-void StructInheritanceChecker::CheckPropertyInheritance(const MemberSignature& parent, Decl& child) const
+void StructInheritanceChecker::CheckPropertyInheritance(const MemberSignature& parent, const MemberSignature& child) const
 {
     auto parentDecl = parent.decl;
     // Caller guarantees parent and child have same astKind.
@@ -1360,15 +1360,15 @@ void StructInheritanceChecker::CheckPropertyInheritance(const MemberSignature& p
         return;
     }
     auto parentProp = StaticCast<PropDecl>(parentDecl);
-    auto childProp = StaticCast<PropDecl>(&child);
+    auto childProp = StaticCast<PropDecl>(child.decl);
     bool sameMode = parentProp->TyMode() == childProp->TyMode();
     if (childProp->TestAttr(Attribute::STATIC) && typeManager.ImplementsCopyInterface(childProp->DataTy())) {
         sameMode = true;
     }
     // do not consider copy type here, because mode of prop is also mode of this param, different mode in prop type
     // means different this mode, and override prop must have the same this mode.
-    if (!typeManager.IsTyEqual(parent.ty, child.DataTy()) || !sameMode || !parent.inconsistentTypes.empty()) {
-        diag.Diagnose(child, DiagKind::sema_property_override_implement_type_diff);
+    if (!typeManager.IsTyEqual(parent.ty, child.ty) || !sameMode || !parent.inconsistentTypes.empty()) {
+        diag.Diagnose(*child.decl, DiagKind::sema_property_override_implement_type_diff);
     }
     if (childProp->isVar != parentProp->isVar) {
         if (parentProp->isVar) {
@@ -1385,7 +1385,7 @@ void StructInheritanceChecker::CheckPropertyInheritance(const MemberSignature& p
             DiagKindRefactor::sema_property_must_implement_both, *childProp, childProp->identifier.Val());
         childProp->EnableAttr(Attribute::HAS_BROKEN);
     }
-    CheckAccessVisibility(*parentDecl, child, child);
+    CheckAccessVisibility(*parentDecl, *child.decl, *child.decl);
 }
 
 bool StructInheritanceChecker::CheckReturnOverrideByGeneric(const FuncTy& parentTy, const FuncTy& childTy) const
