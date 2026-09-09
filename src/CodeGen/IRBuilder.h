@@ -343,8 +343,8 @@ public:
     llvm::Value* CallIntrinsicForUninitialized(const CHIR::Type& ty);
     ///*----------------- Array related --------------------//
     llvm::Value* CallArrayIntrinsicGetSize(llvm::Value* array);
-    void CallArrayIntrinsicSet(
-        const CHIR::RawArrayType& arrTy, llvm::Value* array, llvm::Value* index, CGValue& cgVal, bool isChecked);
+    void CallArrayIntrinsicSet(const CHIR::RawArrayType& arrTy, llvm::Value* array, llvm::Value* index, CGValue& cgVal,
+        bool isChecked, ModalWriteKind writeKind);
     llvm::Value* CallArrayIntrinsicGet(
         const CHIR::RawArrayType& arrTy, llvm::Value* array, llvm::Value* index, bool isChecked);
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND

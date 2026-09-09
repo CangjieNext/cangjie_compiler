@@ -846,7 +846,6 @@ llvm::Instruction* EmitOpaqueFieldWriteBarrier(IRBuilder2& irBuilder, const Stor
         irBuilder.CreateTypeInfoIsReferenceCall(fieldType->GetOriginal()), gcwriteRefBB, gcwriteNonRefBB);
 
     irBuilder.SetInsertPoint(gcwriteRefBB);
-    irBuilder.CallGCWrite({store.val, store.fieldOwnerPtr, store.destAddr});
     EmitRefWriteBarrier(irBuilder, store);
     irBuilder.CreateBr(gcwriteExitBB);
 
@@ -1712,7 +1711,8 @@ void InitArrayDataUG(IRBuilder2& irBuilder, llvm::Value* arrPtr, llvm::Value* ar
         fieldAddr = irBuilder.CreateBitCast(fieldAddr, fieldCGType->GetLLVMType()->getPointerTo(1U));
     }
     irBuilder.GetCGContext().SetBasePtr(fieldAddr, arrPtr);
-    irBuilder.CreateStore(CGValue(value, fieldCGType), CGValue(fieldAddr, fieldAddrCGType));
+    auto writeKind = arrTy.IsLocalRegion() ? ModalWriteKind::MAYBE_LOCAL : ModalWriteKind::NONE;
+    irBuilder.CreateStore(CGValue(value, fieldCGType), CGValue(fieldAddr, fieldAddrCGType), nullptr, writeKind);
     // Generate increment and compare size.
     auto incremented = irBuilder.CreateAdd(index, irBuilder.getInt64(1));
     (void)irBuilder.CreateStore(incremented, iterator);
