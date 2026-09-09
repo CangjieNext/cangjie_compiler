@@ -165,6 +165,9 @@ public:
                 case ToCHIR::Phase::OPT:
                     irChecker.Errorln("after opt.");
                     break;
+                default:
+                    CJC_ABORT();
+                    break;
             }
         }
         return ret;

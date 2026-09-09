@@ -279,11 +279,11 @@ void LookUpImpl::FieldLookup(
         if (!super || super->TestAttr(Attribute::IN_REFERENCE_CYCLE)) {
             continue;
         }
-        if (auto superClass = DynamicCast<ClassDecl*>(super)) {
+        if (auto superClass = DynamicCast<ClassDecl>(super)) {
             auto superInfo = info;
             superInfo.lookupExtend = true;
             FieldLookup(*superClass, fieldName, results, superInfo);
-        } else if (auto superInterface = DynamicCast<InterfaceDecl*>(super)) {
+        } else if (Is<InterfaceDecl>(super)) {
             FieldLookup(*StaticCast<InterfaceTy>(it->ty), fieldName, results, {info.baseTy});
         }
     }

@@ -322,6 +322,7 @@ Bchir::ByteCodeContent CHIR2BCHIR::GetTypeIdx(Cangjie::CHIR::Type& chirType)
             break;
         }
         default:
+            CJC_ABORT();
             break;
     }
     return static_cast<Bchir::ByteCodeContent>(tyIdx);
@@ -431,6 +432,9 @@ void CHIR2BCHIR::TranslateExpression(Context& ctx, const Expression& expr)
         case ExprMajorKind::OTHERS:
             CJC_ASSERT(expr.GetResult());
             TranslateOthersExpression(ctx, expr);
+            break;
+        default:
+            CJC_ABORT();
             break;
     }
 }

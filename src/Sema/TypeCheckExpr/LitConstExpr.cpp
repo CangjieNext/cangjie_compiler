@@ -245,6 +245,9 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLitConstExpr(ASTContext& ctx, LitConstE
         case LitConstKind::NONE:
             lce.ty = TypeManager::GetInvalidTy();
             break;
+        default:
+            CJC_ABORT();
+            break;
     }
     ChkLitConstExprRange(lce);
     return lce.ty;

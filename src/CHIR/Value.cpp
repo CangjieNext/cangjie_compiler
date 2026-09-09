@@ -806,11 +806,11 @@ void BlockGroup::SetOwnerExpression(Expression& expr)
         CJC_ASSERT(ownerFunc == nullptr && (ownerExpression == nullptr || !ownerExpression->IsLambda()));
     }
 #endif
-    if (auto lambda = DynamicCast<Lambda*>(&expr)) {
+    if (Is<Lambda>(expr)) {
         if (ownerFunc) {
             ownerFunc->RemoveBody();
             ownerFunc = nullptr;
-        } else if (auto lambdaExpr = DynamicCast<Lambda*>(ownerExpression)) {
+        } else if (auto lambdaExpr = DynamicCast<Lambda>(ownerExpression)) {
             lambdaExpr->RemoveBody();
         }
     }

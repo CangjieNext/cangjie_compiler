@@ -29,11 +29,6 @@ using namespace Meta;
 // Local-only ostream printing helpers.
 // Marked static to limit linkage to this translation unit and avoid accidental reuse elsewhere.
 namespace {
-template <typename... Args> static inline void Print(std::ostream& stream, Args&&... args)
-{
-    ((stream << args << ' '), ...);
-}
-
 template <typename Arg> static inline void Println(std::ostream& stream, Arg&& arg)
 {
     stream << std::forward<Arg>(arg) << std::endl;
@@ -44,11 +39,6 @@ template <typename Arg, typename... Args> static inline void Println(std::ostrea
     stream << std::forward<Arg>(arg);
     ((stream << ' ' << std::forward<Args>(args)), ...);
     stream << std::endl;
-}
-
-template <typename... Args> static inline void PrintNoSplit(std::ostream& stream, Args&&... args)
-{
-    (stream << ... << args);
 }
 
 static inline void PrintIndentOnly(std::ostream& stream, unsigned indent, unsigned numSpaces = 2)

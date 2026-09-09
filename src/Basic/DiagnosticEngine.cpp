@@ -374,6 +374,9 @@ void DiagnosticEngine::RegisterHandler(DiagFormat format)
             RegisterHandler(std::move(h));
             break;
         }
+        default:
+            CJC_ABORT();
+            break;
     }
 #if defined __GNUC__ && not defined __clang__
 #pragma GCC diagnostic pop

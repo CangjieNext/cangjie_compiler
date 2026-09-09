@@ -1400,6 +1400,9 @@ template <> flatbuffers::Offset<void> CHIRSerializer::CHIRSerializerImpl::Dispat
         case Type::TypeKind::MAX_TYPE_KIND:
             CJC_ABORT();
             return 0;
+        default:
+            CJC_ABORT();
+            break;
     }
 }
 
@@ -1429,6 +1432,9 @@ template <> flatbuffers::Offset<void> CHIRSerializer::CHIRSerializerImpl::Dispat
             return Serialize<PackageFormat::NullLiteral>(static_cast<const NullLiteral&>(obj)).Union();
         case ConstantValueKind::KIND_FUNC:
             return 0;
+        default:
+            CJC_ABORT();
+            break;
     }
 }
 
@@ -1461,6 +1467,9 @@ template <> flatbuffers::Offset<void> CHIRSerializer::CHIRSerializerImpl::Dispat
         case Value::ValueKind::KIND_BLOCK_GROUP:
             valueKind[GetId<Value>(&obj) - 1] = PackageFormat::ValueElem_BlockGroup;
             return Serialize<PackageFormat::BlockGroup>(static_cast<const BlockGroup&>(obj)).Union();
+        default:
+            CJC_ABORT();
+            break;
     }
 }
 
@@ -1654,6 +1663,9 @@ template <> flatbuffers::Offset<void> CHIRSerializer::CHIRSerializerImpl::Dispat
         case ExprKind::MAX_EXPR_KINDS:
             CJC_ABORT();
             return 0;
+        default:
+            CJC_ABORT();
+            break;
     }
 }
 
@@ -1672,6 +1684,9 @@ template <> flatbuffers::Offset<void> CHIRSerializer::CHIRSerializerImpl::Dispat
         case CustomDefKind::TYPE_EXTEND:
             defKind[GetId<CustomTypeDef>(&obj) - 1] = PackageFormat::CustomTypeDefElem_ExtendDef;
             return Serialize<PackageFormat::ExtendDef>(static_cast<const ExtendDef&>(obj)).Union();
+        default:
+            CJC_ABORT();
+            break;
     }
 }
 

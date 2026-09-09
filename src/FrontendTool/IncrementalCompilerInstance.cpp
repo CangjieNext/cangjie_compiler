@@ -92,6 +92,9 @@ void IncrementalCompilerInstance::SaveCompilationResult(Cangjie::IncreResult&& r
         case IncreKind::INVALID:
             CJC_ABORT();
             break;
+        default:
+            CJC_ABORT();
+            break;
     }
 }
 

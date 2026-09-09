@@ -9,6 +9,7 @@
 
 #include "cangjie/CHIR/Analysis/Analysis.h"
 #include "cangjie/CHIR/Value.h"
+#include "cangjie/Utils/CheckUtils.h"
 
 #include <algorithm>
 #include <memory>
@@ -304,6 +305,9 @@ public:
                 return absVal->ToString();
             case ValueKind::TOP:
                 return "TOP";
+            default:
+                CJC_ABORT();
+                return "";
         }
     }
 
