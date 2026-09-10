@@ -209,9 +209,7 @@ public:
     llvm::Instruction* CallGCReadAgg(llvm::StructType* structType, std::vector<llvm::Value*> args);
     llvm::Instruction* CallGCReadStaticRef(const std::vector<llvm::Value*>& args);
     llvm::Instruction* CallGCReadStaticAgg(llvm::StructType* type, std::vector<llvm::Value*> args);
-    llvm::Instruction* CallGCWrite(std::vector<llvm::Value*> args);
-    llvm::Instruction* CallMaybeLocalWrite(std::vector<llvm::Value*> args);
-    llvm::Instruction* CallDemodeWrite(std::vector<llvm::Value*> args);
+    llvm::Instruction* CallGCWrite(std::vector<llvm::Value*> args, ModalWriteKind writeKind = ModalWriteKind::NONE);
     llvm::Instruction* CallGCWriteAgg(llvm::StructType* structType, std::vector<llvm::Value*> args);
     llvm::Instruction* CallGCWriteStaticRef(const std::vector<llvm::Value*>& args);
     llvm::Instruction* CallGCWriteStaticAgg(llvm::StructType* type, std::vector<llvm::Value*> args);
@@ -438,9 +436,8 @@ public:
     llvm::Instruction* CallIntrinsicIsSubtype(const std::vector<llvm::Value*>& parameters);
     llvm::Instruction* CallIntrinsicIsTupleTypeOf(const std::vector<llvm::Value*>& parameters);
     llvm::Instruction* CallIntrinsicIsTypeEqualTo(const std::vector<llvm::Value*>& parameters);
-    llvm::Instruction* CallIntrinsicAllocaGeneric(const std::vector<llvm::Value*>& parameters, bool isLocal);
-    llvm::Instruction* CallIntrinsicGCWriteGeneric(const std::vector<llvm::Value*>& parameters);
-    llvm::Instruction* CallIntrinsicMaybeLocalWriteGeneric(const std::vector<llvm::Value*>& parameters);
+    llvm::Instruction* CallIntrinsicAllocaGeneric(const std::vector<llvm::Value*>& parameters, bool isLocal = false);
+    llvm::Instruction* CallIntrinsicGCWriteGeneric(const std::vector<llvm::Value*>& parameters, bool isLocal = false);
     llvm::Instruction* CallGCWriteGenericPayload(const std::vector<llvm::Value*>& parameters);
     llvm::Instruction* CallGCReadGeneric(const std::vector<llvm::Value*>& parameters);
     llvm::Instruction* CallIntrinsicMTable(const std::vector<llvm::Value*>& parameters);

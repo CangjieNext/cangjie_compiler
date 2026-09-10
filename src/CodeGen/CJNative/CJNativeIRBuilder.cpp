@@ -583,27 +583,15 @@ llvm::Instruction* IRBuilder2::CallGCReadStaticAgg(llvm::StructType* type, std::
     return inst;
 }
 
-llvm::Instruction* IRBuilder2::CallGCWrite(std::vector<llvm::Value*> args)
+llvm::Instruction* IRBuilder2::CallGCWrite(std::vector<llvm::Value*> args, ModalWriteKind writeKind)
 {
-    // Func: void @llvm.cj.gcwrite.ref(type val, i8 addr1* baseObj, type addr1* place)
-    // E.g. void @llvm.cj.gcwrite.ref(i8 addr1* val, i8 addr1* baseObj, i8 addr1*addr1* refPtr)
-    auto func = llvm::Intrinsic::getDeclaration(cgMod.GetLLVMModule(), llvm::Intrinsic::cj_gcwrite_ref);
-    ConvertArgsType(*this, func, args);
-    return CreateCall(func, args);
-}
-
-llvm::Instruction* IRBuilder2::CallMaybeLocalWrite(std::vector<llvm::Value*> args)
-{
-    // Func: void @llvm.cj.maybe.local.write.ref(i8 addr1* obj, i8 addr1*addr1* fieldPtr, i8 addr1* value)
-    auto func = llvm::Intrinsic::getDeclaration(cgMod.GetLLVMModule(), llvm::Intrinsic::cj_maybe_local_write_ref);
-    ConvertArgsType(*this, func, args);
-    return CreateCall(func, args);
-}
-
-llvm::Instruction* IRBuilder2::CallDemodeWrite(std::vector<llvm::Value*> args)
-{
-    // Func: void @llvm.cj.demode.write.ref(i8 addr1* obj, i8 addr1* addr1* fieldPtr, i8 addr1* value)
-    auto func = llvm::Intrinsic::getDeclaration(cgMod.GetLLVMModule(), llvm::Intrinsic::cj_demode_write_ref);
+    // Func: void @llvm.cj.maybe.local.write.ref(i8 addr1* value, i8 addr1* obj, i8 addr1*addr1* fieldPtr)
+    // Func: void @llvm.cj.demode.write.ref(i8 addr1* value, i8 addr1* obj, i8 addr1* addr1* fieldPtr)
+    // Func: void @llvm.cj.gcwrite.ref(i8 addr1* val, i8 addr1* baseObj, i8 addr1*addr1* place)
+    auto intrinsic = writeKind == ModalWriteKind::MAYBE_LOCAL ? llvm::Intrinsic::cj_maybe_local_write_ref
+                     : (writeKind == ModalWriteKind::DEMODE ? llvm::Intrinsic::cj_demode_write_ref
+                        : llvm::Intrinsic::cj_gcwrite_ref);
+    auto func = llvm::Intrinsic::getDeclaration(cgMod.GetLLVMModule(), intrinsic);
     ConvertArgsType(*this, func, args);
     return CreateCall(func, args);
 }
@@ -747,20 +735,6 @@ bool NeedsRuntimeRefnessDispatch(const StoreLowering& store)
     return !store.IsMemberWrite() && isUnsizedGeneric(store.valType) && isUnsizedGeneric(store.destDerefType);
 }
 
-// Emits the reference-field barrier selected by `modalWrite`.
-llvm::Instruction* EmitRefWriteBarrier(IRBuilder2& irBuilder, const StoreLowering& store)
-{
-    switch (store.modalWrite) {
-        case ModalWriteKind::MAYBE_LOCAL:
-            return irBuilder.CallMaybeLocalWrite({store.fieldOwnerPtr, store.destAddr, store.val});
-        case ModalWriteKind::DEMODE:
-            return irBuilder.CallDemodeWrite({store.fieldOwnerPtr, store.destAddr, store.val});
-        case ModalWriteKind::NONE:
-            break;
-    }
-    return irBuilder.CallGCWrite({store.val, store.fieldOwnerPtr, store.destAddr});
-};
-
 // Returns the buffer a non-reference value must be copied into: the caller-provided sret
 // buffer, or a freshly allocated one whose address is written back into \p destAddr.
 llvm::Value* AcquireBufferForNonRefValue(IRBuilder2& irBuilder, const StoreLowering& store,
@@ -846,15 +820,12 @@ llvm::Instruction* EmitOpaqueFieldWriteBarrier(IRBuilder2& irBuilder, const Stor
         irBuilder.CreateTypeInfoIsReferenceCall(fieldType->GetOriginal()), gcwriteRefBB, gcwriteNonRefBB);
 
     irBuilder.SetInsertPoint(gcwriteRefBB);
-    EmitRefWriteBarrier(irBuilder, store);
+    irBuilder.CallGCWrite({store.val, store.fieldOwnerPtr, store.destAddr}, store.modalWrite);
     irBuilder.CreateBr(gcwriteExitBB);
 
     irBuilder.SetInsertPoint(gcwriteNonRefBB);
-    if (store.modalWrite == ModalWriteKind::NONE) {
-        irBuilder.CallIntrinsicGCWriteGeneric({store.fieldOwnerPtr, store.destAddr, store.val, size});
-    } else {
-        irBuilder.CallIntrinsicMaybeLocalWriteGeneric({store.fieldOwnerPtr, store.destAddr, store.val, size});
-    }
+    irBuilder.CallIntrinsicGCWriteGeneric({store.fieldOwnerPtr, store.destAddr, store.val, size},
+                                          store.modalWrite != ModalWriteKind::NONE);
     irBuilder.CreateBr(gcwriteExitBB);
     irBuilder.SetInsertPoint(gcwriteExitBB);
     return nullptr;
@@ -917,7 +888,7 @@ llvm::Instruction* EmitFieldWriteBarrier(IRBuilder2& irBuilder, const StoreLower
         return EmitVArrayFieldWriteBarrier(irBuilder, store);
     }
     if (store.valType->IsReference() || store.valType->IsOptionLikeRef()) {
-        return EmitRefWriteBarrier(irBuilder, store);
+        return irBuilder.CallGCWrite({store.val, store.fieldOwnerPtr, store.destAddr}, store.modalWrite);
     }
     return irBuilder.CreateStore(*store.cgVal, *store.cgDestAddr);
 }
@@ -1501,7 +1472,8 @@ llvm::Value* IRBuilder2::CallArrayIntrinsicInitWithContent(const CHIR::RawArrayL
                 CreateMemCpy(elemPtr, align, elemValue, align, size);
             }
         } else if (elemType->IsRefType()) {
-            CallGCWrite({elemValue, arrayV, elemPtr});
+            CallGCWrite({elemValue, arrayV, elemPtr},
+                        arrTy->IsLocalRegion() ? ModalWriteKind::MAYBE_LOCAL : ModalWriteKind::NONE);
         } else {
             CreateStore(elemValue, elemPtr);
         }
