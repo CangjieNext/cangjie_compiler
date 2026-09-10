@@ -1394,10 +1394,19 @@ std::pair<std::vector<Type*>, Type*> Translator::GetMemberFuncParamAndRetInstTyp
     } else {
         funcType = StaticCast<FuncType*>(TranslateType(expr.baseFunc->GetTy()));
     }
-    if (expr.resolvedFunction->TestAttr(AST::Attribute::CONSTRUCTOR) || expr.resolvedFunction->IsFinalizer()) {
-        return std::pair<std::vector<Type*>, Type*>{funcType->GetParamTypes(), builder.GetUnitTy()};
+    auto paramInstTys = funcType->GetParamTypes();
+    // enum doesn't have init func like class and struct, so enum can't set local info,
+    // we have to use local info from callExpr's ty
+    if (expr.resolvedFunction->TestAttr(AST::Attribute::ENUM_CONSTRUCTOR)) {
+        auto localModal = ASTModal2CHIRModal(expr.GetTy().Mode());
+        for (auto& paramInstTy: paramInstTys) {
+            paramInstTy = builder.WithModal(paramInstTy, localModal);
+        }
     }
-    return std::pair<std::vector<Type*>, Type*>{funcType->GetParamTypes(), funcType->GetReturnType()};
+    if (expr.resolvedFunction->TestAttr(AST::Attribute::CONSTRUCTOR) || expr.resolvedFunction->IsFinalizer()) {
+        return std::pair<std::vector<Type*>, Type*>{paramInstTys, builder.GetUnitTy()};
+    }
+    return std::pair<std::vector<Type*>, Type*>{paramInstTys, funcType->GetReturnType()};
 }
 
 Value* Translator::GenerateLoadIfNeccessary(Value& arg, bool isThis, bool isMut, bool isInOut, const DebugLocation& loc)

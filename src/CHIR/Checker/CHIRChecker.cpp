@@ -3610,7 +3610,7 @@ void CHIRChecker::CheckEnumTuple(const Tuple& expr, const Function& topLevelFunc
         return;
     }
     for (size_t i = 1; i < operands.size(); ++i) {
-        if (!TypeIsExpected(*operands[i]->GetType(), *paramTypes[i - 1])) {
+        if (!TypeIsExpected(*operands[i]->GetType()->GetDataType(builder), *paramTypes[i - 1])) {
             auto errMsg = "type mismatched, the " + std::to_string(i - 1) + "-th parameter type is " +
                 paramTypes[i - 1]->ToString() + ", but " + operands[i]->GetIdentifier() + "'s type is " +
                 operands[i]->GetType()->ToString() + " in `" + result->ToString(0) + "`.";
