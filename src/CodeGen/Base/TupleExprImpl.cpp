@@ -124,9 +124,11 @@ llvm::Value* GenerateOptionLikeT(IRBuilder2& irBuilder, const CHIR::Tuple& tuple
     irBuilder.CreateCondBr(isRef, refBB, nonRefBB);
     irBuilder.SetInsertPoint(refBB);
     if (hasAssociatedValue) {
-        (void)irBuilder.CallGCWrite({**(cgMod | tuple.GetOperand(1)), enumVal, castedPayload});
+        auto modalWrite = chirEnumType->IsLocalRegion() ? ModalWriteKind::MAYBE_LOCAL : ModalWriteKind::NONE;
+        (void)irBuilder.CallGCWrite({**(cgMod | tuple.GetOperand(1)), enumVal, castedPayload}, modalWrite);
     } else {
-        (void)irBuilder.CallGCWrite({llvm::Constant::getNullValue(p1i8), enumVal, castedPayload});
+        (void)irBuilder.CallGCWrite({llvm::Constant::getNullValue(p1i8), enumVal, castedPayload},
+                                    ModalWriteKind::NONE);
     }
     irBuilder.CreateBr(endBB);
 
@@ -138,7 +140,7 @@ llvm::Value* GenerateOptionLikeT(IRBuilder2& irBuilder, const CHIR::Tuple& tuple
         payload = irBuilder.CreateInBoundsGEP(irBuilder.getInt8Ty(), castedPayload, associatedValOffset);
         auto associatedTypeSize = irBuilder.GetLayoutSize_32(*associatedType);
         (void)irBuilder.CallIntrinsicGCWriteGeneric(
-            {enumVal, payload, **(cgMod | tuple.GetOperand(1)), associatedTypeSize});
+            {enumVal, payload, **(cgMod | tuple.GetOperand(1)), associatedTypeSize}, chirEnumType->IsLocalRegion());
     }
     irBuilder.CreateBr(endBB);
 
@@ -190,7 +192,7 @@ llvm::Value* GenerateOptionLikeNonRef(IRBuilder2& irBuilder, const CHIR::Tuple& 
             auto associatedType = tuple.GetOperand(1)->GetType();
             auto associatedTypeSize = irBuilder.GetLayoutSize_32(*associatedType);
             (void)irBuilder.CallIntrinsicGCWriteGeneric(
-                {enumVal, payload, **(cgMod | tuple.GetOperand(1)), associatedTypeSize});
+                {enumVal, payload, **(cgMod | tuple.GetOperand(1)), associatedTypeSize}, chirEnumType->IsLocalRegion());
         }
         return enumVal;
     }
