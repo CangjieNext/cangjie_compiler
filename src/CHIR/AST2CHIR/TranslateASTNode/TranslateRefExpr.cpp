@@ -63,9 +63,9 @@ Translator::LeftValueInfo Translator::TranslateEnumMemberVarRef(const AST::RefEx
     auto loc = TranslateLocation(refExpr);
 
     // polish here
-    auto enumTy = StaticCast<EnumTy*>(refExpr.DataTy());
-    auto enumType = StaticCast<EnumType*>(chirTy.TranslateType(AST::ModalTy{enumTy}));
+    auto enumType = StaticCast<EnumType*>(chirTy.TranslateType(refExpr.GetTy()));
     uint64_t enumId = GetEnumCtorId(*target);
+    auto enumTy = StaticCast<EnumTy*>(refExpr.DataTy());
     auto selectorTy = GetSelectorType(*enumTy);
     if (enumTy->decl->hasArguments) {
         std::vector<Value*> args;
