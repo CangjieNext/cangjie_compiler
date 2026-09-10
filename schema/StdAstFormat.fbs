@@ -797,7 +797,8 @@ table Annotation {
   identifier: string;
   args: [FuncArg]; // For special annos
   overflow_strategy: string;
-  attrs: [string];
+  attrs: [Token];
+  attr_commas_pos: [Position];
   condExpr: Expr;
   left_square_pos: Position;
   right_square_pos: Position;

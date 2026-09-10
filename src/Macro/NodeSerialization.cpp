@@ -1070,15 +1070,11 @@ flatbuffers::Offset<ASTFormat::Annotation> NodeWriter::SerializeAnnotation(AstAn
         annotation->args, &NodeWriter::SerializeFuncArg);
     auto rsquarePos = FlatPosCreateHelper(annotation->rsquarePos);
     auto overlowStrategy = builder.CreateString(OverflowStrategyName(annotation->overflowStrategy));
-    std::vector<flatbuffers::Offset<flatbuffers::String>> vecAttrs;
-    for (auto& item : annotation->attrs) {
-        auto fbItem = builder.CreateString(item.Value());
-        vecAttrs.push_back(fbItem);
-    }
-    auto fbAttrs = builder.CreateVector(vecAttrs);
+    auto fbAttrs = builder.CreateVector(TokensVectorCreateHelper(annotation->attrs));
+    auto fbAttrCommas = CreatePositionVector(annotation->attrCommas);
     auto condExpr = SerializeExpr(annotation->condExpr.get());
     return ASTFormat::CreateAnnotation(builder, base, kind, &identPos, identifier, fbArgs, overlowStrategy, fbAttrs,
-        condExpr, &lsquarePos, &rsquarePos, isCompileTimeVisible);
+        fbAttrCommas, condExpr, &lsquarePos, &rsquarePos, isCompileTimeVisible);
 }
 
 flatbuffers::Offset<ASTFormat::Modifier> NodeWriter::SerializeModifier(AstModifier modifier)
