@@ -1058,7 +1058,7 @@ template <typename ExprT> OwnedPtr<ExprT> ASTCloner::CloneExpr(Ptr<ExprT> expr, 
     auto clonedExpr = match(*expr)(
         // PrimitiveExpr, AdjointExpr are ignored.
         [&visitor](const IfExpr& ie) { return OwnedPtr<Expr>(CloneIfExpr(ie, visitor)); },
-        [](const PrimitiveTypeExpr& pte) { return OwnedPtr<Expr>(MakeOwned<PrimitiveTypeExpr>(pte.typeKind)); },
+        [](const PrimitiveTypeExpr& pte) { return OwnedPtr<Expr>(ClonePrimitiveTypeExpr(pte)); },
         [&visitor](const MacroExpandExpr& mee) { return OwnedPtr<Expr>(CloneMacroExpandExpr(mee, visitor)); },
         [&visitor](const TokenPart& tp) { return OwnedPtr<Expr>(CloneTokenPart(tp, visitor)); },
         [&visitor](const QuoteExpr& qe) { return OwnedPtr<Expr>(CloneQuoteExpr(qe, visitor)); },

@@ -614,23 +614,7 @@ void TypeChecker::TypeCheckerImpl::InferRefExpr(ASTContext& ctx, RefExpr& re)
         re.SetTy({TypeManager::GetInvalidTy()});
         return;
     }
-    if (re.isAlone && !re.callOrPattern && !ctx.HasTargetTy(&re) && !targets.empty() && IsAllFuncDecl(targets)) {
-        std::vector<Ptr<Decl>> kept;
-        kept.reserve(targets.size());
-        for (auto target : targets) {
-            if (IsCapturingLocalFullInFunRef(ctx, re, *StaticCast<FuncDecl>(target))) {
-                continue;
-            }
-            kept.emplace_back(target);
-        }
-        if (kept.empty()) {
-            // All overloads capture a @local! receiver: no usable target, report and bail.
-            DiagLocalFullFunRefCapture(ctx, re, targets.front()->identifier.Val());
-            re.SetTy({TypeManager::GetInvalidTy()});
-            return;
-        }
-        std::swap(kept, targets);
-    }
+    // Local! fun-ref capture is diagnosed in FilterTargetsForFuncReference.
     // 'targets' must not empty.
     auto decl = GetAccessibleDecl(ctx, re, targets);
     if (!decl) {
@@ -1100,21 +1084,6 @@ void TypeChecker::TypeCheckerImpl::InferInstanceAccess(const ASTContext& ctx, Me
     } else {
         // if some are prop's some are not, the error should be reported later. we just pick one determinately
         ReplaceTarget(&ma, target);
-    }
-    if (target->IsFunc() && ma.isAlone && !ma.callOrPattern && !ctx.HasTargetTy(&ma)) {
-        std::vector<Ptr<Decl>> valid;
-        for (auto t : ma.targets) {
-            if (!IsCapturingLocalFullInFunRef(ctx, ma, *StaticCast<FuncDecl>(t))) {
-                valid.push_back(t);
-            }
-        }
-        if (!ma.targets.empty() && valid.empty()) {
-            DiagLocalFullFunRefCapture(ctx, ma, ma.field.Val());
-            ma.target = {};
-            ma.targets.clear();
-            return;
-        }
-        std::swap(valid, ma.targets);
     }
 }
 

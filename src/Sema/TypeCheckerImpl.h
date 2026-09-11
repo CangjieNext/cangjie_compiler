@@ -1231,6 +1231,7 @@ private:
      *  2. found multiple function candidates.
      * @param expr [in] reference expression which target type is not given.
      * @param targets [in/out]
+     * Side effect: report error if all reference are @local! capture.
      */
     bool FilterTargetsForFuncReference(
         const ASTContext& ctx, const AST::NameReferenceExpr& expr, std::vector<Ptr<AST::Decl>>& targets);
