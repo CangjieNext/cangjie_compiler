@@ -979,14 +979,11 @@ private:
     }
 
     // Check bad member assignment
+    // Incompatible ~local vs local!/local? is already rejected by typecheck (HAS_BROKEN skips this walker).
     void CheckAssignExprRef(
         const ASTContext& ctx, const AssignExpr& assign, const Expr* left, Mode lLocal, Mode rLocal)
     {
-        // When llocal is @~local, rlocal must be @~local
         if (lLocal == Mode::NOT) {
-            if (rLocal != Mode::NOT) {
-                DiagBadAssignment(assign, {}, assign.rightExpr->GetTy());
-            }
             return;
         }
         // @local?: only member assignment to `this` in @local? ctor or finalizer is allowed.
@@ -1002,13 +999,6 @@ private:
             DiagBadAssigmentToLocalHalf(assign);
             return;
         }
-        if (IsCapture(ctx, *left)) {
-            if (lLocal != Mode::FULL && rLocal == Mode::NOT) {
-                return;
-            }
-            DiagBadAssignment(assign, {lLocal}, assign.rightExpr->GetTy());
-            return;
-        }
         // @local!: both @local!, external vs internal
         if (rLocal == Mode::FULL) {
             auto lext = IsExternalLocal(ctx, *left);
@@ -1016,8 +1006,6 @@ private:
             if (lext != rext) {
                 DiagBadAssignment(assign, {Mode::FULL}, assign.rightExpr->GetTy(), lext, rext);
             }
-        } else {
-            DiagBadAssignment(assign, {lLocal}, assign.rightExpr->GetTy());
         }
     }
 
@@ -1025,11 +1013,7 @@ private:
         const ASTContext& ctx, const AssignExpr& assign, const Expr* left, Mode lLocal, Mode rLocal)
     {
         auto ma = StaticCast<MemberAccess>(left);
-        // When llocal is @~local, rlocal must be @~local
         if (lLocal == Mode::NOT) {
-            if (rLocal != Mode::NOT) {
-                DiagBadAssignment(assign, {}, assign.rightExpr->GetTy());
-            }
             return;
         }
         // @local? member assignment is allowed only in @local? ctor or finalizer and the ref is this
@@ -1072,31 +1056,6 @@ private:
         } else if (DynamicCast<MemberAccess>(left)) {
             CheckAssignExprMa(ctx, assign, left, lLocal, rLocal);
         }
-    }
-
-    bool IsCapture(const ASTContext& ctx, const Expr& expr)
-    {
-        auto ref = DynamicCast<RefExpr>(&expr);
-        if (!ref) {
-            return false;
-        }
-        auto target = ref->GetTarget();
-        if (target->TestAnyAttr(Attribute::GLOBAL, Attribute::STATIC)) {
-            return false;
-        }
-        auto defSite = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, target->scopeName);
-        auto useSite = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, expr.scopeName);
-        if (!defSite || !useSite) {
-            return false;
-        }
-        return defSite->node != useSite->node;
-    }
-
-    DiagnosticBuilder DiagBadAssignment(const Node& position, const ModalInfo& lModal, ModalTy rTy)
-    {
-        std::string arg1 = lModal.local != Mode::NOT ? " " + lModal.LocalString() : "";
-        std::string arg2 = rTy.String();
-        return d.DiagnoseRefactor(DiagKindRefactor::sema_bad_local_assignment, position, arg1, arg2);
     }
 
     DiagnosticBuilder DiagBadAssignment(
