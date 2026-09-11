@@ -486,6 +486,36 @@ bool IsInheritableType(Ptr<const Ty> ty)
     auto inherit = Ty::GetDeclPtrOfTy<InheritableDecl>(ty);
     return inherit && !inherit->TestAttr(Attribute::IN_REFERENCE_CYCLE);
 }
+
+// Whether a primitive type kind is a copy type (spec: not subject to locality constraints).
+bool IsPrimitiveCopyableKind(TypeKind kind)
+{
+    switch (kind) {
+        case TypeKind::TYPE_UNIT:
+        case TypeKind::TYPE_INT8:
+        case TypeKind::TYPE_INT16:
+        case TypeKind::TYPE_INT32:
+        case TypeKind::TYPE_INT64:
+        case TypeKind::TYPE_INT_NATIVE:
+        case TypeKind::TYPE_IDEAL_INT:
+        case TypeKind::TYPE_UINT8:
+        case TypeKind::TYPE_UINT16:
+        case TypeKind::TYPE_UINT32:
+        case TypeKind::TYPE_UINT64:
+        case TypeKind::TYPE_UINT_NATIVE:
+        case TypeKind::TYPE_FLOAT16:
+        case TypeKind::TYPE_FLOAT32:
+        case TypeKind::TYPE_FLOAT64:
+        case TypeKind::TYPE_IDEAL_FLOAT:
+        case TypeKind::TYPE_RUNE:
+        case TypeKind::TYPE_BOOLEAN:
+        case TypeKind::TYPE_NOTHING:
+        case TypeKind::TYPE_INVALID:
+            return true;
+        default:
+            return false;
+    }
+}
 } // namespace
 
 void TypeManager::PackMapping(SubstPack& maps, const MultiTypeSubst m)
@@ -1212,17 +1242,7 @@ bool TypeManager::ImplementsCopyInterface(DataTy ty)
         return true;
     }
     if (auto d = DynamicCast<PrimitiveTy>(ty)) {
-        switch (d->kind) {
-            case TypeKind::TYPE_FLOAT16:
-            case TypeKind::TYPE_RUNE:
-            case TypeKind::TYPE_NOTHING:
-            case TypeKind::TYPE_IDEAL_FLOAT:
-            case TypeKind::TYPE_IDEAL_INT:
-            case TypeKind::TYPE_INVALID:
-                return true;
-            default:
-                return false;
-        }
+        return IsPrimitiveCopyableKind(d->kind);
     }
     if (auto tuple = DynamicCast<TupleTy>(ty)) {
         return std::all_of(tuple->typeArgs.begin(), tuple->typeArgs.end(),
