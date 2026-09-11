@@ -1014,6 +1014,34 @@ void TypeChecker::TypeCheckerImpl::FilterBetterThisModeNonCtorCall(const ASTCont
     if (!hasThisParam) {
         return;
     }
+    // Receiver modal still pending (IDEAL, e.g. an unannotated lambda parameter kept as a
+    // placeholder): every this-mode unifies, so without a tie-break all modal overloads stay
+    // legal and overload resolution becomes ambiguous. Prefer the @~local (NOT) this-param
+    // candidate, mirroring the "prefer @~local for compatibility" rule used for ctor calls
+    // when no mode is determined.
+    if (argMode.local == Mode::IDEAL) {
+        bool hasNotMode = false;
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            if (!targetMark[i] || !typeManager.HasThisParam(candidates[i]->fd)) {
+                continue;
+            }
+            if (typeManager.GetThisParamTy(candidates[i]->fd).Mode().local == Mode::NOT) {
+                hasNotMode = true;
+                break;
+            }
+        }
+        if (hasNotMode) {
+            for (size_t i = 0; i < candidates.size(); ++i) {
+                if (!targetMark[i] || !typeManager.HasThisParam(candidates[i]->fd)) {
+                    continue;
+                }
+                if (typeManager.GetThisParamTy(candidates[i]->fd).Mode().local != Mode::NOT) {
+                    targetMark[i] = false;
+                }
+            }
+        }
+        return;
+    }
     if (!hasExact && !hasSubmode) {
         // only consider copy type cast when even sub modes do not match any overload, keep all in this case.
         // otherwise go through normal filter by this mode

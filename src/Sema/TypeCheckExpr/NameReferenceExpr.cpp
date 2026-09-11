@@ -183,7 +183,7 @@ bool IsCloserToImpl(const Decl& src, const Decl& target)
 FuncSig2Decl::const_iterator FoundSameSignatureMember(
     TypeManager& tyMgr, const Decl& decl, std::optional<ModalInfo> thisMode, FuncTy& funcTy, FuncSig2Decl& methodSigs)
 {
-    FuncSig keyPair{decl.identifier, thisMode, funcTy.paramTys};
+    FuncSig keyPair{decl.identifier, thisMode, funcTy.paramTys, funcTy.retTy};
     auto found = methodSigs.find(keyPair);
     if (found != methodSigs.cend()) {
         return found;
@@ -206,7 +206,7 @@ FuncSig2Decl::const_iterator FoundSameSignatureMember(
         if (auto fd = DynamicCast<FuncDecl>(it); fd && tyMgr.HasThisParam(*fd)) {
             declThisMode = GetThisParamModal(*fd);
         }
-        keyPair = {decl.identifier, declThisMode, instTy->paramTys};
+        keyPair = {decl.identifier, declThisMode, instTy->paramTys, instTy->retTy};
         found = methodSigs.find(keyPair);
         if (found != methodSigs.cend()) {
             return found;
@@ -245,12 +245,12 @@ std::vector<Ptr<Decl>> MergeFuncTargetsInUpperBounds(TypeManager& tyMgr, const M
             }
             const auto found = FoundSameSignatureMember(tyMgr, *decl, thisMode, *funcTy, methodSigs);
             if (found == methodSigs.cend()) {
-                methodSigs.emplace(FuncSig{decl->identifier, thisMode, funcTy->paramTys}, StaticCast<FuncDecl>(decl));
+                methodSigs.emplace(FuncSig{decl->identifier, thisMode, funcTy->paramTys, funcTy->retTy}, StaticCast<FuncDecl>(decl));
             } else if (IsCloserToImpl(*found->second, *decl)) {
                 // If the decl is generic, the paramsTys in the map key should also be updated,
                 // so, just erase found result and emplace new result here.
                 methodSigs.erase(found);
-                methodSigs.emplace(FuncSig{decl->identifier, thisMode, funcTy->paramTys}, StaticCast<FuncDecl>(decl));
+                methodSigs.emplace(FuncSig{decl->identifier, thisMode, funcTy->paramTys, funcTy->retTy}, StaticCast<FuncDecl>(decl));
             }
         }
     }
@@ -290,12 +290,12 @@ std::vector<Ptr<Decl>> MergeFuncTargetsInSum(TypeManager& tyMgr, const MemberAcc
             }
             auto found = FoundSameSignatureMember(tyMgr, *decl, thisMode, *funcTy, methodSigs);
             if (found == methodSigs.cend()) {
-                methodSigs.emplace(FuncSig{decl->identifier, thisMode, funcTy->paramTys}, StaticCast<FuncDecl>(decl));
+                methodSigs.emplace(FuncSig{decl->identifier, thisMode, funcTy->paramTys, funcTy->retTy}, StaticCast<FuncDecl>(decl));
             } else if (IsCloserToImpl(*found->second, *decl)) {
                 // If the decl is generic, the paramsTys in the map key should also be updated,
                 // so, just erase found result and emplace new result here.
                 methodSigs.erase(found);
-                methodSigs.emplace(FuncSig{decl->identifier, thisMode, funcTy->paramTys}, StaticCast<FuncDecl>(decl));
+                methodSigs.emplace(FuncSig{decl->identifier, thisMode, funcTy->paramTys, funcTy->retTy}, StaticCast<FuncDecl>(decl));
             }
         }
     }

@@ -48,6 +48,7 @@ struct FuncSig {
     std::string identifier;
     std::optional<ModalInfo> thisMode;
     std::vector<AST::ModalTy> paramTys;
+    AST::ModalTy retTy;
 };
 struct FuncSigCmp {
     bool operator()(const FuncSig& lhs, const FuncSig& rhs) const;

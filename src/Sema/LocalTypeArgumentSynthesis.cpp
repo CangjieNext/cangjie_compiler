@@ -246,6 +246,13 @@ bool LocalTypeArgumentSynthesis::UnifyOne(const Tracked<ModalTy>& argTTy, const 
         !tyMgr.ImplementsCopyInterface(argTTy.ty.Ty()) && !paramTTy.ty->IsPlaceholder()) {
         return false;
     }
+    // Copy fastpath, mirroring the one in IsSubtype: a value that implements Copy satisfies
+    // the Copyable interface constraint without going through Promote-based nominal unification
+    // (Promote's super-type walk does not cover compiler-provided interface implementations).
+    if (paramTy.IsInterface() && tyMgr.IsCopyInterfaceTy(ModalTy{&paramTy}.Ty()) &&
+        tyMgr.ImplementsCopyInterface(argTTy.ty.Ty())) {
+        return true;
+    }
     // Handle the base case.
     if (cms.size() != 1) {
         return false;

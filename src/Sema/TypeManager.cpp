@@ -1213,11 +1213,25 @@ bool TypeManager::ImplementsCopyInterface(DataTy ty)
     }
     if (auto d = DynamicCast<PrimitiveTy>(ty)) {
         switch (d->kind) {
-            case TypeKind::TYPE_FLOAT16:
-            case TypeKind::TYPE_RUNE:
-            case TypeKind::TYPE_NOTHING:
-            case TypeKind::TYPE_IDEAL_FLOAT:
+            case TypeKind::TYPE_UNIT:
+            case TypeKind::TYPE_INT8:
+            case TypeKind::TYPE_INT16:
+            case TypeKind::TYPE_INT32:
+            case TypeKind::TYPE_INT64:
+            case TypeKind::TYPE_INT_NATIVE:
             case TypeKind::TYPE_IDEAL_INT:
+            case TypeKind::TYPE_UINT8:
+            case TypeKind::TYPE_UINT16:
+            case TypeKind::TYPE_UINT32:
+            case TypeKind::TYPE_UINT64:
+            case TypeKind::TYPE_UINT_NATIVE:
+            case TypeKind::TYPE_FLOAT16:
+            case TypeKind::TYPE_FLOAT32:
+            case TypeKind::TYPE_FLOAT64:
+            case TypeKind::TYPE_IDEAL_FLOAT:
+            case TypeKind::TYPE_RUNE:
+            case TypeKind::TYPE_BOOLEAN:
+            case TypeKind::TYPE_NOTHING:
             case TypeKind::TYPE_INVALID:
                 return true;
             default:
