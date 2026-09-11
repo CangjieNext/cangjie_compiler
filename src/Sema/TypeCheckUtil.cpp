@@ -61,6 +61,19 @@ bool FuncSigCmp::operator()(const FuncSig& lhs, const FuncSig& rhs) const
         if (CompTyByNamesModal(lhs.paramTys[i], rhs.paramTys[i])) {
             return true;
         }
+        if (CompTyByNamesModal(rhs.paramTys[i], lhs.paramTys[i])) {
+            return false;
+        }
+    }
+    // Same name/this-mode/params: distinguish by return type, so members with the same
+    // parameter signature but different results both stay in the sum candidates.
+    if (lhs.retTy && rhs.retTy) {
+        if (CompTyByNamesModal(lhs.retTy, rhs.retTy)) {
+            return true;
+        }
+        if (CompTyByNamesModal(rhs.retTy, lhs.retTy)) {
+            return false;
+        }
     }
     return false;
 }
