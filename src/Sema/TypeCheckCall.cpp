@@ -960,6 +960,79 @@ bool TypeChecker::TypeCheckerImpl::CompareFuncCandidates(
         CompareThisParamTy(typeManager, i.fd, j.fd, ce, target) != OverloadCmp::WORSE;
 }
 
+/// Receiver modal is IDEAL (pending, e.g. an unannotated lambda parameter kept as a placeholder):
+/// every this-mode unifies, so all modal overloads stay legal and resolution becomes ambiguous.
+/// Prefer the @~local (NOT) this-param candidate, mirroring the "prefer @~local for compatibility"
+/// rule used for ctor calls when no mode is determined.
+void FilterIdealReceiverCandidates(
+    TypeManager& typeManager, const std::vector<OwnedPtr<FunctionMatchingUnit>>& candidates,
+    std::vector<bool>& targetMark)
+{
+    bool hasNotMode = false;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (!targetMark[i] || !typeManager.HasThisParam(candidates[i]->fd)) {
+            continue;
+        }
+        if (typeManager.GetThisParamTy(candidates[i]->fd).Mode().local == Mode::NOT) {
+            hasNotMode = true;
+            break;
+        }
+    }
+    if (hasNotMode) {
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            if (!targetMark[i] || !typeManager.HasThisParam(candidates[i]->fd)) {
+                continue;
+            }
+            if (typeManager.GetThisParamTy(candidates[i]->fd).Mode().local != Mode::NOT) {
+                targetMark[i] = false;
+            }
+        }
+    }
+}
+
+/// Result of classifying this-param candidates by modal relation to the receiver.
+struct ThisParamModalClassification {
+    bool hasExact{false};
+    bool hasSubmode{false};
+    bool hasThisParam{false};
+};
+
+/// Scan candidates and classify their this-param modal relation to `argMode`.
+ThisParamModalClassification ClassifyThisParamModals(TypeManager& typeManager, const ModalInfo& argMode,
+    const std::vector<OwnedPtr<FunctionMatchingUnit>>& candidates, const std::vector<bool>& targetMark)
+{
+    ThisParamModalClassification result;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (!targetMark[i] || !typeManager.HasThisParam(candidates[i]->fd)) {
+            continue;
+        }
+        result.hasThisParam = true;
+        auto paramMode = typeManager.GetThisParamTy(candidates[i]->fd).Mode();
+        if (argMode == paramMode) {
+            result.hasExact = true;
+        }
+        if (argMode.IsSubModal(paramMode)) {
+            result.hasSubmode = true;
+        }
+    }
+    return result;
+}
+
+/// Drop candidates whose this-param mode does not match according to hasExact/hasSubmode.
+void FilterNonMatchingThisParamCandidates(TypeManager& typeManager, const ModalInfo& argMode,
+    const std::vector<OwnedPtr<FunctionMatchingUnit>>& candidates, std::vector<bool>& targetMark, bool hasExact)
+{
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (!targetMark[i] || !typeManager.HasThisParam(candidates[i]->fd)) {
+            continue;
+        }
+        auto paramMode = typeManager.GetThisParamTy(candidates[i]->fd).Mode();
+        if (hasExact ? argMode != paramMode : !argMode.IsSubModal(paramMode)) {
+            targetMark[i] = false;
+        }
+    }
+}
+
 /// For non-ctor call, do these in such order.
 /// 1) keep only exact this arg mode to this param.
 /// 2) if candidates still non-empty, keep this arg mode that is submode of this param.
@@ -975,30 +1048,16 @@ void TypeChecker::TypeCheckerImpl::FilterBetterThisModeNonCtorCall(const ASTCont
     auto thisArgTy = GetReceiverTy(ctx, *baseFunc);
     auto argMode = thisArgTy.Mode();
 
-    // Classify this-param candidates by their modal relation to the receiver.
-    bool hasExact{false};
-    bool hasSubmode{false};
-    bool hasThisParam{false};
-    for (size_t i = 0; i < candidates.size(); ++i) {
-        if (!targetMark[i] || !typeManager.HasThisParam(candidates[i]->fd)) {
-            continue;
-        }
-        hasThisParam = true;
-        auto paramMode = typeManager.GetThisParamTy(candidates[i]->fd).Mode();
-        if (argMode == paramMode) {
-            hasExact = true;
-        }
-        if (argMode.IsSubModal(paramMode)) {
-            hasSubmode = true;
-        }
-    }
-    // not instance method call, return
-    if (!hasThisParam) {
+    auto modalClass = ClassifyThisParamModals(typeManager, argMode, candidates, targetMark);
+    if (!modalClass.hasThisParam) {
         return;
     }
-    if (!hasExact && !hasSubmode) {
-        // only consider copy type cast when even sub modes do not match any overload, keep all in this case.
-        // otherwise go through normal filter by this mode
+    if (argMode.local == Mode::IDEAL) {
+        FilterIdealReceiverCandidates(typeManager, candidates, targetMark);
+        return;
+    }
+    if (!modalClass.hasExact && !modalClass.hasSubmode) {
+        // only consider copy type cast when even sub modes do not match any overload, keep all.
         if (typeManager.ImplementsCopyInterface(thisArgTy.Ty())) {
             return;
         }
@@ -1007,16 +1066,7 @@ void TypeChecker::TypeCheckerImpl::FilterBetterThisModeNonCtorCall(const ASTCont
         }
         return;
     }
-
-    for (size_t i = 0; i < candidates.size(); ++i) {
-        if (!targetMark[i] || !typeManager.HasThisParam(candidates[i]->fd)) {
-            continue;
-        }
-        auto paramMode = typeManager.GetThisParamTy(candidates[i]->fd).Mode();
-        if (hasExact ? argMode != paramMode : !argMode.IsSubModal(paramMode)) {
-            targetMark[i] = false;
-        }
-    }
+    FilterNonMatchingThisParamCandidates(typeManager, argMode, candidates, targetMark, modalClass.hasExact);
 }
 
 std::vector<size_t> TypeChecker::TypeCheckerImpl::ResolveOverload(const ASTContext& ctx,
