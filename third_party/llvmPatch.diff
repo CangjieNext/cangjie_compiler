@@ -3749,7 +3749,7 @@ index ad80d4344..84f875406 100644
  
    // This is used to:
 diff --git a/lld/MachO/Config.h b/lld/MachO/Config.h
-index c7e4b4f96..94440801c 100644
+index c7e4b4f96..3715b4477 100644
 --- a/lld/MachO/Config.h
 +++ b/lld/MachO/Config.h
 @@ -131,6 +131,7 @@ struct Configuration {
@@ -3764,7 +3764,7 @@ index c7e4b4f96..94440801c 100644
    llvm::StringRef thinLTOJobs;
    llvm::StringRef umbrella;
    uint32_t ltoo = 2;
-+  bool ltoEmitObjOnly = false;
++  bool staticlib = false;
    llvm::CachePruningPolicy thinLTOCachePolicy;
    llvm::StringRef thinLTOCacheDir;
    bool deadStripDylibs = false;
@@ -3779,7 +3779,7 @@ index c7e4b4f96..94440801c 100644
    // so use a vector instead of a map.
    std::vector<SectionAlign> sectionAlignments;
 diff --git a/lld/MachO/Driver.cpp b/lld/MachO/Driver.cpp
-index ce2d55bef..818d715f0 100644
+index ce2d55bef..841c0fd56 100644
 --- a/lld/MachO/Driver.cpp
 +++ b/lld/MachO/Driver.cpp
 @@ -247,6 +247,70 @@ static llvm::CachePruningPolicy getLTOCachePolicy(InputArgList &args) {
@@ -3857,7 +3857,7 @@ index ce2d55bef..818d715f0 100644
      config->umbrella = arg->getValue();
    }
    config->ltoObjPath = args.getLastArgValue(OPT_object_path_lto);
-+  config->ltoEmitObjOnly = args.hasArg(OPT_lto_emit_obj_only);
++  config->staticlib = args.hasArg(OPT_staticlib);
    config->ltoo = args::getInteger(args, OPT_lto_O, 2);
    if (config->ltoo > 3)
      error("--lto-O: invalid optimization level: " + Twine(config->ltoo));
@@ -3892,7 +3892,7 @@ index ce2d55bef..818d715f0 100644
        parseClangOption(arg->getValue(), arg->getSpelling());
  
      compileBitcodeFiles();
-+    if (config->ltoEmitObjOnly)
++    if (config->staticlib)
 +      return !errorCount();
      replaceCommonSymbols();
  
@@ -3981,7 +3981,7 @@ index 87034d41e..65aaf2e71 100644
    }
  }
 diff --git a/lld/MachO/LTO.cpp b/lld/MachO/LTO.cpp
-index 0b76216d2..5b57f7d42 100644
+index 0b76216d2..7df568fde 100644
 --- a/lld/MachO/LTO.cpp
 +++ b/lld/MachO/LTO.cpp
 @@ -31,6 +31,30 @@ using namespace llvm;
@@ -4015,15 +4015,25 @@ index 0b76216d2..5b57f7d42 100644
  static lto::Config createConfig() {
    lto::Config c;
    c.Options = initTargetOptionsFromCodeGenFlags();
-@@ -46,6 +70,7 @@ static lto::Config createConfig() {
+@@ -46,6 +70,17 @@ static lto::Config createConfig() {
    c.TimeTraceGranularity = config->timeTraceGranularity;
    c.OptLevel = config->ltoo;
    c.CGOptLevel = args::getCGOptLevel(config->ltoo);
 +  c.OpaquePointers =false;
++  // Cangjie: enable package-visibility lowering when the package-visibility
++  // path engaged: --hide-all-visible-pkgs forces it on, otherwise at least one
++  // bitcode module matched a listed package (hasMatchedVisiblePkg). Without it,
++  // HiddenGUIDs stays empty and ordinary LTO links (iOS executables, dylibs,
++  // archives without --visible-pkgs) hide nothing. Which symbols get hidden is
++  // decided separately by the ExportDynamic resolution in BitcodeCompiler::add
++  // (visible-package symbols get ExportDynamic=true and never enter
++  // HiddenGUIDs).
++  c.EnablePackageVisibility =
++      config->hideAllVisiblePkgs || config->hasMatchedVisiblePkg;
    if (config->saveTemps)
      checkError(c.addSaveTemps(config->outputFile.str() + ".",
                                /*UseInputModulePath=*/true));
-@@ -62,10 +87,12 @@ void BitcodeCompiler::add(BitcodeFile &f) {
+@@ -62,10 +97,12 @@ void BitcodeCompiler::add(BitcodeFile &f) {
    ArrayRef<lto::InputFile::Symbol> objSyms = f.obj->symbols();
    std::vector<lto::SymbolResolution> resols;
    resols.reserve(objSyms.size());
@@ -4031,14 +4041,31 @@ index 0b76216d2..5b57f7d42 100644
  
    // Provide a resolution to the LTO API for each symbol.
 -  bool exportDynamic =
+-      config->outputType != MH_EXECUTE || config->exportDynamic;
 +  bool defaultExportDynamic =
-       config->outputType != MH_EXECUTE || config->exportDynamic;
++      config->outputType != MH_EXECUTE || config->exportDynamic || config->staticlib;
 +  bool exportDynamic = defaultExportDynamic && exportForPkg;
    auto symIt = f.symbols.begin();
    for (const lto::InputFile::Symbol &objSym : objSyms) {
      resols.emplace_back();
+@@ -80,8 +117,13 @@ void BitcodeCompiler::add(BitcodeFile &f) {
+     r.Prevailing = !objSym.isUndefined() && sym->getFile() == &f;
+ 
+     if (const auto *defined = dyn_cast<Defined>(sym)) {
+-      r.ExportDynamic =
+-          defined->isExternal() && !defined->privateExtern && exportDynamic;
++      // Only the file that actually defines this symbol may mark it export
++      // dynamic. The merged lld Symbol below can be defined by a different
++      // input file (e.g. lib1 referencing lib2's function); applying this
++      // file's export policy to such a reference would un-hide a symbol whose
++      // defining package is not visible (--visible-pkgs).
++      r.ExportDynamic = !objSym.isUndefined() && defined->isExternal() &&
++                        !defined->privateExtern && exportDynamic;
+       r.FinalDefinitionInLinkageUnit =
+           !defined->isExternalWeakDef() && !defined->interposable;
+     } else if (const auto *common = dyn_cast<CommonSymbol>(sym)) {
 diff --git a/lld/MachO/Options.td b/lld/MachO/Options.td
-index 064862fb1..c995742b8 100644
+index 064862fb1..6e9327381 100644
 --- a/lld/MachO/Options.td
 +++ b/lld/MachO/Options.td
 @@ -92,6 +92,10 @@ def no_call_graph_profile_sort : Flag<["--"], "no-call-graph-profile-sort">,
@@ -4052,16 +4079,16 @@ index 064862fb1..c995742b8 100644
  
  // This is a complete Options.td compiled from Apple's ld(1) manpage
  // dated 2018-03-07 and cross checked with ld64 source code in repo
-@@ -945,6 +949,9 @@ def object_path_lto : Separate<["-"], "object_path_lto">,
-     MetaVarName<"<path>">,
-     HelpText<"Retain any temporary mach-o file in <path> that would otherwise be deleted during LTO">,
-     Group<grp_rare>;
-+def lto_emit_obj_only : Flag<["-"], "lto-emit-obj-only">,
-+    HelpText<"Stop after emitting LTO native object files">,
-+    Group<grp_rare>;
- def cache_path_lto : Separate<["-"], "cache_path_lto">,
-     MetaVarName<"<path>">,
-     HelpText<"Use <path> as a directory for the incremental LTO cache">,
+@@ -118,6 +122,9 @@ def r : Flag<["-"], "r">,
+     HelpText<"Merge multiple object files into one, retaining relocations">,
+     Flags<[HelpHidden]>,
+     Group<grp_kind>;
++def staticlib : Flag<["-"], "staticlib">,
++    HelpText<"Produce a static library">,
++    Group<grp_kind>;
+ def dylinker : Flag<["-"], "dylinker">,
+     HelpText<"Produce a dylinker only used when building dyld">,
+     Flags<[HelpHidden]>,
 diff --git a/lld/MachO/OutputSegment.cpp b/lld/MachO/OutputSegment.cpp
 index da1394c08..f2949e7f3 100644
 --- a/lld/MachO/OutputSegment.cpp
@@ -33293,7 +33320,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..0837297e7 100644
+index b391fe1ea..431647150 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -33349,7 +33376,7 @@ index b391fe1ea..0837297e7 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.3.0-alpha.03";
++    g_version_str += "\n  cangjie 1.3.0-alpha.04";
    }
  
    return g_version_str.c_str();
@@ -37602,7 +37629,7 @@ index 8cf31c08d..b6df3bdc7 100644
  void initializeTwoAddressInstructionPassPass(PassRegistry&);
  void initializeTypeBasedAAWrapperPassPass(PassRegistry&);
 diff --git a/llvm/include/llvm/LTO/Config.h b/llvm/include/llvm/LTO/Config.h
-index b2ed8e60b..8d7b124c0 100644
+index b2ed8e60b..3a50e061b 100644
 --- a/llvm/include/llvm/LTO/Config.h
 +++ b/llvm/include/llvm/LTO/Config.h
 @@ -171,7 +171,7 @@ struct Config {
@@ -37614,6 +37641,24 @@ index b2ed8e60b..8d7b124c0 100644
    DiagnosticHandlerFunction DiagHandler;
  
    /// Add FSAFDO discriminators.
+@@ -252,6 +252,17 @@ struct Config {
+       const DenseSet<GlobalValue::GUID> &GUIDPreservedSymbols)>;
+   CombinedIndexHookFn CombinedIndexHook;
+ 
++  /// Cangjie: symbols (by GUID) hidden in the thin backend output, mapped to
++  /// N_PEXT (private extern) on Mach-O, to implement package-level symbol
++  /// visibility. Only consulted by the thin backend.
++  DenseSet<GlobalValue::GUID> HiddenGUIDs;
++
++  /// Cangjie: master gate for package-visibility lowering. Defaults to false.
++  /// When false, HiddenGUIDs is never populated, so non-visible-package symbols
++  /// are NOT lowered to N_PEXT -- this keeps LTO links that are not static
++  /// libraries (e.g. iOS executables) from hiding main/cross-package symbols.
++  bool EnablePackageVisibility = false;
++
+   /// This is a convenience function that configures this Config object to write
+   /// temporary files named after the given OutputFileName for each of the LTO
+   /// phases to disk. A client can use this function to implement -save-temps.
 diff --git a/llvm/include/llvm/LTO/LTO.h b/llvm/include/llvm/LTO/LTO.h
 index ea52226dc..abedee3be 100644
 --- a/llvm/include/llvm/LTO/LTO.h
@@ -37902,10 +37947,10 @@ index 52f0bc934..fe5c77c6b 100644
  #endif
 diff --git a/llvm/include/llvm/Transforms/IPO/CJPartialEscapeAnalysis.h b/llvm/include/llvm/Transforms/IPO/CJPartialEscapeAnalysis.h
 new file mode 100644
-index 000000000..1ec3ef1f2
+index 000000000..1420a390f
 --- /dev/null
 +++ b/llvm/include/llvm/Transforms/IPO/CJPartialEscapeAnalysis.h
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,93 @@
 +//===- CJPartialEscapeAnalysis.h - escape analysis for Cangjie ------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -37926,6 +37971,10 @@ index 000000000..1ec3ef1f2
 +#ifndef LLVM_TRANSFORMS_IPO_CJPartialEscapeAnalysis_H
 +#define LLVM_TRANSFORMS_IPO_CJPartialEscapeAnalysis_H
 +
++#include "llvm/ADT/DenseMap.h"
++#include "llvm/ADT/DenseSet.h"
++#include "llvm/ADT/MapVector.h"
++#include "llvm/ADT/SmallVector.h"
 +#include "llvm/Analysis/CGSCCPassManager.h"
 +#include "llvm/Analysis/LoopInfo.h"
 +#include "llvm/IR/PassManager.h"
@@ -37934,7 +37983,7 @@ index 000000000..1ec3ef1f2
 +class MemPtr;
 +
 +namespace llvm {
-+enum EscapeState : unsigned { NotEscape, InfoEscaped, TransEscaped, Escaped };
++enum EscapeState : unsigned { NotEscape, InfoEscaped, Escaped };
 +struct CJPartialEscapeAnalysisPass
 +    : public PassInfoMixin<CJPartialEscapeAnalysisPass> {
 +  PreservedAnalyses run(LazyCallGraph::SCC &C, CGSCCAnalysisManager &AM,
@@ -37947,10 +37996,39 @@ index 000000000..1ec3ef1f2
 +  void setInfoEscaped(GCPtr *, BasicBlock *);
 +  bool isEscapedValue(Value *V);
 +
++  // Assign a stable unique id to each GCPtr/MemPtr
++  // provides a compact node identity for SpreadVisited dedup keys
++  unsigned getNextId() { return NextId++; }
++
++  // Record that P is fully escaped in BB
++  void setEscaped(GCPtr *P, BasicBlock *BB) {
++    if (!EscapeBBInfo[BB].count(P) || EscapeBBInfo[BB][P] < Escaped) {
++      EscapeBBInfo[BB][P] = Escaped;
++    }
++  }
++
++  // Deduplicate spreadMemEscape work
++  // ensure the same propagation is done at most once
++  void resetSpreadVisited() { SpreadVisited.clear(); }
++  bool tryMarkSpreadVisited(GCPtr *P, unsigned ES, bool Direct,
++                            SmallVectorImpl<int> &Offsets);
++
 +  Function *ProcessedFunc = nullptr;
++  // Upper bound of object sizes seen among this analysis' GCNews. Offsets
++  // beyond it cannot be legitimate field offsets, so they are collapsed to
++  // the escape-all value by MemPtr::create / tryMarkSpreadVisited
++  unsigned MaxObjSize = 0;
++  // True once computeAllObjSizes() has finished. Before that MaxObjSize is
++  // still being accumulated during initialize and must not be used as an
++  // offset bound.
++  bool MaxObjSizeComputed = false;
 +  DenseMap<Value *, GCPtr *> AllPtrLocInfo;
 +  DenseMap<std::pair<Value *, int>, MemPtr *> AllMemLocInfo;
-+  DenseMap<BasicBlock *, DenseMap<GCPtr *, unsigned>> EscapeBBInfo;
++  DenseMap<BasicBlock *, MapVector<GCPtr *, unsigned>> EscapeBBInfo;
++
++private:
++  unsigned NextId = 0;
++  DenseSet<uint64_t> SpreadVisited;
 +};
 +
 +Type *getAllocaType(GlobalVariable *Klass, bool &HasRef, uint32_t &AS, bool &,
@@ -38583,10 +38661,10 @@ index 000000000..18bd5afdd
 +#endif // LLVM_TRANSFORMS_SCALAR_CJ_DEVIRTUAL_OPT_H
 diff --git a/llvm/include/llvm/Transforms/Scalar/CJFillMetadata.h b/llvm/include/llvm/Transforms/Scalar/CJFillMetadata.h
 new file mode 100644
-index 000000000..c11499277
+index 000000000..a4dad33f4
 --- /dev/null
 +++ b/llvm/include/llvm/Transforms/Scalar/CJFillMetadata.h
-@@ -0,0 +1,279 @@
+@@ -0,0 +1,290 @@
 +//===- CJFillMetadata.h - ---------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -38847,6 +38925,17 @@ index 000000000..c11499277
 +class Module;
 +
 +struct CJFillMetadata : public PassInfoMixin<CJFillMetadata> {
++  PreservedAnalyses run(Module &M, ModuleAnalysisManager &) const;
++};
++
++// CJDisableImportLibReflection strips import-lib reflection at LTO post-link
++// under --disable-reflection: clears the TF_REFLECTION flag on each
++// TypeInfo/TypeTemplate, rewrites oversized reflect structs to a small .dbg
++// global (enum keeps ctorInfo/modifier/ctorCnt, class keeps fieldNames), keeps
++// already-minimal/unsupported reflect operands unchanged, and erases the
++// now-unreferenced reflect globals.
++struct CJDisableImportLibReflection
++    : public PassInfoMixin<CJDisableImportLibReflection> {
 +  PreservedAnalyses run(Module &M, ModuleAnalysisManager &) const;
 +};
 +
@@ -48788,7 +48877,7 @@ index d46a0a23c..2d3908b11 100644
              !isa<GCRelocateInst>(Inst) && !isa<GCResultInst>(Inst)) {
            OptimizationRemarkMissed R("sdagisel", "FastISelFailure",
 diff --git a/llvm/lib/CodeGen/SelectionDAG/StatepointLowering.cpp b/llvm/lib/CodeGen/SelectionDAG/StatepointLowering.cpp
-index c5c093ae2..bca32dd82 100644
+index c5c093ae2..f8a984c8e 100644
 --- a/llvm/lib/CodeGen/SelectionDAG/StatepointLowering.cpp
 +++ b/llvm/lib/CodeGen/SelectionDAG/StatepointLowering.cpp
 @@ -22,6 +22,8 @@
@@ -49351,22 +49440,34 @@ index c5c093ae2..bca32dd82 100644
    SI.StatepointInstr = &I;
    SI.ID = I.getID();
  
-@@ -1117,13 +1304,32 @@ SelectionDAGBuilder::LowerStatepoint(const GCStatepointInst &I,
+@@ -1117,13 +1304,44 @@ SelectionDAGBuilder::LowerStatepoint(const GCStatepointInst &I,
    SI.StatepointFlags = I.getFlags();
    SI.NumPatchBytes = I.getNumPatchBytes();
    SI.EHPadBB = EHPadBB;
 +  const Triple &TT = DAG.getTarget().getTargetTriple();
++  Function *CalleeFunc = I.getActualCalledFunction();
 +  SI.IsTailCall =
 +      I.isTailCall() && I.getNumPatchBytes() == 0 &&
 +      (TT.isAArch64() || TT.isX86()) &&
 +      !needToDisableTailCall(I, DAG.getTargetLoweringInfo(),
 +                             I.isMustTailCall()) &&
-+      isInTailCallPosition(I, DAG.getTarget());
++      isInTailCallPosition(I, DAG.getTarget()) &&
++      // STATEPOINT_TAIL_CALL lowers an indirect call target to a register
++      // jump. If that target must live in a callee-saved register across an
++      // intervening call, the epilogue's callee-saved restore clobbers it
++      // before the tail jump. Direct (symbol) targets use pc-relative tail
++      // jumps and are unaffected, so only allow tail statepoints for direct
++      // callees until indirect targets are lowered to a caller-saved
++      // register after the epilogue.
++      CalleeFunc != nullptr &&
++      // C2N/N2C stubs create a full runtime frame, and the runtime
++      // unwinder/GC/EH still rely on the managed caller frame being present.
++      !CalleeFunc->isCangjieNativeStub(*I.getFunction());
++
++  SI.ActualCalledFunction = CalleeFunc;
  
--  SDValue ReturnValue = LowerAsSTATEPOINT(SI);
-+  SI.ActualCalledFunction = I.getActualCalledFunction();
- 
-+  SDValue ReturnValue = LowerAsSTATEPOINT(SI);
+   SDValue ReturnValue = LowerAsSTATEPOINT(SI);
+-
 +  if (CJPipeline) {
 +    // Inform the Frame Information that we have a stackmap in this function.
 +    // Otherwise, the optimizer will omit the frame poiner.
@@ -49387,7 +49488,7 @@ index c5c093ae2..bca32dd82 100644
      // The return value is not needed, just generate a poison value.
      // Note: This covers the void return case.
      setValue(&I, DAG.getIntPtrConstant(-1, getCurSDLoc()));
-@@ -1225,7 +1431,28 @@ void SelectionDAGBuilder::visitGCResult(const GCResultInst &CI) {
+@@ -1225,7 +1443,28 @@ void SelectionDAGBuilder::visitGCResult(const GCResultInst &CI) {
    setValue(&CI, CopyFromReg);
  }
  
@@ -49417,7 +49518,7 @@ index c5c093ae2..bca32dd82 100644
    const Value *Statepoint = Relocate.getStatepoint();
  #ifndef NDEBUG
    // Consistency check
-@@ -1237,15 +1464,23 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
+@@ -1237,15 +1476,23 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
    if (isa<UndefValue>(Statepoint))
      return;
  
@@ -49447,7 +49548,7 @@ index c5c093ae2..bca32dd82 100644
    auto &RelocationMap =
        FuncInfo.StatepointRelocationMaps[cast<GCStatepointInst>(Statepoint)];
    auto SlotIt = RelocationMap.find(&Relocate);
-@@ -1257,7 +1492,7 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
+@@ -1257,7 +1504,7 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
      assert(cast<GCStatepointInst>(Statepoint)->getParent() ==
                 Relocate.getParent() &&
             "Nonlocal gc.relocate mapped via SDValue");
@@ -49456,7 +49557,7 @@ index c5c093ae2..bca32dd82 100644
      assert(SDV.getNode() && "empty SDValue");
      setValue(&Relocate, SDV);
      return;
-@@ -1301,7 +1536,8 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
+@@ -1301,7 +1548,8 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
                                                             Relocate.getType());
  
      SDValue SpillLoad =
@@ -49466,7 +49567,7 @@ index c5c093ae2..bca32dd82 100644
      PendingLoads.push_back(SpillLoad.getValue(1));
  
      assert(SpillLoad.getNode());
-@@ -1310,8 +1546,7 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
+@@ -1310,8 +1558,7 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
    }
  
    assert(Record.type == RecordType::NoRelocate);
@@ -49476,7 +49577,7 @@ index c5c093ae2..bca32dd82 100644
    if (SD.isUndef() && SD.getValueType().getSizeInBits() <= 64) {
      // Lowering relocate(undef) as arbitrary constant. Current constant value
      // is chosen such that it's unlikely to be a valid pointer.
-@@ -1321,7 +1556,14 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
+@@ -1321,7 +1568,14 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
  
    // We didn't need to spill these special cases (constants and allocas).
    // See the handling in spillIncomingValueForStatepoint for detail.
@@ -54013,7 +54114,7 @@ index e3ea256af..0d48707cc 100644
      Check(Call.arg_size() == 3, "wrong number of arguments", Call);
  
 diff --git a/llvm/lib/LTO/LTO.cpp b/llvm/lib/LTO/LTO.cpp
-index cc7be24c1..8b8e2b289 100644
+index cc7be24c1..9488ad2c7 100644
 --- a/llvm/lib/LTO/LTO.cpp
 +++ b/llvm/lib/LTO/LTO.cpp
 @@ -69,6 +69,14 @@ static cl::opt<bool>
@@ -54094,7 +54195,18 @@ index cc7be24c1..8b8e2b289 100644
  Error LTO::run(AddStreamFn AddStream, FileCache Cache) {
    // Compute "dead" symbols, we don't want to import/export these!
    DenseSet<GlobalValue::GUID> GUIDPreservedSymbols;
-@@ -1035,6 +1085,10 @@ Error LTO::run(AddStreamFn AddStream, FileCache Cache) {
+@@ -1016,6 +1066,10 @@ Error LTO::run(AddStreamFn AddStream, FileCache Cache) {
+     if (Res.second.ExportDynamic)
+       DynamicExportSymbols.insert(GUID);
+ 
++    // Cangjie: prevailing symbols not marked ExportDynamic are from
++    // non-visible packages and are hidden in the thin backend output (see
++    // runThinLTO for the HiddenGUIDs population).
++
+     GUIDPrevailingResolutions[GUID] =
+         Res.second.Prevailing ? PrevailingType::Yes : PrevailingType::No;
+   }
+@@ -1035,6 +1089,10 @@ Error LTO::run(AddStreamFn AddStream, FileCache Cache) {
      return StatsFileOrErr.takeError();
    std::unique_ptr<ToolOutputFile> StatsFile = std::move(StatsFileOrErr.get());
  
@@ -54105,8 +54217,33 @@ index cc7be24c1..8b8e2b289 100644
    Error Result = runRegularLTO(AddStream);
    if (!Result)
      Result = runThinLTO(AddStream, Cache, GUIDPreservedSymbols);
+@@ -1444,6 +1502,24 @@ Error LTO::runThinLTO(AddStreamFn AddStream, FileCache Cache,
+   if (ThinLTO.ModuleMap.empty())
+     return Error::success();
+ 
++  // Cangjie: on the ThinLTO path, populate HiddenGUIDs with the prevailing
++  // symbols that are not marked ExportDynamic (non-visible packages). Visible
++  // packages are excluded because BitcodeCompiler::add sets ExportDynamic=true
++  // for them, so they stay external. Gated on EnablePackageVisibility, which
++  // lld sets only when --visible-pkgs / --hide-all-visible-pkgs actually
++  // matched a bitcode module; ordinary LTO links keep it false.
++  if (Conf.EnablePackageVisibility) {
++    for (auto &Res : GlobalResolutions) {
++      if (Res.second.IRName.empty())
++        continue;
++      if (Res.second.Prevailing && !Res.second.ExportDynamic) {
++        GlobalValue::GUID GUID = GlobalValue::getGUID(
++            GlobalValue::dropLLVMManglingEscape(Res.second.IRName));
++        Conf.HiddenGUIDs.insert(GUID);
++      }
++    }
++  }
++
+   if (ThinLTO.ModulesToCompile && ThinLTO.ModulesToCompile->empty()) {
+     llvm::errs() << "warning: [ThinLTO] No module compiled\n";
+     return Error::success();
 diff --git a/llvm/lib/LTO/LTOBackend.cpp b/llvm/lib/LTO/LTOBackend.cpp
-index 2e32469b4..c33abc50e 100644
+index 2e32469b4..e0d0ee00f 100644
 --- a/llvm/lib/LTO/LTOBackend.cpp
 +++ b/llvm/lib/LTO/LTOBackend.cpp
 @@ -20,6 +20,7 @@
@@ -54257,7 +54394,7 @@ index 2e32469b4..c33abc50e 100644
    } else {
      splitCodeGen(C, TM.get(), AddStream, ParallelCodeGenParallelismLevel, Mod,
                   CombinedIndex);
-@@ -564,7 +642,7 @@ Error lto::thinBackend(const Config &Conf, unsigned Task, AddStreamFn AddStream,
+@@ -564,13 +642,21 @@ Error lto::thinBackend(const Config &Conf, unsigned Task, AddStreamFn AddStream,
    updatePublicTypeTestCalls(Mod, CombinedIndex.withWholeProgramVisibility());
  
    if (Conf.CodeGenOnly) {
@@ -54266,15 +54403,74 @@ index 2e32469b4..c33abc50e 100644
      return finalizeOptimizationRemarks(std::move(DiagnosticOutputFile));
    }
  
-@@ -579,7 +657,7 @@ Error lto::thinBackend(const Config &Conf, unsigned Task, AddStreamFn AddStream,
+   if (Conf.PreOptModuleHook && !Conf.PreOptModuleHook(Task, Mod))
+     return finalizeOptimizationRemarks(std::move(DiagnosticOutputFile));
+ 
++  // Cangjie static-lib: the package-visibility semantics (external → N_PEXT,
++  // local 't' unchanged, llvm.used unchanged) is implemented by the hide-loop
++  // below, which sets HiddenVisibility on symbols listed in HiddenGUIDs.
++  // Keeping External linkage + HiddenVisibility yields N_PEXT (private-extern):
++  // linkable across partitions and archive members, but invisible outside the
++  // library. llvm.used-pinned symbols are exempted by the hide-loop's UsedGVs
++  // set (see below); local symbols are guarded by !isLocalLinkage() so they
++  // stay 't'.
+   auto OptimizeAndCodegen =
+       [&](Module &Mod, TargetMachine *TM,
+           std::unique_ptr<ToolOutputFile> DiagnosticOutputFile) {
+@@ -578,8 +664,7 @@ Error lto::thinBackend(const Config &Conf, unsigned Task, AddStreamFn AddStream,
+                  /*ExportSummary=*/nullptr, /*ImportSummary=*/&CombinedIndex,
                   CmdArgs))
            return finalizeOptimizationRemarks(std::move(DiagnosticOutputFile));
- 
+-
 -        codegen(Conf, TM, AddStream, Task, Mod, CombinedIndex);
 +        ::codegen(Conf, TM, AddStream, Task, Mod, CombinedIndex);
          return finalizeOptimizationRemarks(std::move(DiagnosticOutputFile));
        };
  
+@@ -604,6 +689,43 @@ Error lto::thinBackend(const Config &Conf, unsigned Task, AddStreamFn AddStream,
+   if (!DefinedGlobals.empty())
+     thinLTOInternalizeModule(Mod, DefinedGlobals);
+ 
++  // Cangjie static-lib: hide non-visible-package symbols. This hide-loop is the
++  // visibility rewriter for package-visibility semantics:
++  //   - hidden prevailing symbols (in HiddenGUIDs) → HiddenVisibility, which
++  //     on Mach-O yields N_PEXT (private-extern): linkable across archive
++  //     members and partitions, invisible outside the library;
++  //   - llvm.used/llvm.compiler.used-pinned symbols are exempt (UsedGVs) so
++  //     they keep their original visibility (e.g. package init entries
++  //     __CJ_..._init must remain externally callable);
++  //   - already-local symbols (InternalLinkage / PrivateLinkage, i.e. Mach-O
++  //     't'/'non-external') are guarded by !isLocalLinkage(getLinkage()) so
++  //     they are never touched -- 't' stays 't'.
++  // Note: this runs BEFORE opt(), so collectUsedGlobalVariables reads the
++  // intact @llvm.used array; GlobalDCE inside opt() still honors @llvm.used as
++  // a strong IR-level root, so pinned symbols survive.
++  // Note: the standard library participates in LTO only when the archive is a
++  // final product (--lto-keep-pkg-visibility delegates interop/final exports to
++  // explicitly listed packages), so std.core is hidden on the same terms as
++  // any other non-visible package.
++  if (!Conf.HiddenGUIDs.empty()) {
++    SmallVector<GlobalValue *, 8> UsedVec;
++    collectUsedGlobalVariables(Mod, UsedVec, /*CompilerUsed=*/false);
++    collectUsedGlobalVariables(Mod, UsedVec, /*CompilerUsed=*/true);
++    SmallPtrSet<GlobalValue *, 8> UsedGVs(UsedVec.begin(), UsedVec.end());
++    // Symbols that must stay visible for runtime use are pinned in
++    // @llvm.used / @llvm.compiler.used; symbols already at local linkage
++    // would gain nothing from HiddenVisibility (they're already non-exported).
++    auto MaybeHideGlobal = [&](GlobalValue &GV) {
++      if (UsedGVs.count(&GV) || GlobalValue::isLocalLinkage(GV.getLinkage()))
++        return;
++      if (Conf.HiddenGUIDs.count(GlobalValue::getGUID(
++              GlobalValue::dropLLVMManglingEscape(GV.getName()))))
++        GV.setVisibility(GlobalValue::HiddenVisibility);
++    };
++    for (GlobalValue &GV : Mod.global_values())
++      MaybeHideGlobal(GV);
++  }
++
+   if (Conf.PostInternalizeModuleHook &&
+       !Conf.PostInternalizeModuleHook(Task, Mod))
+     return finalizeOptimizationRemarks(std::move(DiagnosticOutputFile));
 diff --git a/llvm/lib/Linker/IRMover.cpp b/llvm/lib/Linker/IRMover.cpp
 index e31faf642..35fa8cc16 100644
 --- a/llvm/lib/Linker/IRMover.cpp
@@ -54796,7 +54992,7 @@ index 703969f8b..c2992aa79 100644
    Coroutines
    IPO
 diff --git a/llvm/lib/Passes/PassBuilder.cpp b/llvm/lib/Passes/PassBuilder.cpp
-index 42fde3752..f1dd8c90a 100644
+index 42fde3752..cc02c983e 100644
 --- a/llvm/lib/Passes/PassBuilder.cpp
 +++ b/llvm/lib/Passes/PassBuilder.cpp
 @@ -26,6 +26,7 @@
@@ -54895,7 +55091,7 @@ index 42fde3752..f1dd8c90a 100644
  #include "llvm/Transforms/Scalar/Reassociate.h"
  #include "llvm/Transforms/Scalar/Reg2Mem.h"
  #include "llvm/Transforms/Scalar/RewriteStatepointsForGC.h"
-@@ -251,14 +278,66 @@
+@@ -251,14 +278,70 @@
  
  using namespace llvm;
  
@@ -54948,6 +55144,10 @@ index 42fde3752..f1dd8c90a 100644
 +    EnableCJPtrAuthBackwardCFI("cj-ptrauth-backward-cfi",
 +                               cl::desc("Cangjie PtrAuth-based backward CFI"),
 +                               cl::NotHidden, cl::init(false));
++cl::opt<bool> DisableCJLTOReflection("cj-disable-lto-reflection", cl::Hidden,
++                                     cl::init(false),
++                                     cl::desc("Disable reflection metadata in"
++                                              " cangjie LTO pipelines"));
 +
  namespace llvm {
  cl::opt<bool> PrintPipelinePasses(
@@ -54962,7 +55162,7 @@ index 42fde3752..f1dd8c90a 100644
  } // namespace llvm
  
  namespace {
-@@ -1136,10 +1215,68 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
+@@ -1136,10 +1219,68 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
                                .Case("O3", OptimizationLevel::O3)
                                .Case("Os", OptimizationLevel::Os)
                                .Case("Oz", OptimizationLevel::Oz);
@@ -55031,7 +55231,7 @@ index 42fde3752..f1dd8c90a 100644
        return Error::success();
      }
  
-@@ -1152,7 +1289,7 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
+@@ -1152,7 +1293,7 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
          L.getSpeedupLevel() > 1 && L != OptimizationLevel::Oz;
  
      if (Matches[1] == "default") {
@@ -55040,7 +55240,7 @@ index 42fde3752..f1dd8c90a 100644
      } else if (Matches[1] == "thinlto-pre-link") {
        MPM.addPass(buildThinLTOPreLinkDefaultPipeline(L));
      } else if (Matches[1] == "thinlto") {
-@@ -1163,6 +1300,7 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
+@@ -1163,6 +1304,7 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
        assert(Matches[1] == "lto" && "Not one of the matched options!");
        MPM.addPass(buildLTODefaultPipeline(L, nullptr));
      }
@@ -55049,7 +55249,7 @@ index 42fde3752..f1dd8c90a 100644
    }
  
 diff --git a/llvm/lib/Passes/PassBuilderPipelines.cpp b/llvm/lib/Passes/PassBuilderPipelines.cpp
-index 945ef5123..5af3b6766 100644
+index 945ef5123..9f072f6bd 100644
 --- a/llvm/lib/Passes/PassBuilderPipelines.cpp
 +++ b/llvm/lib/Passes/PassBuilderPipelines.cpp
 @@ -17,6 +17,7 @@
@@ -55100,7 +55300,7 @@ index 945ef5123..5af3b6766 100644
  #include "llvm/Transforms/Scalar/InstSimplifyPass.h"
  #include "llvm/Transforms/Scalar/JumpThreading.h"
  #include "llvm/Transforms/Scalar/LICM.h"
-@@ -182,6 +195,15 @@ static cl::opt<bool> EnableMergeFunctions(
+@@ -182,6 +195,16 @@ static cl::opt<bool> EnableMergeFunctions(
      "enable-merge-functions", cl::init(false), cl::Hidden,
      cl::desc("Enable function merging as part of the optimization pipeline"));
  
@@ -55112,11 +55312,12 @@ index 945ef5123..5af3b6766 100644
 +extern cl::opt<int> CountedLoopTripWidth;
 +extern cl::opt<bool> CangjieLTOPreOpt;
 +extern cl::opt<bool> EnableCJPtrAuthBackwardCFI;
++extern cl::opt<bool> DisableCJLTOReflection;
 +
  PipelineTuningOptions::PipelineTuningOptions() {
    LoopInterleaving = true;
    LoopVectorization = true;
-@@ -223,6 +245,13 @@ extern cl::opt<bool> EnableMatrix;
+@@ -223,6 +246,13 @@ extern cl::opt<bool> EnableMatrix;
  
  extern cl::opt<bool> DisablePreInliner;
  extern cl::opt<int> PreInlineThreshold;
@@ -55130,7 +55331,7 @@ index 945ef5123..5af3b6766 100644
  } // namespace llvm
  
  void PassBuilder::invokePeepholeEPCallbacks(FunctionPassManager &FPM,
-@@ -242,6 +271,49 @@ static bool isLTOPreLink(ThinOrFullLTOPhase Phase) {
+@@ -242,6 +272,49 @@ static bool isLTOPreLink(ThinOrFullLTOPhase Phase) {
           Phase == ThinOrFullLTOPhase::FullLTOPreLink;
  }
  
@@ -55180,7 +55381,7 @@ index 945ef5123..5af3b6766 100644
  // TODO: Investigate the cost/benefit of tail call elimination on debugging.
  FunctionPassManager
  PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
-@@ -399,10 +471,19 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
+@@ -399,10 +472,19 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
  
    FunctionPassManager FPM;
  
@@ -55200,7 +55401,7 @@ index 945ef5123..5af3b6766 100644
    // Catch trivial redundancies
    FPM.addPass(EarlyCSEPass(true /* Enable mem-ssa. */));
    if (EnableKnowledgeRetention)
-@@ -429,6 +510,12 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
+@@ -429,6 +511,12 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
    FPM.addPass(JumpThreadingPass());
    FPM.addPass(CorrelatedValuePropagationPass());
  
@@ -55213,7 +55414,7 @@ index 945ef5123..5af3b6766 100644
    FPM.addPass(
        SimplifyCFGPass(SimplifyCFGOptions().convertSwitchRangeToICmp(true)));
    FPM.addPass(InstCombinePass());
-@@ -446,7 +533,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
+@@ -446,7 +534,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
        !Level.isOptimizingForSize())
      FPM.addPass(PGOMemOPSizeOpt());
  
@@ -55224,7 +55425,7 @@ index 945ef5123..5af3b6766 100644
    FPM.addPass(
        SimplifyCFGPass(SimplifyCFGOptions().convertSwitchRangeToICmp(true)));
  
-@@ -466,6 +555,16 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
+@@ -466,6 +556,16 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
    // `LoopInstSimplify`.
    LoopPassManager LPM1, LPM2;
  
@@ -55241,7 +55442,7 @@ index 945ef5123..5af3b6766 100644
    // Simplify the loop body. We do this initially to clean up after other loop
    // passes run, either when iterating on a loop or on inner loops with
    // implications on the outer loop.
-@@ -528,6 +627,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
+@@ -528,6 +628,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
    FPM.addPass(
        SimplifyCFGPass(SimplifyCFGOptions().convertSwitchRangeToICmp(true)));
    FPM.addPass(InstCombinePass());
@@ -55251,7 +55452,7 @@ index 945ef5123..5af3b6766 100644
    // The loop passes in LPM2 (LoopIdiomRecognizePass, IndVarSimplifyPass,
    // LoopDeletionPass and LoopFullUnrollPass) do not preserve MemorySSA.
    // *All* loop passes must preserve it, in order to be able to use it.
-@@ -581,6 +683,11 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
+@@ -581,6 +684,11 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
    // Specially optimize memory movement as it doesn't look like dataflow in SSA.
    FPM.addPass(MemCpyOptPass());
  
@@ -55263,7 +55464,7 @@ index 945ef5123..5af3b6766 100644
    FPM.addPass(DSEPass());
    FPM.addPass(createFunctionToLoopPassAdaptor(
        LICMPass(PTO.LicmMssaOptCap, PTO.LicmMssaNoAccForPromotionCap,
-@@ -728,10 +835,9 @@ PassBuilder::buildInlinerPipeline(OptimizationLevel Level,
+@@ -728,10 +836,9 @@ PassBuilder::buildInlinerPipeline(OptimizationLevel Level,
    if (PGOOpt)
      IP.EnableDeferral = EnablePGOInlineDeferral;
  
@@ -55277,7 +55478,7 @@ index 945ef5123..5af3b6766 100644
  
    // Require the GlobalsAA analysis for the module so we can query it within
    // the CGSCC pipeline.
-@@ -775,6 +881,20 @@ PassBuilder::buildInlinerPipeline(OptimizationLevel Level,
+@@ -775,6 +882,20 @@ PassBuilder::buildInlinerPipeline(OptimizationLevel Level,
    for (auto &C : CGSCCOptimizerLateEPCallbacks)
      C(MainCGPipeline, Level);
  
@@ -55298,7 +55499,7 @@ index 945ef5123..5af3b6766 100644
    // Lastly, add the core function simplification pipeline nested inside the
    // CGSCC walk.
    MainCGPipeline.addPass(createCGSCCToFunctionPassAdaptor(
-@@ -819,6 +939,22 @@ PassBuilder::buildModuleInlinerPipeline(OptimizationLevel Level,
+@@ -819,6 +940,22 @@ PassBuilder::buildModuleInlinerPipeline(OptimizationLevel Level,
  
    MPM.addPass(ModuleInlinerPass(IP, UseInlineAdvisor, Phase));
  
@@ -55321,7 +55522,7 @@ index 945ef5123..5af3b6766 100644
    MPM.addPass(createModuleToFunctionPassAdaptor(
        buildFunctionSimplificationPipeline(Level, Phase),
        PTO.EagerlyInvalidateAnalyses));
-@@ -874,12 +1010,21 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
+@@ -874,12 +1011,21 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
    // Create an early function pass manager to cleanup the output of the
    // frontend.
    FunctionPassManager EarlyFPM;
@@ -55343,7 +55544,7 @@ index 945ef5123..5af3b6766 100644
    if (Level == OptimizationLevel::O3)
      EarlyFPM.addPass(CallSiteSplittingPass());
  
-@@ -971,14 +1116,15 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
+@@ -971,14 +1117,15 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
                                                  PTO.EagerlyInvalidateAnalyses));
  
    // Add all the requested passes for instrumentation PGO, if requested.
@@ -55361,7 +55562,7 @@ index 945ef5123..5af3b6766 100644
    }
    if (PGOOpt && Phase != ThinOrFullLTOPhase::ThinLTOPostLink &&
        PGOOpt->CSAction == PGOOptions::CSIRInstr)
-@@ -1008,7 +1154,6 @@ void PassBuilder::addVectorPasses(OptimizationLevel Level,
+@@ -1008,7 +1155,6 @@ void PassBuilder::addVectorPasses(OptimizationLevel Level,
                                    FunctionPassManager &FPM, bool IsFullLTO) {
    FPM.addPass(LoopVectorizePass(
        LoopVectorizeOptions(!PTO.LoopInterleaving, !PTO.LoopVectorization)));
@@ -55369,7 +55570,7 @@ index 945ef5123..5af3b6766 100644
    if (IsFullLTO) {
      // The vectorizer may have significantly shortened a loop body; unroll
      // again. Unroll small loops to hide loop backedge latency and saturate any
-@@ -1154,8 +1299,9 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
+@@ -1154,8 +1300,9 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
    // may make globals referenced by available external functions dead and saves
    // running remaining passes on the eliminated functions. These should be
    // preserved during prelinking for link-time inlining decisions.
@@ -55380,7 +55581,7 @@ index 945ef5123..5af3b6766 100644
  
    if (EnableOrderFileInstrumentation)
      MPM.addPass(InstrOrderFilePass());
-@@ -1211,6 +1357,16 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
+@@ -1211,6 +1358,16 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
    for (auto &C : VectorizerStartEPCallbacks)
      C(OptimizePM, Level);
  
@@ -55397,7 +55598,7 @@ index 945ef5123..5af3b6766 100644
    LoopPassManager LPM;
    // First rotate loops that may have been un-rotated by prior passes.
    // Disable header duplication at -Oz.
-@@ -1235,6 +1391,14 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
+@@ -1235,6 +1392,14 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
  
    addVectorPasses(Level, OptimizePM, /* IsFullLTO */ false);
  
@@ -55412,7 +55613,7 @@ index 945ef5123..5af3b6766 100644
    // LoopSink pass sinks instructions hoisted by LICM, which serves as a
    // canonicalization pass that enables other optimizations. As a result,
    // LoopSink pass needs to be a very late IR pass to avoid undoing LICM
-@@ -1250,7 +1414,8 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
+@@ -1250,7 +1415,8 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
    OptimizePM.addPass(DivRemPairsPass());
  
    // Try to annotate calls that were created during optimization.
@@ -55422,7 +55623,7 @@ index 945ef5123..5af3b6766 100644
  
    // LoopSink (and other loop passes since the last simplifyCFG) might have
    // resulted in single-entry-single-exit or empty blocks. Clean up the CFG.
-@@ -1281,6 +1446,10 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
+@@ -1281,6 +1447,10 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
    if (PTO.MergeFunctions)
      MPM.addPass(MergeFunctionsPass());
  
@@ -55433,7 +55634,7 @@ index 945ef5123..5af3b6766 100644
    // Now we need to do some global optimization transforms.
    // FIXME: It would seem like these should come first in the optimization
    // pipeline and maybe be the bottom of the canonicalization pipeline? Weird
-@@ -1308,6 +1477,8 @@ PassBuilder::buildPerModuleDefaultPipeline(OptimizationLevel Level,
+@@ -1308,6 +1478,8 @@ PassBuilder::buildPerModuleDefaultPipeline(OptimizationLevel Level,
  
    ModulePassManager MPM;
  
@@ -55442,7 +55643,7 @@ index 945ef5123..5af3b6766 100644
    // Convert @llvm.global.annotations to !annotation metadata.
    MPM.addPass(Annotation2MetadataPass());
  
-@@ -1321,9 +1492,12 @@ PassBuilder::buildPerModuleDefaultPipeline(OptimizationLevel Level,
+@@ -1321,9 +1493,14 @@ PassBuilder::buildPerModuleDefaultPipeline(OptimizationLevel Level,
    if (PGOOpt && PGOOpt->DebugInfoForProfiling)
      MPM.addPass(createModuleToFunctionPassAdaptor(AddDiscriminatorsPass()));
  
@@ -55455,10 +55656,12 @@ index 945ef5123..5af3b6766 100644
 +  else if (LTOPreLink)
 +    LTOPhase = ThinOrFullLTOPhase::FullLTOPreLink;
 +
++  // Import-lib reflection is trimmed at post-link by CJDisableImportLibReflection;
++  // the main package already has TF_REFLECTION=0 under --disable-reflection.
    // Add the core simplification pipeline.
    MPM.addPass(buildModuleSimplificationPipeline(Level, LTOPhase));
  
-@@ -1350,6 +1524,8 @@ PassBuilder::buildThinLTOPreLinkDefaultPipeline(OptimizationLevel Level) {
+@@ -1350,6 +1527,8 @@ PassBuilder::buildThinLTOPreLinkDefaultPipeline(OptimizationLevel Level) {
  
    ModulePassManager MPM;
  
@@ -55467,7 +55670,7 @@ index 945ef5123..5af3b6766 100644
    // Convert @llvm.global.annotations to !annotation metadata.
    MPM.addPass(Annotation2MetadataPass());
  
-@@ -1404,6 +1580,8 @@ ModulePassManager PassBuilder::buildThinLTODefaultPipeline(
+@@ -1404,6 +1583,8 @@ ModulePassManager PassBuilder::buildThinLTODefaultPipeline(
      OptimizationLevel Level, const ModuleSummaryIndex *ImportSummary) {
    ModulePassManager MPM;
  
@@ -55476,7 +55679,27 @@ index 945ef5123..5af3b6766 100644
    // Convert @llvm.global.annotations to !annotation metadata.
    MPM.addPass(Annotation2MetadataPass());
  
-@@ -1470,6 +1648,8 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+@@ -1435,6 +1616,8 @@ ModulePassManager PassBuilder::buildThinLTODefaultPipeline(
+     // with ThinLTO in order to avoid leaving undefined references to dead
+     // globals in the object file.
+     MPM.addPass(EliminateAvailableExternallyPass());
++    if (CJPipeline && DisableCJLTOReflection)
++      MPM.addPass(CJDisableImportLibReflection());
+     MPM.addPass(GlobalDCEPass());
+     return MPM;
+   }
+@@ -1442,6 +1625,10 @@ ModulePassManager PassBuilder::buildThinLTODefaultPipeline(
+   // Force any function attributes we want the rest of the pipeline to observe.
+   MPM.addPass(ForceFunctionAttrsPass());
+ 
++  if (CJPipeline && DisableCJLTOReflection) {
++    MPM.addPass(CJDisableImportLibReflection());
++  }
++
+   // Add the core simplification pipeline.
+   MPM.addPass(buildModuleSimplificationPipeline(
+       Level, ThinOrFullLTOPhase::ThinLTOPostLink));
+@@ -1470,6 +1657,8 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
                                       ModuleSummaryIndex *ExportSummary) {
    ModulePassManager MPM;
  
@@ -55485,7 +55708,7 @@ index 945ef5123..5af3b6766 100644
    // Convert @llvm.global.annotations to !annotation metadata.
    MPM.addPass(Annotation2MetadataPass());
  
-@@ -1479,8 +1659,20 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+@@ -1479,8 +1668,20 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
    // Create a function that performs CFI checks for cross-DSO calls with targets
    // in the current module.
    MPM.addPass(CrossDSOCFIPass());
@@ -55506,7 +55729,15 @@ index 945ef5123..5af3b6766 100644
      // The WPD and LowerTypeTest passes need to run at -O0 to lower type
      // metadata and intrinsics.
      MPM.addPass(WholeProgramDevirtPass(ExportSummary, nullptr));
-@@ -1498,6 +1690,17 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+@@ -1495,9 +1696,29 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+     // Emit annotation remarks.
+     addAnnotationRemarksPass(MPM);
+ 
++    if (CJPipeline && DisableCJLTOReflection) {
++      MPM.addPass(CJDisableImportLibReflection());
++      // No GlobalDCE at -O0; the pass self-erases dead reflection globals.
++    }
++
      return MPM;
    }
  
@@ -55521,10 +55752,14 @@ index 945ef5123..5af3b6766 100644
 +                      ThinOrFullLTOPhase::FullLTOPostLink);
 +  }
 +
++  if (CJPipeline && DisableCJLTOReflection) {
++    MPM.addPass(CJDisableImportLibReflection());
++  }
++
    if (PGOOpt && PGOOpt->Action == PGOOptions::SampleUse) {
      // Load sample profile before running the LTO optimization pipeline.
      MPM.addPass(SampleProfileLoaderPass(PGOOpt->ProfileFile,
-@@ -1617,6 +1820,23 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+@@ -1617,6 +1838,23 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
        InlineContext{ThinOrFullLTOPhase::FullLTOPostLink,
                            InlinePass::CGSCCInliner}));
  
@@ -55548,7 +55783,7 @@ index 945ef5123..5af3b6766 100644
    // Optimize globals again after we ran the inliner.
    MPM.addPass(GlobalOptPass());
  
-@@ -1627,6 +1847,16 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+@@ -1627,6 +1865,16 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
    // transform it to pass arguments by value instead of by reference.
    MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(ArgumentPromotionPass()));
  
@@ -55565,7 +55800,7 @@ index 945ef5123..5af3b6766 100644
    FunctionPassManager FPM;
    // The IPO Passes may leave cruft around. Clean up after them.
    FPM.addPass(InstCombinePass());
-@@ -1654,7 +1884,8 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+@@ -1654,7 +1902,8 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
  
    // LTO provides additional opportunities for tailcall elimination due to
    // link-time inlining, and visibility of nocapture attribute.
@@ -55575,7 +55810,7 @@ index 945ef5123..5af3b6766 100644
  
    // Run a few AA driver optimizations here and now to cleanup the code.
    MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM),
-@@ -1672,23 +1903,7 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+@@ -1672,23 +1921,7 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
        createModuleToFunctionPassAdaptor(InvalidateAnalysisPass<AAManager>()));
  
    FunctionPassManager MainFPM;
@@ -55600,7 +55835,7 @@ index 945ef5123..5af3b6766 100644
  
    if (EnableConstraintElimination)
      MainFPM.addPass(ConstraintEliminationPass());
-@@ -1747,7 +1962,9 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+@@ -1747,7 +1980,9 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
    // Now that we have optimized the program, discard unreachable functions.
    MPM.addPass(GlobalDCEPass());
  
@@ -55611,7 +55846,7 @@ index 945ef5123..5af3b6766 100644
      MPM.addPass(MergeFunctionsPass());
  
    if (PTO.CallGraphProfile)
-@@ -1776,8 +1993,9 @@ ModulePassManager PassBuilder::buildO0DefaultPipeline(OptimizationLevel Level,
+@@ -1776,8 +2011,9 @@ ModulePassManager PassBuilder::buildO0DefaultPipeline(OptimizationLevel Level,
    if (PGOOpt && PGOOpt->PseudoProbeForProfiling)
      MPM.addPass(SampleProfileProbePass(TM));
  
@@ -55623,7 +55858,7 @@ index 945ef5123..5af3b6766 100644
      addPGOInstrPassesForO0(
          MPM,
          /* RunProfileGen */ (PGOOpt->Action == PGOOptions::IRInstr),
-@@ -1886,6 +2104,9 @@ AAManager PassBuilder::buildDefaultAAPipeline() {
+@@ -1886,6 +2122,9 @@ AAManager PassBuilder::buildDefaultAAPipeline() {
    AA.registerFunctionAnalysis<ScopedNoAliasAA>();
    AA.registerFunctionAnalysis<TypeBasedAA>();
  
@@ -55634,7 +55869,7 @@ index 945ef5123..5af3b6766 100644
    // Because the `AAManager` is a function analysis and `GlobalsAA` is a module
    // analysis, all that the `AAManager` can do is query for any *cached*
 diff --git a/llvm/lib/Passes/PassRegistry.def b/llvm/lib/Passes/PassRegistry.def
-index 7c29bffbc..81239f399 100644
+index 7c29bffbc..a5f5f9106 100644
 --- a/llvm/lib/Passes/PassRegistry.def
 +++ b/llvm/lib/Passes/PassRegistry.def
 @@ -28,6 +28,7 @@ MODULE_ANALYSIS("verify", VerifierAnalysis())
@@ -55653,7 +55888,7 @@ index 7c29bffbc..81239f399 100644
  MODULE_PASS("constmerge", ConstantMergePass())
  MODULE_PASS("coro-early", CoroEarlyPass())
  MODULE_PASS("coro-cleanup", CoroCleanupPass())
-@@ -126,6 +128,18 @@ MODULE_PASS("sancov-module", ModuleSanitizerCoveragePass())
+@@ -126,6 +128,19 @@ MODULE_PASS("sancov-module", ModuleSanitizerCoveragePass())
  MODULE_PASS("memprof-module", ModuleMemProfilerPass())
  MODULE_PASS("poison-checking", PoisonCheckingPass())
  MODULE_PASS("pseudo-probe-update", PseudoProbeUpdatePass())
@@ -55661,6 +55896,7 @@ index 7c29bffbc..81239f399 100644
 +MODULE_PASS("cj-allocation-size-check", CJAllocationSizeCheck())
 +MODULE_PASS("cj-ir-verifier", CJIRVerifier())
 +MODULE_PASS("cj-fill-metadata", CJFillMetadata())
++MODULE_PASS("cj-disable-import-lib-reflection", CJDisableImportLibReflection())
 +MODULE_PASS("cj-barrier-opt", CJBarrierOpt())
 +MODULE_PASS("cj-runtime-lowering", CJRuntimeLowering())
 +MODULE_PASS("cj-specific-opt", CJSpecificOpt())
@@ -55672,7 +55908,7 @@ index 7c29bffbc..81239f399 100644
  #undef MODULE_PASS
  
  #ifndef MODULE_PASS_WITH_PARAMS
-@@ -173,6 +187,8 @@ CGSCC_PASS("function-attrs", PostOrderFunctionAttrsPass())
+@@ -173,6 +188,8 @@ CGSCC_PASS("function-attrs", PostOrderFunctionAttrsPass())
  CGSCC_PASS("attributor-cgscc", AttributorCGSCCPass())
  CGSCC_PASS("openmp-opt-cgscc", OpenMPOptCGSCCPass())
  CGSCC_PASS("no-op-cgscc", NoOpCGSCCPass())
@@ -55681,7 +55917,7 @@ index 7c29bffbc..81239f399 100644
  #undef CGSCC_PASS
  
  #ifndef CGSCC_PASS_WITH_PARAMS
-@@ -227,6 +243,7 @@ FUNCTION_ANALYSIS("targetir",
+@@ -227,6 +244,7 @@ FUNCTION_ANALYSIS("targetir",
  FUNCTION_ANALYSIS("verify", VerifierAnalysis())
  FUNCTION_ANALYSIS("pass-instrumentation", PassInstrumentationAnalysis(PIC))
  FUNCTION_ANALYSIS("divergence", DivergenceAnalysis())
@@ -55689,7 +55925,7 @@ index 7c29bffbc..81239f399 100644
  
  #ifndef FUNCTION_ALIAS_ANALYSIS
  #define FUNCTION_ALIAS_ANALYSIS(NAME, CREATE_PASS)                             \
-@@ -239,6 +256,7 @@ FUNCTION_ALIAS_ANALYSIS("objc-arc-aa", objcarc::ObjCARCAA())
+@@ -239,6 +257,7 @@ FUNCTION_ALIAS_ANALYSIS("objc-arc-aa", objcarc::ObjCARCAA())
  FUNCTION_ALIAS_ANALYSIS("scev-aa", SCEVAA())
  FUNCTION_ALIAS_ANALYSIS("scoped-noalias-aa", ScopedNoAliasAA())
  FUNCTION_ALIAS_ANALYSIS("tbaa", TypeBasedAA())
@@ -55697,7 +55933,7 @@ index 7c29bffbc..81239f399 100644
  #undef FUNCTION_ALIAS_ANALYSIS
  #undef FUNCTION_ANALYSIS
  
-@@ -268,6 +286,7 @@ FUNCTION_PASS("div-rem-pairs", DivRemPairsPass())
+@@ -268,6 +287,7 @@ FUNCTION_PASS("div-rem-pairs", DivRemPairsPass())
  FUNCTION_PASS("dse", DSEPass())
  FUNCTION_PASS("dot-cfg", CFGPrinterPass())
  FUNCTION_PASS("dot-cfg-only", CFGOnlyPrinterPass())
@@ -55705,7 +55941,7 @@ index 7c29bffbc..81239f399 100644
  FUNCTION_PASS("dot-dom", DomPrinter())
  FUNCTION_PASS("dot-dom-only", DomOnlyPrinter())
  FUNCTION_PASS("dot-post-dom", PostDomPrinter())
-@@ -378,10 +397,21 @@ FUNCTION_PASS("verify<safepoint-ir>", SafepointIRVerifierPass())
+@@ -378,10 +398,21 @@ FUNCTION_PASS("verify<safepoint-ir>", SafepointIRVerifierPass())
  FUNCTION_PASS("verify<scalar-evolution>", ScalarEvolutionVerifierPass())
  FUNCTION_PASS("view-cfg", CFGViewerPass())
  FUNCTION_PASS("view-cfg-only", CFGOnlyViewerPass())
@@ -61000,10 +61236,10 @@ index 8c77b6937..4e65ed2e2 100644
        F->addParamAttr(ArgNo, Attribute::NoAlias);
 diff --git a/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
 new file mode 100644
-index 000000000..1f297883b
+index 000000000..559c23184
 --- /dev/null
 +++ b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
-@@ -0,0 +1,3848 @@
+@@ -0,0 +1,3909 @@
 +//===- CJPartialEscapeAnalysis.cpp - escape analysis for Cangjie ----------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -61023,6 +61259,7 @@ index 000000000..1f297883b
 +
 +#include "queue"
 +#include "llvm/ADT/DenseMap.h"
++#include "llvm/ADT/MapVector.h"
 +#include "llvm/ADT/SmallSet.h"
 +#include "llvm/Analysis/CGSCCPassManager.h"
 +#include "llvm/Analysis/CallGraph.h"
@@ -61047,7 +61284,32 @@ index 000000000..1f297883b
 +
 +#define DEBUG_TYPE "escape-analysis"
 +using namespace llvm;
++
 +constexpr int alignEight = 8;
++
++// Maximum depth of the cumulative-offset path carried by spreadMemEscape.
++// Deeper propagations are collapsed to the escape-all offset (-1), which
++// bounds the number of distinct (node, Offsets) states
++constexpr unsigned MaxSpreadDepth = 16;
++
++// Maximum meaningful field offset for a MemPtr. Offsets are collapsed to
++// the unique escape-all value -1, keeping the number of distinct
++// (node, offset) propagation states bounded.
++constexpr int MaxSpreadOffset = 4096;
++
++// Effective offset bound: once per-object sizes are computed, use the tighter
++// of the object-size-aware upper bound (max object size among this analysis'
++// GCNews; offsets beyond it cannot be legitimate field offsets) and the static
++// MaxSpreadOffset fallback. Before that (during initialize) MaxObjSize is
++// still being accumulated, so keep the bound stable at MaxSpreadOffset.
++static unsigned getSpreadOffsetBound(const CJEscapeAnalysis &EA) {
++  if (!EA.MaxObjSizeComputed)
++    return MaxSpreadOffset;
++  if (EA.MaxObjSize != 0 &&
++      EA.MaxObjSize < static_cast<unsigned>(MaxSpreadOffset))
++    return EA.MaxObjSize;
++  return MaxSpreadOffset;
++}
 +enum InitializeState : unsigned { NotInitialize, Initializing, Initialized };
 +static cl::opt<unsigned> CJMaxStackObject("cj-max-stack-obj", cl::Hidden,
 +                                          cl::init(1024));
@@ -61056,17 +61318,6 @@ index 000000000..1f297883b
 +namespace llvm {
 +cl::opt<bool> CJDisablePEA("cj-disable-partial-ea",
 +                                  cl::Hidden, cl::init(false));
-+cl::opt<unsigned> CJPEAMaxCycNonzero(
-+    "cj-pea-max-cyc-nonzero", cl::Hidden, cl::init(24),
-+    // 24 bails the confirmed-pathological case (RedBlackTree.put,
-+    // maxCycNonzero=30). The metric counts every non-zero-offset
-+    // intra-SCC edge (multi-edges included); the -1 escape-all sentinel
-+    // offset is excluded (see countNonzeroIntraEdges).
-+    cl::desc("Max non-zero-offset edges inside a cyclic SCC of the PEA "
-+             "propagation graph for PEA to proceed; above this PEA bails "
-+             "out. A cyclic SCC with non-zero offsets makes spreadMemEscape "
-+             "cumulative offset-paths diverge; this is a deterministic graph "
-+             "property and the direct topology root cause of the blow-up."));
 +cl::opt<bool> CJEASupportFinalizer("cj-ea-support-finalizer", cl::Hidden,
 +                                   cl::init(true));
 +
@@ -62094,7 +62345,7 @@ index 000000000..1f297883b
 +}
 +
 +#ifndef NDEBUG
-+void doPrintFuncObjects(SmallVector<ObjectLocation *, 8> &AllLocations) {
++void doPrintFuncObjects(SmallVectorImpl<ObjectLocation *> &AllLocations) {
 +  for (unsigned i = 0; i < AllLocations.size(); i++) {
 +    if (AllLocations[i]->Val) {
 +      LLVM_DEBUG(dbgs() << AllLocations[i]->Parent->getName() << " : "
@@ -62112,6 +62363,15 @@ index 000000000..1f297883b
 +// 1. escape when store into/load from escaped object.
 +// 2. object size bigger than threshold.
 +// 3. escape as function's params.
++
++// Values that can never legally be stored into a GC reference field.
++static bool isValueInvalid(Value *V) {
++  if (V->getValueID() == llvm::Value::UndefValueVal) {
++    report_fatal_error("store/gcwrite an undef value!");
++  }
++  return V->getValueID() == llvm::Value::ConstantPointerNullVal;
++}
++
 +class EADepthImpl : public InstVisitor<EADepthImpl> {
 +  // Befriend the base class so it can delegate to private visit methods.
 +  friend class InstVisitor<EADepthImpl>;
@@ -62351,13 +62611,6 @@ index 000000000..1f297883b
 +    return finishAll(CGUpdater);
 +  }
 +
-+  bool isValueInvalid(Value *V) {
-+    if (V->getValueID() == llvm::Value::UndefValueVal) {
-+      report_fatal_error("store/gcwrite an undef value!");
-+    }
-+    return V->getValueID() == llvm::Value::ConstantPointerNullVal;
-+  }
-+
 +  bool isGCReadIntrinsic(Value *Base) {
 +    if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(Base)) {
 +      switch (II->getIntrinsicID()) {
@@ -62431,6 +62684,15 @@ index 000000000..1f297883b
 +    }
 +    HeapLoc->insertEdge(&Loc, Path);
 +    Loc.insertEdge(HeapLoc, -Path);
++  }
++
++  // Mark a location as escaped to the heap at the given instruction. Shared by
++  // the load / store / gcwrite / extractvalue handlers.
++  void markEscaped(ObjectLocation *Loc, Instruction *I) {
++    Loc->Escaped = true;
++    Loc->EscapedInst = I;
++    Loc->EscapeState |= EscapeOrigin | EscapeGlobal;
++    escapeHeap(*Loc);
 +  }
 +
 +  void handleSCCFunctionCall(CallBase &I, Function *CalledFunction) {
@@ -62559,10 +62821,7 @@ index 000000000..1f297883b
 +      Loc->insertEdge(SrcLoc, 1);
 +      SrcLoc->insertEdge(Loc, -1);
 +    } else {
-+      Loc->Escaped = true;
-+      Loc->EscapedInst = I;
-+      Loc->EscapeState = EscapeOrigin | EscapeGlobal;
-+      escapeHeap(*Loc);
++      markEscaped(Loc, I);
 +    }
 +    enqueueUsers(I);
 +  }
@@ -62704,10 +62963,7 @@ index 000000000..1f297883b
 +      Loc->insertEdge(SrcLoc, 1);
 +      SrcLoc->insertEdge(Loc, -1);
 +    } else {
-+      Loc->Escaped = true;
-+      Loc->EscapedInst = &EVT;
-+      Loc->EscapeState = EscapeOrigin | EscapeGlobal;
-+      escapeHeap(*Loc);
++      markEscaped(Loc, &EVT);
 +    }
 +    enqueueUsers(&EVT);
 +  }
@@ -62763,10 +63019,7 @@ index 000000000..1f297883b
 +    if (isGCPointerType(I->getType()) ||
 +        isMemoryContainsGCPtrType(I->getType())) {
 +      if (auto Loc = getOrCreateLocation(I)) {
-+        Loc->Escaped = true;
-+        Loc->EscapedInst = I;
-+        Loc->EscapeState |= EscapeOrigin | EscapeGlobal;
-+        escapeHeap(*Loc);
++        markEscaped(Loc, I);
 +      }
 +    }
 +    if (IsClosureCall) {
@@ -62782,10 +63035,7 @@ index 000000000..1f297883b
 +          isMemoryContainsGCPtrType(V->getType())))
 +        continue;
 +      if (auto Loc = getOrCreateLocation(V)) {
-+        Loc->Escaped = true;
-+        Loc->EscapedInst = I;
-+        Loc->EscapeState |= EscapeOrigin | EscapeGlobal;
-+        escapeHeap(*Loc);
++        markEscaped(Loc, I);
 +      }
 +    }
 +  }
@@ -62839,10 +63089,7 @@ index 000000000..1f297883b
 +    auto Loc = getOrCreateLocation(V);
 +    if (!Loc)
 +      return;
-+    Loc->Escaped = true;
-+    Loc->EscapedInst = II;
-+    Loc->EscapeState |= EscapeOrigin | EscapeGlobal;
-+    escapeHeap(*Loc);
++    markEscaped(Loc, II);
 +  }
 +
 +  void handleGCRead(IntrinsicInst *II, bool IsStatic) {
@@ -62975,15 +63222,15 @@ index 000000000..1f297883b
 +}
 +class GCPtr;
 +static void memPtrspreadEscape(BasicBlock *BB, unsigned ES,
-+                               DenseMap<GCPtr *, unsigned> &SuccBBInfo,
-+                               GCPtr *P, SmallVector<int, 8> &Offset,
++                               MapVector<GCPtr *, unsigned> &SuccBBInfo,
++                               GCPtr *P, SmallVectorImpl<int> &Offset,
 +                               bool Direct);
 +
-+static void countRefOffsets(StructType *ST, SmallVector<uint64_t, 8> &Offsets,
++static void countRefOffsets(StructType *ST, SmallVectorImpl<uint64_t> &Offsets,
 +                            uint64_t BaseOff, const DataLayout &DL,
 +                            unsigned Left, unsigned Right);
 +
-+static void countArrayOffsets(ArrayType *AT, SmallVector<uint64_t, 8> &Offsets,
++static void countArrayOffsets(ArrayType *AT, SmallVectorImpl<uint64_t> &Offsets,
 +                              uint64_t BaseOff, const DataLayout &DL,
 +                              unsigned Left, unsigned Right) {
 +  uint32_t Size = AT->getNumElements();
@@ -63014,7 +63261,7 @@ index 000000000..1f297883b
 +  }
 +}
 +
-+static void countRefOffsets(StructType *ST, SmallVector<uint64_t, 8> &Offsets,
++static void countRefOffsets(StructType *ST, SmallVectorImpl<uint64_t> &Offsets,
 +                            uint64_t BaseOff, const DataLayout &DL,
 +                            unsigned Left, unsigned Right) {
 +  for (uint32_t Idx = 0; Idx < ST->getNumElements(); Idx++) {
@@ -63040,7 +63287,7 @@ index 000000000..1f297883b
 +  explicit GCPtr(Value *Val, unsigned Depth, CJEscapeAnalysis &EAImpl)
 +      : P(Val), IsLoad(isa<LoadInst>(Val) || isa<ExtractValueInst>(Val)),
 +        IsPhiOrSelect(isa<PHINode>(Val) || isa<SelectInst>(Val)),
-+        LoopDepth(Depth), EA(EAImpl) {
++        LoopDepth(Depth), EA(EAImpl), Id(EAImpl.getNextId()) {
 +    if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(Val))
 +      IsLoad |= II->getIntrinsicID() == Intrinsic::cj_gcread_ref;
 +  }
@@ -63048,6 +63295,10 @@ index 000000000..1f297883b
 +  virtual ~GCPtr() = default;
 +
 +  virtual bool equal(GCPtr *V) { return V->isPtr() && (P == V->P); }
++
++  // Size in bytes of the object this pointer refers to, lazily derived from
++  // the defining instruction (GCNew / load / phi / select); 0 = unknown.
++  virtual unsigned getObjSize();
 +
 +  static GCPtr *get(Value *Val, CJEscapeAnalysis &EAImpl) {
 +    if (EAImpl.AllPtrLocInfo.count(Val)) {
@@ -63081,7 +63332,7 @@ index 000000000..1f297883b
 +    GCPtr *New = new GCPtr(Val, LD, EAImpl);
 +    if (EAImpl.isEscapedValue(Val)) {
 +      Function *CurFunc = EAImpl.ProcessedFunc;
-+      EAImpl.EscapeBBInfo[&CurFunc->getEntryBlock()][New] = Escaped;
++      EAImpl.setEscaped(New, &CurFunc->getEntryBlock());
 +    }
 +    EAImpl.AllPtrLocInfo[Val] = New;
 +    return New;
@@ -63114,7 +63365,7 @@ index 000000000..1f297883b
 +  bool isInfoEscaped() { return InfoEscapeInfo; }
 +
 +  virtual void spreadInfoEscape(BasicBlock *BB, unsigned ES,
-+                                DenseMap<GCPtr *, unsigned> &SuccBBInfo,
++                                MapVector<GCPtr *, unsigned> &SuccBBInfo,
 +                                bool Direct = true) {
 +    if (isDerivedPtr() && Direct && DirectSpread < InfoEscaped) {
 +      DirectSpread = InfoEscaped;
@@ -63131,78 +63382,81 @@ index 000000000..1f297883b
 +      }
 +    }
 +    if (Direct) {
-+      for (auto &V : BaseValue) {
-+        V.first->spreadInfoEscape(BB, ES, SuccBBInfo, true);
++      for (auto &KV : BaseValue) {
++        GCPtr *V = KV.first;
++        V->spreadInfoEscape(BB, ES, SuccBBInfo, true);
 +      }
 +    }
 +    if (Alias.size() != 0) {
-+      for (auto V : Alias) {
-+        V.first->spreadInfoEscape(BB, ES, SuccBBInfo, false);
++      for (auto &KV : Alias) {
++        GCPtr *V = KV.first;
++        V->spreadInfoEscape(BB, ES, SuccBBInfo, false);
 +      }
 +    }
-+    for (auto &V : InfoEscapedVec) {
++    for (GCPtr *V : InfoEscapedVec) {
 +      V->spreadInfoEscape(BB, ES, SuccBBInfo, Direct);
 +    }
 +  }
 +
 +  virtual void spreadMemEscape(BasicBlock *BB, unsigned ES,
-+                               DenseMap<GCPtr *, unsigned> &SuccBBInfo,
-+                               SmallVector<int, 8> &Offsets,
++                               MapVector<GCPtr *, unsigned> &SuccBBInfo,
++                               SmallVectorImpl<int> &Offsets,
 +                               bool Direct = true) {
-+    if (IsVisiting) {
++    if (!EA.tryMarkSpreadVisited(this, ES, Direct, Offsets)) {
 +      return;
 +    }
-+    IsVisiting = true;
 +    int CurOffset = Offsets.pop_back_val();
 +    if (CurOffset >= 0) {
 +      Offsets.push_back(CurOffset);
 +      memPtrspreadEscape(BB, ES, SuccBBInfo, this, Offsets, Direct);
-+      IsVisiting = false;
 +      return;
 +    }
 +    if (isPhiOrSelect()) {
 +      if (Offsets.size() > 0) {
 +        for (unsigned I = 0; I < MPs.size(); ++I)
 +          MPs[I]->spreadMemEscape(BB, ES, SuccBBInfo, Offsets, Direct);
-+        for (auto &V : InfoEscapedVec) {
++        for (GCPtr *V : InfoEscapedVec) {
 +          for (unsigned I = 0; I < V->MPs.size(); ++I)
 +            V->MPs[I]->spreadMemEscape(BB, ES, SuccBBInfo, Offsets, Direct);
 +        }
 +      } else {
 +        for (unsigned I = 0; I < MPs.size(); ++I)
 +          MPs[I]->spreadEscape(BB, ES, SuccBBInfo, true);
-+        for (auto &V : InfoEscapedVec) {
++        for (GCPtr *V : InfoEscapedVec) {
 +          for (unsigned I = 0; I < V->MPs.size(); ++I)
 +            V->MPs[I]->spreadEscape(BB, ES, SuccBBInfo, Direct);
 +        }
 +      }
 +      Offsets.push_back(CurOffset);
 +      if (Direct) {
-+        for (auto &V : BaseValue) {
-+          V.first->spreadMemEscape(BB, ES, SuccBBInfo, Offsets, Direct);
++        for (auto &KV : BaseValue) {
++          GCPtr *V = KV.first;
++          V->spreadMemEscape(BB, ES, SuccBBInfo, Offsets, Direct);
 +        }
 +      }
-+      for (auto V : Alias) {
-+        V.first->spreadMemEscape(BB, ES, SuccBBInfo, Offsets, Direct);
++      for (auto &KV : Alias) {
++        GCPtr *V = KV.first;
++        V->spreadMemEscape(BB, ES, SuccBBInfo, Offsets, Direct);
 +      }
-+      IsVisiting = false;
 +      return;
 +    }
 +    if (Offsets.size() > 0) {
 +      for (unsigned I = 0; I < MPs.size(); ++I)
 +        MPs[I]->spreadMemEscape(BB, ES, SuccBBInfo, Offsets, Direct);
 +      if (Direct) {
-+        for (auto &V : BaseValue) {
-+          for (unsigned I = 0; I < V.first->MPs.size(); ++I)
-+            V.first->MPs[I]->spreadMemEscape(BB, ES, SuccBBInfo, Offsets,
-+                                             Direct);
++        for (auto &KV : BaseValue) {
++          GCPtr *V = KV.first;
++          for (unsigned I = 0; I < V->MPs.size(); ++I)
++            V->MPs[I]->spreadMemEscape(BB, ES, SuccBBInfo, Offsets,
++                                       Direct);
 +        }
 +      }
-+      for (auto V : Alias) {
-+        for (unsigned I = 0; I < V.first->MPs.size(); ++I)
-+          V.first->MPs[I]->spreadMemEscape(BB, ES, SuccBBInfo, Offsets, Direct);
++      for (auto &KV : Alias) {
++        GCPtr *V = KV.first;
++        for (unsigned I = 0; I < V->MPs.size(); ++I)
++          V->MPs[I]->spreadMemEscape(BB, ES, SuccBBInfo, Offsets, Direct);
 +      }
-+      for (auto &V : InfoEscapedVec) {
++      for (GCPtr *V : InfoEscapedVec) {
 +        for (unsigned I = 0; I < V->MPs.size(); ++I)
 +          V->MPs[I]->spreadMemEscape(BB, ES, SuccBBInfo, Offsets, Direct);
 +      }
@@ -63211,26 +63465,27 @@ index 000000000..1f297883b
 +      for (unsigned I = 0; I < MPs.size(); ++I)
 +        MPs[I]->spreadEscape(BB, ES, SuccBBInfo, true);
 +      if (Direct) {
-+        for (auto &V : BaseValue) {
-+          for (unsigned I = 0; I < V.first->MPs.size(); ++I)
-+            V.first->MPs[I]->spreadEscape(BB, ES, SuccBBInfo, true);
++        for (auto &KV : BaseValue) {
++          GCPtr *V = KV.first;
++          for (unsigned I = 0; I < V->MPs.size(); ++I)
++            V->MPs[I]->spreadEscape(BB, ES, SuccBBInfo, true);
 +        }
 +      }
-+      for (auto V : Alias) {
-+        for (unsigned I = 0; I < V.first->MPs.size(); ++I)
-+          V.first->MPs[I]->spreadEscape(BB, ES, SuccBBInfo, Direct);
++      for (auto &KV : Alias) {
++        GCPtr *V = KV.first;
++        for (unsigned I = 0; I < V->MPs.size(); ++I)
++          V->MPs[I]->spreadEscape(BB, ES, SuccBBInfo, Direct);
 +      }
-+      for (auto &V : InfoEscapedVec) {
++      for (GCPtr *V : InfoEscapedVec) {
 +        for (unsigned I = 0; I < V->MPs.size(); ++I)
 +          V->MPs[I]->spreadEscape(BB, ES, SuccBBInfo, Direct);
 +      }
 +      Offsets.push_back(CurOffset);
 +    }
-+    IsVisiting = false;
 +  }
 +
 +  virtual void spreadEscape(BasicBlock *BB, unsigned ES,
-+                            DenseMap<GCPtr *, unsigned> &SuccBBInfo,
++                            MapVector<GCPtr *, unsigned> &SuccBBInfo,
 +                            bool Direct) {
 +    if (isDerivedPtr() && Direct && DirectSpread < ES) {
 +      DirectSpread = ES;
@@ -63244,23 +63499,25 @@ index 000000000..1f297883b
 +    }
 +    // is direct escape
 +    if (isDerivedPtr() && Direct) {
-+      for (auto &V : BaseValue) {
-+        if (!SuccBBInfo.count(V.first) || SuccBBInfo[V.first] < ES ||
-+            canSpread(V.first, ES)) {
-+          SuccBBInfo[V.first] = ES;
-+          V.first->spreadEscape(BB, ES, SuccBBInfo, true);
++      for (auto &KV : BaseValue) {
++        GCPtr *V = KV.first;
++        if (!SuccBBInfo.count(V) || SuccBBInfo[V] < ES ||
++            canSpread(V, ES)) {
++          SuccBBInfo[V] = ES;
++          V->spreadEscape(BB, ES, SuccBBInfo, true);
 +        }
 +      }
 +    }
 +    if (Alias.size() != 0) {
-+      for (auto &V : Alias) {
-+        if (!SuccBBInfo.count(V.first) || SuccBBInfo[V.first] < ES) {
-+          SuccBBInfo[V.first] = ES;
-+          V.first->spreadEscape(BB, ES, SuccBBInfo, false);
++      for (auto &KV : Alias) {
++        GCPtr *V = KV.first;
++        if (!SuccBBInfo.count(V) || SuccBBInfo[V] < ES) {
++          SuccBBInfo[V] = ES;
++          V->spreadEscape(BB, ES, SuccBBInfo, false);
 +        }
 +      }
 +    }
-+    for (auto &V : InfoEscapedVec) {
++    for (GCPtr *V : InfoEscapedVec) {
 +      V->spreadInfoEscape(BB, ES, SuccBBInfo, Direct);
 +    }
 +  }
@@ -63273,22 +63530,31 @@ index 000000000..1f297883b
 +  bool IsPhiOrSelect;
 +  unsigned DirectSpread = NotEscape;
 +  bool InfoEscapeInfo = false;
-+  bool IsVisiting = false;
 +  int MemOff = 0;
 +  InitializeState InitializeFlag = NotInitialize;
 +  unsigned LoopDepth;
 +  CJEscapeAnalysis &EA;
++  // Stable unique id (assigned in IR-visit order)
++  unsigned Id;
++  // Size in bytes of the object this pointer refers to (0 = unknown). An offset
++  // larger than the object itself cannot be a legitimate field offset, so it
++  // will collapse to the escape-all value.
++  unsigned ObjSize = 0;
 +  // for load
-+  DenseMap<GCPtr *, SmallSet<uint64_t, 2>> BaseValue;
++  MapVector<GCPtr *, SmallSet<uint64_t, 2>> BaseValue;
 +  // Ptr's memPtr info
 +  SmallVector<GCPtr *, 8> MPs;
 +  // pass to other instruction, such as
 +  // %3 = phi [%1, %bb1], [%2, %bb2]
 +  // which %1， %2's obj Alias stored %3.
 +  // Value is the offset of %1's base and %3
-+  DenseMap<GCPtr *, SmallSet<int, 2>> Alias;
++  MapVector<GCPtr *, SmallSet<int, 2>> Alias;
 +  SmallSetVector<GCPtr *, 8> InfoEscapedVec;
 +};
++
++// The object size is computed iteratively by EscapeAnalysisImpl::
++// computeAllObjSizes() before propagation.
++unsigned GCPtr::getObjSize() { return ObjSize; }
 +
 +class MemPtr final : public GCPtr {
 +public:
@@ -63303,19 +63569,55 @@ index 000000000..1f297883b
 +
 +  static MemPtr *create(Value *Val, int Off, CJEscapeAnalysis &EAImpl,
 +                        LoopInfo *LI = nullptr, bool needInsert = true) {
-+    if (EAImpl.AllMemLocInfo.count(std::make_pair(Val, Off))) {
-+      return EAImpl.AllMemLocInfo[std::make_pair(Val, Off)];
++    // Normalize extreme offsets to the unique escape-all value (-1):
++    // negative offsets and offsets beyond the effective bound are not
++    // meaningful for individual fields.
++    if (Off < 0) {
++      Off = -1;
 +    }
++    int RawOff = Off;
 +    GCPtr *P = GCPtr::create(Val, EAImpl, LI);
 +    if (P == nullptr)
 +      return nullptr;
-+    if (Off < 0) {
-+      Off = --P->MemOff;
++    if (Off > 0) {
++      unsigned ObjSize = P->getObjSize();
++      unsigned Bound = ObjSize ? ObjSize : getSpreadOffsetBound(EAImpl);
++      if (Off > static_cast<int>(Bound))
++        Off = -1;
++    }
++    // If the raw offset exceeds the current bound but a MemPtr was already
++    // created at that exact offset (e.g., during initialize under the looser
++    // pre-sizing bound), reuse it. Collapsing to -1 here would orphan the
++    // existing MemPtr and its DefineValues from the offset-precise channel.
++    if (Off == -1 && RawOff > 0) {
++      auto RawIt = EAImpl.AllMemLocInfo.find(std::make_pair(Val, RawOff));
++      if (RawIt != EAImpl.AllMemLocInfo.end()) {
++        MemPtr *M = RawIt->second;
++        if (needInsert && !M->InsertedIntoMPs) {
++          P->insertMem(M);
++          M->InsertedIntoMPs = true;
++        }
++        return M;
++      }
++    }
++    auto CacheIt = EAImpl.AllMemLocInfo.find(std::make_pair(Val, Off));
++    if (CacheIt != EAImpl.AllMemLocInfo.end()) {
++      MemPtr *M = CacheIt->second;
++      // A MemPtr may first be created by an alias/weak path with
++      // needInsert=false; backfill MPs when a later direct/strong path needs
++      // the slot to be visible to base-escape enumeration.
++      if (needInsert && !M->InsertedIntoMPs) {
++        P->insertMem(M);
++        M->InsertedIntoMPs = true;
++      }
++      return M;
 +    }
 +    MemPtr *New = new MemPtr(Val, Off, P->LoopDepth, EAImpl, P);
 +    EAImpl.AllMemLocInfo[std::make_pair(Val, Off)] = New;
-+    if (needInsert)
++    if (needInsert) {
 +      P->insertMem(New);
++      New->InsertedIntoMPs = true;
++    }
 +    return New;
 +  }
 +
@@ -63329,12 +63631,54 @@ index 000000000..1f297883b
 +
 +  bool isPtr() override { return false; }
 +
++  // A memory location lives inside its base object, so it shares its size.
++  unsigned getObjSize() override { return Base->getObjSize(); }
++
 +  void insertDefine(BasicBlock *BB, GCPtr *Val) {
 +    DefineValues[BB].push_back(Val);
 +  }
 +
++  // Propagate escape through the Base->BaseValue edges (strong propagation,
++  // only meaningful when Direct). Shared by the three MemPtr spread methods.
++  void spreadBaseValues(BasicBlock *BB, unsigned ES,
++                        MapVector<GCPtr *, unsigned> &SuccBBInfo,
++                        SmallVectorImpl<int> &Offsets, bool Direct) {
++    if (!Direct)
++      return;
++    for (auto &KV : Base->BaseValue) {
++      GCPtr *V = KV.first;
++      for (auto BaseValueOffset : Base->BaseValue[V]) {
++        Offsets.push_back(BaseValueOffset + Offset);
++        V->spreadMemEscape(BB, ES, SuccBBInfo, Offsets);
++        Offsets.pop_back();
++      }
++    }
++  }
++
++  // Propagate escape through the Base->Alias edges (weak propagation).
++  // Shared by the three MemPtr spread methods.
++  void spreadAliases(BasicBlock *BB, unsigned ES,
++                     MapVector<GCPtr *, unsigned> &SuccBBInfo,
++                     SmallVectorImpl<int> &Offsets) {
++    if (Base->Alias.size() == 0)
++      return;
++    for (auto &KV : Base->Alias) {
++      GCPtr *V = KV.first;
++      for (auto AliasOffset : Base->Alias[V]) {
++        if (Offset < AliasOffset)
++          continue;
++        if (AliasOffset != -1)
++          Offsets.push_back(Offset - AliasOffset);
++        else
++          Offsets.push_back(AliasOffset); // == -1, escape-all offset
++        V->spreadMemEscape(BB, ES, SuccBBInfo, Offsets, false);
++        Offsets.pop_back();
++      }
++    }
++  }
++
 +  void spreadInfoEscape(BasicBlock *BB, unsigned ES,
-+                        DenseMap<GCPtr *, unsigned> &SuccBBInfo,
++                        MapVector<GCPtr *, unsigned> &SuccBBInfo,
 +                        bool Direct = true) override {
 +    if (isDerivedPtr() && Direct && DirectSpread < InfoEscaped) {
 +      DirectSpread = InfoEscaped;
@@ -63344,7 +63688,7 @@ index 000000000..1f297883b
 +    if (SuccBBInfo[this] < InfoEscaped) {
 +      SuccBBInfo[this] = InfoEscaped;
 +    }
-+    for (auto DefineMap : DefineValues) {
++    for (auto &DefineMap : DefineValues) {
 +      for (GCPtr *Define : DefineMap.second) {
 +        if (!SuccBBInfo.count(Define) || SuccBBInfo[Define] < InfoEscaped) {
 +          Define->spreadInfoEscape(BB, Escaped, SuccBBInfo, Direct);
@@ -63359,42 +63703,18 @@ index 000000000..1f297883b
 +    if (Offset < 0) {
 +      return;
 +    }
-+    if (Direct) {
-+      for (auto &V : Base->BaseValue) {
-+        for (auto BaseValueOffset : V.second) {
-+          Offsets.push_back(BaseValueOffset + Offset);
-+          V.first->spreadMemEscape(BB, ES, SuccBBInfo, Offsets);
-+          Offsets.pop_back();
-+        }
-+      }
-+    }
-+    if (Base->Alias.size() != 0) {
-+      for (auto &V : Base->Alias) {
-+        for (auto AliasOffset : V.second) {
-+          if (Offset < AliasOffset) {
-+            continue;
-+          }
-+          if (AliasOffset != -1) {
-+            Offsets.push_back(Offset - AliasOffset);
-+          } else {
-+            Offsets.push_back(AliasOffset);
-+          }
-+          V.first->spreadMemEscape(BB, ES, SuccBBInfo, Offsets, false);
-+          Offsets.pop_back();
-+        }
-+      }
-+    }
++    spreadBaseValues(BB, ES, SuccBBInfo, Offsets, Direct);
++    spreadAliases(BB, ES, SuccBBInfo, Offsets);
 +  }
 +
 +  void spreadMemEscape(
-+      BasicBlock *BB, unsigned ES, DenseMap<GCPtr *, unsigned> &SuccBBInfo,
-+      SmallVector<int, 8> &Offsets, bool Direct) override {
-+    if (IsVisiting) {
++      BasicBlock *BB, unsigned ES, MapVector<GCPtr *, unsigned> &SuccBBInfo,
++      SmallVectorImpl<int> &Offsets, bool Direct) override {
++    if (!EA.tryMarkSpreadVisited(this, ES, Direct, Offsets)) {
 +      return;
 +    }
-+    IsVisiting = true;
 +    int CurOffset = Offsets.back();
-+    for (auto DefineMap : DefineValues) {
++    for (auto &DefineMap : DefineValues) {
 +      for (GCPtr *Define : DefineMap.second) {
 +        if ((Offsets.size() == 1) && Define->isPtr()) {
 +          MemPtr *MPtr = MemPtr::create(Define->P, CurOffset, EA);
@@ -63408,48 +63728,27 @@ index 000000000..1f297883b
 +        Define->spreadMemEscape(BB, ES, SuccBBInfo, Offsets);
 +      }
 +    }
-+    Offsets.push_back(Offset);
++    // Depth-limit the cumulative offset path: beyond MaxSpreadDepth, collapse
++    // to the escape-all offset (-1) so the number of distinct (node, Offsets)
++    // states stays bounded.
++    int LimitedOffset = (Offsets.size() < MaxSpreadDepth)? Offset : -1;
++    Offsets.push_back(LimitedOffset);
 +    Base->spreadMemEscape(BB, ES, SuccBBInfo, Offsets, Direct);
 +    Offsets.pop_back();
 +    if (Offset < 0) {
-+      IsVisiting = false;
 +      return;
 +    }
-+    if (Direct) {
-+      for (auto &V : Base->BaseValue) {
-+        for (auto BaseValueOffset : V.second) {
-+          Offsets.push_back(BaseValueOffset + Offset);
-+          V.first->spreadMemEscape(BB, ES, SuccBBInfo, Offsets);
-+          Offsets.pop_back();
-+        }
-+      }
-+    }
-+    if (Base->Alias.size() != 0) {
-+      for (auto &V : Base->Alias) {
-+        for (auto AliasOffset : V.second) {
-+          if (Offset < AliasOffset) {
-+            continue;
-+          }
-+          if (AliasOffset != -1) {
-+            Offsets.push_back(Offset - AliasOffset);
-+          } else {
-+            Offsets.push_back(AliasOffset);
-+          }
-+          V.first->spreadMemEscape(BB, ES, SuccBBInfo, Offsets, false);
-+          Offsets.pop_back();
-+        }
-+      }
-+    }
-+    IsVisiting = false;
++    spreadBaseValues(BB, ES, SuccBBInfo, Offsets, Direct);
++    spreadAliases(BB, ES, SuccBBInfo, Offsets);
 +  }
 +
 +  void spreadEscape(BasicBlock *BB, unsigned ES,
-+                    DenseMap<GCPtr *, unsigned> &SuccBBInfo,
++                    MapVector<GCPtr *, unsigned> &SuccBBInfo,
 +                    bool Direct) override {
 +    if (isDerivedPtr() && Direct && DirectSpread < ES) {
 +      DirectSpread = ES;
 +    }
-+    for (auto DefineMap : DefineValues) {
++    for (auto &DefineMap : DefineValues) {
 +      for (GCPtr *Define : DefineMap.second) {
 +        if (!SuccBBInfo.count(Define) || SuccBBInfo[Define] < ES ||
 +            canSpread(Define, ES)) {
@@ -63463,43 +63762,21 @@ index 000000000..1f297883b
 +      return;
 +    }
 +    SmallVector<int, 8> Offsets;
-+    if (Direct) {
-+      for (auto &V : Base->BaseValue) {
-+        for (auto BaseValueOffset : V.second) {
-+          Offsets.push_back(BaseValueOffset + Offset);
-+          V.first->spreadMemEscape(BB, ES, SuccBBInfo, Offsets);
-+          Offsets.pop_back();
-+        }
-+      }
-+    }
++    spreadBaseValues(BB, ES, SuccBBInfo, Offsets, Direct);
 +
-+    if (Base->Alias.size() != 0) {
-+      for (auto &V : Base->Alias) {
-+        for (auto AliasOffset : V.second) {
-+          if (Offset < AliasOffset) {
-+            continue;
-+          }
-+          if (AliasOffset != -1) {
-+             Offsets.push_back(Offset - AliasOffset);
-+           } else {
-+             Offsets.push_back(-1);
-+           }
-+           V.first->spreadMemEscape(BB, ES, SuccBBInfo, Offsets, false);
-+           Offsets.pop_back();
-+        }
-+      }
-+    }
++    spreadAliases(BB, ES, SuccBBInfo, Offsets);
 +  }
 +
 +  bool isDerivedPtr() override { return Base->isDerivedPtr(); }
 +  GCPtr *Base;
 +  int Offset;
-+  DenseMap<BasicBlock *, SmallVector<GCPtr *, 8>> DefineValues;
++  bool InsertedIntoMPs = false;
++  MapVector<BasicBlock *, SmallVector<GCPtr *>> DefineValues;
 +};
 +
 +static void memPtrspreadEscape(
-+    BasicBlock *BB, unsigned ES, DenseMap<GCPtr *, unsigned> &SuccBBInfo,
-+    GCPtr *P, SmallVector<int, 8> &Offsets, bool Direct) {
++    BasicBlock *BB, unsigned ES, MapVector<GCPtr *, unsigned> &SuccBBInfo,
++    GCPtr *P, SmallVectorImpl<int> &Offsets, bool Direct) {
 +  int CurOffset = Offsets.back();
 +  MemPtr *MPtr = MemPtr::create(P->P, CurOffset, P->EA, nullptr, Direct);
 +  if (MPtr == nullptr) {
@@ -63517,12 +63794,81 @@ index 000000000..1f297883b
 +  }
 +}
 +
++// Return true if a concrete Back above the per-object bound should be kept in
++// the visited key instead of being collapsed to -1. This is needed when the
++// current state can materialize a MemPtr whose raw offset was already created
++// (e.g., during initialize under the looser pre-sizing bound). Collapsing such
++// a Back would make two different raw backs share the same memo key and skip
++// the second one.
++//
++// GCPtr::spreadMemEscape materializes MemPtr(P->P, Back) through
++// memPtrspreadEscape. MemPtr::spreadMemEscape does not create (P->P, Back),
++// but its define branch (Offsets.size() == 1) and the recursive spread through
++// pointer Defines can materialize MemPtr(Define->P, Back). Check both so
++// MemPtr-layer memoization does not collapse distinct raw targets that are
++// already registered.
++static bool shouldKeepConcreteBack(CJEscapeAnalysis &EA, GCPtr *P, int Back) {
++  if (P->isPtr())
++    return EA.AllMemLocInfo.count(std::make_pair(P->P, Back));
++
++  MemPtr *M = static_cast<MemPtr *>(P);
++  for (auto &DefineMap : M->DefineValues)
++    for (GCPtr *Define : DefineMap.second)
++      if (Define->isPtr() &&
++          EA.AllMemLocInfo.count(std::make_pair(Define->P, Back)))
++        return true;
++  return false;
++}
++
 +void CJEscapeAnalysis::setInfoEscaped(GCPtr *GP, BasicBlock *BB) {
 +  assert(GP && "CJEscapeAnalysis::setInfoEscaped GCPtr should not be nullptr!");
 +  GP->setInfoEscaped();
 +  if (!EscapeBBInfo[BB].count(GP)) {
 +    EscapeBBInfo[BB][GP] = NotEscape;
 +  }
++}
++
++bool CJEscapeAnalysis::tryMarkSpreadVisited(GCPtr *P, unsigned ES, bool Direct,
++                                            SmallVectorImpl<int> &Offsets) {
++  int Back = Offsets.empty() ? 0 : Offsets.back();
++  if (Back < 0) {
++    Back = -1; // normalize escape-all offsets
++  } else if (Back > 0) {
++    // Per-object bound: an offset beyond the current node's own object size
++    // is not a legitimate field offset. Falls back to the global bound when
++    // the object size is unknown.
++    unsigned ObjSize = P->getObjSize();
++    unsigned Bound = ObjSize ? ObjSize : getSpreadOffsetBound(*this);
++    if (Back > static_cast<int>(Bound) &&
++        !shouldKeepConcreteBack(*this, P, Back))
++      Back = -1;
++  }
++  unsigned DepthBucket = Offsets.size() > MaxSpreadDepth ? MaxSpreadDepth
++                                                         : Offsets.size();
++  // Pack the state into a compact integer key:
++  //   Id (32 bits) | Reserved (11 bits) | Direct (1 bit) | ES (2 bits)
++  //   | Back+1 (13 bits) | DepthBucket (5 bits).
++  // Id occupies the high 32 bits. The Reserved field spans the 22nd through
++  // 32nd bits (0-based bit 21..31) and must remain zero for future expansion.
++  // Id is the stable unique id assigned at GCPtr construction; Back+1 keeps
++  // the escape-all (-1) offset addressable.
++  uint64_t BaseKey = ((uint64_t)P->Id << 32) | // Id: bits 32..63
++                     ((uint64_t)(ES & 0x3) << 18) |
++                     ((uint64_t)(Back + 1) << 5) |
++                     (DepthBucket & 0x1F);
++  uint64_t TrueKey = BaseKey | (1ULL << 20); // Direct bit: bit 20
++
++  // Direct==true is strictly stronger than Direct==false for the same state:
++  // it performs all Direct==false propagation plus the BaseValue/needInsert
++  // work. Therefore a Direct==false visit is redundant once a Direct==true
++  // visit of the same state has happened, while a Direct==true visit is never
++  // covered by an earlier Direct==false visit.
++  if (Direct) {
++    return SpreadVisited.insert(TrueKey).second;
++  }
++  if (SpreadVisited.count(TrueKey))
++    return false;
++  return SpreadVisited.insert(BaseKey).second;
 +}
 +
 +Value *CJEscapeAnalysis::getBaseValue(Value *CV, int &Offset) {
@@ -63609,9 +63955,6 @@ index 000000000..1f297883b
 +          }
 +          LLVM_DEBUG(dbgs() << "\n");
 +          break;
-+        case TransEscaped:
-+          LLVM_DEBUG(dbgs() << "TransEscaped\n");
-+          break;
 +        default:
 +          LLVM_DEBUG(dbgs() << "info escape state.\n");
 +          break;
@@ -63670,6 +64013,8 @@ index 000000000..1f297883b
 +#endif
 +
 +  void initialize() {
++    MaxObjSize = 0;
++    MaxObjSizeComputed = false;
 +    for (Function *Func : SCCFunctions) {
 +      ProcessedFunc = Func;
 +      LI = &LookupLoopInfo(*Func);
@@ -63775,14 +64120,21 @@ index 000000000..1f297883b
 +        if (!EscapeBBInfo.count(Pred)) {
 +          continue;
 +        }
-+        for (auto BBInfo : EscapeBBInfo[Pred]) {
-+          if (BBInfo.second >= TransEscaped &&
++        // SpreadEscape can update SuccBBInfo, which is the same MapVector as
++        // EscapeBBInfo[Pred] for a self-loop BB; snapshot the predecessor state
++        // before iterating to avoid mutating a container while iterating it.
++        SmallVector<std::pair<GCPtr *, unsigned>> PredSnapshot;
++        for (auto &PredInfo : EscapeBBInfo[Pred])
++          PredSnapshot.push_back(PredInfo);
++        for (auto BBInfo : PredSnapshot) {
++          if (BBInfo.second == Escaped &&
 +              (!SuccBBInfo.count(BBInfo.first) ||
-+               SuccBBInfo[BBInfo.first] < TransEscaped)) {
++               SuccBBInfo[BBInfo.first] < Escaped)) {
 +            Changed = true;
-+            SuccBBInfo[BBInfo.first] = TransEscaped;
-+            // obj stored to Escaped or TransEscaped is to be Escaped.
-+            BBInfo.first->spreadEscape(&BB, TransEscaped, SuccBBInfo, true);
++            SuccBBInfo[BBInfo.first] = Escaped;
++            // Any object stored into an Escaped memory location is to be
++            // treated as Escaped.
++            BBInfo.first->spreadEscape(&BB, Escaped, SuccBBInfo, true);
 +          } else if (BBInfo.second == InfoEscaped &&
 +                     (!SuccBBInfo.count(BBInfo.first) ||
 +                      SuccBBInfo[BBInfo.first] < InfoEscaped)) {
@@ -63795,6 +64147,8 @@ index 000000000..1f297883b
 +  }
 +
 +  void processFunc(Function *Func) {
++    // Start a fresh spreadMemEscape deduplication set for this function.
++    resetSpreadVisited();
 +    bool Changed = true;
 +    for (auto &BB : *Func) {
 +      auto &BBInfo = EscapeBBInfo[&BB];
@@ -63872,127 +64226,91 @@ index 000000000..1f297883b
 +    }
 +  }
 +
-+  // Compute the maximum number of non-zero-offset edges inside any cyclic
-+  // SCC of the propagation graph (built from MP / BaseValue / Alias /
-+  // InfoEscapedVec edges). A cyclic SCC carrying non-zero offsets is the
-+  // topology root cause of spreadMemEscape blow-up: cumulative offset-paths
-+  // diverge, so distinct (node, offset) states grow without bound. This is a
-+  // deterministic graph property (independent of ASLR or DenseMap order).
-+  unsigned computeMaxCycNonzero() {
-+    DenseMap<GCPtr *, SmallVector<GCPtr *>> G;
-+    DenseMap<GCPtr *, SmallVector<int64_t>> GOff;
-+    auto AddEdge = [&](GCPtr *From, GCPtr *To, int64_t Off) {
-+      G[From].push_back(To);
-+      GOff[From].push_back(Off);
-+      // Pre-register every edge target as a key of G: targets such as
-+      // MemPtrs live in AllMemLocInfo and are never values of AllPtrLocInfo,
-+      // so without this tarjanMaxCycNonzero would insert them via G[U]
-+      // while iterating G, invalidating the iteration (UB).
-+      if (G.find(To) == G.end()) {
-+        G[To];
++  // Aggregate the object size of G from its defining instruction without
++  // recursing: GCNew calls carry their Klass size, loads/phis/selects read the
++  // (already computed) size of their source/operands via GCPtr::get.
++  unsigned deriveObjSize(GCPtr *G) {
++    Value *V = G->P;
++    if (auto *CI = dyn_cast<CallBase>(V)) {
++      if (GlobalVariable *Klass = getNewKlass(CI)) {
++        bool HasRefs = false;
++        uint32_t AS = 0;
++        bool NonMoveArray = false;
++        Type *T = getAllocaType(Klass, HasRefs, AS, NonMoveArray,
++                                dyn_cast<Instruction>(V));
++        if (T != nullptr || NonMoveArray)
++          return AS;
 +      }
-+    };
++      return 0;
++    }
++    if (auto *LI = dyn_cast<LoadInst>(V)) {
++      if (GCPtr *Src = GCPtr::get(LI->getPointerOperand(), *this))
++        return Src->ObjSize;
++      return 0;
++    }
++    unsigned Max = 0;
++    if (auto *PN = dyn_cast<PHINode>(V)) {
++      for (unsigned I = 0; I < PN->getNumIncomingValues(); ++I)
++        if (GCPtr *Inv = GCPtr::get(PN->getIncomingValue(I), *this))
++          Max = std::max(Max, Inv->ObjSize);
++      return Max;
++    }
++    if (auto *SI = dyn_cast<SelectInst>(V)) {
++      for (Value *Op : {SI->getTrueValue(), SI->getFalseValue()})
++        if (GCPtr *OpPtr = GCPtr::get(Op, *this))
++          Max = std::max(Max, OpPtr->ObjSize);
++      return Max;
++    }
++    return 0;
++  }
++
++  void computeAllObjSizes() {
++    constexpr unsigned UseVectorSize = 4;
++    DenseMap<GCPtr *, SmallVector<GCPtr *, UseVectorSize>> Uses;
++    SmallVector<GCPtr *> Worklist;
 +    for (auto &KV : AllPtrLocInfo) {
-+      GCPtr *P = KV.second;
-+      for (GCPtr *M : P->MPs) {
-+        AddEdge(P, M, 0);
-+      }
-+      for (auto &V : P->BaseValue) {
-+        for (uint64_t O : V.second) {
-+          AddEdge(P, V.first, static_cast<int64_t>(O));
-+        }
-+      }
-+      for (auto &V : P->Alias) {
-+        for (int O : V.second) {
-+          AddEdge(P, V.first, O);
-+        }
-+      }
-+      for (GCPtr *V : P->InfoEscapedVec) {
-+        AddEdge(P, V, 0);
-+      }
-+    }
-+    return tarjanMaxCycNonzero(G, GOff);
-+  }
-+
-+  // Iterative Tarjan SCC. For every cyclic SCC, count non-zero-offset
-+  // intra-SCC edges and return the maximum such count.
-+  unsigned tarjanMaxCycNonzero(DenseMap<GCPtr *, SmallVector<GCPtr *>> &G,
-+                               DenseMap<GCPtr *, SmallVector<int64_t>> &GOff) {
-+    unsigned Idx = 0;
-+    DenseMap<GCPtr *, unsigned> Disc, Low;
-+    SmallVector<GCPtr *> Stk;
-+    DenseSet<GCPtr *> OnStk;
-+    unsigned MaxCycNonzero = 0;
-+    for (auto &KV : G) {
-+      if (Disc.count(KV.first)) {
-+        continue;
-+      }
-+      SmallVector<std::pair<GCPtr *, unsigned>> Dfs;
-+      Dfs.push_back({KV.first, 0});
-+      while (!Dfs.empty()) {
-+        GCPtr *U = Dfs.back().first;
-+        unsigned &Pos = Dfs.back().second;
-+        if (Pos == 0) {
-+          Disc[U] = Low[U] = Idx++;
-+          Stk.push_back(U);
-+          OnStk.insert(U);
-+        }
-+        if (Pos < G[U].size()) {
-+          GCPtr *W = G[U][Pos++];
-+          if (!Disc.count(W)) {
-+            Dfs.push_back({W, 0});
-+            continue;
++      GCPtr *G = KV.second;
++      Value *V = G->P;
++      if (auto *CI = dyn_cast<CallBase>(V)) {
++        // Seed: a GCNew carries its Klass size.
++        if (GlobalVariable *Klass = getNewKlass(CI)) {
++          bool HasRefs = false;
++          uint32_t AS = 0;
++          bool NonMoveArray = false;
++          Type *T = getAllocaType(Klass, HasRefs, AS, NonMoveArray,
++                                  dyn_cast<Instruction>(V));
++          if (T != nullptr || NonMoveArray) {
++            G->ObjSize = AS;
++            Worklist.push_back(G);
 +          }
-+          if (OnStk.count(W)) {
-+            Low[U] = std::min(Low[U], Disc[W]);
-+          }
-+          continue;
 +        }
-+        Dfs.pop_back();
-+        if (!Dfs.empty()) {
-+          Low[Dfs.back().first] = std::min(Low[Dfs.back().first], Low[U]);
-+        }
-+        if (Low[U] != Disc[U]) {
-+          continue;
-+        }
-+        // U roots an SCC; pop it and, if cyclic, count non-zero intra-edges.
-+        SmallVector<GCPtr *> Comp;
-+        GCPtr *X;
-+        do {
-+          X = Stk.pop_back_val();
-+          OnStk.erase(X);
-+          Comp.push_back(X);
-+        } while (X != U);
-+        if (Comp.size() <= 1) {
-+          continue;
-+        }
-+        DenseSet<GCPtr *> In(Comp.begin(), Comp.end());
-+        unsigned Nz = countNonzeroIntraEdges(Comp, G, GOff, In);
-+        MaxCycNonzero = std::max(MaxCycNonzero, Nz);
++      }
++      // Build the reverse use index: def -> users.
++      if (auto *LI = dyn_cast<LoadInst>(V)) {
++        if (GCPtr *Src = GCPtr::get(LI->getPointerOperand(), *this))
++          Uses[Src].push_back(G);
++      } else if (auto *PN = dyn_cast<PHINode>(V)) {
++        for (unsigned I = 0; I < PN->getNumIncomingValues(); ++I)
++          if (GCPtr *Inc = GCPtr::get(PN->getIncomingValue(I), *this))
++            Uses[Inc].push_back(G);
++      } else if (auto *SI = dyn_cast<SelectInst>(V)) {
++        for (Value *Op : {SI->getTrueValue(), SI->getFalseValue()})
++          if (GCPtr *OpPtr = GCPtr::get(Op, *this))
++            Uses[OpPtr].push_back(G);
 +      }
 +    }
-+    return MaxCycNonzero;
-+  }
-+
-+  // Count edges within a cyclic SCC whose offset is non-zero. The -1
-+  // escape-all sentinel (an unknown, non-constant offset; see getBaseValue)
-+  // is excluded: it stops offset accumulation in spreadMemEscape rather
-+  // than making cumulative offset-paths diverge, so it must not count as a
-+  // diverging edge.
-+  unsigned countNonzeroIntraEdges(SmallVectorImpl<GCPtr *> &Comp,
-+                                  DenseMap<GCPtr *, SmallVector<GCPtr *>> &G,
-+                                  DenseMap<GCPtr *, SmallVector<int64_t>> &GOff,
-+                                  DenseSet<GCPtr *> &In) {
-+    unsigned Nz = 0;
-+    for (GCPtr *N : Comp) {
-+      for (unsigned I = 0; I < G[N].size(); ++I) {
-+        int64_t Off = GOff[N][I];
-+        if (In.count(G[N][I]) && Off != 0 && Off != -1) {
-+          ++Nz;
++    // Forward propagation: when a def's size grows, recompute its users.
++    while (!Worklist.empty()) {
++      GCPtr *G = Worklist.pop_back_val();
++      for (GCPtr *Use : Uses[G]) {
++        unsigned S = deriveObjSize(Use);
++        if (S > Use->ObjSize) {
++          Use->ObjSize = S;
++          Worklist.push_back(Use);
 +        }
 +      }
 +    }
-+    return Nz;
++    MaxObjSizeComputed = true;
 +  }
 +
 +  bool run() {
@@ -64008,17 +64326,12 @@ index 000000000..1f297883b
 +    for (auto LoadPtr : LoadValues) {
 +      processLoadNew(LoadPtr);
 +    }
-+    // Bail out when the propagation graph has a cyclic SCC with too many
-+    // non-zero-offset edges (the direct topology root cause of
-+    // spreadMemEscape blow-up: a cycle carrying non-zero offsets makes
-+    // cumulative offset-paths diverge into an unbounded number of distinct
-+    // (node, offset) states). This is a deterministic compile-time graph
-+    // property, so the bail-out decision is order-independent. Keep every
-+    // GCNew on the heap (conservative, correct, no stack promotion).
-+    if (computeMaxCycNonzero() > CJPEAMaxCycNonzero) {
-+      cleanupAnalysisState();
-+      return Changed;
-+    }
++    // Compute per-object sizes before propagation so MemPtr offset saturation
++    // uses each object's own bound. MemPtrs created during initialize /
++    // processLoadNew come from direct IR accesses and are intentionally left
++    // as-is; only MemPtrs created during propagation need to obey the
++    // per-object bound to keep translation-derived offsets bounded.
++    computeAllObjSizes();
 +    for (Function *Func : SCCFunctions) {
 +      processFunc(Func);
 +    }
@@ -64080,13 +64393,6 @@ index 000000000..1f297883b
 +    }
 +  }
 +
-+  bool isValueInvalid(Value *V) {
-+    if (V->getValueID() == llvm::Value::UndefValueVal) {
-+      report_fatal_error("store/gcwrite an undef value!");
-+    }
-+    return V->getValueID() == llvm::Value::ConstantPointerNullVal;
-+  }
-+
 +  void bindInfoEscape(GCPtr *P, GCPtr *V, BasicBlock *BB) {
 +    assert((P && V) && "CJEscapeAnalysis::bindInfoEscape GCPtr should not be nullptr!");
 +    P->InfoEscapedVec.insert(V);
@@ -64101,6 +64407,38 @@ index 000000000..1f297883b
 +    }
 +  }
 +
++  // Shared handling for "write GC reference V into pointer location P": record
++  // the escape relationship (via MemPtr) and the Def entry. Used by both
++  // cj_gcwrite_ref (handleGCWrite) and plain store (visitStoreInst).
++  void handleWrite(Value *P, Value *V, BasicBlock *BB) {
++    if (P->getValueID() == llvm::Value::ConstantPointerNullVal ||
++        V->getValueID() == llvm::Value::ConstantPointerNullVal)
++      return;
++    GCPtr *GP = GCPtr::create(P, *this, LI);
++    GCPtr *GV = GCPtr::create(V, *this, LI);
++    if (!GP || !GV)
++      return;
++    if (isEscapedValue(P) || GP->LoopDepth < GV->LoopDepth) {
++      if (auto VI = dyn_cast<Instruction>(V)) {
++        setEscaped(GV, BB);
++      }
++    }
++    int Offset = 0;
++    Value *BaseP = getBaseValue(P, Offset);
++    MemPtr *MP = MemPtr::create(BaseP, Offset, *this, LI);
++    MP->insertDefine(BB, GV);
++
++    if (isEscapedValue(V)) {
++      setEscaped(MP, BB);
++    }
++
++    StoreRelations[BB][P].insert(V);
++    if (Offset >= 0 && !Def[BB][BaseP][Offset].empty()) {
++      Def[BB][BaseP][Offset].clear();
++    }
++    Def[BB][BaseP][Offset].insert(GV);
++  }
++
 +  void handleGCWrite(IntrinsicInst *II) {
 +    Value *V = II->getOperand(0);
 +    Type *T = V->getType();
@@ -64109,28 +64447,7 @@ index 000000000..1f297883b
 +      return;
 +    }
 +    Value *P = II->getOperand(2);
-+    GCPtr *GP = GCPtr::create(P, *this, LI);
-+    GCPtr *GV = GCPtr::create(V, *this, LI);
-+    assert((GP && GV) && "CJEscapeAnalysis::handleGCWrite GCPtr should not be nullptr!");
-+    if (isEscapedValue(P) || GP->LoopDepth < GV->LoopDepth) {
-+      if (auto VI = dyn_cast<Instruction>(V)) {
-+        EscapeBBInfo[II->getParent()][GV] = Escaped;
-+      }
-+    }
-+    int Offset = 0;
-+    Value *BaseP = getBaseValue(P, Offset); // direct get from intrinsic
-+    MemPtr *MP = MemPtr::create(BaseP, Offset, *this, LI);
-+    MP->insertDefine(II->getParent(), GV);
-+
-+    if (isEscapedValue(V)) {
-+      EscapeBBInfo[II->getParent()][MP] = Escaped;
-+    }
-+
-+    StoreRelations[II->getParent()][P].insert(V);
-+    if (Offset >=0 && !Def[II->getParent()][BaseP][Offset].empty()) {
-+      Def[II->getParent()][BaseP][Offset].clear();
-+    }
-+    Def[II->getParent()][BaseP][Offset].insert(GV);
++    handleWrite(P, V, II->getParent());
 +  }
 +
 +  void handleGCRead(IntrinsicInst *II, bool IsStatic) {
@@ -64145,7 +64462,7 @@ index 000000000..1f297883b
 +        isValueInvalid(V)) {
 +      return;
 +    }
-+    EscapeBBInfo[II->getParent()][GCPtr::create(V, *this, LI)] = Escaped;
++    setEscaped(GCPtr::create(V, *this, LI), II->getParent());
 +    StoreRelations[II->getParent()][II->getOperand(1)].insert(V);
 +  }
 +
@@ -64386,7 +64703,7 @@ index 000000000..1f297883b
 +    int Offset = 0;
 +    if (isGCPointerType(I->getType())) {
 +      GCPtr *PI = GCPtr::create(I, *this, LI);
-+      EscapeBBInfo[I->getParent()][PI] = Escaped;
++      setEscaped(PI, I->getParent());
 +    }
 +
 +    for (unsigned Idx = 0; Idx < I->getNumOperands(); Idx++) {
@@ -64396,7 +64713,7 @@ index 000000000..1f297883b
 +        continue;
 +      GCPtr *Base = GCPtr::create(getBaseValue(V, Offset), *this, LI);
 +      if (Base != nullptr) {
-+        EscapeBBInfo[I->getParent()][Base] = Escaped;
++        setEscaped(Base, I->getParent());
 +      }
 +    }
 +  }
@@ -64425,7 +64742,7 @@ index 000000000..1f297883b
 +    for (unsigned Idx = 0; Idx < PN.getNumIncomingValues(); Idx++) {
 +      Value *PhiIn = PN.getIncomingValue(Idx);
 +      if (isEscapedValue(PhiIn)) {
-+        EscapeBBInfo[PN.getParent()][P] = Escaped;
++        setEscaped(P, PN.getParent());
 +      }
 +      int Offset = 0;
 +      Value *BasePhiIn = getBaseValue(PhiIn, Offset);
@@ -64480,7 +64797,7 @@ index 000000000..1f297883b
 +                (LD < PhiInPtr->LoopDepth ||
 +                 (LD != 0 && isInSameLoop(P, PhiInPtr)))) {
 +              assert(P->LoopDepth <= PhiInPtr->LoopDepth);
-+              EscapeBBInfo[PN.getParent()][PhiInPtr] = Escaped;
++              setEscaped(PhiInPtr, PN.getParent());
 +            }
 +            break;
 +          }
@@ -64498,7 +64815,7 @@ index 000000000..1f297883b
 +    GCPtr *P = GCPtr::create(&SI, *this, LI);
 +    if (isEscapedValue(SI.getTrueValue()) ||
 +        isEscapedValue(SI.getFalseValue())) {
-+      EscapeBBInfo[SI.getParent()][P] = Escaped;
++      setEscaped(P, SI.getParent());
 +    }
 +    int Offset = 0;
 +    Value *BaseTrue = getBaseValue(SI.getTrueValue(), Offset);
@@ -64530,7 +64847,7 @@ index 000000000..1f297883b
 +    LoadValues.insert(LoadPtr);
 +    BasicBlock *CurBB = V->getParent();
 +    if (isEscapedValue(P)) {
-+      EscapeBBInfo[CurBB][LoadPtr] = Escaped;
++      setEscaped(LoadPtr, CurBB);
 +      return;
 +    }
 +    int SrcOffset = 0;
@@ -64582,28 +64899,7 @@ index 000000000..1f297883b
 +    }
 +
 +    Value *P = SI.getPointerOperand();
-+    GCPtr *GP = GCPtr::create(P, *this, LI);
-+    GCPtr *GV = GCPtr::create(V, *this, LI);
-+    assert((GP && GV) && "CJEscapeAnalysis::visitStoreInst GCPtr should not be nullptr!");
-+    if (isEscapedValue(P) || GP->LoopDepth < GV->LoopDepth) {
-+      if (auto VI = dyn_cast<Instruction>(V)) {
-+        EscapeBBInfo[SI.getParent()][GV] = Escaped;
-+      }
-+    }
-+    int Offset = 0;
-+    Value *BaseP = getBaseValue(P, Offset);
-+    MemPtr *MP = MemPtr::create(BaseP, Offset, *this, LI);
-+    MP->insertDefine(SI.getParent(), GV);
-+
-+    if (isEscapedValue(V)) {
-+      EscapeBBInfo[SI.getParent()][MP] = Escaped;
-+    }
-+
-+    StoreRelations[SI.getParent()][P].insert(V);
-+    if (Offset >= 0 && !Def[SI.getParent()][BaseP][Offset].empty()) {
-+      Def[SI.getParent()][BaseP][Offset].clear();
-+    }
-+    Def[SI.getParent()][BaseP][Offset].insert(GV);
++    handleWrite(P, V, SI.getParent());
 +  }
 +
 +  void visitMemCpyOrMove(Instruction &I) {
@@ -64619,13 +64915,13 @@ index 000000000..1f297883b
 +      return false;
 +    GlobalVariable *Klass = getNewKlass(CB);
 +    if (Klass == nullptr) {
-+      EscapeBBInfo[CB->getParent()][GCPtr::create(CB, *this, LI)] = Escaped;
++      setEscaped(GCPtr::create(CB, *this, LI), CB->getParent());
 +      return true;
 +    }
 +    if (isCangjieNewFinalizerFunc(Callee)) {
 +      LoopInfo *CurLI = &LookupLoopInfo(*CB->getParent()->getParent());
 +      if (!canStackAllocateFinalizer(CB, M, CurLI)) {
-+        EscapeBBInfo[CB->getParent()][GCPtr::create(CB, *this, LI)] = Escaped;
++        setEscaped(GCPtr::create(CB, *this, LI), CB->getParent());
 +        return true;
 +      }
 +    }
@@ -64635,9 +64931,10 @@ index 000000000..1f297883b
 +    Type *AllocaType =
 +        getAllocaType(Klass, HasRefs, AllocaSize, NonMoveArray, CB);
 +    if (AllocaType != nullptr || NonMoveArray) {
++      MaxObjSize = std::max(MaxObjSize, AllocaSize);
 +      insertGCNew(CB);
 +    } else {
-+      EscapeBBInfo[CB->getParent()][GCPtr::create(CB, *this, LI)] = Escaped;
++      setEscaped(GCPtr::create(CB, *this, LI), CB->getParent());
 +    }
 +    return true;
 +  }
@@ -64684,7 +64981,7 @@ index 000000000..1f297883b
 +    if (containsGCPtrType(Ret->getType())) {
 +      GCPtr *RetPtr = GCPtr::create(Ret, *this, LI);
 +      if (RetPtr != nullptr) {
-+        EscapeBBInfo[I.getParent()][RetPtr] = Escaped;
++        setEscaped(RetPtr, I.getParent());
 +      }
 +    }
 +  }
@@ -72456,10 +72753,10 @@ index 000000000..9b2a99555
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp b/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp
 new file mode 100644
-index 000000000..ebff9254b
+index 000000000..07a3c2610
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp
-@@ -0,0 +1,1648 @@
+@@ -0,0 +1,1801 @@
 +//===- CJFillMetadata.cpp - Fill Cangjie Metadata ---------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -74082,6 +74379,159 @@ index 000000000..ebff9254b
 +    return PreservedAnalyses::all();
 +  }
 +  if (fillGV(M)) {
++    return PreservedAnalyses::none();
++  }
++  return PreservedAnalyses::all();
++}
++
++namespace {
++
++// Copy the debug fields of a reflect struct into a small .dbg global.
++// Enum reflects keep operands [0..2] (ctorInfo/modifier/ctorCnt), non-enum
++// reflects keep operand [0] only. We only rewrite when that compact form would
++// actually shrink the payload; otherwise the caller keeps the original
++// reflection operand unchanged.
++// IsEnum comes from the owner's type byte, not operand count — enum reflects
++// can grow to 15+ operands, so field count is not a reliable discriminator.
++GlobalVariable *downgradeReflectGlobal(GlobalVariable &ReflectGV, bool IsEnum) {
++  if (!ReflectGV.hasInitializer())
++    return nullptr;
++
++  auto *Init = dyn_cast<ConstantStruct>(ReflectGV.getInitializer());
++  if (!Init)
++    return nullptr;
++
++  unsigned NumOps = Init->getNumOperands();
++  unsigned CopiedOps = IsEnum ? 3 : 1;
++  if (NumOps <= CopiedOps)
++    return nullptr;
++
++  SmallVector<Type *, 4> DebugTypes;
++  SmallVector<Constant *, 4> DebugOps;
++  for (unsigned I = 0; I < CopiedOps; ++I) {
++    DebugTypes.push_back(Init->getOperand(I)->getType());
++    DebugOps.push_back(Init->getOperand(I));
++  }
++
++  auto *DebugST = StructType::get(ReflectGV.getContext(), DebugTypes);
++  auto *DebugGV = new GlobalVariable(
++      *ReflectGV.getParent(), DebugST, false, GlobalValue::InternalLinkage,
++      ConstantStruct::get(DebugST, DebugOps), ReflectGV.getName() + ".dbg");
++  DebugGV->copyAttributesFrom(&ReflectGV);
++  return DebugGV;
++}
++
++bool rewriteReflectionOperand(GlobalVariable &GV, unsigned FlagIdx,
++                              unsigned ReflectionIdx) {
++  if (!GV.hasInitializer())
++    return false;
++
++  auto *Init = dyn_cast<ConstantStruct>(GV.getInitializer());
++  if (Init == nullptr || Init->getNumOperands() <= ReflectionIdx)
++    return false;
++
++  auto *Flag = cast<ConstantInt>(Init->getOperand(FlagIdx));
++  uint64_t NewFlag = Flag->getZExtValue() & ~TF_REFLECTION;
++
++  if (NewFlag == Flag->getZExtValue())
++    return false;
++
++  SmallVector<Constant *, 0> Ops;
++  Ops.reserve(Init->getNumOperands());
++  for (unsigned I = 0; I < Init->getNumOperands(); ++I)
++    Ops.push_back(cast<Constant>(Init->getOperand(I)));
++
++  Ops[FlagIdx] = ConstantInt::get(Flag->getType(), NewFlag);
++
++  auto *ReflectOp = Init->getOperand(ReflectionIdx);
++  auto *CE = dyn_cast<ConstantExpr>(ReflectOp);
++  if (CE && CE->getOpcode() == Instruction::BitCast) {
++    bool IsEnum = false;
++    unsigned TypeIdx = FlagIdx == CIT_FLAG ? CIT_TYPE : TT_TYPE;
++    if (auto *TypeCI = dyn_cast<ConstantInt>(Init->getOperand(TypeIdx))) {
++      int64_t Kind = TypeCI->getSExtValue();
++      IsEnum = (Kind == TK_ENUM || Kind == TK_TEMP_ENUM);
++    }
++
++    if (auto *ReflectGV = dyn_cast<GlobalVariable>(CE->getOperand(0))) {
++      if (auto *DebugGV = downgradeReflectGlobal(*ReflectGV, IsEnum)) {
++        Ops[ReflectionIdx] = ConstantExpr::getBitCast(DebugGV, CE->getType());
++      }
++    }
++  }
++
++  GV.setInitializer(ConstantStruct::get(Init->getType(), Ops));
++  return true;
++}
++
++bool rewritePackageInfoPayload(GlobalVariable &GV) {
++  if (!GV.hasInitializer())
++    return false;
++
++  auto *Init = dyn_cast<ConstantStruct>(GV.getInitializer());
++  if (Init == nullptr || Init->getNumOperands() < FPT_PTRS)
++    return false;
++
++  // Clear only FPT_FLAG (PackageInfo::isVaild) to make package lookup fail; zeroing the counts
++  // would misalign the runtime's GetPackageSize() stride walk over the packageInfos.
++  auto *Flag = dyn_cast<ConstantInt>(Init->getOperand(FPT_FLAG));
++  if (Flag == nullptr || Flag->isZero())
++    return false;
++
++  SmallVector<Constant *, 0> Ops;
++  Ops.reserve(Init->getNumOperands());
++  for (unsigned I = 0; I < Init->getNumOperands(); ++I)
++    Ops.push_back(cast<Constant>(Init->getOperand(I)));
++
++  Ops[FPT_FLAG] = ConstantInt::get(Flag->getType(), 0);
++  GV.setInitializer(ConstantStruct::get(Init->getType(), Ops));
++  return true;
++}
++
++// Erase reflect globals left unreferenced by the rewrite (needed at FullLTO
++// -O0, where no GlobalDCE follows). Scope: internal + isCJReflectGV() + no
++// uses; fixpoint collects chains. .dbg/fieldNames stay referenced and never
++// touched.
++void eraseReflectGlobals(Module &M) {
++  bool RoundChanged = true;
++  while (RoundChanged) {
++    RoundChanged = false;
++    SmallVector<GlobalVariable *, 16> ToErase;
++    for (auto &GV : M.globals()) {
++      if (GV.isDeclaration() || !GV.isCJReflectGV() ||
++          !GlobalValue::isInternalLinkage(GV.getLinkage()))
++        continue;
++      // The rewrite detaches the old TI/TT initializer constant, whose nested
++      // constant exprs still count as uses; drop them so use_empty() is accurate.
++      GV.removeDeadConstantUsers();
++      if (!GV.use_empty())
++        continue;
++      ToErase.push_back(&GV);
++    }
++    for (auto *GV : ToErase) {
++      GV->eraseFromParent();
++      RoundChanged = true;
++    }
++  }
++}
++} // namespace
++
++PreservedAnalyses
++CJDisableImportLibReflection::run(Module &M, ModuleAnalysisManager &) const {
++  bool Changed = false;
++  for (auto &GV : M.globals()) {
++    if (GV.isCJTypeInfo()) {
++      Changed |= rewriteReflectionOperand(GV, CIT_FLAG, CIT_REFLECTION);
++    } else if (GV.isCJTypeTemplate()) {
++      Changed |= rewriteReflectionOperand(GV, TT_FLAG, TT_REFLECTION);
++    } else if (GV.isCJReflectPkgInfo()) {
++      Changed |= rewritePackageInfoPayload(GV);
++    }
++  }
++  // Self-erase dead reflection globals; harmless where GlobalDCE follows.
++  // Nothing becomes dead unless a rewrite happened, so skip the scan otherwise.
++  if (Changed) {
++    eraseReflectGlobals(M);
 +    return PreservedAnalyses::none();
 +  }
 +  return PreservedAnalyses::all();
@@ -107435,6 +107885,117 @@ index 000000000..8a544ea75
 +
 +!0 = !{!"default:A"}
 +!1 = !{!"default:A.ti"}
+diff --git a/llvm/test/Transforms/CJFillMetadata/disable_import_lib_reflection.ll b/llvm/test/Transforms/CJFillMetadata/disable_import_lib_reflection.ll
+new file mode 100644
+index 000000000..f52cc3a9e
+--- /dev/null
++++ b/llvm/test/Transforms/CJFillMetadata/disable_import_lib_reflection.ll
+@@ -0,0 +1,105 @@
++; RUN: opt '-passes=cj-disable-import-lib-reflection,globaldce' -S < %s | FileCheck %s --check-prefix=CHECK
++; RUN: opt '-passes=cj-disable-import-lib-reflection' -S < %s | FileCheck %s --check-prefix=ERASE
++
++; CJDisableImportLibReflection clears TF_REFLECTION on TypeInfo/TypeTemplate and
++; FPT_FLAG on PackageInfo at LTO post-link time.
++;
++; The reflection payload is only rewritten when the compact .dbg form actually
++; shrinks it: non-enum keeps operand [0] (fieldnames), enum keeps [0..2]. A
++; minimal payload that is already one operand is not downgraded; its (now
++; unusable) reflect global stays referenced and is not erased.
++;
++; Both pipelines must produce the same IR: GlobalDCE (FullLTO -O2) and the
++; pass-internal self-erase (FullLTO -O0) both drop the dead reflection chain.
++
++%BitMap = type { i32, [0 x i8] }
++%ExtensionDef = type { i32, i8, i8*, i8*, i8*, i8* }
++%TypeTemplate = type { i8*, i8, i8, i16, i16, i8*, i8*, i8*, i8*, %ExtensionDef**, i16 }
++%TypeInfo = type { i8*, i8, i8, i16, i32, %BitMap*, i32, i8, i8, i16, i32*, i8*, i8*, i8*, %TypeInfo*, %ExtensionDef**, i8*, i8* }
++%DefaultHasher.ti.reflectType = type { i8* }
++%"std.core:CPointerHandle.tt.reflectType" = type { i8* }
++%test.pkgInfoType = type { i8*, i32, i32, i32, i32, i64, i8*, i8*, i8*, i8*, i8*, i8*, i8* }
++
++; Minimal one-operand payloads: the reflection flag is cleared but the payload
++; cannot be shrunk, so the original reflect globals stay referenced.
++@"DefaultHasher.ti.reflect" = internal global %DefaultHasher.ti.reflectType { i8* null }, align 8 #1
++@"std.core:CPointerHandle.tt.reflect" = internal global %"std.core:CPointerHandle.tt.reflectType" { i8* null }, align 8 #1
++@"DefaultHasher.ti" = global %TypeInfo { i8* null, i8 22, i8 64, i16 1, i32 8, %BitMap* null, i32 0, i8 8, i8 0, i16 -32768, i32* null, i8* null, i8* null, i8* null, %TypeInfo* null, %ExtensionDef** null, i8* null, i8* bitcast (%DefaultHasher.ti.reflectType* @"DefaultHasher.ti.reflect" to i8*) }, !RelatedType !0 #0
++@"std.core:CPointerHandle.tt" = global %TypeTemplate { i8* null, i8 22, i8 64, i16 0, i16 0, i8* null, i8* null, i8* null, i8* bitcast (%"std.core:CPointerHandle.tt.reflectType"* @"std.core:CPointerHandle.tt.reflect" to i8*), %ExtensionDef** null, i16 0 } #2
++@test_test.packageInfo = global %test.pkgInfoType { i8* null, i32 1, i32 1, i32 0, i32 0, i64 1, i8* null, i8* null, i8* null, i8* null, i8* null, i8* bitcast (%TypeInfo* @"DefaultHasher.ti" to i8*), i8* bitcast (%TypeTemplate* @"std.core:CPointerHandle.tt" to i8*) }, no_sanitize_address #1
++
++; Multi-operand payload: Bar.ti.reflect is downgraded to a one-field .dbg
++; global holding fieldnames; method0/paramName/annotation become unreferenced
++; and are erased by the pass (or GlobalDCE).
++%Bar.ti.reflectType = type { i8*, i8*, i8*, i8* }
++@"Bar.ti.reflect" = internal global %Bar.ti.reflectType {
++  i8* bitcast ([3 x i8]* @"Bar.fieldnames" to i8*),
++  i8* bitcast ([7 x i8]* @"Bar.methodName" to i8*),
++  i8* bitcast ([10 x i8]* @"Bar.annoName" to i8*),
++  i8* bitcast (%Bar.tt.method0Type* @"Bar.tt.method0" to i8*)
++}, align 8 #1
++%Bar.tt.method0Type = type { i8*, i8* }
++@"Bar.tt.method0" = internal global %Bar.tt.method0Type {
++  i8* bitcast ([7 x i8]* @"Bar.methodName" to i8*),
++  i8* bitcast (%Bar.tt.actualParamType* @"Bar.tt.method0.actualParam" to i8*)
++}, align 8 #1
++%Bar.tt.actualParamType = type { i8* }
++@"Bar.tt.method0.actualParam" = internal global %Bar.tt.actualParamType {
++  i8* bitcast ([12 x i8]* @"Bar.paramName" to i8*)
++}, align 8 #1
++@"Bar.paramName" = internal global [12 x i8] c"actualParam0", align 1 #1
++@"Bar.fieldnames" = internal global [3 x i8] c"Bar", align 1 #1
++@"Bar.methodName" = internal global [7 x i8] c"method0", align 1 #1
++@"Bar.annoName" = internal global [10 x i8] c"annotation", align 1 #1
++@"Bar.ti" = global %TypeInfo { i8* null, i8 22, i8 64, i16 1, i32 8, %BitMap* null, i32 0, i8 8, i8 0, i16 -32768, i32* null, i8* null, i8* null, i8* null, %TypeInfo* null, %ExtensionDef** null, i8* null, i8* bitcast (%Bar.ti.reflectType* @"Bar.ti.reflect" to i8*) }, !RelatedType !1 #0
++
++define i8* @keep_ti() {
++  ret i8* bitcast (%TypeInfo* @"DefaultHasher.ti" to i8*)
++}
++
++define i8* @keep_tt() {
++  ret i8* bitcast (%TypeTemplate* @"std.core:CPointerHandle.tt" to i8*)
++}
++
++; Minimal TI/TT payloads stay referenced after the flag is cleared.
++; CHECK: @DefaultHasher.ti.reflect = internal global %DefaultHasher.ti.reflectType zeroinitializer, align 8{{.*}}
++; CHECK: @"std.core:CPointerHandle.tt.reflect" = internal global %"std.core:CPointerHandle.tt.reflectType" zeroinitializer, align 8{{.*}}
++; CHECK: @DefaultHasher.ti = global %TypeInfo { i8* null, i8 22, i8 0, i16 1, i32 8, %BitMap* null, i32 0, i8 8, i8 0, i16 -32768, i32* null, i8* null, i8* null, i8* null, %TypeInfo* null, %ExtensionDef** null, i8* null, i8* bitcast (%DefaultHasher.ti.reflectType* @DefaultHasher.ti.reflect to i8*) }, !RelatedType !0{{.*}}
++; CHECK: @"std.core:CPointerHandle.tt" = global %TypeTemplate { i8* null, i8 22, i8 0, i16 0, i16 0, i8* null, i8* null, i8* null, i8* bitcast (%"std.core:CPointerHandle.tt.reflectType"* @"std.core:CPointerHandle.tt.reflect" to i8*), %ExtensionDef** null, i16 0 }{{.*}}
++
++; PackageInfo keeps its layout; only the FPT_FLAG field (i64) is zeroed.
++; CHECK: @test_test.packageInfo = global %test.pkgInfoType { i8* null, i32 1, i32 1, i32 0, i32 0, i64 0, i8* null, i8* null, i8* null, i8* null, i8* null, i8* bitcast (%TypeInfo* @DefaultHasher.ti to i8*), i8* bitcast (%TypeTemplate* @"std.core:CPointerHandle.tt" to i8*) }, no_sanitize_address{{.*}}
++
++; Bar's multi-operand reflect payload is downgraded to .dbg with fieldnames and
++; the whole method/annotation chain is gone.
++; CHECK: @Bar.fieldnames = internal global [3 x i8] c"Bar", align 1{{.*}}
++; CHECK: @Bar.ti = global %TypeInfo { i8* null, i8 22, i8 0, i16 1, i32 8, %BitMap* null, i32 0, i8 8, i8 0, i16 -32768, i32* null, i8* null, i8* null, i8* null, %TypeInfo* null, %ExtensionDef** null, i8* null, i8* bitcast ({ i8* }* @Bar.ti.reflect.dbg to i8*) }, !RelatedType !1{{.*}}
++; CHECK: @Bar.ti.reflect.dbg = internal global { i8* } { i8* getelementptr inbounds ([3 x i8], [3 x i8]* @Bar.fieldnames, i32 0, i32 0) }, align 8{{.*}}
++; CHECK-NOT: @Bar.ti.reflect =
++; CHECK-NOT: @Bar.tt.method0 =
++; CHECK-NOT: @Bar.tt.method0.actualParam =
++; CHECK-NOT: @Bar.paramName =
++; CHECK-NOT: @Bar.methodName =
++; CHECK-NOT: @Bar.annoName =
++
++; ERASE: @DefaultHasher.ti.reflect = internal global %DefaultHasher.ti.reflectType zeroinitializer, align 8{{.*}}
++; ERASE: @"std.core:CPointerHandle.tt.reflect" = internal global %"std.core:CPointerHandle.tt.reflectType" zeroinitializer, align 8{{.*}}
++; ERASE: @DefaultHasher.ti = global %TypeInfo { i8* null, i8 22, i8 0, i16 1, i32 8, %BitMap* null, i32 0, i8 8, i8 0, i16 -32768, i32* null, i8* null, i8* null, i8* null, %TypeInfo* null, %ExtensionDef** null, i8* null, i8* bitcast (%DefaultHasher.ti.reflectType* @DefaultHasher.ti.reflect to i8*) }, !RelatedType !0{{.*}}
++; ERASE: @"std.core:CPointerHandle.tt" = global %TypeTemplate { i8* null, i8 22, i8 0, i16 0, i16 0, i8* null, i8* null, i8* null, i8* bitcast (%"std.core:CPointerHandle.tt.reflectType"* @"std.core:CPointerHandle.tt.reflect" to i8*), %ExtensionDef** null, i16 0 }{{.*}}
++; ERASE: @test_test.packageInfo = global %test.pkgInfoType { i8* null, i32 1, i32 1, i32 0, i32 0, i64 0, i8* null, i8* null, i8* null, i8* null, i8* null, i8* bitcast (%TypeInfo* @DefaultHasher.ti to i8*), i8* bitcast (%TypeTemplate* @"std.core:CPointerHandle.tt" to i8*) }, no_sanitize_address{{.*}}
++; ERASE: @Bar.fieldnames = internal global [3 x i8] c"Bar", align 1{{.*}}
++; ERASE: @Bar.ti = global %TypeInfo { i8* null, i8 22, i8 0, i16 1, i32 8, %BitMap* null, i32 0, i8 8, i8 0, i16 -32768, i32* null, i8* null, i8* null, i8* null, %TypeInfo* null, %ExtensionDef** null, i8* null, i8* bitcast ({ i8* }* @Bar.ti.reflect.dbg to i8*) }, !RelatedType !1{{.*}}
++; ERASE: @Bar.ti.reflect.dbg = internal global { i8* } { i8* getelementptr inbounds ([3 x i8], [3 x i8]* @Bar.fieldnames, i32 0, i32 0) }, align 8{{.*}}
++; ERASE-NOT: @Bar.ti.reflect =
++; ERASE-NOT: @Bar.tt.method0 =
++; ERASE-NOT: @Bar.tt.method0.actualParam =
++; ERASE-NOT: @Bar.paramName =
++; ERASE-NOT: @Bar.methodName =
++; ERASE-NOT: @Bar.annoName =
++
++attributes #0 = { "CFileKlass" }
++attributes #1 = { "CFileReflect" }
++attributes #2 = { "cj_tt" }
++
++!0 = !{!"record.DefaultHasher"}
++!1 = !{!"record.Bar"}
 diff --git a/llvm/test/Transforms/CJFillMetadata/reflection.ll b/llvm/test/Transforms/CJFillMetadata/reflection.ll
 new file mode 100644
 index 000000000..df84353ff
