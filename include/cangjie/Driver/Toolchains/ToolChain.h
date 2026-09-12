@@ -158,10 +158,16 @@ protected:
     }
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    // A key linked dynamically requires the std libraries in its value to be linked dynamically
+    // along with it, so that only one copy of each of them ever reaches the process.
     const std::unordered_map<std::string, std::vector<std::string>> ALWAYS_DYNAMIC_LINK_STD_LIBRARIES = {
         {"libcangjie-std-ast.a",
             {"libcangjie-std-core.a", "libcangjie-std-collection.a", "libcangjie-std-sort.a",
                 "libcangjie-std-math.a"}}};
+
+    // The always-dynamic set for the current built-in dependency closure: keys of the map above
+    // plus their std dependencies.
+    std::unordered_set<std::string> GetAlwaysDynamicStdLibs() const;
 #endif
     // Check other dependencies of 'staticLib' and emplace them in 'otherLibs'.
     void CheckOtherDependeniesOfStaticLib(

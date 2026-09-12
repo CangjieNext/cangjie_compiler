@@ -164,8 +164,18 @@ void MachO::AppendLTOBcInputs(const std::vector<TempFileInfo>& objFiles, Tool& t
     // appear in BOTH directBuiltinDependencies and indirectBuiltinDependencies
     // (GetUsedSTDLibFiles returns a DepType::BOTH package from each call), so we
     // still dedup across the two iteration passes via a single set.
+    // The always-dynamic std packages stay undefined here - the downstream link resolves them
+    // against the shared libraries it links. Baking a copy in would duplicate them.
+    const std::unordered_set<std::string> alwaysDynamicStdLibs = GetAlwaysDynamicStdLibs();
+
     std::unordered_set<std::string> seen;
-    const std::function<void(std::string)> appendBcToTool = [&tool, &seen](const std::string& cjoFileName) {
+    const std::function<void(std::string)> appendBcToTool = [&tool, &seen, &alwaysDynamicStdLibs](
+                                                               const std::string& cjoFileName) {
+        if (alwaysDynamicStdLibs.find(
+                FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTEBSION)) !=
+            alwaysDynamicStdLibs.end()) {
+            return;
+        }
         auto bcFile = FileUtil::ConvertFilenameToLtoLibCangjieFormat(cjoFileName);
         if (seen.emplace(bcFile).second) {
             tool.AppendArg(bcFile);
@@ -322,21 +332,9 @@ void MachO::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
     std::set<std::string> dynamicLibraries;
     std::set<std::string> staticLibraries;
     std::set<std::string> ltoBuiltInDependencies;
-    std::unordered_set<std::string> dyDependencies;
-
-    const std::function<void(const std::unordered_set<std::string>&)> getDyDependencies =
-        [this, &dyDependencies](const std::unordered_set<std::string>& dependencies) {
-            for (auto& cjoFileName : dependencies) {
-                auto staticLib = FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTEBSION);
-                if (ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.find(staticLib) != ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.end()) {
-                    dyDependencies.emplace(staticLib);
-                    dyDependencies.insert(ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.at(staticLib).begin(),
-                        ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.at(staticLib).end());
-                }
-            }
-        };
-    getDyDependencies(driverOptions.directBuiltinDependencies);
-    getDyDependencies(driverOptions.indirectBuiltinDependencies);
+    // linkStatic is always false here: CheckStaticOption resets it for every non-EXECUTABLE
+    // output mode, so the always-dynamic set below indeed goes to dynamicLibraries.
+    const std::unordered_set<std::string> dyDependencies = GetAlwaysDynamicStdLibs();
 
     const std::function<void(std::string)> appendStaticLibsToTool = [this, &dynamicLibraries, &staticLibraries,
                                                                         &ltoBuiltInDependencies, &dyDependencies](
