@@ -164,8 +164,24 @@ void MachO::AppendLTOBcInputs(const std::vector<TempFileInfo>& objFiles, Tool& t
     // appear in BOTH directBuiltinDependencies and indirectBuiltinDependencies
     // (GetUsedSTDLibFiles returns a DepType::BOTH package from each call), so we
     // still dedup across the two iteration passes via a single set.
+    // Packages the final link resolves dynamically must not be baked into this archive either.
+    // GetAlwaysDynamicStdLibs returns the same set GenerateLinkOptionsOfBuiltinLibsForStaticLink
+    // links as shared libraries, and the downstream link will add those shared libraries for any
+    // consumer that imports them. Keeping a bitcode copy here would put a second instance of the
+    // package into the process - on Mach-O the archive's copy survives LTO as a private external,
+    // so it is linked in rather than discarded. Leaving their symbols undefined in the archive
+    // reproduces exactly what a link step that never saw those packages would do; they are
+    // resolved against the shared libraries at the final link.
+    const std::unordered_set<std::string> alwaysDynamicStdLibs = GetAlwaysDynamicStdLibs();
+
     std::unordered_set<std::string> seen;
-    const std::function<void(std::string)> appendBcToTool = [&tool, &seen](const std::string& cjoFileName) {
+    const std::function<void(std::string)> appendBcToTool = [&tool, &seen, &alwaysDynamicStdLibs](
+                                                               const std::string& cjoFileName) {
+        if (alwaysDynamicStdLibs.find(
+                FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTEBSION)) !=
+            alwaysDynamicStdLibs.end()) {
+            return;
+        }
         auto bcFile = FileUtil::ConvertFilenameToLtoLibCangjieFormat(cjoFileName);
         if (seen.emplace(bcFile).second) {
             tool.AppendArg(bcFile);
@@ -322,21 +338,9 @@ void MachO::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
     std::set<std::string> dynamicLibraries;
     std::set<std::string> staticLibraries;
     std::set<std::string> ltoBuiltInDependencies;
-    std::unordered_set<std::string> dyDependencies;
-
-    const std::function<void(const std::unordered_set<std::string>&)> getDyDependencies =
-        [this, &dyDependencies](const std::unordered_set<std::string>& dependencies) {
-            for (auto& cjoFileName : dependencies) {
-                auto staticLib = FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTEBSION);
-                if (ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.find(staticLib) != ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.end()) {
-                    dyDependencies.emplace(staticLib);
-                    dyDependencies.insert(ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.at(staticLib).begin(),
-                        ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.at(staticLib).end());
-                }
-            }
-        };
-    getDyDependencies(driverOptions.directBuiltinDependencies);
-    getDyDependencies(driverOptions.indirectBuiltinDependencies);
+    // A package in this set is linked dynamically together with the transitive std libraries it
+    // depends on, so that only one copy of each of them ever reaches the process.
+    const std::unordered_set<std::string> dyDependencies = GetAlwaysDynamicStdLibs();
 
     const std::function<void(std::string)> appendStaticLibsToTool = [this, &dynamicLibraries, &staticLibraries,
                                                                         &ltoBuiltInDependencies, &dyDependencies](
