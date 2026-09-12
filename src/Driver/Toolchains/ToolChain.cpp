@@ -56,28 +56,37 @@ void ToolChain::GenerateLinkOptionsOfBuiltinLibs(Tool& tool) const
     }
 }
 
+std::unordered_set<std::string> ToolChain::GetAlwaysDynamicStdLibs() const
+{
+    std::unordered_set<std::string> alwaysDynamic;
+    const std::function<void(const std::unordered_set<std::string>&)> collectDependencies =
+        [this, &alwaysDynamic](const std::unordered_set<std::string>& dependencies) {
+            for (auto& cjoFileName : dependencies) {
+                auto staticLib = FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTEBSION);
+                auto found = ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.find(staticLib);
+                if (found == ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.end()) {
+                    continue;
+                }
+                alwaysDynamic.insert(found->first);
+                alwaysDynamic.insert(found->second.begin(), found->second.end());
+            }
+        };
+    collectDependencies(driverOptions.directBuiltinDependencies);
+    collectDependencies(driverOptions.indirectBuiltinDependencies);
+    return alwaysDynamic;
+}
+
 void ToolChain::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
 {
     std::set<std::string> dynamicLibraries;
     std::set<std::string> staticLibraries;
     std::set<std::string> ltoBuiltInDependencies;
-    std::unordered_set<std::string> dyDependencies;
-    const std::function<void(const std::unordered_set<std::string>&)> getDyDependencies =
-        [this, &dyDependencies](const std::unordered_set<std::string>& dependencies) {
-            for (auto& cjoFileName : dependencies) {
-                auto staticLib = FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTEBSION);
-                if (ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.find(staticLib) !=
-                    ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.end()) {
-                    dyDependencies.emplace(staticLib);
-                    if (driverOptions.target.os != Triple::OSType::WINDOWS) {
-                        dyDependencies.insert(ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.at(staticLib).begin(),
-                            ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.at(staticLib).end());
-                    }
-                }
-            }
-        };
-    getDyDependencies(driverOptions.directBuiltinDependencies);
-    getDyDependencies(driverOptions.indirectBuiltinDependencies);
+    // A package in this set is linked dynamically together with the transitive std libraries it
+    // depends on, so that only one copy of each of them ever reaches the process.
+    // The !linkStatic guards below rely on CheckStaticOption having reset linkStatic to false for
+    // every non-EXECUTABLE output mode on LINUX/DARWIN/WINDOWS/IOS - staticlib outputs always
+    // reach this function with linkStatic == false.
+    const std::unordered_set<std::string> dyDependencies = GetAlwaysDynamicStdLibs();
     const std::function<void(std::string)> appendStaticLibsToTool =
         [this, &dynamicLibraries, &staticLibraries, &ltoBuiltInDependencies, &dyDependencies]
             (const std::string& cjoFileName) {

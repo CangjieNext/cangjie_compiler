@@ -162,6 +162,16 @@ protected:
         {"libcangjie-std-ast.a",
             {"libcangjie-std-core.a", "libcangjie-std-collection.a", "libcangjie-std-sort.a",
                 "libcangjie-std-math.a"}}};
+
+    // Collect the std static libraries (by file name, e.g. "libcangjie-std-ast.a") that must be
+    // linked dynamically for the current built-in dependency set: every used key of
+    // ALWAYS_DYNAMIC_LINK_STD_LIBRARIES contributes itself plus the transitive std libraries it
+    // depends on. Any step that produces a copy of a std package - the final link and the LTO
+    // static library production - must skip exactly this set, otherwise the process ends up with
+    // two versions of the same std package. On Windows this is also the only mechanism that keeps
+    // a package from being half static, half dynamic: MinGW exports every symbol, so unlike ELF
+    // (--exclude-libs) and Mach-O (two-level namespace) it has no way to isolate the two copies.
+    std::unordered_set<std::string> GetAlwaysDynamicStdLibs() const;
 #endif
     // Check other dependencies of 'staticLib' and emplace them in 'otherLibs'.
     void CheckOtherDependeniesOfStaticLib(
