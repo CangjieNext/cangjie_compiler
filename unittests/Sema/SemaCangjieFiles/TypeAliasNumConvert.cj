@@ -3,7 +3,7 @@
 // with Runtime Library Exception.
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
-// Issue #375: type alias should be usable for numeric type conversion
+// Issue #1045: type alias should be usable for numeric type conversion
 
 // === Type aliases for all numeric/rune types ===
 type word = UInt16
