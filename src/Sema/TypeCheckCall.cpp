@@ -2389,7 +2389,7 @@ bool TypeChecker::TypeCheckerImpl::TryResolveTypeAliasNumConv(CallExpr& ce, Expr
         return false;
     }
     // Resolve through the (possibly nested) alias chain to the final underlying type, so that
-    // `type word1 = Int64; type word = word1; word(1)` works (Issue #375).
+    // `type word1 = Int64; type word = word1; word(1)` works (Issue #1045).
     auto realTarget = TypeCheckUtil::GetRealTarget(aliasDecl);
     auto origTy = realTarget ? realTarget->GetTy() : nullptr;
     if (!origTy || !(origTy->IsNumeric() || origTy->kind == TypeKind::TYPE_RUNE)) {
@@ -2419,9 +2419,15 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseRefExpr(
         return false;
     }
     if (GetCallBaseCandidates(ctx, ce, *re, target, candidates)) {
+        // GetCallBaseCandidates returns true even when the target is a user-defined
+        // type alias with no function candidates.  In that case, the call is not a
+        // function call but a potential numeric type conversion via the alias.
+        if (target && target->astKind == ASTKind::TYPE_ALIAS_DECL && candidates.empty()) {
+            return TryResolveTypeAliasNumConv(ce, *re);
+        }
         return true;
     }
-    // Issue #375: type alias to numeric/rune type is treated as a type conversion.
+    // Issue #1045: type alias to numeric/rune type is treated as a type conversion.
     return TryResolveTypeAliasNumConv(ce, *re);
 }
 
@@ -2445,9 +2451,15 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseMemberAccess(
         }
         return false;
     } else {
-        // Issue #375: a member access whose field is a type alias (e.g. an imported
+        // Issue #1045: a member access whose field is a type alias (e.g. an imported
         // `pkg.alias(1)`) is treated as a type conversion, mirroring the RefExpr path.
         if (GetCallBaseCandidates(ctx, ce, *ma, target, candidates)) {
+            // GetCallBaseCandidates returns true even when the target is a user-defined
+            // type alias with no function candidates.  In that case, the call is not a
+            // function call but a potential numeric type conversion via the alias.
+            if (target && target->astKind == ASTKind::TYPE_ALIAS_DECL && candidates.empty()) {
+                return TryResolveTypeAliasNumConv(ce, *ma);
+            }
             return true;
         }
         return TryResolveTypeAliasNumConv(ce, *ma);

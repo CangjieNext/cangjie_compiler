@@ -905,7 +905,7 @@ private:
     bool GetCallBaseCandidates(const ASTContext& ctx, const AST::CallExpr& ce, AST::Expr& expr, Ptr<AST::Decl>& target,
         std::vector<Ptr<AST::FuncDecl>>& candidates);
     bool CheckRefConstructor(const ASTContext& ctx, const AST::CallExpr& ce, const AST::RefExpr& re);
-    /** Try to resolve a call to a numeric/rune type alias as a type conversion (Issue #375). */
+    /** Try to resolve a call to a numeric/rune type alias as a type conversion (Issue #1045). */
     bool TryResolveTypeAliasNumConv(AST::CallExpr& ce, AST::Expr& baseExpr);
     /**
      * Check call expression's base expression. Get current target and function candidates.
