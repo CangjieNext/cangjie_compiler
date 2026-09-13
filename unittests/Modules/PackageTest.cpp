@@ -1400,3 +1400,57 @@ TEST_F(PackageTest, TypeAliasRefExport)
         return VisitAction::WALK_CHILDREN;
     }).Walk();
 }
+
+// Issue #375: cross-package type alias used as numeric type conversion.
+// Verifies that `pkg.alias(value)` resolves as a type conversion when the alias
+// targets a numeric or Rune type, mirroring the same-package path.
+TEST_F(PackageTest, TypeAliasNumConvertCrossPackage)
+{
+    diag.ClearError();
+
+    // Step 1: compile the dependency package that exports numeric type aliases.
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->invocation.globalOptions.compilePackage = true;
+    instance->code = R"(
+        package testb
+        public type word = UInt16
+        public type myInt64 = Int64
+        public type myFloat64 = Float64
+        public type myRune = Rune
+    )";
+    instance->importManager->SetSourceCodeImportStatus(false);
+    instance->Compile(CompileStage::SEMA);
+    std::vector<uint8_t> astData;
+    instance->importManager->ExportAST(false, astData, *instance->GetSourcePackages()[0]);
+
+    // Step 2: import the package and use the type aliases as numeric conversions.
+    // Use `import testb` (not `import testb.*`) so that members are accessed
+    // via the package qualifier, e.g. `testb.word(1)`.
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->importManager->SetPackageCjoCache("testb", astData);
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->code = R"(
+        import testb
+        main(): Int64 {
+            var a = testb.word(1)
+            if (a != 1) { return 1 }
+
+            var b = testb.myInt64(100)
+            if (b != 100) { return 2 }
+
+            var c = testb.myFloat64(3.14)
+            if (c < 3.0) { return 3 }
+
+            var d = testb.myRune(65)
+
+            var e = testb.word(10) + testb.word(20)
+            if (e != 30) { return 4 }
+
+            return 0
+        }
+    )";
+    instance->importManager->SetSourceCodeImportStatus(false);
+    instance->Compile(CompileStage::SEMA);
+    EXPECT_TRUE(diag.GetErrorCount() == 0);
+}
