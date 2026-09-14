@@ -915,7 +915,7 @@ Value* Translator::TranslateMemberFuncCall(const AST::CallExpr& expr)
             auto invokeInfo = GenerateInvokeCallContext(instCallInfo, *obj, args, expr.overflowStrategy);
             ret = TryCreate<Invoke>(currentBlock, loc, instCallInfo.instRetTy, invokeInfo)->GetResult();
         }
-        if (HasNothingTypeArg(args)) {
+        if (GetFirstNothingTypeArgIndex(args) >= 0) {
             const auto& warningLoc = TranslateLocation(*expr.baseFunc);
             ret->GetExpr()->Set<DebugLocationInfoForWarning>(warningLoc);
         }
@@ -1109,13 +1109,10 @@ Value* Translator::GenerateLoadIfNeccessary(Value& arg, bool isThis, bool isMut,
     return &arg;
 }
 
-bool Translator::HasNothingTypeArg(std::vector<Value*>& args) const
+int64_t Translator::GetFirstNothingTypeArgIndex(const std::vector<Value*>& args) const
 {
     auto it = std::find_if(args.begin(), args.end(), [](auto arg) { return arg->GetType()->IsNothing(); });
-    if (it != args.end()) {
-        return true;
-    }
-    return false;
+    return it == args.end() ? -1 : static_cast<int64_t>(std::distance(args.begin(), it));
 }
 
 Ptr<Value> Translator::ProcessCallExpr(const AST::CallExpr& expr)
@@ -1140,7 +1137,15 @@ Ptr<Value> Translator::ProcessCallExpr(const AST::CallExpr& expr)
     }
     if (bool isNothingCall = !expr.resolvedFunction && expr.baseFunc->TyKind() == AST::TypeKind::TYPE_NOTHING;
         isNothingCall) {
-        return TranslateExprArg(*expr.baseFunc);
+        auto callee = TranslateExprArg(*expr.baseFunc);
+        // `callee` has already terminated its block. Preserve the arguments in that continuation so unreachable
+        // analysis can report them; no outer Apply can be created for a Nothing-typed callee.
+        static_cast<void>(TranslateFuncArgs(expr, nullptr, nullptr));
+        const auto& loc = TranslateLocation(expr);
+        CreateAndAppendTerminator<Exit>(loc, currentBlock);
+        currentBlock = CreateBlock();
+        currentBlock->SetDebugLocation(loc);
+        return callee;
     }
     if (auto res = TranslateFuncTypeValueCall(expr); res) {
         return res;

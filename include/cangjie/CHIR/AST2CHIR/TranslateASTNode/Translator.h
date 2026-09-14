@@ -948,7 +948,8 @@ private:
     bool CanOptimizeMatchToSwitch(const AST::MatchExpr& matchExpr);
 
     std::vector<Type*> TranslateASTTypes(const std::vector<Ptr<AST::Ty>>& genericInfos);
-    bool HasNothingTypeArg(std::vector<Value*>& args) const;
+    /// Return the first Nothing-typed argument index, or -1 when all arguments return normally.
+    int64_t GetFirstNothingTypeArgIndex(const std::vector<Value*>& args) const;
     // ============= memberaccess expr ====================
     Ptr<Value> TranslateStaticTargetOrPackageMemberAccess(const AST::MemberAccess& member);
     Ptr<Value> TranslateInstanceMemberMemberAccess(const AST::MemberAccess& member);
