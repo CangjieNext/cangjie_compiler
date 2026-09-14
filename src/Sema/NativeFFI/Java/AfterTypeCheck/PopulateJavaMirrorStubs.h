@@ -35,67 +35,84 @@ protected:
     void Process(AfterTypeCheckContext& ctx) override;
 private:
     void Process(AfterTypeCheckContext& ctx, AST::ClassLikeDecl& mirror) const;
-
-    /**
+    
+   /**
     * Generates a body for Java mirror constructor to initialize the generated wrapper
     * with a Java object created via JNI.
     *
     * before:
-    *   init(a1: A, ..., an: N) {
-    *   }
+    *     init(a1: A, ..., an: N) {
+    *     }
     *
     * after:
-    *   init(a1: A, ..., an: N) {
-    *       this({
-    *           // Create Java object via JNI.
-    *           ...
-    *       })
-    *   }
-   */
+    *     init(a1: A, ..., an: N) {
+    *         this(exclusiveScope {
+    *             // Create Java object via JNI.
+    *             ...
+    *         })
+    *     }
+    */
     void PopulateUserConstructor(AfterTypeCheckContext& ctx,
         AST::FuncDecl& userCtor, AST::FuncDecl& wrappingCtor) const;
 
-    /**
-     * for func [fun]:
-     *     func foo(args): Ret
-     *
-     * the following will be generated:
-     *     func foo(args): Ret {
-     *         *UnwrapJavaEntity*(
-     *             Java_CFFI_callMethod_raw(
-     *                 Java_CFFI_get_env(),
-     *                 this.javaref, // or getJavaref if mirror is an interface
-     *                 typeSignature, "foo", "(<argsSignature>)Ret",
-     *                 [Java_CFFI_JavaEntity(args[0]), ... Java_CFFI_JavaEntity(args[n])]
-     *         )
-     *     }
-     *
-     * where *UnwrapJavaEntity* - generated unwrapper for Ret type value.
-     */
+   /**
+    * For a mirror method:
+    *
+    *     func foo(args): Ret
+    *
+    * the following will be generated:
+    *
+    *     func foo(args): Ret {
+    *         return exclusiveScope {
+    *             *UnwrapJavaEntity*(
+    *                 Java_CFFI_callMethod_raw(
+    *                     Java_CFFI_get_env(),
+    *                     this.javaref, // or getJavaref if mirror is an interface
+    *                     typeSignature, "foo", "(<argsSignature>)Ret",
+    *                     [Java_CFFI_JavaEntity(args[0]), ...,
+    *                      Java_CFFI_JavaEntity(args[n])]
+    *                 )
+    *             )
+    *         }
+    *     }
+    *
+    * where *UnwrapJavaEntity* is the generated unwrapper for Ret type value.
+    */
     void PopulateUserMethod(AfterTypeCheckContext& ctx, AST::ClassLikeDecl& mirror, AST::FuncDecl& userMethod) const;
 
-    void PopulateJArrayMethod(AST::ClassDecl& jarray, AST::FuncDecl& userMethod) const;
+    void PopulateJArrayMethod(AfterTypeCheckContext& ctx, AST::ClassDecl& jarray, AST::FuncDecl& userMethod) const;
 
-    /**
-     * for prop [prop]:
-     *   mut prop p: Ret
-     *
-     * the following will be generated:
-     *     mut prop p: Ret {
-     *         get() {
-     *             *UnwrapJavaEntity*(
-     *                 Java_CFFI_getField_raw(
-     *                     Java_CFFI_get_env(), this.javaref, typeSignature, "p", "Ret"
-     *             ))
-     *         }
-     *         set(v) {
-     *             Java_CFFI_setField_raw(
-     *                 Java_CFFI_get_env(),
-     *                 this.javaref, typeSignature, "p", "Ret", Java_CFFI_JavaEntity(v)
-     *             )
-     *         }
-     *     }
-     */
+   /**
+    * For prop [prop]:
+    *
+    *     mut prop p: Ret
+    *
+    * the following will be generated:
+    *
+    *     mut prop p: Ret {
+    *         get() {
+    *             return exclusiveScope {
+    *                 *UnwrapJavaEntity*(
+    *                     Java_CFFI_getField_raw(
+    *                         Java_CFFI_get_env(),
+    *                         this.javaref,
+    *                         typeSignature, "p", "Ret"
+    *                     )
+    *                 )
+    *             }
+    *         }
+    *         set(v) {
+    *             exclusiveScope {
+    *                 Java_CFFI_setField_raw(
+    *                     Java_CFFI_get_env(),
+    *                     this.javaref,
+    *                     typeSignature, "p", "Ret",
+    *                     Java_CFFI_JavaEntity(v)
+    *                 )
+    *             }
+    *         }
+    *     }
+    */
     void PopulateUserProperty(AfterTypeCheckContext& ctx, AST::ClassLikeDecl& mirror, AST::PropDecl& userProp) const;
 
     /**
