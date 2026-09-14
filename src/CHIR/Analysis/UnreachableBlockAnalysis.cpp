@@ -246,17 +246,7 @@ UnreachableBlockRegions MergeRegion(
     return regions;
 }
 
-/*
- * Collect unreachable CFG components, take each component's entry as a region,
- * then sort by rootLocation so MergeRegion can be unidirectional.
- *
- * CollectComponent's seed is arbitrary and remaining is consumed, so each
- * located unreachable block is assigned once. Sort puts earlier roots first;
- * MergeRegion then folds a later region into the first existing region whose
- * expressions contain the new root. Without that order an inner region would
- * be existing first, Contains(inner, outer.root) would fail, and both would
- * be reported.
- */
+/// Collect unreachable CFG components from one BlockGroup.
 UnreachableBlockRegions AnalyzeBody(const BlockGroup& body)
 {
     auto blocks = body.GetBlocks();
@@ -266,14 +256,7 @@ UnreachableBlockRegions AnalyzeBody(const BlockGroup& body)
         auto region = CreateRegion(body, CollectComponent(unreachableBlocks));
         result.push_back(std::move(region));
     }
-    std::sort(result.begin(), result.end(), [](const auto& a, const auto& b) {
-        return RootLocationLess(a.rootLocation, b.rootLocation);
-    });
-    UnreachableBlockRegions merged;
-    for (auto& region : result) {
-        merged = MergeRegion(std::move(merged), region);
-    }
-    return merged;
+    return result;
 }
 
 /// Return whether every user has `kind` and consumes a Nothing-typed operand.
@@ -514,7 +497,14 @@ void UnreachableBlockAnalysis::RunOnFunc(Function& func)
             std::make_move_iterator(bodyRegions.end()));
         return VisitResult::CONTINUE;
     });
+    std::sort(regions.begin(), regions.end(), [](const auto& a, const auto& b) {
+        return RootLocationLess(a.rootLocation, b.rootLocation);
+    });
+    UnreachableBlockRegions merged;
     for (const auto& region : regions) {
+        merged = MergeRegion(std::move(merged), region);
+    }
+    for (const auto& region : merged) {
         ReportRegion(diag, package.GetName(), region);
     }
 }
