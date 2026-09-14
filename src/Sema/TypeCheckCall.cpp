@@ -758,11 +758,11 @@ void FilterNestedCtorCall(
     if (ce.modal.HasLocal()) {
         return;
     }
-    // Skip `ce` itself; the enclosing call is the next CallExpr on the checking stack.
+    // Skip `ce` itself and any outer CallExpr that still has desugarExpr (mid-check sugar left on the stack).
     auto outerCall = DynamicCast<CallExpr>(stack.FindFirstOf([&ce](Ptr<Node> n) {
         return n != &ce && DynamicCast<CallExpr>(n);
     }));
-    if (!outerCall) {
+    if (!outerCall || ce.desugarExpr) {
         return;
     }
     bool isNestedCall = false;
