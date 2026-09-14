@@ -71,13 +71,9 @@ Expression* Translator::CreateAndAppendApplyCallFromCallExpr(
             apply->SetSuperCall();
         }
     }
-    if (HasNothingTypeArg(context.args)) {
-        if (expr.baseFunc != nullptr) {
-            const auto& warningLoc = TranslateLocation(*expr.baseFunc);
-            funcCall->Set<DebugLocationInfoForWarning>(warningLoc);
-        } else {
-            funcCall->Set<DebugLocationInfoForWarning>(loc);
-        }
+    const auto& warningLoc = expr.baseFunc != nullptr ? TranslateLocation(*expr.baseFunc) : loc;
+    if (HandleNothingCallArguments(*funcCall, context.args, loc, warningLoc)) {
+        return funcCall;
     }
     if (instFuncTy.GetReturnType()->IsNothing()) {
         CreateAndAppendTerminator<Exit>(loc, currentBlock);
