@@ -71,13 +71,10 @@ Expression* Translator::CreateAndAppendApplyCallFromCallExpr(
             apply->SetSuperCall();
         }
     }
-    if (HasNothingTypeArg(context.args)) {
-        if (expr.baseFunc != nullptr) {
-            const auto& warningLoc = TranslateLocation(*expr.baseFunc);
-            funcCall->Set<DebugLocationInfoForWarning>(warningLoc);
-        } else {
-            funcCall->Set<DebugLocationInfoForWarning>(loc);
-        }
+    const auto& warningLoc = expr.baseFunc != nullptr ? TranslateLocation(*expr.baseFunc) : loc;
+    if (auto firstNothingArgIndex = GetFirstNothingTypeArgIndex(context.args); firstNothingArgIndex.has_value()) {
+        FinalizeNothingCallArguments(*funcCall, *firstNothingArgIndex, context.args.size(), loc, warningLoc);
+        return funcCall;
     }
     if (instFuncTy.GetReturnType()->IsNothing()) {
         CreateAndAppendTerminator<Exit>(loc, currentBlock);
