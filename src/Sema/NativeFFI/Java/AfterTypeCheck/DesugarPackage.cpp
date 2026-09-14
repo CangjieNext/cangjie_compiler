@@ -32,7 +32,7 @@ void JavaDesugarManager::ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx,
     Process<GenerateJavaImplApiStub>(ctx, typeManager, lib, jniBridge);
 
     for (auto& file : ctx.pkg.files) {
-        GenerateInMirrors(*file);
+        GenerateInMirrors(ctx, *file);
     }
 
     Process<GenerateInJavaImplRegistryCompanion>(ctx, typeManager, lib);

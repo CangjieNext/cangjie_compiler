@@ -66,9 +66,9 @@ public:
     /**
      * Fills bodies for previously generated stubs.
      */
-    void GenerateInMirrors(File& file);
+    void GenerateInMirrors(AfterTypeCheckContext& ctx, File& file);
 
-    void GenerateInMirror(ClassDecl& classDecl);
+    void GenerateInMirror(AfterTypeCheckContext& ctx, ClassDecl& classDecl);
 
     void GenerateJavaSourceCode(AfterTypeCheckContext& ctx);
 
@@ -133,7 +133,7 @@ private:
      *   super(Java_CFFI_CangjieStringToJava(env, s))
      * }
      */
-    void InsertJStringOfStringCtorBody(ClassDecl& decl);
+    void InsertJStringOfStringCtorBody(AfterTypeCheckContext& ctx, ClassDecl& decl);
 
     void GenerateNativeItemFunc(AfterTypeCheckContext& ctx, const Ptr<TupleTy>& tupleTy);
 

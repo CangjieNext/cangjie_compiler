@@ -52,7 +52,7 @@ private:
      * }
      * -------------------------------------------------------------------------
      */
-    void GenerateJniTypeConstructor(AST::ClassDecl& jarray) const;
+    void GenerateJniTypeConstructor(AfterTypeCheckContext& ctx, AST::ClassDecl& jarray) const;
 
     /**
      * Inserts throw Exception("unexpected call") into body of given size constructor.
@@ -78,7 +78,7 @@ private:
     void TransformConstructorCallsToPassJNIParam(AST::File& file) const;
 
     void InsertJniTypeParamIntoConstructor(AST::FuncDecl& constr) const;
-    void InsertConstructorBody(AST::FuncDecl& constr) const;
+    void InsertConstructorBody(AfterTypeCheckContext& ctx, AST::FuncDecl& constr) const;
     Ptr<AST::FuncDecl> FindSizeJNITypeConstructor(AST::ClassDecl& jarray) const;
     Ptr<AST::FuncDecl> FindSizeJNITypeConstructorFromInnerDecl(const AST::Decl& decl) const;
 
