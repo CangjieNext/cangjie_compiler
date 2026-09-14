@@ -73,13 +73,13 @@ void UnreachableBranchCheck::PrintWarning(
     if (block.GetTerminator()->GetExprKind() == ExprKind::BRANCH ||
         block.GetTerminator()->GetExprKind() == ExprKind::MULTIBRANCH) {
         auto branchNode = block.GetTerminator();
-        bool rec{true};
-        if (auto br = DynamicCast<Branch>(branchNode)) {
-            if (br->GetSourceExpr() == SourceExpr::FOR_IN_EXPR) {
-                rec = false;
+        bool recurse{true};
+        if (auto branch = DynamicCast<Branch>(branchNode)) {
+            if (branch->GetSourceExpr() == SourceExpr::FOR_IN_EXPR) {
+                recurse = false;
             }
         }
-        if (rec) {
+        if (recurse) {
             for (auto successor : branchNode->GetSuccessors()) {
                 PrintWarning(*branchNode, *successor, hasProcessed, true);
             }
