@@ -206,9 +206,6 @@ InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& in
 {
     CJC_NULLPTR_CHECK(instFuncInfo.originalFuncDecl);
     auto method = StaticCast<Function*>(GetSymbolTable(*instFuncInfo.originalFuncDecl));
-    // the overflow strategy is NA in mock case, of course, it's a wrong choice, we have to use SATURATING as default
-    // we choose SATURATING because SATURATING and NA are same in `OverflowStrategyPrefix`
-    auto tempStrategy = strategy == OverflowStrategy::NA ? OverflowStrategy::SATURATING : strategy;
     return InvokeCallContext {
         .method = method,
         .caller = &caller,
@@ -217,7 +214,7 @@ InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& in
             .instTypeArgs = instFuncInfo.instantiatedTypeArgs,
             .thisType = instFuncInfo.thisType
         },
-        .overflowStrategy = IsOverflowOpCall(*instFuncInfo.originalFuncDecl) ? tempStrategy : OverflowStrategy::NA
+        .overflowStrategy = IsOverflowOpCall(*instFuncInfo.originalFuncDecl) ? strategy : OverflowStrategy::NA
     };
 }
 

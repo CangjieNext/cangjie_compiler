@@ -164,8 +164,30 @@ void TypeChecker::SetOverflowStrategy(const std::vector<Ptr<AST::Package>>& pkgs
 }
 
 namespace {
+void SetOverflowStrategyForExpr(Expr& expr, const OverflowStrategy strategy)
+{
+    expr.overflowStrategy = strategy;
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    // mark call to operator func with overflowStrategy, used in split operator
+    if (expr.desugarExpr) {
+        expr.desugarExpr->overflowStrategy = expr.overflowStrategy;
+    }
+#endif
+}
+
+void SetOverflowStrategyForMockCall(CallExpr& callExpr, const OverflowStrategy strategy)
+{
+    // Mock generates call exprs (e.g. calls to the original operator inside mock handlers) after
+    // type checking, so they do not inherit the strategy from a source arithmetic expression.
+    // Give them the same effective strategy as the surrounding nodes.
+    if (callExpr.TestAttr(Attribute::GENERATED_TO_MOCK)) {
+        callExpr.overflowStrategy = strategy;
+    }
+}
+
 void SetOverflowStrategy(Node& node, const OverflowStrategy overflowStrategy, const OverflowStrategy optionStrategy)
 {
+    const auto effectiveStrategy = overflowStrategy == OverflowStrategy::NA ? optionStrategy : overflowStrategy;
     auto setOverflowStrategyInFuncBody = [optionStrategy](Node& curNode) -> void {
         if (curNode.astKind == ASTKind::FUNC_DECL) {
             auto& fd = StaticCast<FuncDecl>(curNode);
@@ -179,8 +201,7 @@ void SetOverflowStrategy(Node& node, const OverflowStrategy overflowStrategy, co
             }
         }
     };
-    auto preVisit = [overflowStrategy, optionStrategy, setOverflowStrategyInFuncBody](
-                        Ptr<Node> curNode) -> VisitAction {
+    auto preVisit = [effectiveStrategy, setOverflowStrategyInFuncBody](Ptr<Node> curNode) -> VisitAction {
         switch (curNode->astKind) {
             case ASTKind::FUNC_DECL:
             case ASTKind::LAMBDA_EXPR: {
@@ -194,21 +215,12 @@ void SetOverflowStrategy(Node& node, const OverflowStrategy overflowStrategy, co
             case ASTKind::ASSIGN_EXPR:
             case ASTKind::UNARY_EXPR:
             case ASTKind::BINARY_EXPR:
-            case ASTKind::TYPE_CONV_EXPR: {
-                auto expr = RawStaticCast<Expr*>(curNode);
-                if (overflowStrategy == OverflowStrategy::NA) {
-                    expr->overflowStrategy = optionStrategy;
-                } else {
-                    expr->overflowStrategy = overflowStrategy;
-                }
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-                // mark call to operator func with overflowStrategy, used in split operator
-                if (expr->desugarExpr) {
-                    expr->desugarExpr->overflowStrategy = expr->overflowStrategy;
-                }
-#endif
+            case ASTKind::TYPE_CONV_EXPR:
+                SetOverflowStrategyForExpr(*RawStaticCast<Expr*>(curNode), effectiveStrategy);
                 break;
-            }
+            case ASTKind::CALL_EXPR:
+                SetOverflowStrategyForMockCall(*RawStaticCast<CallExpr*>(curNode), effectiveStrategy);
+                break;
             default:
                 break;
         }
