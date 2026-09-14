@@ -201,7 +201,8 @@ void MockSupportManager::PrepareDecls(DeclsToPrepare&& decls)
         decl->EnableAttr(Attribute::MOCK_SUPPORTED);
     }
 
-    for (auto [classDecl, interfaceDecl, extendDecl] : decls.classWithInterfaceDefaults) {
+    for (auto [classInterfaceDecl, extendDecl] : decls.classWithInterfaceDefaults) {
+        auto [classDecl, interfaceDecl] = classInterfaceDecl;
         PrepareClassLikeWithDefaults(*classDecl, *interfaceDecl, extendDecl);
     }
 
@@ -269,7 +270,7 @@ void MockSupportManager::CollectDeclsToPrepare(Decl& decl, DeclsToPrepare& decls
     if (auto interfaceDecl = As<ASTKind::INTERFACE_DECL>(&decl)) {
         if (HasDefaults(interfaceDecl)) {
             decls.interfacesWithDefaults.emplace_back(interfaceDecl);
-            decls.classWithInterfaceDefaults.emplace_back(interfaceDecl, interfaceDecl, nullptr);
+            decls.classWithInterfaceDefaults.emplace(std::pair{interfaceDecl, interfaceDecl}, nullptr);
         }
         return;
     }
@@ -294,7 +295,7 @@ void MockSupportManager::CollectDeclsToPrepare(Decl& decl, DeclsToPrepare& decls
 
     if (auto classDecl = As<ASTKind::CLASS_DECL>(&decl)) {
         for (auto interfaceDecl : FindInterfacesWithDefaults(classDecl)) {
-            decls.classWithInterfaceDefaults.emplace_back(classDecl, interfaceDecl, nullptr);
+            decls.classWithInterfaceDefaults.emplace(std::pair{classDecl, interfaceDecl}, nullptr);
         }
         return;
     }
@@ -306,7 +307,8 @@ void MockSupportManager::CollectDeclsToPrepare(Decl& decl, DeclsToPrepare& decls
         }
 
         for (auto interfaceDecl : FindInterfacesWithDefaults(extendDecl)) {
-            decls.classWithInterfaceDefaults.emplace_back(classDecl, interfaceDecl, extendDecl);
+            // Intentionally not overriding. Prefer direct supertype over extension
+            decls.classWithInterfaceDefaults.emplace(std::pair{classDecl, interfaceDecl}, extendDecl);
         }
         return;
     }
