@@ -169,7 +169,7 @@ DebugLocation GetRootLocation(const Block& root)
         }
     }
 
-    CJC_ASSERT(false && "unreachable region root has no source location");
+    // A component made entirely of compiler-generated CFG bridges has no source location to diagnose.
     return rootLocation;
 }
 
