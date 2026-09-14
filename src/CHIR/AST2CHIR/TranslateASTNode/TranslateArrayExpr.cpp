@@ -71,13 +71,25 @@ Expression* Translator::CreateAndAppendApplyCallFromCallExpr(
             apply->SetSuperCall();
         }
     }
-    if (HasNothingTypeArg(context.args)) {
+    auto firstNothingArgIndex = GetFirstNothingTypeArgIndex(context.args);
+    if (firstNothingArgIndex >= 0) {
         if (expr.baseFunc != nullptr) {
             const auto& warningLoc = TranslateLocation(*expr.baseFunc);
             funcCall->Set<DebugLocationInfoForWarning>(warningLoc);
         } else {
             funcCall->Set<DebugLocationInfoForWarning>(loc);
         }
+        if (static_cast<size_t>(firstNothingArgIndex) + 1U < context.args.size()) {
+            // The continuation after this Apply starts a new source-level region. The Apply only completes the same
+            // call lowering, so unreachable analysis must not diagnose it again.
+            funcCall->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+        } else {
+            currentBlock->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+        }
+        CreateAndAppendTerminator<Exit>(loc, currentBlock);
+        currentBlock = CreateBlock();
+        currentBlock->SetDebugLocation(loc);
+        return funcCall;
     }
     if (instFuncTy.GetReturnType()->IsNothing()) {
         CreateAndAppendTerminator<Exit>(loc, currentBlock);
