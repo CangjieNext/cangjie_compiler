@@ -57,7 +57,7 @@ struct NodeStackT {
 
     void Push(Ptr<NodeT> n)
     {
-        stack.push_back(n);
+        stack.push_back(PreferDesugared(n));
     }
 
     void Pop()
@@ -102,6 +102,9 @@ struct NodeStackT {
     }
 
 private:
+    /** If @p n already has desugarExpr, push the desugared node instead. */
+    static Ptr<NodeT> PreferDesugared(Ptr<NodeT> n);
+
     std::vector<Ptr<NodeT>> stack;
     friend class WalkerT<NodeT>;
 };

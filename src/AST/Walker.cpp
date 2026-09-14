@@ -17,6 +17,21 @@
 using namespace Cangjie;
 using namespace Cangjie::AST;
 namespace Cangjie::AST {
+template <class NodeT> Ptr<NodeT> NodeStackT<NodeT>::PreferDesugared(Ptr<NodeT> n)
+{
+    using ExprT = std::conditional_t<std::is_const_v<NodeT>, const Expr, Expr>;
+    auto expr = DynamicCast<ExprT>(n);
+    if (!expr) {
+        return n;
+    }
+    while (expr->desugarExpr) {
+        expr = expr->desugarExpr.get();
+    }
+    return expr;
+}
+template Ptr<Node> NodeStackT<Node>::PreferDesugared(Ptr<Node> n);
+template Ptr<const Node> NodeStackT<const Node>::PreferDesugared(Ptr<const Node> n);
+
 template <class NodeT> std::atomic_uint WalkerT<NodeT>::nextWalkerID = 1;
 template <class NodeT> unsigned WalkerT<NodeT>::GetNextWalkerID()
 {
