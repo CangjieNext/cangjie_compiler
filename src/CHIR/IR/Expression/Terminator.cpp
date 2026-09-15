@@ -78,6 +78,16 @@ std::vector<Block*> MultiBranch::GetNormalBlocks() const
     return {succs.begin() + 1, succs.end()};
 }
 
+void MultiBranch::SetSourceExpr(SourceExpr srcExpr)
+{
+    sourceExpr = srcExpr;
+}
+
+SourceExpr MultiBranch::GetSourceExpr() const
+{
+    return sourceExpr;
+}
+
 std::string MultiBranch::OperandsToString() const
 {
     std::vector<std::string> res;
@@ -335,6 +345,7 @@ std::string Branch::AddExtraComment() const
         {SourceExpr::QUEST, "QUEST"},
         {SourceExpr::BINARY, "BINARY"},
         {SourceExpr::FOR_IN_EXPR, "FOR_IN_EXPR"},
+        {SourceExpr::MATCH_CASE, "MATCH_CASE"},
         {SourceExpr::OTHER, "OTHER"},
     };
     return "sourceExpr: " + SOURCE_EXPR_MAP.at(sourceExpr);

@@ -125,7 +125,8 @@ void MergeBlocks::RunOnPackage(const Package& package, CHIRBuilder& builder, con
 
 static bool SkipMergeBlock(const Block& bl, const GlobalOptions& opts)
 {
-    if (bl.TestAttr(Attribute::UNREACHABLE)) {
+    // Pattern blocks encode source-case boundaries consumed after ConstAnalysis; merging would erase that structure.
+    if (bl.TestAttr(Attribute::UNREACHABLE) || bl.TestAttr(Attribute::MATCH_PATTERN)) {
         return true;
     }
     if (!opts.enableCompileDebug) {

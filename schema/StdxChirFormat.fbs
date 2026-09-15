@@ -96,6 +96,7 @@ enum SourceExpr: uint8 {
   QUEST,
   BINARY,
   FOR_IN_EXPR,
+  MATCH_CASE,
   OTHER,
 }
 
@@ -215,6 +216,11 @@ table OverrideSrcFuncType {
   type: uint32;  // use types id
 }
 
+table MatchCaseId {
+  // Groups table entries generated from one source match case.
+  id: uint64;
+}
+
 union Annotation {
   needCheckArrayBound: NeedCheckArrayBound,
   needCheckCast: NeedCheckCast,
@@ -228,7 +234,8 @@ union Annotation {
   enumCaseIndex: EnumCaseIndex,
   virMethodOffset: VirMethodOffset,
   wrappedRawMethod: WrappedRawMethod,
-  overrideSrcFuncType : OverrideSrcFuncType
+  overrideSrcFuncType : OverrideSrcFuncType,
+  matchCaseId: MatchCaseId
 }
 
 table Base {
@@ -1085,6 +1092,8 @@ table Branch {
 table MultiBranch {
   base: Expression;
   caseValues: [uint64];
+  // Identifies whether the default edge stays in a case or enters the next source case.
+  sourceExpr: SourceExpr = OTHER;
 }
 
 table GetElementRef {
