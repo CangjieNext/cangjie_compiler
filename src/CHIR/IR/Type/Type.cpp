@@ -1549,12 +1549,33 @@ bool Type::IsEqualOrSubTypeOf(const Type& parentType, CHIRBuilder& builder,
         return this->SatisfyCType();
     }
     if (thisDeref->IsGeneric()) {
-        for (auto upperBound : StaticCast<GenericType*>(thisDeref)->GetUpperBounds()) {
-            if (!upperBound->StripAllRefs()->IsEqualOrSubTypeOf(*parentDeref, builder, visited)) {
-                return false;
+        /**
+         *  a generic type `T` is a sub type of each of its upper bounds, so `T <: P` is provable as
+         *  soon as ANY upper bound of `T` is a sub type of `P`.
+         *
+         *  e.g.
+         *  interface I {}
+         *  interface J {}
+         *  enum E<T> where T <: I { A }
+         *  extend<T> E<T> where T <: J { ... }
+         *
+         *  here `T` has two upper bounds, `I` (implied by the extended type `E<T>`) and `J` (declared
+         *  by the extend itself). `T <: J` holds by the `J` bound, even though `I <: J` does not.
+         *  requiring every upper bound to be a sub type would reject such `T` wrongly.
+         */
+        const auto& upperBounds = StaticCast<GenericType*>(thisDeref)->GetUpperBounds();
+        if (upperBounds.empty()) {
+            // an orphan generic type has no bound to reason from, keep the previous behaviour
+            return true;
+        }
+        for (auto upperBound : upperBounds) {
+            // each attempt records pairs in `visited`, don't let a failed one affect the next
+            std::set<std::pair<const Type*, const Type*>> visited2 = *visited;
+            if (upperBound->StripAllRefs()->IsEqualOrSubTypeOf(*parentDeref, builder, &visited2)) {
+                return true;
             }
         }
-        return true;
+        return false;
     }
     if (thisDeref->IsTuple()) {
         if (!parentDeref->IsTuple()) {
