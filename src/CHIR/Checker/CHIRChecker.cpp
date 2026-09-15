@@ -4037,7 +4037,7 @@ void CHIRChecker::CheckGetInstantiateValue(const GetInstantiateValue& expr, cons
     if (auto parentType = funcBase->GetParentCustomTypeOrExtendedType()) {
         if (auto customType = DynamicCast<CustomType*>(parentType)) {
             for (auto arg : customType->GetGenericArgs()) {
-                if (!instTypeArgs[typeIdx]->IsEqualOrInstantiatedTypeOf(*arg, builder)) {
+                if (!InstTypeCanSetToGenericRelatedType(*instTypeArgs[typeIdx], *arg)) {
                     errMsg += IndexToString(typeIdx + 1) + ", ";
                     hasError = true;
                 }
@@ -4047,7 +4047,7 @@ void CHIRChecker::CheckGetInstantiateValue(const GetInstantiateValue& expr, cons
     }
     for (auto& it : funcAndGenericTypes) {
         for (auto genericType : it.second) {
-            if (!instTypeArgs[typeIdx]->IsEqualOrInstantiatedTypeOf(*genericType, builder)) {
+            if (!InstTypeCanSetToGenericRelatedType(*instTypeArgs[typeIdx], *genericType)) {
                 errMsg += IndexToString(typeIdx + 1) + ", ";
                 hasError = true;
             }
