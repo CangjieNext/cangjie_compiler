@@ -1206,7 +1206,9 @@ template <> MultiBranch* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(con
     }
     auto owner = GetValue<Block>(obj->base()->owner());
     auto caseVals = std::vector<uint64_t>(obj->caseValues()->begin(), obj->caseValues()->end());
-    return builder.CreateTerminator<MultiBranch>(cond, defaultBlock, caseVals, caseBlocks, owner);
+    auto result = builder.CreateTerminator<MultiBranch>(cond, defaultBlock, caseVals, caseBlocks, owner);
+    result->SetSourceExpr(CHIR::SourceExpr(obj->sourceExpr()));
+    return result;
 }
 
 template <>
@@ -1312,6 +1314,7 @@ template <> GetRTTIStatic* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(c
 void CHIRDeserializer::CHIRDeserializerImpl::ConfigBase(const CHIRFormat::Base* buffer, Base& obj)
 {
     CJC_NULLPTR_CHECK(buffer);
+    obj.AppendAttributeInfo(CreateAttr(buffer->attributes()));
     auto annos = buffer->annos();
     auto annoTypes = buffer->annos_type();
     for (unsigned i = 0; i < annos->size(); ++i) {
@@ -1372,6 +1375,10 @@ void CHIRDeserializer::CHIRDeserializerImpl::ConfigBase(const CHIRFormat::Base* 
                 obj.Set<CHIR::OverrideSrcFuncType>(
                     GetType<FuncType>(static_cast<const CHIRFormat::OverrideSrcFuncType*>(anno)->type()));
                 break;
+            case CHIRFormat::Annotation::Annotation_matchCaseId:
+                obj.Set<CHIR::MatchCaseId>(static_cast<const CHIRFormat::MatchCaseId*>(anno)->id());
+                CJC_ASSERT(obj.TestAttr(Attribute::MATCH_PATTERN));
+                break;
             default:
                 continue;
         }
@@ -1379,7 +1386,6 @@ void CHIRDeserializer::CHIRDeserializerImpl::ConfigBase(const CHIRFormat::Base* 
     if (buffer->loc()) {
         obj.SetDebugLocation(Create<DebugLocation>(buffer->loc()));
     }
-    obj.AppendAttributeInfo(CreateAttr(buffer->attributes()));
 }
 
 void CHIRDeserializer::CHIRDeserializerImpl::ConfigValue(const CHIRFormat::Value* buffer, Value& obj)
