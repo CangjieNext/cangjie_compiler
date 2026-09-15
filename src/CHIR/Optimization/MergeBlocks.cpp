@@ -125,7 +125,7 @@ void MergeBlocks::RunOnPackage(const Package& package, CHIRBuilder& builder, con
 
 static bool SkipMergeBlock(const Block& bl, const GlobalOptions& opts)
 {
-    if (bl.TestAttr(Attribute::UNREACHABLE)) {
+    if (bl.TestAttr(Attribute::UNREACHABLE) || bl.TestAttr(Attribute::MATCH_PATTERN)) {
         return true;
     }
     if (!opts.enableCompileDebug) {

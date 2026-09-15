@@ -121,6 +121,29 @@ private:
     DebugLocation location;
 };
 
+struct MatchCaseId : public Annotation {
+public:
+    explicit MatchCaseId() = default;
+    explicit MatchCaseId(size_t value) : id(value)
+    {
+    }
+
+    static std::optional<size_t> Extract(const MatchCaseId* input)
+    {
+        return input->id;
+    }
+
+    std::unique_ptr<Annotation> Clone() override
+    {
+        return std::make_unique<MatchCaseId>(*this);
+    }
+
+    std::string ToString() override;
+
+private:
+    std::optional<size_t> id;
+};
+
 struct LinkTypeInfo : public Annotation {
 public:
     explicit LinkTypeInfo() : linkType(Cangjie::Linkage::EXTERNAL){};

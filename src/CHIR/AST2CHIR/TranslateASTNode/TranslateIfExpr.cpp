@@ -183,17 +183,21 @@ protected:
         auto selectorVal = tr.TranslateExprArg(*let.initializer);
         Translator::ScopeContext context{tr};
         auto originLoc = tr.TranslateLocation(let);
+        auto matchedBlockLoc = GetTrueBlockDiagnosticLocation();
         {
             // translate let pattern
             context.ScopePlus();
             auto [patternFalseBlock, patternTrueBlock] = let.patterns.size() == 1
-                ? tr.TranslateNestingCasePattern(*let.patterns[0], selectorVal, originLoc, SourceExpr::IF_EXPR)
-                : tr.TranslateOrPattern(let.patterns, selectorVal, originLoc);
+                ? tr.TranslateNestingCasePattern(
+                    *let.patterns[0], selectorVal, originLoc, GetSourceExpr(), &matchedBlockLoc)
+                : tr.TranslateOrPattern(let.patterns, selectorVal, originLoc, GetSourceExpr());
 
             // translate pattern not match block
             if (isRightmost) {
                 auto tb = TranslateTrueBlock();
                 auto fb = TranslateFalseBlock();
+                patternTrueBlock->SetDebugLocation(tb->GetDebugLocation());
+                patternFalseBlock->SetDebugLocation(fb->GetDebugLocation());
                 CreateGoto(*tb, *patternTrueBlock);
                 CreateGoto(*fb, *patternFalseBlock);
                 return {};
@@ -223,6 +227,10 @@ protected:
         if (isRightmost) {
             auto tb = TranslateTrueBlock();
             auto fb = TranslateFalseBlock();
+            res.tb->SetDebugLocation(tb->GetDebugLocation());
+            if (res.fb) {
+                res.fb->SetDebugLocation(fb->GetDebugLocation());
+            }
             CreateGoto(*tb, *res.tb);
             if (res.fb) {
                 CreateGoto(*fb, *res.fb);
@@ -265,10 +273,13 @@ protected:
             indices.push_back(p.first);
             blocks.push_back(p.second);
         }
-        tr.CreateAndAppendTerminator<MultiBranch>(firstSelectorVal, firstDefaultBlock, indices, blocks, baseBlock);
+        auto firstMultiBranch =
+            tr.CreateAndAppendTerminator<MultiBranch>(firstSelectorVal, firstDefaultBlock, indices, blocks, baseBlock);
+        firstMultiBranch->SetSourceExpr(GetSourceExpr());
 
         // Create second switch block.
-        auto branchInfos = tr.TranslateSecondLevelAsTable(matchInfo, &enumVal, firstDefaultBlock);
+        auto branchInfos =
+            tr.TranslateSecondLevelAsTable(matchInfo, &enumVal, firstDefaultBlock, GetSourceExpr());
         // Finally create goto from case's true block to caseBody block.
         for (auto& block : std::as_const(branchInfos[0])) {
             CreateGoto(*tb, *block);
@@ -331,7 +342,9 @@ protected:
         }
         auto castedVal = tr.TypeCastOrBoxIfNeeded(val, *targetType, {});
         auto loc = tr.TranslateLocation(let);
-        auto multib = tr.CreateAndAppendTerminator<MultiBranch>(castedVal, defaultBlock, indices, blocks, baseBlock);
+        auto multib =
+            tr.CreateAndAppendTerminator<MultiBranch>(castedVal, defaultBlock, indices, blocks, baseBlock);
+        multib->SetSourceExpr(GetSourceExpr());
         multib->SetDebugLocation(loc);
         tr.currentBlock = endBlock;
         return {tb, isStillReachable ? defaultBlock : nullptr};
@@ -375,6 +388,7 @@ protected:
 
     virtual Block* TranslateTrueBlock() = 0;
     virtual Block* TranslateFalseBlock() = 0;
+    virtual DebugLocation GetTrueBlockDiagnosticLocation() const = 0;
     virtual SourceExpr GetSourceExpr() = 0;
     virtual const Expr* GetExpr() = 0;
 };
@@ -464,6 +478,10 @@ protected:
             return SourceExpr::FOR_IN_EXPR;
         }
         return SourceExpr::IF_EXPR;
+    }
+    DebugLocation GetTrueBlockDiagnosticLocation() const override
+    {
+        return tr.TranslateLocation(*e->thenBody);
     }
     CHIR::Block* TranslateTrueBlock() override
     {
@@ -613,6 +631,10 @@ protected:
             return SourceExpr::FOR_IN_EXPR;
         }
         return SourceExpr::WHILE_EXPR;
+    }
+    DebugLocation GetTrueBlockDiagnosticLocation() const override
+    {
+        return tr.TranslateLocation(e->body->begin, e->body->end);
     }
 };
 
