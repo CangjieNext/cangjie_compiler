@@ -315,6 +315,13 @@ template <> flatbuffers::Offset<CHIRFormat::Base> CHIRSerializer::CHIRSerializer
         auto funcType = GetId<Type>(OverrideSrcFuncType::Extract(StaticCast<CHIR::OverrideSrcFuncType*>(anno)));
         annos.emplace_back(CHIRFormat::CreateOverrideSrcFuncType(builder, funcType).Union());
     };
+
+    // Preserve source-case grouping when an optimized enum match crosses the stdx plugin boundary.
+    annoHandler[typeid(CHIR::MatchCaseId)] = [this, &annos, &annoTypes](Annotation* anno) {
+        auto id = MatchCaseId::Extract(StaticCast<MatchCaseId*>(anno));
+        annoTypes.push_back(CHIRFormat::Annotation::Annotation_matchCaseId);
+        annos.emplace_back(CHIRFormat::CreateMatchCaseId(builder, id.value()).Union());
+    };
     
     annoHandler[typeid(CHIR::AnnoFactoryInfo)] = Empty;
 
@@ -865,7 +872,8 @@ flatbuffers::Offset<CHIRFormat::MultiBranch> CHIRSerializer::CHIRSerializerImpl:
 {
     auto base = Serialize<CHIRFormat::Expression>(static_cast<const Expression&>(obj));
     auto caseVals = obj.GetCaseVals();
-    return CHIRFormat::CreateMultiBranchDirect(builder, base, caseVals.empty() ? nullptr : &caseVals);
+    return CHIRFormat::CreateMultiBranchDirect(
+        builder, base, caseVals.empty() ? nullptr : &caseVals, CHIRFormat::SourceExpr(obj.GetSourceExpr()));
 }
 
 template <>

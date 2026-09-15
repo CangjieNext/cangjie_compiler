@@ -287,6 +287,19 @@ void ToCHIR::UnreachableBranchReporter()
     check.RunOnPackage(*chirPkg, opts.GetJobs());
 }
 
+void ToCHIR::ClearMatchMetadata()
+{
+    for (auto func : chirPkg->GetGlobalFuncsWithBody()) {
+        for (auto block : func->GetBody()->GetAllBlocks()) {
+            block->DisableAttr(Attribute::MATCH_PATTERN);
+            block->Remove<MatchCaseId>();
+            for (auto expr : block->GetExpressions()) {
+                expr->DisableAttr(Attribute::MATCH_PATTERN);
+            }
+        }
+    }
+}
+
 void ToCHIR::UselessExprElimination()
 {
     if (!opts.IsCHIROptimizationLevelOverO2()) {
@@ -1089,6 +1102,7 @@ bool ToCHIR::RulesChecking()
         return false;
     }
     UnreachableBranchReporter();
+    ClearMatchMetadata();
     // this instantance of block elimination is to maintain dead code warnings
     UnreachableBlockElimination();
     RunMergingBlocks("RulesChecking", "MergingBlockAfterUnreachableBlock");

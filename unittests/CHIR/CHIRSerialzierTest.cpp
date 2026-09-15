@@ -179,6 +179,9 @@ CHIRFormat::SourceExpr Serialize(const SourceExpr& kind)
         case SourceExpr::FOR_IN_EXPR:
             ret = SourceExpr_FOR_IN_EXPR;
             break;
+        case SourceExpr::MATCH_CASE:
+            ret = SourceExpr_MATCH_CASE;
+            break;
         case SourceExpr::OTHER:
             ret = SourceExpr_OTHER;
             break;

@@ -175,6 +175,9 @@ SourceExpr DeSerialize(const CHIRFormat::SourceExpr& kind)
         case SourceExpr_FOR_IN_EXPR:
             ret = SourceExpr::FOR_IN_EXPR;
             break;
+        case SourceExpr_MATCH_CASE:
+            ret = SourceExpr::MATCH_CASE;
+            break;
         case SourceExpr_OTHER:
             ret = SourceExpr::OTHER;
             break;
