@@ -15,17 +15,104 @@ UnreachableBranchCheck::UnreachableBranchCheck(
 }
 
 namespace {
-std::string GetKeyWordBySourceExpr(const Branch& branch)
+std::string GetKeyWordBySourceExpr(SourceExpr sourceExpr)
 {
-    if (branch.GetSourceExpr() == SourceExpr::IF_EXPR) {
+    if (sourceExpr == SourceExpr::IF_EXPR) {
         return "if";
-    } else if (branch.GetSourceExpr() == SourceExpr::WHILE_EXPR) {
+    } else if (sourceExpr == SourceExpr::WHILE_EXPR) {
         return "while";
-    } else if (branch.GetSourceExpr() == SourceExpr::FOR_IN_EXPR) {
+    } else if (sourceExpr == SourceExpr::FOR_IN_EXPR) {
         return "for";
     }
     return "";
 }
+
+void ClearMatchPattern(const BlockGroup& group)
+{
+    for (auto block : group.GetBlocks()) {
+        block->DisableAttr(Attribute::MATCH_PATTERN);
+        block->Remove<MatchCaseId>();
+        if (auto goTo = Cangjie::DynamicCast<GoTo>(block->GetTerminator())) {
+            goTo->DisableAttr(Attribute::MATCH_PATTERN);
+        }
+        for (auto expression : block->GetExpressions()) {
+            if (auto lambda = Cangjie::DynamicCast<Lambda>(expression)) {
+                ClearMatchPattern(*lambda->GetBody());
+            }
+        }
+    }
+}
+
+bool IsEnumMatchTableEntry(const Block& block)
+{
+    return block.TestAttr(Attribute::MATCH_PATTERN) && block.Get<MatchCaseId>().has_value();
+}
+
+std::pair<Expression*, Block*> GetNextMatchCase(
+    Branch& branch, const std::set<Block*>& constructorGroups)
+{
+    auto nextCase = branch.GetFalseBlock();
+    if (branch.GetSourceExpr() == SourceExpr::MATCH_CASE) {
+        if (!constructorGroups.empty() &&
+            (!IsEnumMatchTableEntry(*nextCase) || constructorGroups.find(nextCase) != constructorGroups.end())) {
+            return {};
+        }
+        return {&branch, nextCase};
+    }
+    return branch.GetSourceExpr() == SourceExpr::MATCH_EXPR
+        ? std::make_pair(nullptr, nextCase) : std::pair<Expression*, Block*>{};
+}
+
+std::pair<Expression*, Block*> GetNextMatchCase(
+    MultiBranch& branch, const std::set<Block*>& constructorGroups)
+{
+    auto nextCase = branch.GetDefaultBlock();
+    if (branch.GetSourceExpr() == SourceExpr::MATCH_CASE) {
+        if (!constructorGroups.empty() &&
+            (!IsEnumMatchTableEntry(*nextCase) || constructorGroups.find(nextCase) != constructorGroups.end())) {
+            return {};
+        }
+        return {&branch, nextCase};
+    }
+    return branch.GetSourceExpr() == SourceExpr::MATCH_EXPR
+        ? std::make_pair(nullptr, nextCase) : std::pair<Expression*, Block*>{};
+}
+
+std::pair<Expression*, Block*> GetNextMatchCase(
+    Block& caseBlock, const std::set<Block*>& constructorGroups = {})
+{
+    auto block = &caseBlock;
+    bool isFirstBlock = true;
+    std::set<Block*> visited;
+    while (visited.emplace(block).second && block->TestAttr(Attribute::MATCH_PATTERN)) {
+        if (!isFirstBlock && constructorGroups.find(block) != constructorGroups.end()) {
+            return {};
+        }
+        isFirstBlock = false;
+        auto terminator = block->GetTerminator();
+        if (auto goTo = Cangjie::DynamicCast<GoTo>(terminator)) {
+            if (!goTo->TestAttr(Attribute::MATCH_PATTERN)) {
+                return {};
+            }
+            block = goTo->GetDestination();
+            continue;
+        }
+        std::pair<Expression*, Block*> next;
+        if (auto branch = Cangjie::DynamicCast<Branch>(terminator)) {
+            next = GetNextMatchCase(*branch, constructorGroups);
+        } else if (auto multiBranch = Cangjie::DynamicCast<MultiBranch>(terminator)) {
+            next = GetNextMatchCase(*multiBranch, constructorGroups);
+        } else {
+            return {};
+        }
+        if (next.first || !next.second) {
+            return next;
+        }
+        block = next.second;
+    }
+    return {};
+}
+
 } // namespace
 void UnreachableBranchCheck::RunOnPackage(const Package& package, size_t threadNum)
 {
@@ -56,10 +143,121 @@ void UnreachableBranchCheck::RunOnPackage(const Package& package, size_t threadN
         }
         taskQueue.RunAndWaitForAllTasksCompleted();
     }
+    for (auto func : package.GetGlobalFuncsWithBody()) {
+        ClearMatchPattern(*func->GetBody());
+    }
+}
+
+void UnreachableBranchCheck::PrintMatchSuccessors(Block& block, std::set<Block*>& hasProcessed)
+{
+    auto current = &block;
+    while (true) {
+        auto [terminator, nextCase] = GetNextMatchCase(*current);
+        if (!terminator || !nextCase || hasProcessed.find(nextCase) != hasProcessed.end()) {
+            return;
+        }
+        PrintWarning(*terminator, *nextCase, hasProcessed);
+        current = nextCase;
+    }
+}
+
+void UnreachableBranchCheck::PrintMatchTableSuccessors(Block& block, std::set<Block*>& hasProcessed,
+    std::set<size_t>& reportedCaseIds, const std::set<Block*>& constructorGroups)
+{
+    auto current = &block;
+    std::set<Block*> visited;
+    while (visited.emplace(current).second) {
+        auto [terminator, nextCase] = GetNextMatchCase(*current, constructorGroups);
+        if (!terminator || !nextCase) {
+            return;
+        }
+        auto caseId = nextCase->Get<MatchCaseId>();
+        CJC_ASSERT(caseId.has_value());
+        if (reportedCaseIds.emplace(caseId.value()).second) {
+            PrintWarning(*terminator, *nextCase, hasProcessed);
+        }
+        current = nextCase;
+    }
+}
+
+void UnreachableBranchCheck::PrintMatchTableCases(MultiBranch& table, std::set<Block*>& hasProcessed,
+    std::set<size_t>& reportedCaseIds, const std::set<Block*>& constructorGroups)
+{
+    for (auto successor : table.GetNormalBlocks()) {
+        CJC_ASSERT(IsEnumMatchTableEntry(*successor));
+        auto caseId = successor->Get<MatchCaseId>();
+        CJC_ASSERT(caseId.has_value());
+        if (reportedCaseIds.emplace(caseId.value()).second) {
+            PrintWarning(table, *successor, hasProcessed);
+        }
+        PrintMatchTableSuccessors(*successor, hasProcessed, reportedCaseIds, constructorGroups);
+    }
+    PrintMatchTableSuccessors(*table.GetParentBlock(), hasProcessed, reportedCaseIds, constructorGroups);
+}
+
+void UnreachableBranchCheck::VisitBranch(Branch& branch, Block& target)
+{
+    CJC_ASSERT(!branch.GetParentBlock()->Get<MatchCaseId>().has_value());
+    std::set<Block*> hasProcessed;
+    for (auto successor : branch.GetSuccessors()) {
+        if (successor == &target) {
+            continue;
+        }
+        PrintWarning(branch, *successor, hasProcessed);
+        if (successor == branch.GetFalseBlock() &&
+            (branch.GetSourceExpr() == SourceExpr::MATCH_EXPR || branch.GetSourceExpr() == SourceExpr::MATCH_CASE)) {
+            PrintMatchSuccessors(*successor, hasProcessed);
+        }
+    }
+}
+
+void UnreachableBranchCheck::VisitMultiBranch(MultiBranch& branch, Block& target)
+{
+    CJC_ASSERT(!branch.GetParentBlock()->Get<MatchCaseId>().has_value());
+    std::set<Block*> hasProcessed;
+    std::set<size_t> reportedCaseIds;
+    std::set<Block*> constructorGroups;
+    for (auto successor : branch.GetNormalBlocks()) {
+        if (successor->TestAttr(Attribute::MATCH_PATTERN)) {
+            constructorGroups.emplace(successor);
+        }
+    }
+    const bool table = !branch.GetParentBlock()->TestAttr(Attribute::MATCH_PATTERN) &&
+        !constructorGroups.empty() && branch.GetSourceExpr() == SourceExpr::MATCH_EXPR;
+    for (auto successor : branch.GetSuccessors()) {
+        if (successor == &target) {
+            continue;
+        }
+        if (table && successor->TestAttr(Attribute::MATCH_PATTERN)) {
+            auto caseId = successor->Get<MatchCaseId>();
+            CJC_ASSERT(caseId.has_value());
+            if (reportedCaseIds.emplace(caseId.value()).second) {
+                PrintWarning(branch, *successor, hasProcessed);
+            }
+            if (auto nestedTable = DynamicCast<MultiBranch>(successor->GetTerminator())) {
+                PrintMatchTableCases(*nestedTable, hasProcessed, reportedCaseIds, constructorGroups);
+            } else {
+                PrintMatchTableSuccessors(*successor, hasProcessed, reportedCaseIds, constructorGroups);
+            }
+        } else {
+            PrintWarning(branch, *successor, hasProcessed);
+            if (branch.GetSourceExpr() == SourceExpr::MATCH_CASE && successor == branch.GetDefaultBlock()) {
+                PrintMatchSuccessors(*successor, hasProcessed);
+            }
+        }
+    }
+    if (table && IsEnumMatchTableEntry(target)) {
+        auto targetCaseId = target.Get<MatchCaseId>();
+        CJC_ASSERT(targetCaseId.has_value());
+        reportedCaseIds.emplace(targetCaseId.value());
+        if (target.GetTerminator()->GetExprKind() == ExprKind::MULTIBRANCH) {
+            PrintMatchTableSuccessors(target, hasProcessed, reportedCaseIds, constructorGroups);
+        }
+    }
 }
 
 void UnreachableBranchCheck::PrintWarning(
-    const Expression& node, Block& block, std::set<Block*>& hasProcessed, bool isRecursive)
+    const Expression& node, Block& block, std::set<Block*>& hasProcessed)
 {
     if (hasProcessed.find(&block) != hasProcessed.end()) {
         return;
@@ -68,22 +266,6 @@ void UnreachableBranchCheck::PrintWarning(
     // Do-while expr do not need to check unreachable branch.
     if (block.Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING || node.Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING) {
         return;
-    }
-    CJC_ASSERT(block.GetTerminator());
-    if (block.GetTerminator()->GetExprKind() == ExprKind::BRANCH ||
-        block.GetTerminator()->GetExprKind() == ExprKind::MULTIBRANCH) {
-        auto branchNode = block.GetTerminator();
-        bool rec{true};
-        if (auto br = DynamicCast<Branch>(branchNode)) {
-            if (br->GetSourceExpr() == SourceExpr::FOR_IN_EXPR) {
-                rec = false;
-            }
-        }
-        if (rec) {
-            for (auto successor : branchNode->GetSuccessors()) {
-                PrintWarning(*branchNode, *successor, hasProcessed, true);
-            }
-        }
     }
     auto [res, range] = ToRangeIfNotZero(block.GetDebugLocation());
     if (!res) {
@@ -94,20 +276,28 @@ void UnreachableBranchCheck::PrintWarning(
     }
     if (node.GetExprKind() == ExprKind::BRANCH) {
         auto branch = StaticCast<const Branch*>(&node);
-        if (branch->GetSourceExpr() == SourceExpr::QUEST || branch->GetSourceExpr() == SourceExpr::BINARY) {
-            if (!isRecursive) {
-                (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_expression, range);
-            }
-        } else if (branch->GetSourceExpr() == SourceExpr::MATCH_EXPR) {
+        auto sourceExpr = branch->GetSourceExpr();
+        if (sourceExpr == SourceExpr::QUEST || sourceExpr == SourceExpr::BINARY) {
+            (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_expression, range);
+        } else if (sourceExpr == SourceExpr::MATCH_EXPR || sourceExpr == SourceExpr::MATCH_CASE) {
             (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_unreachable_pattern, range);
         } else {
-            auto keyWord = GetKeyWordBySourceExpr(*branch);
+            auto keyWord = GetKeyWordBySourceExpr(sourceExpr);
             auto builder =
                 diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_block_in_expression, range, keyWord);
             builder.AddMainHintArguments(keyWord);
         }
     } else {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_unreachable_pattern, range);
+        auto sourceExpr = StaticCast<const MultiBranch*>(&node)->GetSourceExpr();
+        if (sourceExpr == SourceExpr::MATCH_EXPR || sourceExpr == SourceExpr::MATCH_CASE ||
+            sourceExpr == SourceExpr::OTHER) {
+            (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_unreachable_pattern, range);
+        } else {
+            auto keyWord = GetKeyWordBySourceExpr(sourceExpr);
+            auto builder =
+                diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_block_in_expression, range, keyWord);
+            builder.AddMainHintArguments(keyWord);
+        }
     }
 }
 
@@ -123,28 +313,13 @@ void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result)
             case ExprKind::BRANCH: {
                 if (targetSucc.has_value()) {
                     auto branchNode = StaticCast<Branch*>(terminator);
-                    auto successors = terminator->GetSuccessors();
-                    std::set<Block*> hasProcessed;
-                    for (auto successor : successors) {
-                        if (successor == targetSucc.value()) {
-                            continue;
-                        }
-                        PrintWarning(*branchNode, *successor, hasProcessed);
-                    }
+                    VisitBranch(*branchNode, *targetSucc.value());
                 }
                 break;
             }
             case ExprKind::MULTIBRANCH: {
                 if (targetSucc.has_value()) {
-                    auto multiBranchNode = StaticCast<MultiBranch*>(terminator);
-                    auto successors = terminator->GetSuccessors();
-                    std::set<Block*> hasProcessed;
-                    for (auto successor : successors) {
-                        if (successor == targetSucc.value()) {
-                            continue;
-                        }
-                        PrintWarning(*multiBranchNode, *successor, hasProcessed);
-                    }
+                    VisitMultiBranch(*StaticCast<MultiBranch*>(terminator), *targetSucc.value());
                 }
                 break;
             }

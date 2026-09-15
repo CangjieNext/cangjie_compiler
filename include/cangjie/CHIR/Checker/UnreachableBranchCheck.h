@@ -26,7 +26,14 @@ public:
     void RunOnFunc(const Ptr<Function> func);
 
 private:
-    void PrintWarning(const Expression& node, Block& block, std::set<Block*>& hasProcessed, bool isRecursive = false);
+    void PrintWarning(const Expression& node, Block& block, std::set<Block*>& hasProcessed);
+    void PrintMatchSuccessors(Block& block, std::set<Block*>& hasProcessed);
+    void PrintMatchTableSuccessors(Block& block, std::set<Block*>& hasProcessed,
+        std::set<size_t>& reportedCaseIds, const std::set<Block*>& constructorGroups);
+    void PrintMatchTableCases(MultiBranch& table, std::set<Block*>& hasProcessed,
+        std::set<size_t>& reportedCaseIds, const std::set<Block*>& constructorGroups);
+    void VisitBranch(Branch& branch, Block& target);
+    void VisitMultiBranch(MultiBranch& branch, Block& target);
 
     template <typename TConstDomain>
     void VisitFunc(Results<TConstDomain>& result);

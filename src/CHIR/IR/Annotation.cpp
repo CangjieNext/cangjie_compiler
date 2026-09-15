@@ -12,6 +12,11 @@
 #include "cangjie/CHIR/IR/Value/Value.h"
 
 namespace Cangjie::CHIR {
+
+std::string MatchCaseId::ToString()
+{
+    return id.has_value() ? "matchCaseId: " + std::to_string(id.value()) : "";
+}
 std::string AnnotationMap::ToString() const
 {
     std::stringstream ss;

@@ -5,6 +5,7 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
+#include "cangjie/CHIR/Utils/Utils.h"
 
 using namespace Cangjie::CHIR;
 using namespace Cangjie;
@@ -111,6 +112,11 @@ inline SourceExpr GetSourceExprByMatchExpr(const AST::MatchExpr& matchExpr)
     }
     return SourceExpr::MATCH_EXPR;
 }
+
+inline bool IsMatchPatternSource(SourceExpr sourceExpr)
+{
+    return sourceExpr == SourceExpr::MATCH_EXPR || sourceExpr == SourceExpr::MATCH_CASE;
+}
 } // namespace
 
 Ptr<Value> Translator::Visit(const AST::MatchExpr& matchExpr)
@@ -155,11 +161,26 @@ void Translator::TranslateMatchWithSelector(const AST::MatchExpr& matchExpr, Ptr
             context->ScopePlus();
         }
         auto current = matchExpr.matchCases[i].get();
+        SourceExpr caseSourceExpr = needScope && sourceExpr == SourceExpr::MATCH_EXPR && i + 1 < caseNum
+            ? SourceExpr::MATCH_CASE
+            : sourceExpr;
+        std::optional<DebugLocation> matchedBlockLoc;
+        if (current->patternGuard) {
+            // A case rejected before its guard is evaluated diagnoses the complete case head.
+            matchedBlockLoc.emplace(TranslateLocation(current->patterns.front()->begin, current->patternGuard->end));
+        }
         // Generate case pattern condition and set var pattern symbol.
+        auto patternEntry = currentBlock;
         auto [falseBlock, trueBlock] = current->patterns.size() == 1
-            ? TranslateNestingCasePattern(*current->patterns[0], selectorVal, originLoc, sourceExpr)
-            : TranslateOrPattern(current->patterns, selectorVal, originLoc);
-        TranslatePatternGuard(*current, falseBlock, trueBlock);
+            ? TranslateNestingCasePattern(*current->patterns[0], selectorVal, originLoc, caseSourceExpr,
+                matchedBlockLoc ? &*matchedBlockLoc : nullptr)
+            : TranslateOrPattern(current->patterns, selectorVal, originLoc, caseSourceExpr);
+        if (sourceExpr != SourceExpr::QUEST && matchedBlockLoc && current->patterns.size() > 1) {
+            // The entry and shared true block represent the complete or-pattern; alternatives keep their own ranges.
+            patternEntry->SetDebugLocation(*matchedBlockLoc);
+            trueBlock->SetDebugLocation(*matchedBlockLoc);
+        }
+        TranslatePatternGuard(*current, falseBlock, trueBlock, caseSourceExpr, originLoc);
         if (sourceExpr == SourceExpr::QUEST && i == 0) {
             CJC_ASSERT(caseNum == 2); // 2 denote than QUEST has two cases.
             if (!matchExpr.matchCases[1]->exprOrDecls->body.empty()) {
@@ -186,18 +207,62 @@ void Translator::TranslateMatchWithSelector(const AST::MatchExpr& matchExpr, Ptr
     currentBlock = endBlock;
 }
 
+void Translator::TranslateMatchGuardCondition(
+    const AST::Expr& condition, Ptr<Block> trueBlock, Ptr<Block> falseBlock, SourceExpr sourceExpr)
+{
+    // A desugared guard is one lowering unit because it may define temporaries used by the source expression.
+    if (!condition.desugarExpr) {
+        if (auto parenExpr = DynamicCast<AST::ParenExpr>(&condition)) {
+            TranslateMatchGuardCondition(*parenExpr->expr, trueBlock, falseBlock, sourceExpr);
+            return;
+        }
+        if (auto binaryExpr = DynamicCast<AST::BinaryExpr>(&condition);
+            binaryExpr && (binaryExpr->op == TokenKind::AND || binaryExpr->op == TokenKind::OR)) {
+            auto rightBlock = CreateBlock();
+            if (binaryExpr->op == TokenKind::AND) {
+                TranslateMatchGuardCondition(*binaryExpr->leftExpr, rightBlock, falseBlock, sourceExpr);
+            } else {
+                // The left false edge stays in this case; the right operand owns the case-failure edge.
+                TranslateMatchGuardCondition(
+                    *binaryExpr->leftExpr, trueBlock, rightBlock, SourceExpr::MATCH_EXPR);
+            }
+            currentBlock = rightBlock;
+            TranslateMatchGuardCondition(*binaryExpr->rightExpr, trueBlock, falseBlock, sourceExpr);
+            return;
+        }
+    }
+    // Expression lowering may advance currentBlock, so mark both ends of the guard corridor.
+    currentBlock->EnableAttr(Attribute::MATCH_PATTERN);
+    auto cond = TranslateExprArg(condition);
+    currentBlock->EnableAttr(Attribute::MATCH_PATTERN);
+    CreateWrappedBranch(sourceExpr, cond, trueBlock, falseBlock, currentBlock);
+}
+
 /**
- * Translate pattern guard if existed, and update @p 'trueBlock' .
+ * Translate pattern guard if existed, and update @p 'trueBlock'. Keep @p sourceExpr on the generated branch so
+ * unreachable checking can distinguish match guards from ordinary control flow.
  */
-void Translator::TranslatePatternGuard(const AST::MatchCase& matchCase, Ptr<Block> falseBlock, Ptr<Block>& trueBlock)
+void Translator::TranslatePatternGuard(
+    const AST::MatchCase& matchCase, Ptr<Block> falseBlock, Ptr<Block>& trueBlock, SourceExpr sourceExpr,
+    const DebugLocation& originLoc)
 {
     if (!matchCase.patternGuard) {
         return;
     }
     currentBlock = trueBlock;
+    auto guardBlock = currentBlock;
     auto newTrueBlock = CreateBlock();
-    auto cond = TranslateExprArg(*matchCase.patternGuard);
-    CreateAndAppendTerminator<Branch>(cond, newTrueBlock, falseBlock, currentBlock);
+    const auto& guardLoc = TranslateLocation(*matchCase.patternGuard);
+    if (sourceExpr != SourceExpr::QUEST && !originLoc.IsInvalidPos()) {
+        newTrueBlock->SetDebugLocation(guardLoc);
+    }
+    guardBlock->EnableAttr(Attribute::MATCH_PATTERN);
+    for (auto predecessor : guardBlock->GetPredecessors()) {
+        if (auto goTo = DynamicCast<GoTo>(predecessor->GetTerminator())) {
+            goTo->EnableAttr(Attribute::MATCH_PATTERN);
+        }
+    }
+    TranslateMatchGuardCondition(*matchCase.patternGuard, newTrueBlock, falseBlock, sourceExpr);
     trueBlock = newTrueBlock;
 }
 
@@ -208,7 +273,14 @@ Block* Translator::TranslateMatchCaseBody(
         : TranslateLocation(*caseBody.body.back()) : TranslateLocation(caseBody);
     TranslateSubExprToLoc(caseBody, retVal, loc);
     auto currentBody = GetBlockByAST(caseBody);
-    CreateAndAppendTerminator<GoTo>(endBlock, currentBlock);
+    auto reachable = TopologicalSort(currentBody);
+    if (std::find(reachable.begin(), reachable.end(), currentBlock) != reachable.end()) {
+        CJC_ASSERT(currentBlock->GetTerminator() == nullptr);
+        CreateAndAppendTerminator<GoTo>(endBlock, currentBlock);
+    } else {
+        CJC_ASSERT(currentBlock->GetTerminator() == nullptr);
+        CreateAndAppendTerminator<Exit>(loc, currentBlock)->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+    }
     // Return the free block for connecting control flow at outside.
     return currentBody;
 }
@@ -283,7 +355,8 @@ uint64_t Translator::GetEnumCtorId(const AST::Decl& target)
 
 // Sub-pattern of or-pattern must not introduce new variable.
 std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateOrPattern(
-    const std::vector<OwnedPtr<AST::Pattern>>& patterns, Ptr<Value> selectorVal, const DebugLocation& originLoc)
+    const std::vector<OwnedPtr<AST::Pattern>>& patterns, Ptr<Value> selectorVal, const DebugLocation& originLoc,
+    SourceExpr sourceExpr)
 {
     CJC_ASSERT(patterns.size() > 1);
     // Or-pattern can only connect same type of patterns without nesting var pattern.
@@ -294,7 +367,7 @@ std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateOrPattern(
         return {CreateBlock(), trueBlock};
     } else if (patternKind == AST::ASTKind::CONST_PATTERN) {
         if (patterns[0]->GetTy()->IsString() || patterns[0]->GetTy()->IsFloating()) {
-            return TranslateComplicatedOrPattern(patterns, selectorVal, originLoc);
+            return TranslateComplicatedOrPattern(patterns, selectorVal, originLoc, sourceExpr);
         } else if (patterns[0]->GetTy()->IsUnit()) {
             // unit literal is always match
             auto trueBlock = CreateBlock();
@@ -305,9 +378,9 @@ std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateOrPattern(
         for (auto& it : patterns) {
             values.emplace(GetConstPatternVal(StaticCast<AST::ConstPattern>(*it)));
         }
-        return TranslateConstantMultiOr(Utils::SetToVec<uint64_t>(values), selectorVal);
+        return TranslateConstantMultiOr(Utils::SetToVec<uint64_t>(values), selectorVal, sourceExpr);
     } else if (patternKind == AST::ASTKind::TUPLE_PATTERN || patternKind == AST::ASTKind::TYPE_PATTERN) {
-        return TranslateComplicatedOrPattern(patterns, selectorVal, originLoc);
+        return TranslateComplicatedOrPattern(patterns, selectorVal, originLoc, sourceExpr);
     }
     CJC_ASSERT(patternKind == AST::ASTKind::VAR_OR_ENUM_PATTERN || patternKind == AST::ASTKind::ENUM_PATTERN);
     if (IsOptimizableEnumPatterns(patterns)) {
@@ -316,9 +389,9 @@ std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateOrPattern(
             values.emplace(GetEnumPatternID(GetRealEnumPattern(*it)));
         }
         return TranslateConstantMultiOr(
-            Utils::SetToVec<uint64_t>(values), GetEnumIDValue(patterns[0]->GetTy(), selectorVal));
+            Utils::SetToVec<uint64_t>(values), GetEnumIDValue(patterns[0]->GetTy(), selectorVal), sourceExpr);
     }
-    return TranslateComplicatedOrPattern(patterns, selectorVal, originLoc);
+    return TranslateComplicatedOrPattern(patterns, selectorVal, originLoc, sourceExpr);
 }
 
 Ptr<Value> Translator::GetEnumIDValue(Ptr<AST::Ty> ty, Ptr<Value> selectorVal)
@@ -334,12 +407,15 @@ Ptr<Value> Translator::GetEnumIDValue(Ptr<AST::Ty> ty, Ptr<Value> selectorVal)
 }
 
 std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateConstantMultiOr(
-    const std::vector<uint64_t> values, Ptr<Value> value)
+    const std::vector<uint64_t> values, Ptr<Value> value, SourceExpr sourceExpr)
 {
     auto falseBlock = CreateBlock();
     auto trueBlock = CreateBlock();
     std::vector<Block*> succs(values.size(), trueBlock);
-    CreateAndAppendTerminator<MultiBranch>(
+    if (IsMatchPatternSource(sourceExpr)) {
+        currentBlock->EnableAttr(Attribute::MATCH_PATTERN);
+    }
+    CreateWrappedMultiBranch(sourceExpr,
         TypeCastOrBoxIfNeeded(*value, *builder.GetUInt64Ty(), value->GetDebugLocation(), false),
         falseBlock, values, succs, currentBlock);
     return {falseBlock, trueBlock};
@@ -347,13 +423,20 @@ std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateConstantMultiOr(
 
 // Sub-pattern of or-pattern must not introduce new variable.
 std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateComplicatedOrPattern(
-    const std::vector<OwnedPtr<AST::Pattern>>& patterns, const Ptr<Value> selectorVal, const DebugLocation& originLoc)
+    const std::vector<OwnedPtr<AST::Pattern>>& patterns, const Ptr<Value> selectorVal,
+    const DebugLocation& originLoc, SourceExpr sourceExpr)
 {
     CJC_ASSERT(patterns.size() > 1);
     auto trueBlock = CreateBlock();
-    for (auto& it : patterns) {
-        auto [innerFalse, innerTrue] = TranslateNestingCasePattern(*it, selectorVal, originLoc);
-        CreateAndAppendTerminator<GoTo>(trueBlock, innerTrue);
+    for (size_t i = 0; i < patterns.size(); ++i) {
+        // Earlier failures continue the or-pattern; only the final failure leaves the enclosing condition.
+        auto patternSourceExpr = i + 1 == patterns.size() ? sourceExpr : SourceExpr::MATCH_EXPR;
+        auto [innerFalse, innerTrue] =
+            TranslateNestingCasePattern(*patterns[i], selectorVal, originLoc, patternSourceExpr);
+        auto bridge = CreateAndAppendTerminator<GoTo>(trueBlock, innerTrue);
+        if (IsMatchPatternSource(patternSourceExpr)) {
+            bridge->EnableAttr(Attribute::MATCH_PATTERN);
+        }
         currentBlock = innerFalse;
     }
     return {currentBlock, trueBlock};
@@ -397,7 +480,8 @@ Ptr<Value> Translator::DispatchingPattern(std::queue<std::pair<Ptr<const AST::Pa
 }
 
 std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateNestingCasePattern(const AST::Pattern& pattern,
-    const Ptr<Value> selectorVal, const DebugLocation& originLoc, const SourceExpr& sourceExpr)
+    const Ptr<Value> selectorVal, const DebugLocation& originLoc, const SourceExpr& sourceExpr,
+    const DebugLocation* matchedBlockLoc)
 {
     auto falseBlock = CreateBlock();
     auto trueBlock = CreateBlock();
@@ -406,7 +490,10 @@ std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateNestingCasePattern(const 
     auto newBlock = CreateBlock();
     const auto& patternLoc = TranslateLocation(pattern);
     if (sourceExpr != SourceExpr::QUEST) {
-        currentBlock->SetDebugLocation(patternLoc);
+        currentBlock->SetDebugLocation(matchedBlockLoc ? *matchedBlockLoc : patternLoc);
+    }
+    if (IsMatchPatternSource(sourceExpr)) {
+        currentBlock->EnableAttr(Attribute::MATCH_PATTERN);
     }
     while (!queue.empty()) {
         // Typecast of varPattern must be generated at the real trueBlock.
@@ -414,7 +501,10 @@ std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateNestingCasePattern(const 
         if (cond) {
             auto nextBlock = queue.empty() ? trueBlock : newBlock;
             if (sourceExpr != SourceExpr::QUEST) {
-                nextBlock->SetDebugLocation(patternLoc);
+                nextBlock->SetDebugLocation(matchedBlockLoc ? *matchedBlockLoc : patternLoc);
+            }
+            if (IsMatchPatternSource(sourceExpr)) {
+                nextBlock->EnableAttr(Attribute::MATCH_PATTERN);
             }
             CreateWrappedBranch(sourceExpr, GetDerefedValue(cond), nextBlock, falseBlock, currentBlock);
             currentBlock = nextBlock;
@@ -423,9 +513,13 @@ std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateNestingCasePattern(const 
             }
         } else if (queue.empty()) {
             if (sourceExpr != SourceExpr::QUEST) {
-                currentBlock->SetDebugLocation(patternLoc);
+                currentBlock->SetDebugLocation(matchedBlockLoc ? *matchedBlockLoc : patternLoc);
             }
-            CreateAndAppendTerminator<GoTo>(trueBlock, currentBlock);
+            auto bridge = CreateAndAppendTerminator<GoTo>(trueBlock, currentBlock);
+            if (IsMatchPatternSource(sourceExpr)) {
+                bridge->EnableAttr(Attribute::MATCH_PATTERN);
+                trueBlock->EnableAttr(Attribute::MATCH_PATTERN);
+            }
         }
     }
     newBlock->RemoveSelfFromBlockGroup();
@@ -747,11 +841,14 @@ void Translator::TranslateTrivialMatchAsTable(
     std::map<uint64_t, Block*> indexToBodies;
     auto baseBlock = currentBlock;
     auto endBlock = CreateBlock();
+    endBlock->SetDebugLocation(TranslateLocation(match));
     Block* defaultBlock = endBlock;
     bool isStillReachable = true;
     ScopeContext context(*this);
     for (auto& curCase : match.matchCases) {
         context.ScopePlus();
+        // Table case bodies are siblings and must not inherit the previous body's detached continuation.
+        currentBlock = baseBlock;
         auto currentBody = TranslateMatchCaseBody(*curCase->exprOrDecls, retVal, endBlock);
         SetSkipDceWarning(*curCase, *currentBody);
         CJC_ASSERT(!curCase->patterns.empty());
@@ -797,7 +894,7 @@ void Translator::TranslateTrivialMatchAsTable(
     auto castedVal =
         TypeCastOrBoxIfNeeded(*selectorVal, *targetType, selectorVal->GetDebugLocation(), false);
     const auto& loc = TranslateLocation(match);
-    CreateAndAppendTerminator<MultiBranch>(loc, castedVal, defaultBlock, indexes, blocks, baseBlock);
+    CreateWrappedMultiBranch(SourceExpr::MATCH_EXPR, loc, castedVal, defaultBlock, indexes, blocks, baseBlock);
     currentBlock = endBlock;
 }
 
@@ -822,6 +919,7 @@ void Translator::TranslateEnumPatternMatchAsTable(const AST::MatchExpr& match, P
             isStillReachable = false;
             // NOTE: only should to collect first visited wildcard pattern.
             // The sub pattern may contains varPattern, translate when binding second level table.
+            currentBlock = baseBlock;
             firstDefaultBlock = TranslateMatchCaseBody(*matchCase.exprOrDecls, retVal, endBlock);
             SetSkipDceWarning(matchCase, *firstDefaultBlock);
             const auto& loc = TranslateLocation(matchCase.patterns[0]->begin, matchCase.patterns[0]->end);
@@ -840,15 +938,17 @@ void Translator::TranslateEnumPatternMatchAsTable(const AST::MatchExpr& match, P
         // Exhaustive cases, default block will not be reached, just set it to first valid case block.
         firstDefaultBlock = blocks[0];
     }
-    CreateAndAppendTerminator<MultiBranch>(firstSelectorVal, firstDefaultBlock, indexes, blocks, baseBlock);
+    CreateWrappedMultiBranch(SourceExpr::MATCH_EXPR, firstSelectorVal, firstDefaultBlock, indexes, blocks, baseBlock);
 
     // Create each second switch block.
-    auto branchInfos = TranslateSecondLevelAsTable(matchInfo, enumVal, firstDefaultBlock);
+    currentBlock = baseBlock;
+    auto branchInfos = TranslateSecondLevelAsTable(matchInfo, enumVal, firstDefaultBlock, SourceExpr::MATCH_CASE);
     // Finally create goto from case's true block to caseBody block.
     for (size_t i = 0; i < match.matchCases.size(); ++i) {
         if (i == wildcardIdx) {
             continue;
         }
+        currentBlock = baseBlock;
         auto bodyBlock = TranslateMatchCaseBody(*match.matchCases[i]->exprOrDecls, retVal, endBlock);
         SetSkipDceWarning(*match.matchCases[i], *bodyBlock);
         for (auto& block : std::as_const(branchInfos[i])) {
@@ -871,8 +971,10 @@ void Translator::CollectEnumPatternInfo(const AST::Pattern& pattern, EnumMatchIn
         const auto& loc = TranslateLocation(pattern);
         blockIt->second = CreateBlock();
         blockIt->second->SetDebugLocation(loc);
+        blockIt->second->EnableAttr(Attribute::MATCH_PATTERN);
+        blockIt->second->Set<MatchCaseId>(caseId);
     }
-    SecondSwitchInfo switchInfo{enumPattern, caseId};
+    SecondSwitchInfo switchInfo{enumPattern, caseId, TranslateLocation(pattern)};
     auto& secondSwitchMap = info.indexToBodies[patternVal];
     if (enumPattern.patterns.empty()) {
         info.innerDefaultInfos[patternVal].emplace_back(switchInfo);
@@ -894,14 +996,19 @@ void Translator::CollectEnumPatternInfo(const AST::Pattern& pattern, EnumMatchIn
 }
 
 std::unordered_map<size_t, std::vector<Ptr<Block>>> Translator::TranslateSecondLevelAsTable(
-    const EnumMatchInfo& info, Ptr<Value> enumVal, Ptr<Block> firstDefaultBlock)
+    const EnumMatchInfo& info, Ptr<Value> enumVal, Ptr<Block> firstDefaultBlock, SourceExpr sourceExpr)
 {
     std::unordered_map<size_t, std::vector<Ptr<Block>>> blockBranchInfos;
     // Create each second switch block.
     for (auto& [firstIdx, secondMap] : info.indexToBodies) {
         auto firstLevelBlock = info.firstSwitchBlocks.at(firstIdx);
         CJC_NULLPTR_CHECK(firstLevelBlock);
+        firstLevelBlock->EnableAttr(Attribute::MATCH_PATTERN);
         auto found = info.innerDefaultInfos.find(firstIdx);
+        std::optional<size_t> fallbackCaseId;
+        if (found != info.innerDefaultInfos.end() && !found->second.empty()) {
+            fallbackCaseId = found->second.front().caseId;
+        }
         // When there is no default pattern on first sub-pattern, set default as previous default block.
         // When only found one and enum does not have sub-pattern, create direct goto.
         // Otherwise generate all collected patterns for other enum sub-patterns.
@@ -914,7 +1021,8 @@ std::unordered_map<size_t, std::vector<Ptr<Block>>> Translator::TranslateSecondL
             // When 'secondMap' is emtpy, second selector is wildcard,
             // we need pass 'firstLevelBlock' as start block of second table detail.
             secondDefaultBlock = secondMap.empty() ? firstLevelBlock : CreateBlock();
-            TranslateSecondLevelTable(firstDefaultBlock, secondDefaultBlock, enumVal, found->second, blockBranchInfos);
+            TranslateSecondLevelTable(
+                firstDefaultBlock, secondDefaultBlock, enumVal, found->second, blockBranchInfos, sourceExpr, fallbackCaseId);
         }
         if (secondMap.empty()) {
             continue;
@@ -937,10 +1045,12 @@ std::unordered_map<size_t, std::vector<Ptr<Block>>> Translator::TranslateSecondL
             indexes.emplace_back(index);
             auto block = CreateBlock();
             blocks.emplace_back(block);
-            TranslateSecondLevelTable(secondDefaultBlock, block, enumVal, infos, blockBranchInfos);
+            TranslateSecondLevelTable(secondDefaultBlock, block, enumVal, infos, blockBranchInfos, sourceExpr, fallbackCaseId);
         }
         currentBlock = firstLevelBlock;
-        CreateAndAppendTerminator<MultiBranch>(
+        auto tableSourceExpr = fallbackCaseId == firstLevelBlock->Get<MatchCaseId>()
+            ? SourceExpr::MATCH_EXPR : sourceExpr;
+        CreateWrappedMultiBranch(tableSourceExpr,
             TypeCastOrBoxIfNeeded(
                 *secondSelectVar, *builder.GetUInt64Ty(), secondSelectVar->GetDebugLocation(), false),
             secondDefaultBlock, indexes, blocks, firstLevelBlock);
@@ -949,7 +1059,8 @@ std::unordered_map<size_t, std::vector<Ptr<Block>>> Translator::TranslateSecondL
 }
 
 void Translator::TranslateSecondLevelTable(Ptr<Block> endBlock, const Ptr<Block> tableBlock, const Ptr<Value> enumVal,
-    const std::vector<SecondSwitchInfo>& infos, std::unordered_map<size_t, std::vector<Ptr<Block>>>& blockBranchInfos)
+    const std::vector<SecondSwitchInfo>& infos, std::unordered_map<size_t, std::vector<Ptr<Block>>>& blockBranchInfos,
+    SourceExpr sourceExpr, std::optional<size_t> fallbackCaseId)
 {
     currentBlock = tableBlock;
     bool hasGotoBase = false;
@@ -958,11 +1069,16 @@ void Translator::TranslateSecondLevelTable(Ptr<Block> endBlock, const Ptr<Block>
     bool isWildcardPattern = infos[0].ep.patterns[0]->astKind == AST::ASTKind::WILDCARD_PATTERN;
     for (size_t idx = 0; idx < infos.size(); ++idx) {
         const auto& current = infos[idx];
+        currentBlock->SetDebugLocation(current.loc);
+        currentBlock->EnableAttr(Attribute::MATCH_PATTERN);
+        currentBlock->Set<MatchCaseId>(current.caseId);
+        auto nextCaseId = idx + 1 < infos.size() ? std::optional<size_t>{infos[idx + 1].caseId} : fallbackCaseId;
+        auto patternSourceExpr = nextCaseId == current.caseId ? SourceExpr::MATCH_EXPR : sourceExpr;
         // When sub-pattern size is exactly 1, 'tableBlock' should be considered as 'trueBlock'.
         // NOTE: the 'tableBlock' can only be used as 'trueBlock' once.
         auto trueBlock = !hasGotoBase && current.ep.patterns.size() == 1 ? tableBlock.get() : CreateBlock();
         hasGotoBase = hasGotoBase || current.ep.patterns.size() == 1;
-        auto falseBlock = CreateBlock();
+        Block* falseBlock = idx + 1 == infos.size() ? endBlock.get() : CreateBlock();
         std::queue<std::pair<Ptr<const AST::Pattern>, Ptr<Value>>> queue;
         auto elementTys = StaticCast<AST::FuncTy>(current.ep.constructor->GetTy())->paramTys;
         // When first pattern is wildcard and current pattern is not, we need to check from first sub-pattern,
@@ -985,7 +1101,7 @@ void Translator::TranslateSecondLevelTable(Ptr<Block> endBlock, const Ptr<Block>
             auto cond = DispatchingPattern(queue, {trueBlock, newBlock}, originLoc);
             if (cond) {
                 auto nextBlock = queue.empty() ? trueBlock : newBlock;
-                CreateAndAppendTerminator<Branch>(cond, nextBlock, falseBlock, currentBlock);
+                CreateWrappedBranch(patternSourceExpr, cond, nextBlock, falseBlock, currentBlock);
                 currentBlock = nextBlock;
             } else if (queue.empty()) {
                 CreateAndAppendTerminator<GoTo>(trueBlock, currentBlock);
@@ -997,9 +1113,7 @@ void Translator::TranslateSecondLevelTable(Ptr<Block> endBlock, const Ptr<Block>
         newBlock->RemoveSelfFromBlockGroup();
         // Create 'GOTO' for trueBlock at callee for correct binding of varPattern.
         blockBranchInfos[current.caseId].emplace_back(trueBlock);
-        if (idx == infos.size() - 1) {
-            CreateAndAppendTerminator<GoTo>(endBlock, falseBlock);
-        } else {
+        if (idx + 1 < infos.size()) {
             currentBlock = falseBlock;
         }
     }
