@@ -46,6 +46,124 @@ bool IsAnyParamTypeOmitted(const LambdaExpr& le)
     });
 }
 
+// Collect the VarDecl identifiers from a pattern subtree, e.g. x and y from a destructuring
+// declaration's irrefutablePattern (`let (x, y) = (p, q)`), v from an if-let's patterns
+// (`if (let Some(v) <- Some(p))`), or i from a for-in's pattern (`for (i in [p])`). Caller
+// inserts them into aliases after the node is fully checked, so the scope starts correctly.
+std::vector<std::string> CollectPatternAliasNames(Ptr<const Node> patternRoot)
+{
+    std::vector<std::string> names;
+    if (!patternRoot) {
+        return names;
+    }
+    // Collect VarDecl identifiers by walking the pattern subtree.  The Walker visits the whole
+    // pattern tree on its own (including nested EnumPattern / VarPattern sub-patterns), so
+    // collecting inline must not recurse manually or the per-nesting-level walkers make the cost
+    // exponential.  A VAR_OR_ENUM_PATTERN that has not been desugared keeps its identifier
+    // directly; a VarPattern's varDecl is reached via the Walker and caught by the VarDecl
+    // branch.
+    ConstWalker(patternRoot, [&names](Ptr<const Node> pat) -> VisitAction {
+        if (auto vd = DynamicCast<VarDecl*>(pat)) {
+            names.push_back(vd->identifier);
+        } else if (auto vep = DynamicCast<VarOrEnumPattern*>(pat)) {
+            names.push_back(vep->identifier);
+        }
+        return VisitAction::WALK_CHILDREN;
+    }).Walk();
+    return names;
+}
+
+// On a RefExpr to an aliased parameter, walk up the ancestor chain and remove the stale
+// type-check cache from each ancestor not already cleared.
+void ClearAncestorCache(ASTContext& ctx, const std::vector<Ptr<const Node>>& parentStack,
+                        std::unordered_set<Ptr<const Node>>& clearedNodes)
+{
+    for (size_t i = parentStack.size(); i > 0; i--) {
+        auto p = parentStack[i - 1];
+        if (clearedNodes.count(p) > 0) {
+            break;
+        }
+        ctx.RemoveTypeCheckCache(*p);
+        clearedNodes.insert(p);
+    }
+}
+
+// The scope a newly registered alias lives in. Only an if-let / while-let binding
+// (LetPatternDestructor) needs the enclosing IfExpr / WhileExpr as its scope: in a compound
+// condition (`if (let A(v) <- E.A(p) && cond)` or a parenthesized condition) its syntactic
+// parent is a BinaryExpr / ParenExpr whose post-action fires before the body is walked, which
+// would erase the alias too early. Other declarations bind in their syntactic parent (the
+// enclosing block), and climbing for them would cross a nested lambda boundary and erase an
+// outer parameter's own alias entry after the shadowName restore point.
+Ptr<const Node> GetAliasScope(Ptr<const Node> decl, const std::vector<Ptr<const Node>>& parentStack)
+{
+    if (!DynamicCast<LetPatternDestructor*>(decl)) {
+        return parentStack.back();
+    }
+    for (auto it = parentStack.rbegin(); it != parentStack.rend(); ++it) {
+        if (auto ie = DynamicCast<IfExpr*>(*it)) {
+            return ie;
+        }
+        if (auto we = DynamicCast<WhileExpr*>(*it)) {
+            return we;
+        }
+    }
+    return parentStack.back();
+}
+
+// A cleared VarDecl / VarWithPatternDecl / LetPatternDestructor means its initializer used an
+// alias. Once the initializer is fully checked, the declared variable (for VarDecl) or the names
+// bound in the destructuring pattern (for VarWithPatternDecl / LetPatternDestructor) become
+// aliases themselves. Register them with the enclosing scope so they are removed again when that
+// scope is exited.
+void RegisterNewAliases(Ptr<const Node> decl, Ptr<const Node> scope,
+                        std::unordered_set<std::string>& aliases,
+                        std::unordered_map<Ptr<const Node>, std::vector<std::string>>& aliasDecl)
+{
+    std::vector<std::string> newAliases;
+    if (auto vpd = DynamicCast<VarWithPatternDecl*>(decl)) {
+        newAliases = CollectPatternAliasNames(vpd->irrefutablePattern.get());
+    } else if (auto varDecl = DynamicCast<VarDecl*>(decl)) {
+        newAliases.push_back(varDecl->identifier);
+    } else if (auto lpd = DynamicCast<LetPatternDestructor*>(decl)) {
+        for (auto& p : lpd->patterns) {
+            auto names = CollectPatternAliasNames(p.get());
+            newAliases.insert(newAliases.end(), names.begin(), names.end());
+        }
+    }
+    // Only register names that are not aliases yet. Inserting an existing name is a no-op, but
+    // pushing it to aliasDecl anyway would make the scope-exit erase below remove the pre-existing
+    // alias itself (e.g. a destructured name shadowing a lambda parameter), turning valid code
+    // into a false mismatch on later candidates.
+    for (auto& name : newAliases) {
+        if (aliases.insert(name).second) {
+            aliasDecl[scope].push_back(name);
+        }
+    }
+}
+
+// A for-in's bound names get their types from the in-expression's element type, so when the
+// in-expression references an aliased parameter (e.g. `for (i in [p])`), the bound names become
+// aliases too and must be registered before the body is walked. The ForInExpr's post-action is
+// too late for that: the body is a child of the ForInExpr and is walked before it. Idempotent --
+// names already registered are no-ops thanks to the insert-result guard in RegisterNewAliases.
+void RegisterForInAliases(const std::vector<Ptr<const Node>>& parentStack,
+                          std::unordered_set<std::string>& aliases,
+                          std::unordered_map<Ptr<const Node>, std::vector<std::string>>& aliasDecl)
+{
+    for (auto it = parentStack.rbegin(); it != parentStack.rend(); ++it) {
+        auto fie = DynamicCast<ForInExpr*>(*it);
+        if (!fie) {
+            continue;
+        }
+        for (auto& name : CollectPatternAliasNames(fie->pattern.get())) {
+            if (aliases.insert(name).second) {
+                aliasDecl[fie].push_back(name);
+            }
+        }
+    }
+}
+
 void ClearCacheForNames(ASTContext& ctx, const LambdaExpr& le, const std::vector<std::string>& paramNames)
 {
     std::vector<Ptr<const Node>> parentStack;
@@ -64,17 +182,14 @@ void ClearCacheForNames(ASTContext& ctx, const LambdaExpr& le, const std::vector
             }
         }
     };
-    auto preAction = [&ctx, &aliases, &clearedNodes, &parentStack, &shadowName](Ptr<Node> node) -> VisitAction {
+    auto preAction = [&ctx, &aliases, &aliasDecl, &clearedNodes, &parentStack, &shadowName](
+                         Ptr<Node> node) -> VisitAction {
         parentStack.push_back(node);
         if (auto re = DynamicCast<RefExpr*>(node); re && aliases.count(re->ref.identifier) > 0) {
-            for (size_t i = parentStack.size(); i > 0; i--) {
-                auto p = parentStack[i - 1];
-                if (clearedNodes.count(p) > 0) {
-                    break;
-                }
-                ctx.RemoveTypeCheckCache(*p);
-                clearedNodes.insert(p);
-            }
+            ClearAncestorCache(ctx, parentStack, clearedNodes);
+            // Register for-in bound names before their body is walked: the ForInExpr's
+            // post-action fires after the whole body, too late to clear the body's stale caches.
+            RegisterForInAliases(parentStack, aliases, aliasDecl);
         } else if (auto lam = DynamicCast<LambdaExpr*>(node)) {
             shadowName(*lam); // shadow by local var is too complicated to track. skip here
         }
@@ -84,9 +199,13 @@ void ClearCacheForNames(ASTContext& ctx, const LambdaExpr& le, const std::vector
                           Ptr<const Node> /* node */) -> VisitAction {
         auto top = parentStack.back();
         parentStack.pop_back();
-        if (auto decl = DynamicCast<VarDecl*>(top); decl && clearedNodes.count(decl) > 0) {
-            aliases.insert(decl->identifier); // VarDecl is cleared ==> it contains alias ==> the var is a new alias
-            aliasDecl[parentStack.back()].push_back(decl->identifier);
+        if (clearedNodes.count(top) > 0) {
+            // The root block is always cleared once any aliased RefExpr is hit (ClearAncestorCache
+            // walks to the bottom of the stack); at that point parentStack is already empty, and
+            // there is no enclosing scope to register the root's bindings into.
+            if (!parentStack.empty()) {
+                RegisterNewAliases(top, GetAliasScope(top, parentStack), aliases, aliasDecl);
+            }
         }
         for (auto name : aliasShadow[top]) {
             aliases.insert(name);
