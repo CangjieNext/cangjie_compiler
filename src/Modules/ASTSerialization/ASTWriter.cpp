@@ -1589,7 +1589,7 @@ bool ASTWriter::ASTWriterImpl::PlannedToBeSerialized(Ptr<const Decl> decl)
 /// Collect dependencies on which the current `decl` depends.
 /// In case if declaration is not exported, its transitive dependencies will be saved.
 std::vector<TFullIdOffset> ASTWriter::ASTWriterImpl::CollectInitializationDependencies(
-    const Decl& decl, std::set<const Decl*> visited)
+    const Decl& decl, std::set<const Decl*>& visited)
 {
     bool wasVisited = visited.find(&decl) != visited.end();
     if (wasVisited) {
@@ -1599,18 +1599,20 @@ std::vector<TFullIdOffset> ASTWriter::ASTWriterImpl::CollectInitializationDepend
 
     std::vector<TFullIdOffset> dependencies;
 
-    std::vector<TFullIdOffset> dependenciesVector;
     for (auto dependency : decl.dependencies) {
+        if (visited.find(dependency) != visited.end()) {
+            continue;
+        }
         if (PlannedToBeSerialized(dependency)) {
-            TFullIdOffset depFullId = GetFullDeclIndex(dependency);
-            dependencies.push_back(depFullId);
+            (void)visited.insert(dependency);
+            dependencies.push_back(GetFullDeclIndex(dependency));
         } else {
             for (auto transitiveFullId : CollectInitializationDependencies(*dependency, visited)) {
                 dependencies.push_back(transitiveFullId);
             }
         }
     }
-    
+
     return dependencies;
 }
 
@@ -1702,7 +1704,8 @@ FormattedIndex ASTWriter::ASTWriterImpl::SaveDecl(const Decl& decl, bool isTopLe
     // The dependencies default is null for compatibility, only may have value for common part of CJMP.
     flatbuffers::Offset<flatbuffers::Vector<TFullIdOffset>> dependencies;
     if (serializingCommon) {
-        dependencies = builder.CreateVector<TFullIdOffset>(CollectInitializationDependencies(decl, {}));
+        std::set<const Decl*> visited;
+        dependencies = builder.CreateVector<TFullIdOffset>(CollectInitializationDependencies(decl, visited));
     }
     DeclInfo declInfo{name, exportId, mangledName, rawMangleName, declHash, fullPackageName, posBegin, posEnd,
         identifierPos, attributes, isConst, type, isTopLevel, annotations, dependencies};
