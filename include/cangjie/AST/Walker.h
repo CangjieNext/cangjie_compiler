@@ -50,13 +50,10 @@ struct NodeStackT {
         return stack.size();
     }
 
-    /** Return the i-th ancestor from the top (0 = current), after AutoDesugar of that slot. */
     Ptr<NodeT> operator[](size_t i) const;
 
-    /** Push @p n after AutoDesugar (follow desugarExpr if already present). */
     void Push(Ptr<NodeT> n);
 
-    /** AutoDesugar the top slot, then pop it. */
     void Pop();
 
     /**
@@ -88,9 +85,7 @@ struct NodeStackT {
 private:
     /** Follow desugarExpr to the sugar-free node; non-Expr nodes are returned unchanged. */
     static Ptr<NodeT> AutoDesugar(Ptr<NodeT> n);
-
-    /** Mutable: const accessors rewrite slots in place when mid-check sugar appears. */
-    mutable std::vector<Ptr<NodeT>> stack;
+    std::vector<Ptr<NodeT>> stack;
     friend class WalkerT<NodeT>;
 };
 
