@@ -53,13 +53,21 @@ void GlobalVariableGeneratorImpl::EmitIR()
         rawGV->setAlignment(llvm::MaybeAlign(align));
         if (auto literal = chirGV->GetInitializer()) {
             auto literalValue = HandleLiteralValue(irBuilder, *literal);
-            if (literal->GetType()->IsString()) {
+            const bool isStringLit = literal->GetType()->IsString();
+            if (isStringLit) {
                 cgMod.GetCGContext().AddCJString(
                     rawGV->getName().str(), StaticCast<CHIR::StringLiteral*>(literal)->GetVal());
             } else {
                 rawGV->setInitializer(llvm::cast<llvm::Constant>(literalValue));
             }
-            if (chirGV->TestAttr(CHIR::Attribute::READONLY)) {
+            // READONLY String globals are literal records too; keep them
+            // non-constant until CJStringPoolMerge runs so pre-link
+            // optimization cannot fold their fields. That pass repoints them
+            // and flips them back to constant.
+            if (isStringLit && chirGV->TestAttr(CHIR::Attribute::READONLY)) {
+                rawGV->addAttribute(CJSTRING_LITERAL_ATTR);
+            }
+            if (!isStringLit && chirGV->TestAttr(CHIR::Attribute::READONLY)) {
                 rawGV->addAttribute(llvm::Attribute::ReadOnly);
                 rawGV->setConstant(true);
             }
