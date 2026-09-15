@@ -121,6 +121,12 @@ OwnedPtr<Expr> CreateJavaRefCall(ClassLikeDecl& mirrorLike, Ptr<File> curFile);
 OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr);
 
 /**
+ * Is generated constructor of java mirror.
+ * Java mirror class can have several generated constructors as JString has.
+ */
+bool IsGeneratedJavaMirrorConstructor(const FuncDecl& ctor);
+
+/**
  * Is generated wrapping constructor of java mirror of kind: init(Java_CFFI_JavaEntity)
  */
 bool IsWrappingConstructorOfJavaMirror(const FuncDecl& ctor);

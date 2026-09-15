@@ -199,7 +199,7 @@ void PopulateJavaMirrorStubs::Process(AfterTypeCheckContext& ctx, ClassLikeDecl&
             continue;
         }
         if (auto fd = As<ASTKind::FUNC_DECL>(member.get())) {
-            if (fd->IsFinalizer() || IsJavaRefGetter(*fd) || IsWrappingConstructorOfJavaMirror(*fd)) {
+            if (fd->IsFinalizer() || IsJavaRefGetter(*fd) || IsGeneratedJavaMirrorConstructor(*fd)) {
                 continue;
             }
 

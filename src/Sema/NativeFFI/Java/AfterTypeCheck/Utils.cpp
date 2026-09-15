@@ -211,6 +211,15 @@ OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr)
     return CreateJavaRefCall(std::move(expr), *classLikeTy->commonDecl);
 }
 
+bool IsGeneratedJavaMirrorConstructor(const FuncDecl& ctor)
+{
+    if (ctor.outerDecl == nullptr) {
+        return false;
+    }
+    return ctor.outerDecl->IsJavaMirror() && ctor.TestAttr(Attribute::CONSTRUCTOR) &&
+        ctor.TestAttr(Attribute::COMPILER_ADD);
+}
+
 bool IsWrappingConstructorOfJavaMirror(const FuncDecl& ctor)
 {
     if (!ctor.TestAttr(Attribute::CONSTRUCTOR, Attribute::COMPILER_ADD)) {
