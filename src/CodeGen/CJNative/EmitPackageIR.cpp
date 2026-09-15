@@ -674,6 +674,32 @@ void InlineFunction(CGModule& cgMod)
 }
 
 namespace {
+// RawArray's memory layout is struct {i8* ArrayKlassInfo, i64 length, [? x i8] rawdata}.
+constexpr size_t RAW_ARRAY_FIELD_COUNT = 3;
+constexpr size_t RAW_ARRAY_DATA_FIELD = 2;
+
+// Whether an existing buffer's data operand holds exactly `content`.
+// Constant folding canonicalizes an all-zero array (the empty string and any
+// literal made of NUL bytes) to ConstantAggregateZero, so a plain
+// ConstantDataArray comparison would miss those and treat every NUL-filled
+// literal as a hash collision, emitting a duplicate buffer under a suffixed
+// name.
+bool BufferDataMatchesContent(const llvm::Constant* data, const std::string& content)
+{
+    if (auto* dataArray = llvm::dyn_cast_or_null<const llvm::ConstantDataArray>(data)) {
+        return dataArray->getAsString() == content;
+    }
+    auto* zeroAggregate = llvm::dyn_cast_or_null<const llvm::ConstantAggregateZero>(data);
+    if (!zeroAggregate) {
+        return false;
+    }
+    // ConstantAggregateZero keeps the element count but not the bytes: match on
+    // the length plus "the whole content is NUL".
+    auto* arrayType = llvm::dyn_cast<llvm::ArrayType>(zeroAggregate->getType());
+    return arrayType && arrayType->getNumElements() == content.size() &&
+           content.find_first_not_of('\0') == std::string::npos;
+}
+
 llvm::Constant* GetReadOnlyArrayKlassInfo(const CGModule& cgMod)
 {
     auto module = cgMod.GetLLVMModule();
@@ -740,9 +766,9 @@ llvm::GlobalVariable* FindOrCreateStringBuffer(llvm::Module& mod, const std::str
         auto* existingGv = llvm::dyn_cast<llvm::GlobalVariable>(existing);
         auto* existingInit = existingGv ? llvm::dyn_cast_or_null<llvm::ConstantStruct>(existingGv->getInitializer())
                                         : nullptr;
-        auto* existingData = existingInit && existingInit->getNumOperands() == 3
-            ? llvm::dyn_cast<llvm::ConstantDataArray>(existingInit->getOperand(2)) : nullptr;
-        if (existingData && existingData->getAsString() == content) {
+        auto* existingData = existingInit && existingInit->getNumOperands() == RAW_ARRAY_FIELD_COUNT
+            ? existingInit->getOperand(RAW_ARRAY_DATA_FIELD) : nullptr;
+        if (existingGv && BufferDataMatchesContent(existingData, content)) {
             return existingGv;
         }
         // Hash collision: same name but different content, try a suffixed name.
