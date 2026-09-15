@@ -758,12 +758,27 @@ void InitializeCjStringLiteral(const CGModule& cgMod)
     auto arrayKlassInfo = GetReadOnlyArrayKlassInfo(cgMod);
     auto cjStringType = cgMod.GetCGContext().GetCjStringType();
 
+    // Create every per-content buffer first, in a deterministic (content-sorted) order.
+    // FindOrCreateStringBuffer hands the unsuffixed name to whichever content is created
+    // first, so driving it from the unordered_map iteration order would make buffer names
+    // (and therefore the emitted global order, i.e. the --dump-ir stage output) depend on
+    // the stdlib's hash-table layout. std::set gives a sorted, unique, stable order, which
+    // makes the buffer names a pure function of the content set.
+    std::set<std::string> sortedContents;
+    for (const auto& cjStringIter : cjStrings) {
+        sortedContents.emplace(cjStringIter.second);
+    }
+    for (const auto& content : sortedContents) {
+        FindOrCreateStringBuffer(*cgMod.GetLLVMModule(), content, arrayKlassInfo, int8PtrType, int64Type);
+    }
+
     // Deferred pooling: do NOT concatenate all literals into one per-package byte pool here.
     // Each distinct string content gets its own RawArray buffer (deduplicated by the
     // content-hash name) and every literal points at its buffer with offset 0. Literal
     // records stay non-constant (see CreateStringLiteral) so that pre-link optimization
     // cannot bake their fields into instructions; the CJStringPoolMerge pass owns the
     // final layout, repoints literals into the merged pool and flips them to constant.
+    // The buffers already exist; FindOrCreateStringBuffer below is a pure lookup here.
     for (const auto& cjStringIter : cjStrings) {
         auto* gv = llvm::dyn_cast_or_null<llvm::GlobalVariable>(
             cgMod.GetLLVMModule()->getNamedValue(cjStringIter.first));
