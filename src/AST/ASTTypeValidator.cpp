@@ -58,7 +58,7 @@ public:
         CJC_ASSERT(valid);
 
         valid = valid && node.GetTy().IsCorrect() && !node.GetTy()->HasIdealTy() && !node.GetTy()->HasQuestTy() &&
-            !node.GetTy()->HasIdealModal();
+            !node.GetTy().IsIdealModal() && !node.GetTy()->HasIdealModal();
 #endif
         CJC_ASSERT(valid);
 
