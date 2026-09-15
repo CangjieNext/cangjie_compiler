@@ -46,6 +46,25 @@ bool IsAnyParamTypeOmitted(const LambdaExpr& le)
     });
 }
 
+// A destructuring declaration `let (x, y) = (p, q)` puts the aliased VarDecls in the
+// irrefutablePattern subtree, which is a sibling branch of the initializer that contains the
+// `RefExpr(p)` matched by the caller. Such VarDecls are not on that ancestor chain, so collect
+// their names here; the outer walker will reach `RefExpr(x)` later and clear the stale cache
+// entries on its ancestor chain (e.g. `add(x)`).
+void CollectPatternAliasNames(const AST::Node& node, std::unordered_set<std::string>& aliases)
+{
+    auto vpd = DynamicCast<VarWithPatternDecl*>(&node);
+    if (!vpd) {
+        return;
+    }
+    ConstWalker(vpd->irrefutablePattern.get(), [&aliases](Ptr<const Node> pat) -> VisitAction {
+        if (auto vd = DynamicCast<VarDecl*>(pat)) {
+            aliases.insert(vd->identifier);
+        }
+        return VisitAction::WALK_CHILDREN;
+    }).Walk();
+}
+
 void ClearCacheForNames(ASTContext& ctx, const LambdaExpr& le, const std::vector<std::string>& paramNames)
 {
     std::vector<Ptr<const Node>> parentStack;
@@ -74,6 +93,7 @@ void ClearCacheForNames(ASTContext& ctx, const LambdaExpr& le, const std::vector
                 }
                 ctx.RemoveTypeCheckCache(*p);
                 clearedNodes.insert(p);
+                CollectPatternAliasNames(*p, aliases);
             }
         } else if (auto lam = DynamicCast<LambdaExpr*>(node)) {
             shadowName(*lam); // shadow by local var is too complicated to track. skip here
