@@ -46,6 +46,60 @@ bool IsAnyParamTypeOmitted(const LambdaExpr& le)
     });
 }
 
+// Collect the VarDecl identifiers from a destructuring declaration's irrefutablePattern
+// (e.g. x and y from `let (x, y) = (p, q)`). Caller inserts them into aliases after the
+// initializer is fully checked, so the scope starts correctly.
+std::vector<std::string> CollectPatternAliasNames(const AST::Node& node)
+{
+    auto vpd = DynamicCast<VarWithPatternDecl*>(&node);
+    if (!vpd) {
+        return {};
+    }
+    std::vector<std::string> names;
+    ConstWalker(vpd->irrefutablePattern.get(), [&names](Ptr<const Node> pat) -> VisitAction {
+        if (auto vd = DynamicCast<VarDecl*>(pat)) {
+            names.push_back(vd->identifier);
+        }
+        return VisitAction::WALK_CHILDREN;
+    }).Walk();
+    return names;
+}
+
+// On a RefExpr to an aliased parameter, walk up the ancestor chain and remove the stale
+// type-check cache from each ancestor not already cleared.
+void ClearAncestorCache(ASTContext& ctx, const std::vector<Ptr<const Node>>& parentStack,
+                        std::unordered_set<Ptr<const Node>>& clearedNodes)
+{
+    for (size_t i = parentStack.size(); i > 0; i--) {
+        auto p = parentStack[i - 1];
+        if (clearedNodes.count(p) > 0) {
+            break;
+        }
+        ctx.RemoveTypeCheckCache(*p);
+        clearedNodes.insert(p);
+    }
+}
+
+// A cleared VarDecl or VarWithPatternDecl means its initializer used an alias. Once the
+// initializer is fully checked, the declared variable (for VarDecl) or the names bound in the
+// destructuring pattern (for VarWithPatternDecl) become aliases themselves. Register them with
+// the enclosing block so they are removed again when that block is exited.
+void RegisterNewAliases(Ptr<const Node> decl, Ptr<const Node> scope,
+                        std::unordered_set<std::string>& aliases,
+                        std::unordered_map<Ptr<const Node>, std::vector<std::string>>& aliasDecl)
+{
+    std::vector<std::string> newAliases;
+    if (auto vpd = DynamicCast<VarWithPatternDecl*>(decl)) {
+        newAliases = CollectPatternAliasNames(*vpd);
+    } else if (auto varDecl = DynamicCast<VarDecl*>(decl)) {
+        newAliases.push_back(varDecl->identifier);
+    }
+    for (auto& name : newAliases) {
+        aliases.insert(name);
+        aliasDecl[scope].push_back(name);
+    }
+}
+
 void ClearCacheForNames(ASTContext& ctx, const LambdaExpr& le, const std::vector<std::string>& paramNames)
 {
     std::vector<Ptr<const Node>> parentStack;
@@ -67,14 +121,7 @@ void ClearCacheForNames(ASTContext& ctx, const LambdaExpr& le, const std::vector
     auto preAction = [&ctx, &aliases, &clearedNodes, &parentStack, &shadowName](Ptr<Node> node) -> VisitAction {
         parentStack.push_back(node);
         if (auto re = DynamicCast<RefExpr*>(node); re && aliases.count(re->ref.identifier) > 0) {
-            for (size_t i = parentStack.size(); i > 0; i--) {
-                auto p = parentStack[i - 1];
-                if (clearedNodes.count(p) > 0) {
-                    break;
-                }
-                ctx.RemoveTypeCheckCache(*p);
-                clearedNodes.insert(p);
-            }
+            ClearAncestorCache(ctx, parentStack, clearedNodes);
         } else if (auto lam = DynamicCast<LambdaExpr*>(node)) {
             shadowName(*lam); // shadow by local var is too complicated to track. skip here
         }
@@ -84,9 +131,8 @@ void ClearCacheForNames(ASTContext& ctx, const LambdaExpr& le, const std::vector
                           Ptr<const Node> /* node */) -> VisitAction {
         auto top = parentStack.back();
         parentStack.pop_back();
-        if (auto decl = DynamicCast<VarDecl*>(top); decl && clearedNodes.count(decl) > 0) {
-            aliases.insert(decl->identifier); // VarDecl is cleared ==> it contains alias ==> the var is a new alias
-            aliasDecl[parentStack.back()].push_back(decl->identifier);
+        if (clearedNodes.count(top) > 0) {
+            RegisterNewAliases(top, parentStack.back(), aliases, aliasDecl);
         }
         for (auto name : aliasShadow[top]) {
             aliases.insert(name);
