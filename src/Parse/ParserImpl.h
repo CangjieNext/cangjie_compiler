@@ -490,6 +490,8 @@ private:
     }
     std::vector<OwnedPtr<AST::Decl>> ParseForeignDecls(
         const std::set<AST::Modifier>& modifiers, PtrVector<AST::Annotation>& annos);
+    void ParseForeignNodes(const std::set<AST::Modifier>& modifiers, PtrVector<AST::Annotation>& annos,
+        std::vector<OwnedPtr<AST::Node>>& nodes);
     void AssignCurFile(const OwnedPtr<AST::File>& file) const;
     void ParseWhenModifierHandler(std::vector<OwnedPtr<AST::Decl>>& ret, std::vector<OwnedPtr<AST::Annotation>>& annos);
 
