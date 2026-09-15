@@ -194,7 +194,8 @@ public:
      *  type argument inference can unify them against the expected type. This covers the
      *  implicit-return expression, explicit `return`, binary-expression operands that are bare
      *  literals, and if/tuple/paren sub-expressions. A literal whose sibling operand is already
-     *  concrete (e.g. `count():Int64 + 1`) is still unified to that concrete type. */
+     *  concrete (e.g. `count():Int64 + 1`) is still unified to that concrete type.
+     *  CheckFuncDecl suspends this so NeedSynOnUsed callees do not keep Mode::IDEAL. */
     size_t inFuncArgLambdaBody{0};
 
 private:

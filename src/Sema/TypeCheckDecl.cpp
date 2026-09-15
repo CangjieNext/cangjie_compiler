@@ -60,6 +60,33 @@ inline void DiagUnableToInferDecl(DiagnosticEngine& diag, const Decl& decl)
 {
     diag.DiagnoseRefactor(DiagKindRefactor::sema_unable_to_infer_decl, MakeRangeForDeclIdentifier(decl));
 }
+
+// NeedSynOnUsed may CheckFuncDecl while inFuncArgLambdaBody > 0 (lambda arg of a generic call).
+// Without suspending the counter, literals in that callee keep Mode::IDEAL and leak to CHIR, e.g.
+//   func go<T>(f: () -> T): T { f() }
+//   class C {
+//       func earlier(): Unit { go { => later(None) } }
+//       func later(_init: ?String) {
+//           let s = match (_init) { case Some(v) => v; case None => "None" } // "None": String @ideal
+//       }
+//   }
+class SuspendFuncArgLambdaBodyGuard {
+public:
+    explicit SuspendFuncArgLambdaBodyGuard(ASTContext& c) : ctx{&c}, saved{c.inFuncArgLambdaBody}
+    {
+        c.inFuncArgLambdaBody = 0;
+    }
+    ~SuspendFuncArgLambdaBodyGuard()
+    {
+        ctx->inFuncArgLambdaBody = saved;
+    }
+    SuspendFuncArgLambdaBodyGuard(const SuspendFuncArgLambdaBodyGuard&) = delete;
+    SuspendFuncArgLambdaBodyGuard& operator=(const SuspendFuncArgLambdaBodyGuard&) = delete;
+
+private:
+    ASTContext* ctx;
+    size_t saved;
+};
 } // namespace
 
 void TypeChecker::TypeCheckerImpl::CheckFuncDecl(ASTContext& ctx, FuncDecl& fd)
@@ -82,6 +109,7 @@ void TypeChecker::TypeCheckerImpl::CheckFuncDecl(ASTContext& ctx, FuncDecl& fd)
     }
 
     fd.funcBody->funcDecl = &fd;
+    SuspendFuncArgLambdaBodyGuard suspendIdealPending{ctx};
     (void)CheckFuncBody(ctx, *fd.funcBody);
     if (fd.GetTy().IsCorrect() && fd.GetTy()->HasQuestTy()) {
         CJC_ASSERT(fd.GetTy()->IsFunc());
