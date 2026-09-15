@@ -1026,7 +1026,7 @@ private:
         if ((targetTy->IsEnum() &&
              srcTy->GetTypeKind() == Type::TypeKind::TYPE_UINT32) ||
             (srcTy->IsEnum() &&
-             targetTy->GetTypeKind() == Type::TypeKind::TYPE_UINT32)) {
+             (targetTy->GetTypeKind() == Type::TypeKind::TYPE_UINT32 || targetTy->IsTuple()))) {
             state.Propagate(src, dest);
             return;
         }

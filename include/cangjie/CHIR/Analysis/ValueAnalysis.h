@@ -280,7 +280,12 @@ public:
                 // (e.g. for enum, we only record the state of the constructor index). Thus, the size of
                 // dest children may be less than the size of src children.
                 auto& srcChildren = srcIt->second;
-                CJC_ASSERT(srcChildren.size() >= destChildren.size());
+                if (srcChildren.size() < destChildren.size()) {
+                    // A plugin round trip can rebuild a ClassStaticCast with fewer tracked source children than
+                    // its destination shape. Preserve soundness by dropping destination member facts.
+                    targetState->SetNonTopChildrenStateToTop(destChildren);
+                    return;
+                }
                 for (size_t i = 0; i < destChildren.size(); ++i) {
                     PropagateWithoutChildren(srcChildren[i], destChildren[i], targetProgramState);
                 }

@@ -78,6 +78,16 @@ std::vector<Block*> MultiBranch::GetNormalBlocks() const
     return {succs.begin() + 1, succs.end()};
 }
 
+void MultiBranch::SetSourceExpr(SourceExpr srcExpr)
+{
+    sourceExpr = srcExpr;
+}
+
+SourceExpr MultiBranch::GetSourceExpr() const
+{
+    return sourceExpr;
+}
+
 std::string MultiBranch::OperandsToString() const
 {
     std::vector<std::string> res;
@@ -288,6 +298,9 @@ GoTo* GoTo::Clone(CHIRBuilder& builder, Block& parent) const
 {
     CJC_ASSERT(result == nullptr);
     auto newNode = builder.CreateTerminator<GoTo>(GetDestination(), &parent);
+    if (TestAttr(Attribute::MATCH_PATTERN)) {
+        newNode->EnableAttr(Attribute::MATCH_PATTERN);
+    }
     parent.AppendExpression(newNode);
     return newNode;
 }
@@ -335,6 +348,7 @@ std::string Branch::AddExtraComment() const
         {SourceExpr::QUEST, "QUEST"},
         {SourceExpr::BINARY, "BINARY"},
         {SourceExpr::FOR_IN_EXPR, "FOR_IN_EXPR"},
+        {SourceExpr::MATCH_CASE, "MATCH_CASE"},
         {SourceExpr::OTHER, "OTHER"},
     };
     return "sourceExpr: " + SOURCE_EXPR_MAP.at(sourceExpr);
@@ -373,6 +387,7 @@ Branch* Branch::Clone(CHIRBuilder& builder, Block& parent) const
 {
     CJC_ASSERT(result == nullptr);
     auto newNode = builder.CreateTerminator<Branch>(GetCondition(), GetTrueBlock(), GetFalseBlock(), &parent);
+    newNode->SetSourceExpr(GetSourceExpr());
     parent.AppendExpression(newNode);
     return newNode;
 }
@@ -382,6 +397,7 @@ MultiBranch* MultiBranch::Clone(CHIRBuilder& builder, Block& parent) const
     CJC_ASSERT(result == nullptr);
     auto newNode = builder.CreateTerminator<MultiBranch>(
         GetCondition(), GetDefaultBlock(), GetCaseVals(), GetNormalBlocks(), &parent);
+    newNode->SetSourceExpr(GetSourceExpr());
     parent.AppendExpression(newNode);
     return newNode;
 }

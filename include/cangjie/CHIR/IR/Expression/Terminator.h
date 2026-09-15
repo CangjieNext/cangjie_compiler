@@ -28,6 +28,7 @@ enum class SourceExpr : uint8_t {
     QUEST,
     BINARY,
     FOR_IN_EXPR,
+    MATCH_CASE,
     OTHER
 };
 
@@ -114,6 +115,10 @@ public:
 
     std::vector<Block*> GetNormalBlocks() const;
 
+    void SetSourceExpr(SourceExpr srcExpr);
+
+    SourceExpr GetSourceExpr() const;
+
 protected:
     std::string OperandsToString() const override;
 
@@ -129,6 +134,7 @@ private:
      * Note that default Block does not have the case val.
      */
     std::vector<uint64_t> caseVals;
+    SourceExpr sourceExpr{SourceExpr::OTHER};
 };
 
 /**
