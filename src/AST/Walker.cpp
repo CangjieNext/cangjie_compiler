@@ -33,9 +33,7 @@ template <class NodeT> Ptr<NodeT> NodeStackT<NodeT>::AutoDesugar(Ptr<NodeT> n)
 template <class NodeT>
 Ptr<NodeT> NodeStackT<NodeT>::operator[](size_t i) const
 {
-    auto& slot = stack[stack.size() - i - 1];
-    slot = AutoDesugar(slot);
-    return slot;
+    return stack[stack.size() - i - 1];
 }
 
 template <class NodeT>
@@ -47,7 +45,6 @@ void NodeStackT<NodeT>::Push(Ptr<NodeT> n)
 template <class NodeT>
 void NodeStackT<NodeT>::Pop()
 {
-    stack.back() = AutoDesugar(stack.back());
     stack.pop_back();
 }
 
@@ -56,7 +53,6 @@ Ptr<NodeT> NodeStackT<NodeT>::FindFirstOf(
     const std::function<bool(Ptr<NodeT>)>& pred, const std::function<bool(Ptr<NodeT>)>& stop) const
 {
     for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
-        *it = AutoDesugar(*it);
         if (pred(*it)) {
             return *it;
         }

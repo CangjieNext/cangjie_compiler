@@ -760,7 +760,14 @@ void FilterNestedCtorCall(
     }
     // Skip `ce` itself and any outer CallExpr that still has desugarExpr (mid-check sugar left on the stack).
     auto outerCall = DynamicCast<CallExpr>(stack.FindFirstOf([&ce](Ptr<Node> n) {
-        return n != &ce && DynamicCast<CallExpr>(n);
+        auto expr = DynamicCast<Expr>(n);
+        if (!expr || expr->desugarExpr) {
+            return false;
+        }
+        while (expr->desugarExpr) {
+            expr = expr->desugarExpr.get();
+        }
+        return expr != &ce && Is<CallExpr>(expr);
     }));
     if (!outerCall || ce.desugarExpr) {
         return;
@@ -774,6 +781,10 @@ void FilterNestedCtorCall(
         }
     } else {
         for (auto& arg : outerCall->args) {
+            if (!arg) {
+                // desugared, skip, this won't be a problem because this is a disambiguator.
+                break;
+            }
             if (arg->expr.get() == &ce) {
                 isNestedCall = true;
             }
