@@ -43,6 +43,22 @@ const static std::vector<ASTKind> G_EXPRS_CONNECTED_BY_COMMA_LIST = {
     ASTKind::ARRAY_LIT, ASTKind::TUPLE_LIT, ASTKind::FUNC_ARG};
 } // namespace
 
+// A 'foreign' declaration expanded by a macro. ParseDecl has no entry for the block form and
+// would report "expected declaration" at '{', so handle it the same way as ParseTopLevelDecl does.
+void ParserImpl::ParseForeignNodes(
+    const std::set<Modifier>& modifiers, PtrVector<Annotation>& annos, std::vector<OwnedPtr<Node>>& nodes)
+{
+    std::set<Modifier> declMods = modifiers;
+    ParseModifiers(declMods);
+    auto decls = ParseForeignDecls(declMods, annos);
+    for (auto& decl : decls) {
+        decl->curFile = this->currentFile;
+        decl->curMacroCall = this->curMacroCall;
+        AddMacroAttr(*decl);
+        nodes.emplace_back(std::move(decl));
+    }
+}
+
 bool ParserImpl::SeeingParamInMacroCallExpr()
 {
     if (SeeingContextualKeyword() || Seeing(TokenKind::IDENTIFIER) || Seeing(TokenKind::WILDCARD)) {
@@ -100,6 +116,9 @@ std::vector<OwnedPtr<Node>> ParserImpl::ParseNodes(std::variant<ScopeKind, ExprK
         if (scopeKind) {
             if (isParamMacro) {
                 node = ParseParamInParamList(*scopeKind, namedParameter, memberParam);
+            } else if (*scopeKind == ScopeKind::TOPLEVEL && Seeing(TokenKind::FOREIGN)) {
+                ParseForeignNodes(modifiers, annos, nodes);
+                continue;
             } else if (CheckIfSeeingDecl(*scopeKind)) {
                 node = nodes.empty() ? ParseDecl(*scopeKind, modifiers, std::move(annos)) : ParseDecl(*scopeKind);
             } else {
