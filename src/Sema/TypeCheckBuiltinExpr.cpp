@@ -349,7 +349,7 @@ bool TypeChecker::TypeCheckerImpl::ChkArrayLit(ASTContext& ctx, ModalTy target, 
         matched = false;
     }
 
-    ModalTy arrayElemTy = targetTy->typeArgs[0];
+    ModalTy arrayElemTy{targetTy->TyArg(0), targetTy.Mode()};
     for (auto& child : al.children) {
         if (!Check(ctx, arrayElemTy, child.get())) {
             matched = false;

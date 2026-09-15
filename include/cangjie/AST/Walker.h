@@ -25,11 +25,6 @@
 namespace Cangjie::AST {
 /**
  * Enum class for visit action in the Walker.
- *
- * The values have been specially designed to make `STOP_NOW` has the highest priority when several values are combined
- * with `OR` operator.
- *
- * @see operator|(VisitAction, VisitAction)
  */
 enum class VisitAction : uint8_t {
     WALK_CHILDREN, /**< Continue to walk into child items. */
@@ -42,6 +37,11 @@ template <class NodeT> class WalkerT;
 
 /**
  * Stack of ancestor nodes (root at index 0, current node at the back while visiting).
+ *
+ * Mid-check desugaring may attach desugarExpr to a node already on the stack. Push, Pop,
+ * operator[], and FindFirstOf rewrite the accessed slot via AutoDesugar before returning or
+ * applying predicates, so callers always observe the sugar-free node. `stack` is mutable so
+ * const accessors can perform that rewrite without dropping const on the NodeStackT.
  */
 template <class NodeT>
 struct NodeStackT {
@@ -50,42 +50,26 @@ struct NodeStackT {
         return stack.size();
     }
 
-    Ptr<NodeT> operator[](size_t i) const
-    {
-        return stack[stack.size() - i - 1];
-    }
+    /** Return the i-th ancestor from the top (0 = current), after AutoDesugar of that slot. */
+    Ptr<NodeT> operator[](size_t i) const;
 
-    void Push(Ptr<NodeT> n)
-    {
-        stack.push_back(PreferDesugared(n));
-    }
+    /** Push @p n after AutoDesugar (follow desugarExpr if already present). */
+    void Push(Ptr<NodeT> n);
 
-    void Pop()
-    {
-        stack.pop_back();
-    }
+    /** AutoDesugar the top slot, then pop it. */
+    void Pop();
 
     /**
      * Search from the top of the stack downward until @p pred returns true.
-     * If @p stop returns true first, return nullptr.
+     * Each slot is AutoDesugared before pred/stop see it. If @p stop returns true first, return nullptr.
      */
     Ptr<NodeT> FindFirstOf(const std::function<bool(Ptr<NodeT>)>& pred,
-        const std::function<bool(Ptr<NodeT>)>& stop = nullptr) const
-    {
-        for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
-            if (pred(*it)) {
-                return *it;
-            }
-            if (stop && stop(*it)) {
-                return nullptr;
-            }
-        }
-        return nullptr;
-    }
+        const std::function<bool(Ptr<NodeT>)>& stop = nullptr) const;
 
     /**
      * Find the first node of type @p T from the top of the stack.
      * When @p T is Expr or a subclass of Expr, stop at function boundaries and return nullptr.
+     * Slots are AutoDesugared via FindFirstOf(pred, stop).
      */
     template <typename T>
     Ptr<T> FindFirstOf() const
@@ -102,15 +86,18 @@ struct NodeStackT {
     }
 
 private:
-    /** If @p n already has desugarExpr, push the desugared node instead. */
-    static Ptr<NodeT> PreferDesugared(Ptr<NodeT> n);
+    /** Follow desugarExpr to the sugar-free node; non-Expr nodes are returned unchanged. */
+    static Ptr<NodeT> AutoDesugar(Ptr<NodeT> n);
 
-    std::vector<Ptr<NodeT>> stack;
+    /** Mutable: const accessors rewrite slots in place when mid-check sugar appears. */
+    mutable std::vector<Ptr<NodeT>> stack;
     friend class WalkerT<NodeT>;
 };
 
 using NodeStack = NodeStackT<Node>;
 using ConstNodeStack = NodeStackT<const Node>;
+extern template struct NodeStackT<Node>;
+extern template struct NodeStackT<const Node>;
 
 /**
  * The main class used for walking the Rune AST.

@@ -669,8 +669,8 @@ void Collector::BuildSymbolTable(ASTContext& ctx, Ptr<Node> node, bool buildTrie
         decl->fullPackageName = ctx.fullPackageName;
     }
     // For-In expr and Synchronized expr need to be collected in new scope, and will be processed later.
-    if (auto expr = DynamicCast<Expr*>(node);
-        expr && expr->astKind != ASTKind::FOR_IN_EXPR && expr->astKind != ASTKind::SYNCHRONIZED_EXPR) {
+    if (auto expr = DynamicCast<Expr*>(node); expr && expr->desugarExpr &&
+        expr->astKind != ASTKind::FOR_IN_EXPR && expr->astKind != ASTKind::SYNCHRONIZED_EXPR) {
         BuildSymbolTable(ctx, expr->desugarExpr.get(), buildTrie);
     }
     switch (node->astKind) {

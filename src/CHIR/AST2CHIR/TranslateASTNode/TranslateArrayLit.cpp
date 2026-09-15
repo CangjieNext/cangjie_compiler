@@ -43,8 +43,11 @@ Ptr<Value> Translator::TranslateStructArray(const AST::ArrayLit& array)
         CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, array.children.size())
             ->GetResult();
     auto modal = ASTModal2CHIRModal(array.GetTy().Mode());
-    Type* rawArrayType = builder.GetType<RefType>(builder.GetType<RawArrayType>(eleTy, 1u, modal));
-    auto rawArrayRef = TryCreate<RawArrayAllocate>(currentBlock, loc, rawArrayType, eleTy, elementSize)->GetResult();
+    auto allocateEleTy = eleTy->GetDataType(builder);
+    Type* rawArrayType = builder.GetType<RefType>(builder.GetType<RawArrayType>(allocateEleTy, 1u, modal));
+    auto rawArrayRef =
+        TryCreate<RawArrayAllocate>(currentBlock, loc, rawArrayType, allocateEleTy, elementSize)->GetResult();
+    eleTy = builder.WithModal(eleTy, modal);
     // in cjdb, if the arrayLit is nested,e.g. [[1,2]]
     // the outer RawArrayAllocate must be generated earlier than inner RawArrayAllocate,
     // then the location of outer's RawArrayAllocate will come before inner's.
