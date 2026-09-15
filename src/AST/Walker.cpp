@@ -17,7 +17,7 @@
 using namespace Cangjie;
 using namespace Cangjie::AST;
 namespace Cangjie::AST {
-template <class NodeT> Ptr<NodeT> NodeStackT<NodeT>::PreferDesugared(Ptr<NodeT> n)
+template <class NodeT> Ptr<NodeT> NodeStackT<NodeT>::AutoDesugar(Ptr<NodeT> n)
 {
     using ExprT = std::conditional_t<std::is_const_v<NodeT>, const Expr, Expr>;
     auto expr = DynamicCast<ExprT>(n);
@@ -29,8 +29,46 @@ template <class NodeT> Ptr<NodeT> NodeStackT<NodeT>::PreferDesugared(Ptr<NodeT> 
     }
     return expr;
 }
-template Ptr<Node> NodeStackT<Node>::PreferDesugared(Ptr<Node> n);
-template Ptr<const Node> NodeStackT<const Node>::PreferDesugared(Ptr<const Node> n);
+
+template <class NodeT>
+Ptr<NodeT> NodeStackT<NodeT>::operator[](size_t i) const
+{
+    auto& slot = stack[stack.size() - i - 1];
+    slot = AutoDesugar(slot);
+    return slot;
+}
+
+template <class NodeT>
+void NodeStackT<NodeT>::Push(Ptr<NodeT> n)
+{
+    stack.push_back(AutoDesugar(n));
+}
+
+template <class NodeT>
+void NodeStackT<NodeT>::Pop()
+{
+    stack.back() = AutoDesugar(stack.back());
+    stack.pop_back();
+}
+
+template <class NodeT>
+Ptr<NodeT> NodeStackT<NodeT>::FindFirstOf(
+    const std::function<bool(Ptr<NodeT>)>& pred, const std::function<bool(Ptr<NodeT>)>& stop) const
+{
+    for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+        *it = AutoDesugar(*it);
+        if (pred(*it)) {
+            return *it;
+        }
+        if (stop && stop(*it)) {
+            return nullptr;
+        }
+    }
+    return nullptr;
+}
+
+template struct NodeStackT<Node>;
+template struct NodeStackT<const Node>;
 
 template <class NodeT> std::atomic_uint WalkerT<NodeT>::nextWalkerID = 1;
 template <class NodeT> unsigned WalkerT<NodeT>::GetNextWalkerID()

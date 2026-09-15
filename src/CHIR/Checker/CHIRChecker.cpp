@@ -3826,14 +3826,22 @@ void CHIRChecker::CheckRawArrayLiteralInit(const RawArrayLiteralInit& expr, cons
 
     // 2. the 1st operand must be RawArray&
     auto rawArray = expr.GetRawArray();
-    if (!rawArray->GetType()->IsRef() || !rawArray->GetType()->StripAllRefs()->IsRawArray()) {
+    auto rawArrayTy = rawArray->GetType();
+    if (!rawArrayTy->IsRef() || !rawArrayTy->StripAllRefs()->IsRawArray()) {
         TypeCheckError(expr, *rawArray, "RawArray&", topLevelFunc);
+        return;
     }
 
-    // 3. all elements' type must be equal to RawArray's element type
-    auto rawArrayEleTy = StaticCast<RawArrayType*>(rawArray->GetType()->StripAllRefs())->GetElementType();
+    // 3. each element's data type must match RawArray's element type; modal belongs on RawArray
+    // (e.g. RawArray<Rune> @local!), so Rune @local! is accepted when it is equal or a sub-modal of the array.
+    auto rawArrayRawTy = StaticCast<RawArrayType*>(rawArrayTy->StripAllRefs());
+    auto rawArrayEleTy = rawArrayRawTy->GetElementType();
+    auto rawArrayModal = rawArrayRawTy->GetModalInfo();
     for (auto e : expr.GetElementValues()) {
-        if (!e->GetType()->IsEqualOrSubTypeOf(*rawArrayEleTy, builder)) {
+        auto elemTy = e->GetType();
+        auto elemModal = elemTy->StripAllRefs()->GetModalInfo();
+        if (!elemTy->GetDataType(builder)->IsEqualOrSubTypeOf(*rawArrayEleTy, builder) ||
+            !elemModal.IsEqualOrSubModal(rawArrayModal)) {
             TypeCheckError(expr, *e, rawArrayEleTy->ToString(), topLevelFunc);
         }
     }
