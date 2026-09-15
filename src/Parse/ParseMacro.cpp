@@ -100,6 +100,20 @@ std::vector<OwnedPtr<Node>> ParserImpl::ParseNodes(std::variant<ScopeKind, ExprK
         if (scopeKind) {
             if (isParamMacro) {
                 node = ParseParamInParamList(*scopeKind, namedParameter, memberParam);
+            } else if (*scopeKind == ScopeKind::TOPLEVEL && Seeing(TokenKind::FOREIGN)) {
+                // A 'foreign' declaration expanded by a macro. ParseDecl has no entry for the
+                // block form and would report "expected declaration" at '{', so handle it the
+                // same way as ParseTopLevelDecl does.
+                std::set<Modifier> declMods = modifiers;
+                ParseModifiers(declMods);
+                auto decls = ParseForeignDecls(declMods, annos);
+                for (auto& decl : decls) {
+                    decl->curFile = this->currentFile;
+                    decl->curMacroCall = this->curMacroCall;
+                    AddMacroAttr(*decl);
+                    nodes.emplace_back(std::move(decl));
+                }
+                continue;
             } else if (CheckIfSeeingDecl(*scopeKind)) {
                 node = nodes.empty() ? ParseDecl(*scopeKind, modifiers, std::move(annos)) : ParseDecl(*scopeKind);
             } else {
