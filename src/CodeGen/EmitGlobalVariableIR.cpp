@@ -60,10 +60,10 @@ void GlobalVariableGeneratorImpl::EmitIR()
             } else {
                 rawGV->setInitializer(llvm::cast<llvm::Constant>(literalValue));
             }
-            // Black-hole for merging: READONLY String globals are literal records
-            // too; keep them non-constant so pre-link optimization cannot fold
-            // their fields. CJStringPoolMerge repoints them and flips them back
-            // to constant.
+            // READONLY String globals are literal records too; keep them
+            // non-constant until CJStringPoolMerge runs so pre-link
+            // optimization cannot fold their fields. That pass repoints them
+            // and flips them back to constant.
             if (isStringLit && chirGV->TestAttr(CHIR::Attribute::READONLY)) {
                 rawGV->addAttribute(CJSTRING_LITERAL_ATTR);
             }

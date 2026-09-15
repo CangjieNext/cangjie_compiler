@@ -1497,11 +1497,11 @@ llvm::Value* IRBuilder2::CreateStringLiteral(const std::string& str)
     auto gvCjString =
         llvm::cast<llvm::GlobalVariable>(cgMod.GetLLVMModule()->getOrInsertGlobal(cjStringName, cjStringType));
     CJC_NULLPTR_CHECK(gvCjString);
-    // Black-hole for merging: keep the literal non-constant until
-    // CJStringPoolMerge runs, so that pre-link optimization cannot fold the
-    // start field into plain integer instructions (a folded start would
-    // become stale when the pass repoints literals into the merged pool).
-    // The pass flips every cjstring literal back to constant after merging.
+    // Keep the literal non-constant until CJStringPoolMerge runs, so that
+    // pre-link optimization cannot fold the start field into plain integer
+    // instructions (a folded start would become stale when the pass repoints
+    // literals into the merged pool). The pass flips every cjstring literal
+    // back to constant after merging.
     gvCjString->setConstant(false);
     gvCjString->addAttribute(CJSTRING_LITERAL_ATTR);
     gvCjString->setLinkage(llvm::GlobalValue::PrivateLinkage);
