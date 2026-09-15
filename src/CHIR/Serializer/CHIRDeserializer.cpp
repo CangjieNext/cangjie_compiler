@@ -1206,7 +1206,10 @@ template <> MultiBranch* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(con
     }
     auto owner = GetValue<Block>(obj->base()->owner());
     auto caseVals = std::vector<uint64_t>(obj->caseValues()->begin(), obj->caseValues()->end());
-    return builder.CreateTerminator<MultiBranch>(cond, defaultBlock, caseVals, caseBlocks, owner);
+    // Rebuild source-edge semantics before unreachable checking runs on the plugin-produced CHIR context.
+    auto result = builder.CreateTerminator<MultiBranch>(cond, defaultBlock, caseVals, caseBlocks, owner);
+    result->SetSourceExpr(CHIR::SourceExpr(obj->sourceExpr()));
+    return result;
 }
 
 template <>
@@ -1371,6 +1374,9 @@ void CHIRDeserializer::CHIRDeserializerImpl::ConfigBase(const CHIRFormat::Base* 
             case CHIRFormat::Annotation::Annotation_overrideSrcFuncType:
                 obj.Set<CHIR::OverrideSrcFuncType>(
                     GetType<FuncType>(static_cast<const CHIRFormat::OverrideSrcFuncType*>(anno)->type()));
+                break;
+            case CHIRFormat::Annotation::Annotation_matchCaseId:
+                obj.Set<CHIR::MatchCaseId>(static_cast<const CHIRFormat::MatchCaseId*>(anno)->id());
                 break;
             default:
                 continue;

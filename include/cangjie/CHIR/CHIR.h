@@ -132,6 +132,7 @@ private:
     void NothingTypeExprElimination();
     void UselessExprElimination();
     void UnreachableBranchReporter();
+    void ClearMatchMetadata();
     void UselessFuncElimination(const std::string& passName);
     void RedundantLoadElimination();
     void UselessAllocateElimination();

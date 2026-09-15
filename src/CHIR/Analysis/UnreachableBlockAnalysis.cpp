@@ -169,6 +169,19 @@ DebugLocation GetRootLocation(const Block& root)
         }
     }
 
+    /*
+     * A compiler-generated region root may have no source position while its first successor contains the actual dead
+     * statement. Prefer that successor position before giving up, so a structural bridge cannot suppress a warning.
+     */
+    for (auto successor : root.GetSuccessors()) {
+        for (auto expression : successor->GetExpressions()) {
+            rootLocation = expression->GetDebugLocation();
+            if (!rootLocation.GetBeginPos().IsZero()) {
+                return rootLocation;
+            }
+        }
+    }
+
     // A component made entirely of compiler-generated CFG bridges has no source location to diagnose.
     return rootLocation;
 }
@@ -381,11 +394,11 @@ bool TryGetWarningExpression(Expression& expression, UnreachableExpr& result)
             return true;
         }
     }
-    if (expression.GetExprKind() != ExprKind::DEBUGEXPR) {
-        result = UnreachableExpr{&expression, true};
-        return true;
+    if (expression.GetExprKind() == ExprKind::DEBUGEXPR) {
+        return false;
     }
-    return false;
+    result = UnreachableExpr{&expression, true};
+    return true;
 }
 
 /// Select the expression's own range when it is a valid local-package fallback.
