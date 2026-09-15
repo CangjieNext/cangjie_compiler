@@ -186,7 +186,7 @@ private:
 
     bool PlannedToBeSerialized(Ptr<const AST::Decl> decl);
     std::vector<TFullIdOffset> CollectInitializationDependencies(const AST::Decl& decl,
-        std::set<const AST::Decl*> visited);
+        std::set<const AST::Decl*>& visited);
     TFuncBodyOffset SaveFuncBody(const AST::FuncBody& funcBody);
     // Save generic Information
     flatbuffers::Offset<PackageFormat::Generic> SaveGeneric(const AST::Decl& decl);
