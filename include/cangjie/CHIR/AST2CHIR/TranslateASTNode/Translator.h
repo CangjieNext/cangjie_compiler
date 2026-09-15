@@ -985,19 +985,32 @@ private:
     /** Entrance of translating multiple outermost or-pattern case. */
     // return value -> {false block, true block}
     std::pair<Ptr<Block>, Ptr<Block>> TranslateOrPattern(
-        const std::vector<OwnedPtr<AST::Pattern>>& patterns, Ptr<Value> selectorVal, const DebugLocation& originLoc);
-    std::pair<Ptr<Block>, Ptr<Block>> TranslateConstantMultiOr(const std::vector<uint64_t> values, Ptr<Value> value);
+        const std::vector<OwnedPtr<AST::Pattern>>& patterns, Ptr<Value> selectorVal, const DebugLocation& originLoc,
+        SourceExpr sourceExpr);
+    std::pair<Ptr<Block>, Ptr<Block>> TranslateConstantMultiOr(
+        const std::vector<uint64_t> values, Ptr<Value> value, SourceExpr sourceExpr);
     Ptr<Value> GetEnumIDValue(Ptr<AST::Ty> ty, Ptr<Value> selectorVal);
     /* Translate or patterns except constant and enum patterns. */
     std::pair<Ptr<Block>, Ptr<Block>> TranslateComplicatedOrPattern(
         const std::vector<OwnedPtr<AST::Pattern>>& patterns,
-        const Ptr<Value> selectorVal, const DebugLocation& originLoc);
+        const Ptr<Value> selectorVal, const DebugLocation& originLoc, SourceExpr sourceExpr);
     /** Entrance of translating single outermost nesting case pattern. */
     // return value -> {false block, true block}
     std::pair<Ptr<Block>, Ptr<Block>> TranslateNestingCasePattern(const AST::Pattern& pattern,
         const Ptr<Value> selectorVal, const DebugLocation& originLoc,
-        const SourceExpr& sourceExpr = SourceExpr::MATCH_EXPR);
-    void TranslatePatternGuard(const AST::MatchCase& matchCase, Ptr<Block> falseBlock, Ptr<Block>& trueBlock);
+        const SourceExpr& sourceExpr = SourceExpr::MATCH_EXPR, const DebugLocation* matchedBlockLoc = nullptr);
+    /**
+     * @brief Translates a match guard to explicit true and false control-flow targets.
+     * @param condition The guard condition to translate.
+     * @param trueBlock The target selected when the guard succeeds.
+     * @param falseBlock The target selected when the guard fails.
+     * @param sourceExpr The source expression represented by the final failure edge.
+     */
+    void TranslateMatchGuardCondition(
+        const AST::Expr& condition, Ptr<Block> trueBlock, Ptr<Block> falseBlock, SourceExpr sourceExpr);
+    void TranslatePatternGuard(
+        const AST::MatchCase& matchCase, Ptr<Block> falseBlock, Ptr<Block>& trueBlock, SourceExpr sourceExpr,
+        const DebugLocation& originLoc);
     // ========= helper functions for translating each of nesting patterns ==========
     // NOTE: 'blocks' is pair of {final matched block, next condition block}
     // 'enum pattern''s element value should be generated in 'next condition block'.
@@ -1022,7 +1035,10 @@ private:
     // Record relation of enum pattern and its matching case body's id.
     struct SecondSwitchInfo {
         const AST::EnumPattern& ep;
+        // Source case identity is retained when one case is distributed across optimized constructor tables.
         size_t caseId = 0;
+        // Each generated table entry diagnoses the source pattern that created it.
+        DebugLocation loc;
     };
     // NOTE: using map for fixed order of IR generation.
     struct EnumMatchInfo {
@@ -1036,7 +1052,7 @@ private:
     void TranslateEnumPatternMatchAsTable(const AST::MatchExpr& match, Ptr<Value> enumVal, Ptr<Value> retVal);
     void CollectEnumPatternInfo(const AST::Pattern& pattern, EnumMatchInfo& info, size_t caseId);
     std::unordered_map<size_t, std::vector<Ptr<Block>>> TranslateSecondLevelAsTable(
-        const EnumMatchInfo& info, Ptr<Value> enumVal, Ptr<Block> firstDefaultBlock);
+        const EnumMatchInfo& info, Ptr<Value> enumVal, Ptr<Block> firstDefaultBlock, SourceExpr sourceExpr);
     /**
      * Translate sub patterns for each case inside second level switch table.
      * @param endBlock [in]: last block when all sub-patterns are not matched.
@@ -1060,7 +1076,8 @@ private:
      */
     void TranslateSecondLevelTable(Ptr<Block> endBlock, const Ptr<Block> tableBlock, const Ptr<Value> enumVal,
         const std::vector<SecondSwitchInfo>& infos,
-        std::unordered_map<size_t, std::vector<Ptr<Block>>>& blockBranchInfos);
+        std::unordered_map<size_t, std::vector<Ptr<Block>>>& blockBranchInfos, SourceExpr sourceExpr,
+        std::optional<size_t> fallbackCaseId = std::nullopt);
 
     void CreateAndAppendWrappedStoreElementByName(
         const DebugLocation& loc, Value& rhs, Value& lhs, const std::vector<std::string>& path);

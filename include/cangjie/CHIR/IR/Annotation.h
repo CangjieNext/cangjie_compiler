@@ -121,6 +121,33 @@ private:
     DebugLocation location;
 };
 
+/**
+ * Identifies fragments generated from the same source match case. An optimized enum table can split one source case
+ * across constructor groups, so the unreachable checker uses this id to emit that case only once.
+ */
+struct MatchCaseId : public Annotation {
+public:
+    explicit MatchCaseId() = default;
+    explicit MatchCaseId(size_t value) : id(value)
+    {
+    }
+
+    static std::optional<size_t> Extract(const MatchCaseId* input)
+    {
+        return input->id;
+    }
+
+    std::unique_ptr<Annotation> Clone() override
+    {
+        return std::make_unique<MatchCaseId>(*this);
+    }
+
+    std::string ToString() override;
+
+private:
+    std::optional<size_t> id;
+};
+
 struct LinkTypeInfo : public Annotation {
 public:
     explicit LinkTypeInfo() : linkType(Cangjie::Linkage::EXTERNAL){};
