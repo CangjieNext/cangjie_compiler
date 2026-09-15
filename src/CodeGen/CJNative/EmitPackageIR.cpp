@@ -728,6 +728,13 @@ llvm::GlobalVariable* FindOrCreateStringBuffer(llvm::Module& mod, const std::str
             // (this attribute) may be merged; legacy per-package pools must
             // stay untouched.
             gvRawData->addAttribute(CJSTRING_DEFERRED_ATTR);
+            // The buffer's address is never observed (the pointer is only stored
+            // into the literal record, memcpy'd and passed to GC), and same-content
+            // strings already share storage within the module, so the address can
+            // be declared non-significant: ConstantMerge may then fold identical
+            // buffers in the configurations where CJStringPoolMerge does not run
+            // (e.g. -cj-string-pool-merge=false).
+            gvRawData->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
             return gvRawData;
         }
         auto* existingGv = llvm::dyn_cast<llvm::GlobalVariable>(existing);
