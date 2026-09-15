@@ -46,6 +46,44 @@ bool IsAnyParamTypeOmitted(const LambdaExpr& le)
     });
 }
 
+// A destructuring declaration `let (x, y) = (p, q)` puts the aliased VarDecls in the
+// irrefutablePattern subtree, which is a sibling branch of the initializer that contains the
+// `RefExpr(p)` matched by the caller. Such VarDecls are not on that ancestor chain, so collect
+// their names here; the outer walker will reach `RefExpr(x)` later and clear the stale cache
+// entries on its ancestor chain (e.g. `add(x)`).
+void CollectPatternAliasNames(const AST::Node& node, std::unordered_set<std::string>& aliases)
+{
+    auto vpd = DynamicCast<VarWithPatternDecl*>(&node);
+    if (!vpd) {
+        return;
+    }
+    ConstWalker(vpd->irrefutablePattern.get(), [&aliases](Ptr<const Node> pat) -> VisitAction {
+        if (auto vd = DynamicCast<VarDecl*>(pat)) {
+            aliases.insert(vd->identifier);
+        }
+        return VisitAction::WALK_CHILDREN;
+    }).Walk();
+}
+
+// On a RefExpr to an aliased parameter, walk up the ancestor chain and remove the stale
+// type-check cache from each ancestor not already cleared. A cleared VarWithPatternDecl
+// also contributes the names bound in its destructuring pattern, so a later RefExpr to one
+// of them clears its dependent nodes (e.g. add(x)).
+void ClearAncestorCache(ASTContext& ctx, const std::vector<Ptr<const Node>>& parentStack,
+                        std::unordered_set<Ptr<const Node>>& clearedNodes,
+                        std::unordered_set<std::string>& aliases)
+{
+    for (size_t i = parentStack.size(); i > 0; i--) {
+        auto p = parentStack[i - 1];
+        if (clearedNodes.count(p) > 0) {
+            break;
+        }
+        ctx.RemoveTypeCheckCache(*p);
+        clearedNodes.insert(p);
+        CollectPatternAliasNames(*p, aliases);
+    }
+}
+
 void ClearCacheForNames(ASTContext& ctx, const LambdaExpr& le, const std::vector<std::string>& paramNames)
 {
     std::vector<Ptr<const Node>> parentStack;
@@ -67,14 +105,7 @@ void ClearCacheForNames(ASTContext& ctx, const LambdaExpr& le, const std::vector
     auto preAction = [&ctx, &aliases, &clearedNodes, &parentStack, &shadowName](Ptr<Node> node) -> VisitAction {
         parentStack.push_back(node);
         if (auto re = DynamicCast<RefExpr*>(node); re && aliases.count(re->ref.identifier) > 0) {
-            for (size_t i = parentStack.size(); i > 0; i--) {
-                auto p = parentStack[i - 1];
-                if (clearedNodes.count(p) > 0) {
-                    break;
-                }
-                ctx.RemoveTypeCheckCache(*p);
-                clearedNodes.insert(p);
-            }
+            ClearAncestorCache(ctx, parentStack, clearedNodes, aliases);
         } else if (auto lam = DynamicCast<LambdaExpr*>(node)) {
             shadowName(*lam); // shadow by local var is too complicated to track. skip here
         }
