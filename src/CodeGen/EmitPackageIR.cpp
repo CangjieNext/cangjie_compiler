@@ -548,7 +548,13 @@ llvm::Function* CreateMainFunc(const CGModule& cgMod)
     // Create @main func.
     auto module = cgMod.GetLLVMModule();
     auto mainFunc = module->getFunction("main");
-    CJC_ASSERT(!mainFunc && "The main function is generated repeatedly.");
+    // The program entry wrapper must be the only owner of the 'main' symbol. A name conflict here
+    // means another declaration (e.g. a foreign function named 'main' deserialized from an older
+    // cjo) claimed it; CJC_ASSERT is compiled out in release builds, so report it explicitly
+    // instead of silently reusing that declaration through the getOrInsertFunction below.
+    if (mainFunc != nullptr) {
+        InternalError("The 'main' symbol has already been declared as a foreign function.");
+    }
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     auto& context = cgMod.GetCGContext().GetLLVMContext();
     auto i32Ty = llvm::Type::getInt32Ty(context);

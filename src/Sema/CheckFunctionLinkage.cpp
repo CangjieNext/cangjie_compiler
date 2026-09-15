@@ -633,6 +633,17 @@ void TypeChecker::TypeCheckerImpl::AnalyzeFunctionLinkage(Package& pkg) const
 {
     AnalyzeLinkageBasedOnModifier(pkg, ci->invocation.globalOptions);
     ExternalLinkageAnalyzer(pkg).Run();
+    // A foreign function is bound to the C symbol equal to its own identifier, while 'main' is owned
+    // by the compiler generated program entry, so such a declaration cannot be code generated. Like
+    // the other entry checks, it only applies when an executable is produced.
+    if (ci->invocation.globalOptions.CompileExecutable()) {
+        IterateToplevelDecls(pkg, [this](auto& decl) {
+            auto fd = DynamicCast<FuncDecl>(decl.get());
+            if (fd != nullptr && fd->TestAttr(Attribute::FOREIGN) && fd->identifier == "main") {
+                diag.Diagnose(*fd, DiagKind::sema_foreign_func_named_main);
+            }
+        });
+    }
     IterateToplevelDecls(pkg, [](auto& decl) {
         if (auto id = DynamicCast<InheritableDecl>(decl.get()); id && id->linkage == Linkage::INTERNAL) {
             IterateAllFunctionInStruct(*id, MarkFunctionAsInternalLinkage);

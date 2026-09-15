@@ -125,6 +125,9 @@ ERROR(sema_unexpected_param_for_entry, "'main' cannot be defined with parameter 
 ERROR(sema_unexpected_return_type_for_entry, "return type of 'main' is not 'Integer' or 'Unit'")
 ERROR(sema_redefinition_entry, "multiple 'main's are found in source files")
 ERROR(sema_missing_entry, "'main' is missing")
+ERROR(
+    sema_foreign_func_named_main,
+    "a foreign function cannot be named 'main' because the symbol is reserved for the program entry")
 ERROR(sema_numeric_convert_must_be_numeric, "the expression for numeric type conversion must have a numeric type")
 ERROR(sema_cfunc_ctor_must_be_cpointer, "argument type of 'CFunc' constructor must be of type 'CPointer'")
 ERROR(sema_ref_not_be_type, "expected member name or constructor call after '%s' type name")
