@@ -215,6 +215,41 @@ FuncSig2Decl::const_iterator FoundSameSignatureMember(
     return methodSigs.cend();
 }
 
+/// Populate methodSigs: for each instantiated FuncTy of the decl, insert or replace
+/// the matching FuncSig entry. Returns false when the decl is not a FuncDecl.
+bool CollectFuncDeclForSignature(TypeManager& tyMgr, const MemberAccess& ma, Decl& decl,
+    FuncSig2Decl& methodSigs)
+{
+    if (decl.astKind != ASTKind::FUNC_DECL) {
+        return false;
+    }
+    MultiTypeSubst mts;
+    tyMgr.GenerateTypeMappingForUpperBounds(mts, ma, decl);
+    std::optional<ModalInfo> thisMode{};
+    if (auto fd = DynamicCast<FuncDecl>(&decl); fd && tyMgr.HasThisParam(*fd)) {
+        thisMode = GetThisParamModal(*fd);
+    }
+    auto tys = tyMgr.GetInstantiatedTys(decl.DataTy(), mts);
+    for (auto ty : tys) {
+        auto funcTy = DynamicCast<FuncTy>(ty);
+        if (!Ty::IsTyCorrect(funcTy)) {
+            continue;
+        }
+        auto found = FoundSameSignatureMember(tyMgr, decl, thisMode, *funcTy, methodSigs);
+        if (found == methodSigs.cend()) {
+            FuncSig sig{decl.identifier, thisMode, funcTy->paramTys, funcTy->retTy};
+            methodSigs.emplace(sig, StaticCast<FuncDecl>(&decl));
+        } else if (IsCloserToImpl(*found->second, decl)) {
+            // If the decl is generic, the paramsTys in the map key should also be updated,
+            // so, just erase found result and emplace new result here.
+            methodSigs.erase(found);
+            FuncSig sig{decl.identifier, thisMode, funcTy->paramTys, funcTy->retTy};
+            methodSigs.emplace(sig, StaticCast<FuncDecl>(&decl));
+        }
+    }
+    return true;
+}
+
 std::vector<Ptr<Decl>> MergeFuncTargetsInUpperBounds(TypeManager& tyMgr, const MemberAccess& ma)
 {
     // We need to check upperbound members in a fixed order.
@@ -228,33 +263,7 @@ std::vector<Ptr<Decl>> MergeFuncTargetsInUpperBounds(TypeManager& tyMgr, const M
     FuncSig2Decl methodSigs;
     for (auto decl : upperDecls) {
         CJC_NULLPTR_CHECK(decl);
-        if (decl->astKind != ASTKind::FUNC_DECL) {
-            continue;
-        }
-        MultiTypeSubst mts;
-        tyMgr.GenerateTypeMappingForUpperBounds(mts, ma, *decl);
-        std::optional<ModalInfo> thisMode{};
-        if (auto fd = StaticCast<FuncDecl>(decl); tyMgr.HasThisParam(*fd)) {
-            thisMode = GetThisParamModal(*fd);
-        }
-        auto tys = tyMgr.GetInstantiatedTys(decl->DataTy(), mts);
-        for (auto ty : tys) {
-            auto funcTy = DynamicCast<FuncTy>(ty);
-            if (!Ty::IsTyCorrect(funcTy)) {
-                continue;
-            }
-            const auto found = FoundSameSignatureMember(tyMgr, *decl, thisMode, *funcTy, methodSigs);
-            if (found == methodSigs.cend()) {
-                FuncSig sig{decl->identifier, thisMode, funcTy->paramTys, funcTy->retTy};
-                methodSigs.emplace(sig, StaticCast<FuncDecl>(decl));
-            } else if (IsCloserToImpl(*found->second, *decl)) {
-                // If the decl is generic, the paramsTys in the map key should also be updated,
-                // so, just erase found result and emplace new result here.
-                methodSigs.erase(found);
-                FuncSig sig{decl->identifier, thisMode, funcTy->paramTys, funcTy->retTy};
-                methodSigs.emplace(sig, StaticCast<FuncDecl>(decl));
-            }
-        }
+        CollectFuncDeclForSignature(tyMgr, ma, *decl, methodSigs);
     }
     for (auto method : std::as_const(methodSigs)) {
         targets.emplace(method.second);
@@ -275,33 +284,7 @@ std::vector<Ptr<Decl>> MergeFuncTargetsInSum(TypeManager& tyMgr, const MemberAcc
     FuncSig2Decl methodSigs;
     for (auto decl : upperDecls) {
         CJC_NULLPTR_CHECK(decl);
-        if (decl->astKind != ASTKind::FUNC_DECL) {
-            continue;
-        }
-        MultiTypeSubst mts;
-        tyMgr.GenerateTypeMappingForUpperBounds(mts, ma, *decl);
-        std::optional<ModalInfo> thisMode{};
-        if (auto fd = StaticCast<FuncDecl>(decl); tyMgr.HasThisParam(*fd)) {
-            thisMode = GetThisParamModal(*fd);
-        }
-        auto tys = tyMgr.GetInstantiatedTys(decl->DataTy(), mts);
-        for (auto ty : tys) {
-            auto funcTy = DynamicCast<FuncTy>(ty);
-            if (!Ty::IsTyCorrect(funcTy)) {
-                continue;
-            }
-            auto found = FoundSameSignatureMember(tyMgr, *decl, thisMode, *funcTy, methodSigs);
-            if (found == methodSigs.cend()) {
-                FuncSig sig{decl->identifier, thisMode, funcTy->paramTys, funcTy->retTy};
-                methodSigs.emplace(sig, StaticCast<FuncDecl>(decl));
-            } else if (IsCloserToImpl(*found->second, *decl)) {
-                // If the decl is generic, the paramsTys in the map key should also be updated,
-                // so, just erase found result and emplace new result here.
-                methodSigs.erase(found);
-                FuncSig sig{decl->identifier, thisMode, funcTy->paramTys, funcTy->retTy};
-                methodSigs.emplace(sig, StaticCast<FuncDecl>(decl));
-            }
-        }
+        CollectFuncDeclForSignature(tyMgr, ma, *decl, methodSigs);
     }
     for (auto method : std::as_const(methodSigs)) {
         targets.emplace(method.second);

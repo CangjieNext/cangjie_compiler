@@ -1530,41 +1530,39 @@ ModalTy TypeChecker::TypeCheckerImpl::SynExclaveExpr(ASTContext& ctx, ExclaveExp
 {
     // Target from enclosing function return type
     auto fb = TypeCheckUtil::GetCurFuncBody(ctx, expr.scopeName);
-    if (fb) {
-        if (auto funcBodyTy = DynamicCast<FuncTy>(fb->DataTy())) {
-            auto target = funcBodyTy->retTy;
-            if (!target.Ty() || target->kind == TypeKind::TYPE_QUEST) {
-                SynBlock({ctx, SynPos::EXPR_ARG}, *expr.body);
-                // Use body type instead of Nothing when it is correct and has no QuestTy/
-                // IdealTy/IdealModal, so CalcFuncRetTyFromBody can infer the return type
-                // when the enclosing function's return type is still QuestTy (being inferred).
-                auto bodyTy = expr.body->GetTy();
-                if (bodyTy.IsCorrect() && !bodyTy->HasQuestTy() && !bodyTy->HasIdealTy() && !bodyTy->HasIdealModal()) {
-                    expr.SetTy(bodyTy);
-                } else {
-                    expr.SetTy(ModalTy{TypeManager::GetNothingTy()});
-                }
-                return expr.GetTy();
-            }
-            auto fun = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, expr.scopeName);
-            if (auto func = fun && fun->node ? DynamicCast<FuncDecl>(fun->node) : nullptr) {
-                if (func->TestAttr(Attribute::CONSTRUCTOR) || func->IsFinalizer()) {
-                    SynBlock({ctx, SynPos::EXPR_ARG}, *expr.body);
-                    expr.SetTy(ModalTy{TypeManager::GetNothingTy()});
-                    return expr.GetTy();
-                }
-            }
-            if (!ChkBlock(ctx, target, *expr.body)) {
-                expr.SetTy({TypeManager::GetInvalidTy()});
-                return expr.GetTy();
-            }
-            expr.SetTy(ModalTy{TypeManager::GetNothingTy()});
-            return expr.GetTy();
-        }
+    auto funcBodyTy = fb ? DynamicCast<FuncTy>(fb->DataTy()) : nullptr;
+    if (!fb || !funcBodyTy) {
+        // No target: do not check exclave return type; any type inside body is correct
+        SynBlock({ctx, SynPos::EXPR_ARG}, *expr.body);
+        expr.SetTy(ModalTy{TypeManager::GetNothingTy()});
+        return expr.GetTy();
     }
 
-    // No target: do not check exclave return type; any type inside body is correct
-    SynBlock({ctx, SynPos::EXPR_ARG}, *expr.body);
+    auto target = funcBodyTy->retTy;
+    if (!target.Ty() || target->kind == TypeKind::TYPE_QUEST) {
+        SynBlock({ctx, SynPos::EXPR_ARG}, *expr.body);
+        // Use body type instead of Nothing when it is correct and has no QuestTy/
+        // IdealTy/IdealModal, so CalcFuncRetTyFromBody can infer the return type
+        // when the enclosing function's return type is still QuestTy (being inferred).
+        auto bodyTy = expr.body->GetTy();
+        expr.SetTy(bodyTy.IsCorrect() && !bodyTy->HasQuestTy() && !bodyTy->HasIdealTy() && !bodyTy->HasIdealModal()
+                ? bodyTy
+                : ModalTy{TypeManager::GetNothingTy()});
+        return expr.GetTy();
+    }
+
+    auto fun = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, expr.scopeName);
+    if (auto func = fun && fun->node ? DynamicCast<FuncDecl>(fun->node) : nullptr;
+        func && (func->TestAttr(Attribute::CONSTRUCTOR) || func->IsFinalizer())) {
+        SynBlock({ctx, SynPos::EXPR_ARG}, *expr.body);
+        expr.SetTy(ModalTy{TypeManager::GetNothingTy()});
+        return expr.GetTy();
+    }
+
+    if (!ChkBlock(ctx, target, *expr.body)) {
+        expr.SetTy({TypeManager::GetInvalidTy()});
+        return expr.GetTy();
+    }
     expr.SetTy(ModalTy{TypeManager::GetNothingTy()});
     return expr.GetTy();
 }
