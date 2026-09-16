@@ -1352,7 +1352,8 @@ void StructInheritanceChecker::CheckGenericTypeArgInfo(
         *parent.decl, *child.decl, parent.upperBounds, child.upperBounds, diag, typeManager);
 }
 
-void StructInheritanceChecker::CheckPropertyInheritance(const MemberSignature& parent, const MemberSignature& child) const
+void StructInheritanceChecker::CheckPropertyInheritance(
+    const MemberSignature& parent, const MemberSignature& child) const
 {
     auto parentDecl = parent.decl;
     // Caller guarantees parent and child have same astKind.
