@@ -183,24 +183,18 @@ void LinuxAmd64CJNativeCGCFFI::AddFunctionAttr(const CHIR::FuncType& chirFuncTy,
     if (found1 != typeMap.end() && found1->second.IsIndirect()) {
         AddSRetAttribute(llvmFunc.arg_begin());
         argIdx++;
+    } else if (llvmFunc.getReturnType()->isIntegerTy(1)) {
+        AddRetAttr(&llvmFunc, llvm::Attribute::ZExt);
     }
     auto& kinds = found->second.second;
-    // x86-64 ELF follows the caller-extends contract that clang encodes with
-    // signext/zeroext on sub-word integer parameters and returns of the same C
-    // signature.
-    const unsigned int SMALL_INT_THRESHOLD = 32;
     for (auto it = kinds.begin(); it != kinds.end(); ++it, ++argIdx) {
         it = std::find_if(it, kinds.end(), [](auto kind) { return kind != ProcessKind::SKIP; });
         if (it == kinds.end()) {
             break;
         }
-        if (auto argType = chirFuncTy.GetParamType(it - kinds.begin()); argType->IsBoolean() || argType->IsInteger()) {
-            AddParamAttr(&llvmFunc, argIdx, llvm::Attribute::NoUndef);
-            auto intArgType = llvm::dyn_cast<llvm::IntegerType>(llvmFunc.getArg(argIdx)->getType());
-            if (intArgType && intArgType->getBitWidth() < SMALL_INT_THRESHOLD) {
-                AddParamAttr(&llvmFunc, argIdx,
-                    argType->IsSignedInteger() ? llvm::Attribute::SExt : llvm::Attribute::ZExt);
-            }
+        if (GetArgType(&llvmFunc, argIdx)->isIntegerTy(1)) {
+            (llvmFunc.arg_begin() + argIdx)->addAttr(llvm::Attribute::ZExt);
+            continue;
         }
         if (*it == ProcessKind::NO_PROCESS || *it == ProcessKind::DIRECT) {
             continue;
@@ -213,12 +207,6 @@ void LinuxAmd64CJNativeCGCFFI::AddFunctionAttr(const CHIR::FuncType& chirFuncTy,
             CJC_ASSERT(IsStructPtrTy(GetArgType(&llvmFunc, argIdx)));
             auto argument = llvmFunc.arg_begin() + argIdx;
             AddByValAttribute(argument, GetTypeAlignment(cgMod, *argument->getType()));
-        }
-    }
-    if (auto retType = chirFuncTy.GetReturnType(); retType->IsBoolean() || retType->IsInteger()) {
-        auto intRetType = llvm::dyn_cast<llvm::IntegerType>(llvmFunc.getReturnType());
-        if (intRetType && intRetType->getBitWidth() < SMALL_INT_THRESHOLD) {
-            AddRetAttr(&llvmFunc, retType->IsSignedInteger() ? llvm::Attribute::SExt : llvm::Attribute::ZExt);
         }
     }
     AddFnAttr(&llvmFunc, llvm::Attribute::get(llvmFunc.getContext(), CodeGen::CFUNC_ATTR));
