@@ -26,71 +26,46 @@ using namespace CodeGen;
 
 namespace {
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-// Only integers narrower than 32 bits take part in the C signext/zeroext ABI; wider
-// integers always occupy their register as a whole.
-constexpr unsigned int SUB_WORD_INT_BIT_WIDTH = 32;
-
-bool IsSubWordIntType(const CHIR::Type& chirTy, const llvm::Type& loweredTy)
+void AddAttributeForWrapper(const IRBuilder2& builder, const CHIR::FuncType& funcTy,
+    const llvm::FunctionType* varFuncTy, llvm::Function* func, llvm::CallBase& callInst, const bool sret)
 {
-    if (!chirTy.IsBoolean() && !chirTy.IsInteger()) {
-        return false;
+    AddLinkageTypeMetadata(*func, llvm::GlobalValue::LinkageTypes::InternalLinkage, false);
+    AddFnAttr(func, llvm::Attribute::NoInline);
+    AddFnAttr(func, llvm::Attribute::get(func->getContext(), CJ2C_ATTR));
+
+    auto& context = builder.GetCGContext();
+    auto& options = context.GetCompileOptions();
+    auto& cgMod = builder.GetCGModule();
+    if (sret) {
+        callInst.addParamAttr(0, llvm::Attribute::NoAlias);
+        AddSRetAttribute(func->arg_begin());
+        AddSRetAttribute(&callInst);
+        if (options.target.os == Triple::OSType::WINDOWS) {
+            auto elemType = GetPointerElementType(varFuncTy->getParamType(0));
+            auto align = llvm::Align(GetTypeAlignment(cgMod, *elemType));
+            auto alignAttr = llvm::Attribute::getWithAlignment(func->getContext(), align);
+            callInst.addParamAttr(0, alignAttr);
+            func->arg_begin()->addAttr(alignAttr);
+        }
     }
-    auto intTy = llvm::dyn_cast<llvm::IntegerType>(&loweredTy);
-    return intTy != nullptr && intTy->getBitWidth() < SUB_WORD_INT_BIT_WIDTH;
-}
 
-// Mark the leading caller-allocated return buffer as sret/NoAlias on the wrapper and on its call.
-void AddSRetAttrsForWrapper(llvm::Function* func, llvm::CallBase& callInst)
-{
-    callInst.addParamAttr(0, llvm::Attribute::NoAlias);
-    AddSRetAttribute(func->arg_begin());
-    AddSRetAttribute(&callInst);
-}
-
-void AddSRetAlignmentOnWindows(
-    const CGModule& cgMod, const llvm::FunctionType* varFuncTy, llvm::Function* func, llvm::CallBase& callInst)
-{
-    auto elemType = GetPointerElementType(varFuncTy->getParamType(0));
-    auto align = llvm::Align(GetTypeAlignment(cgMod, *elemType));
-    auto alignAttr = llvm::Attribute::getWithAlignment(func->getContext(), align);
-    callInst.addParamAttr(0, alignAttr);
-    func->arg_begin()->addAttr(alignAttr);
-}
-
-void AddSubWordIntParamAttrs(
-    const CGModule& cgMod, const CHIR::FuncType& funcTy, llvm::CallBase& callInst, bool sret)
-{
-    unsigned callArgIdx = sret ? 1U : 0U;
-    for (auto chirParamTy : funcTy.GetParamTypes()) {
-        CJC_NULLPTR_CHECK(chirParamTy);
-        if (IsZeroSizedTypeInC(cgMod, *chirParamTy)) {
-            continue; // no register slot: GetCFuncType skipped it when building the args
-        }
-        if (callArgIdx >= callInst.arg_size()) {
-            break; // reachable only if the arg layout drifted; never index past the call
-        }
-        if (IsSubWordIntType(*chirParamTy, *callInst.getArgOperand(callArgIdx)->getType())) {
-            auto extendAttr = chirParamTy->IsSignedInteger() ? llvm::Attribute::SExt : llvm::Attribute::ZExt;
-            AddParamAttr(&callInst, callArgIdx, llvm::Attribute::NoUndef);
-            AddParamAttr(&callInst, callArgIdx, extendAttr);
-        }
-        callArgIdx++;
+    if (options.target.arch == Triple::ArchType::AARCH64) {
+        return;
+    } else if (func->getReturnType()->isIntegerTy(1)) {
+        AddRetAttr(func, llvm::Attribute::ZExt);
+        SetZExtAttrForCFunc(callInst);
     }
-}
 
-// On non-AArch64 targets, struct parameters lowered to a struct pointer are passed byval.
-// cumulativeOffset tracks how far the LLVM argument slots have drifted from the CHIR
-// parameter list: skipped zero-sized structs move it back, structs whose LLVM
-// representation is smaller than the CHIR type move it forward.
-void AddByValAttrsForStructParams(llvm::LLVMContext& llvmCtx, const CGModule& cgMod, const CHIR::FuncType& funcTy,
-    const llvm::FunctionType* varFuncTy, llvm::Function* func, llvm::CallBase& callInst, bool sret)
-{
+    if (options.target.os == Triple::OSType::WINDOWS) {
+        return;
+    }
+
     unsigned sretOffset = sret ? 1 : 0;
     unsigned cumulativeOffset = 0;
     auto chirParamTys = funcTy.GetParamTypes();
     for (unsigned i = 0; i < chirParamTys.size(); i++) {
+        CJC_ASSERT(i < chirParamTys.size() && chirParamTys[i]);
         auto chirParamTy = chirParamTys[i];
-        CJC_NULLPTR_CHECK(chirParamTy);
         if (!IsCommonStruct(*chirParamTy)) {
             continue;
         }
@@ -101,48 +76,16 @@ void AddByValAttrsForStructParams(llvm::LLVMContext& llvmCtx, const CGModule& cg
         unsigned idx = i + cumulativeOffset + sretOffset;
         auto paramType = varFuncTy->getParamType(idx);
         if (!IsLitStructPtrType(paramType) && IsStructPtrType(paramType)) {
-            auto argument = func->getArg(idx + 1); // +1: the wrapper's params start with the fnptr
+            // 1 means the actual callee.
+            auto argument = func->getArg(idx + 1);
             AddByValAttribute(argument, GetTypeAlignment(cgMod, *argument->getType()));
-            auto byValAttr = llvm::Attribute::getWithByValType(llvmCtx, GetPointerElementType(paramType));
-            callInst.addParamAttr(idx, byValAttr); // the call's params have no fnptr slot
+            auto byValAttr =
+                llvm::Attribute::getWithByValType(context.GetLLVMContext(), GetPointerElementType(paramType));
+            callInst.addParamAttr(idx, byValAttr);
         } else if (GetTypeSize(cgMod, *paramType) < GetTypeSize(cgMod, *chirParamTy)) {
             cumulativeOffset++;
         }
     }
-}
-
-void AddAttributeForWrapper(const IRBuilder2& builder, const CHIR::FuncType& funcTy,
-    const llvm::FunctionType* varFuncTy, llvm::Function* func, llvm::CallBase& callInst, const bool sret)
-{
-    AddLinkageTypeMetadata(*func, llvm::GlobalValue::LinkageTypes::InternalLinkage, false);
-    AddFnAttr(func, llvm::Attribute::NoInline);
-    AddFnAttr(func, llvm::Attribute::get(func->getContext(), CJ2C_ATTR));
-
-    auto& options = builder.GetCGContext().GetCompileOptions();
-    auto& cgMod = builder.GetCGModule();
-    AddSubWordIntParamAttrs(cgMod, funcTy, callInst, sret);
-    if (sret) {
-        AddSRetAttrsForWrapper(func, callInst);
-        if (options.target.os == Triple::OSType::WINDOWS) {
-            AddSRetAlignmentOnWindows(cgMod, varFuncTy, func, callInst);
-        }
-    }
-
-    if (options.target.arch == Triple::ArchType::AARCH64) {
-        return;
-    }
-
-    if (func->getReturnType()->isIntegerTy(1)) {
-        AddRetAttr(func, llvm::Attribute::ZExt);
-        SetZExtAttrForCFunc(callInst);
-    }
-
-    if (options.target.os == Triple::OSType::WINDOWS) {
-        return;
-    }
-
-    AddByValAttrsForStructParams(
-        builder.GetCGContext().GetLLVMContext(), cgMod, funcTy, varFuncTy, func, callInst, sret);
 }
 
 void GenerateWrapperFuncBody(IRBuilder2& builder, const CHIR::FuncType& funcTy, llvm::FunctionType* varFuncTy,
@@ -297,21 +240,25 @@ llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, llvm::Function& call
             AddParamAttr(callRet, it->getArgNo(), byValAttr);
         }
     }
-    // Copy the declaration's extension attributes onto the call site on every target.
-    for (auto ext : {llvm::Attribute::SExt, llvm::Attribute::ZExt}) {
-        if (callee.hasRetAttribute(ext)) {
-            callRet->addRetAttr(ext);
+#ifdef __APPLE__
+    const bool onMacMx = !nonAarch64 && (target.os == Triple::OSType::DARWIN || target.os == Triple::OSType::IOS);
+    if (onMacMx) {
+        for (auto ext : {llvm::Attribute::SExt, llvm::Attribute::ZExt}) {
+            if (callee.hasRetAttribute(ext)) {
+                callRet->addRetAttr(ext);
+            }
         }
-    }
-    // '<' means variable-length parameters exist in the function.
-    CJC_ASSERT(callee.arg_size() <= callRet->arg_size());
-    for (unsigned i = 0; i < callee.arg_size(); ++i) {
-        for (auto attr : {llvm::Attribute::NoUndef, llvm::Attribute::SExt, llvm::Attribute::ZExt}) {
-            if (callee.hasParamAttribute(i, attr)) {
-                callRet->addParamAttr(i, attr);
+        // '<' means variable-length parameters exist in the function.
+        CJC_ASSERT(callee.arg_size() <= callRet->arg_size());
+        for (unsigned i = 0; i < callee.arg_size(); ++i) {
+            for (auto attr : {llvm::Attribute::NoUndef, llvm::Attribute::SExt, llvm::Attribute::ZExt}) {
+                if (callee.hasParamAttribute(i, attr)) {
+                    callRet->addParamAttr(i, attr);
+                }
             }
         }
     }
+#endif
     if (isSRet) {
         AddParamAttr(callRet, 0, llvm::Attribute::NoAlias);
         AddSRetAttribute(callRet);
