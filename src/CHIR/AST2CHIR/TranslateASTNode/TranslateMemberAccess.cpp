@@ -354,21 +354,23 @@ Ptr<Value> Translator::TransformThisType(Value& rawThis, Type& expectedTy, Lambd
         return &rawThis;
     }
     // case a
-    Expression* expr = nullptr;
     if (rawThis.GetType()->IsRef() && StaticCast<RefType*>(rawThis.GetType())->GetBaseType()->IsStruct()) {
         CJC_ASSERT(StaticCast<RefType*>(rawThis.GetType())->GetBaseType() == &expectedTy);
-        expr = builder.CreateExpression<Load>(&expectedTy, &rawThis, curLambda.GetParentBlock());
-    } else {
-        // case e
-        expr = StaticCast<LocalVar*>(
-            CHIR::TypeCastOrBoxIfNeeded(rawThis, expectedTy, builder, *curLambda.GetParentBlock()))->GetExpr();
-    }
-    // this is really hack, should change this
-    if (expr->GetResult() != &rawThis) {
+        auto load = builder.CreateExpression<Load>(&expectedTy, &rawThis, curLambda.GetParentBlock());
+        // this is really hack, should change this
         // `load` or `typecast` must be created before lambda, or we will get wrong llvm ir, and core dump in llvm-opt
+        load->MoveBefore(&curLambda);
+        return load->GetResult();
+    }
+    // case e
+    auto [castedVal, newExprs] =
+        CHIR::TypeCastOrBoxIfNeeded(rawThis, expectedTy, builder, *curLambda.GetParentBlock());
+    // this is really hack, should change this
+    // `load` or `typecast` must be created before lambda, or we will get wrong llvm ir, and core dump in llvm-opt
+    for (auto expr : newExprs) {
         expr->MoveBefore(&curLambda);
     }
-    return expr->GetResult();
+    return castedVal;
 }
 
 GenericType* Translator::TranslateCompleteGenericType(AST::GenericsTy& ty)

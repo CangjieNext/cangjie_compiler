@@ -1646,8 +1646,10 @@ void ClosureConversion::CreateGenericOverrideMethodInAutoEnvImplDef(ClassDef& au
             entry->AppendExpression(typecast);
             applyArgs.emplace_back(typecast->GetResult());
         } else {
-            applyArgs.emplace_back(
-                TypeCastOrBoxIfNeeded(*params[i], *expectedParamTypes[i - offset], builder, *entry, INVALID_LOCATION));
+            auto [castedParam, castedParamExprs] = TypeCastOrBoxIfNeeded(
+                *params[i], *expectedParamTypes[i - offset], builder, *entry, INVALID_LOCATION);
+            entry->AppendExpressions(castedParamExprs);
+            applyArgs.emplace_back(castedParam);
         }
     }
     auto applyRetType =
@@ -1668,8 +1670,9 @@ void ClosureConversion::CreateGenericOverrideMethodInAutoEnvImplDef(ClassDef& au
     if (IsArkInteropLambdaSignature(srcFunc)) {
         callSrcFunc->SetDebugLocation(srcFunc.GetDebugLocation());
     }
-    auto applyRes = TypeCastOrBoxIfNeeded(
+    auto [applyRes, applyResExprs] = TypeCastOrBoxIfNeeded(
         *callSrcFunc->GetResult(), *newFuncRetType, builder, *entry, INVALID_LOCATION);
+    entry->AppendExpressions(applyResExprs);
 
     // store return value and exit
     CreateAndAppendExpression<Store>(

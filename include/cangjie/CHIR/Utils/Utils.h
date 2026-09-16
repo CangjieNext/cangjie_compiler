@@ -15,6 +15,8 @@
 
 #include <deque>
 #include <map>
+#include <utility>
+#include <vector>
 
 #include "cangjie/AST/ASTCasting.h"
 #include "cangjie/AST/Node.h"
@@ -404,10 +406,11 @@ FuncType* ConvertRealFuncTypeToVirtualFuncType(const FuncType& type, CHIRBuilder
  * @param parentBlock The parent block.
  * @param loc The debug location.
  * @param needCheck A flag indicating if a check is needed.
- * @return The value after type casting or boxing if needed.
+ * @return A pair of the value after type casting or boxing if needed, and the newly created expressions
+ *         (not inserted into the block; the caller must append or move them).
  */
-Ptr<Value> TypeCastOrBoxIfNeeded(Value& val, Type& expectedTy, CHIRBuilder& builder, Block& parentBlock,
-    const DebugLocation& loc = INVALID_LOCATION, bool needCheck = true);
+std::pair<Value*, std::vector<Expression*>> TypeCastOrBoxIfNeeded(Value& val, Type& expectedTy, CHIRBuilder& builder,
+    Block& parentBlock, const DebugLocation& loc = INVALID_LOCATION, bool needCheck = true);
 
 /**
  * @brief Creates and appends an expression to the builder.
