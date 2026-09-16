@@ -236,3 +236,49 @@ TEST(ParseType, ParseParenTypeTest)
         EXPECT_TRUE(Is<TupleType>(node.get()));
     }
 }
+
+TEST(ParseType, ParseOptionTypeWithNewlines)
+{
+    const std::vector<std::pair<std::string, ASTKind>> cases = {
+        {"?(Bool, Nothing\n)", ASTKind::TUPLE_TYPE},
+        {"?(Int64\n, Bool)", ASTKind::TUPLE_TYPE},
+        {"?V0\n.V1", ASTKind::QUALIFIED_TYPE},
+        {"?V0.\nV1", ASTKind::QUALIFIED_TYPE},
+        {"?Box<Int64\n, Bool>", ASTKind::REF_TYPE},
+        {"?()\n-> (\n) -> Bool", ASTKind::FUNC_TYPE},
+        {"? ?(?Int64\n, Bool\n)", ASTKind::TUPLE_TYPE},
+    };
+    for (const auto& [type, componentKind] : cases) {
+        SCOPED_TRACE(type);
+        SourceManager sm;
+        DiagnosticEngine diag;
+        diag.SetSourceManager(&sm);
+        std::string code = "type T = " + type + "\nmain() {}";
+        Parser parser(code, diag, sm);
+        auto file = parser.ParseTopLevel();
+        ASSERT_EQ(diag.GetErrorCount(), 0);
+        ASSERT_EQ(file->decls.size(), 2);
+        auto alias = DynamicCast<TypeAliasDecl*>(file->decls[0].get());
+        ASSERT_NE(alias, nullptr);
+        auto option = DynamicCast<OptionType*>(alias->type.get());
+        ASSERT_NE(option, nullptr);
+        ASSERT_NE(option->componentType, nullptr);
+        EXPECT_EQ(option->componentType->astKind, componentKind);
+    }
+}
+
+TEST(ParseType, RejectNewlineAfterOptionPrefix)
+{
+    for (const std::string type : {"?\nInt64", "?\n?Int64"}) {
+        SCOPED_TRACE(type);
+        SourceManager sm;
+        DiagnosticEngine diag;
+        diag.SetSourceManager(&sm);
+        std::string code = "type T = " + type + "\nmain() {}";
+        Parser parser(code, diag, sm);
+        auto file = parser.ParseTopLevel();
+        auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::PARSE);
+        ASSERT_EQ(diagnostics.size(), 1);
+        EXPECT_EQ(diagnostics[0].rKind, DiagKindRefactor::parse_newline_not_allowed_between_quest_and_type);
+    }
+}
