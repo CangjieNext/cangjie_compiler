@@ -279,6 +279,8 @@ OwnedPtr<AST::Type> ParserImpl::ParsePrefixType()
                 SkipBlank(TokenKind::NL);
             }
         }
+        // Only the '?' prefix forbids newlines; allow them within the following type.
+        skipNL = true;
         // Parse the type after the last '?'.
         OwnedPtr<AST::Type> baseType = ParseBaseType();
         skipNL = true;
