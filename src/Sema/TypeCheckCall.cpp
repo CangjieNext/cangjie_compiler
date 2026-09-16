@@ -2437,19 +2437,25 @@ bool TypeChecker::TypeCheckerImpl::CheckTypeAliasConvArgs(ASTContext& ctx, CallE
     if (!baseTarget || baseTarget->astKind != ASTKind::TYPE_ALIAS_DECL) {
         return false;
     }
+    // From here on we are in the type-alias conversion path.  Return true on all
+    // outcomes (success or diagnosed failure) so that CheckNonNormalCall does not
+    // fall through to the function-call paths and produce duplicate diagnostics.
     // A numeric type alias conversion takes exactly one argument.
     if (ce.args.size() != 1) {
         diag.Diagnose(ce, DiagKind::sema_parameters_and_arguments_mismatch);
+        ce.SetTy(TypeManager::GetInvalidTy());
         return true;
     }
     // Synthesize the argument to ensure it is well-typed.
     if (!Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, ce.args[0].get()))) {
+        ce.SetTy(TypeManager::GetInvalidTy());
         return true;
     }
     // Check the argument can be converted to the target type.  For Rune, allow
     // integer literals (which are IdealInt) since Rune(65) is a common pattern.
     auto argTy = ce.args[0]->GetTy();
     if (!argTy || !Ty::IsTyCorrect(argTy) || argTy->IsNothing()) {
+        ce.SetTy(TypeManager::GetInvalidTy());
         return true;
     }
     bool isCompatible = false;
@@ -2460,8 +2466,11 @@ bool TypeChecker::TypeCheckerImpl::CheckTypeAliasConvArgs(ASTContext& ctx, CallE
         // Numeric types: use subtype check.
         isCompatible = typeManager.IsSubtype(argTy, ceTy) || argTy->HasIdealTy();
     }
-    if (!isCompatible && ce.ShouldDiagnose()) {
-        diag.Diagnose(ce, DiagKind::sema_parameters_and_arguments_mismatch);
+    if (!isCompatible) {
+        if (ce.ShouldDiagnose()) {
+            diag.Diagnose(ce, DiagKind::sema_parameters_and_arguments_mismatch);
+        }
+        ce.SetTy(TypeManager::GetInvalidTy());
     }
     return true;
 }

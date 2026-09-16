@@ -1455,6 +1455,10 @@ TEST_F(PackageTest, TypeAliasNumConvertCrossPackage)
             var g = testb.nestedInt64(200)
             if (g != 200) { return 6 }
 
+            // Float literal -> integer type alias conversion (truncation)
+            var h = testb.word(20.05)
+            if (h != 20) { return 7 }
+
             return 0
         }
     )";
@@ -1546,17 +1550,55 @@ TEST_F(PackageTest, TypeAliasNumConvertSamePackage)
     instance->invocation.globalOptions.implicitPrelude = true;
     instance->code = R"(
         type word = UInt16
+        type myInt8 = Int8
+        type myUInt32 = UInt32
         type myInt64 = Int64
-        type nestedWord = word
+        type myFloat32 = Float32
+        type myFloat64 = Float64
+        type myRune = Rune
+        type myUInt8 = UInt8
+        type myWord = word
+        type nestedInt64 = myInt64
         main(): Int64 {
-            var a = word(1)
-            if (a != 1) { return 1 }
-            var b = myInt64(100)
-            if (b != 100) { return 2 }
-            var c = nestedWord(5)
-            if (c != 5) { return 3 }
-            var d = word(10) + word(20)
-            if (d != 30) { return 4 }
+            // Basic numeric type alias conversion
+            var a = word(20)
+            if (a != 20) { return 1 }
+            var b = myInt8(-8)
+            if (b != -8) { return 2 }
+            var c = myUInt32(100000)
+            if (c != 100000) { return 3 }
+            var d = myInt64(-999999)
+            if (d != -999999) { return 4 }
+            var e = myFloat32(3.14)
+            if (e < 3.0) { return 5 }
+            var f = myFloat64(2.71828)
+            if (f < 2.0) { return 6 }
+            var g = myRune(65)
+            // Edge cases: zero, max
+            var h = word(0)
+            if (h != 0) { return 8 }
+            var i = myUInt8(255)
+            if (i != 255) { return 9 }
+            // Chained type alias: myWord -> word -> UInt16
+            var k = myWord(42)
+            if (k != 42) { return 11 }
+            // Nested type alias: nestedInt64 -> myInt64 -> Int64
+            var t = nestedInt64(1)
+            if (t != 1) { return 23 }
+            var u = nestedInt64(-5)
+            if (u != -5) { return 24 }
+            // Usage in expressions
+            var l = word(10) + word(20)
+            if (l != 30) { return 12 }
+            var m = myInt64(100) * myInt64(2)
+            if (m != 200) { return 13 }
+            // Float literal -> integer type alias conversion (truncation)
+            var q = word(20.05)
+            if (q != 20) { return 18 }
+            var r = myInt64(20.05)
+            if (r != 20) { return 20 }
+            var s = myInt8(-3.9)
+            if (s != -3) { return 22 }
             return 0
         }
     )";
