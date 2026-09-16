@@ -3004,6 +3004,33 @@ Ptr<FuncTy> TryCastingToFuncTy(Ptr<Ty> ty, size_t arity, TypeManager& tyMgr)
 };
 }
 
+bool TypeChecker::TypeCheckerImpl::CheckVariadicFuncPtrCall(ASTContext& ctx, Ptr<Ty> target, CallExpr& ce,
+    const FuncTy& funcTy, bool res, const std::vector<Diagnostic>& diagnostics)
+{
+    if (res) {
+        return true;
+    }
+    DesugarVariadicCallExpr(ctx, ce, funcTy.paramTys.size() - 1);
+    bool success = false;
+    {
+        auto ds = DiagSuppressor(diag);
+        success = CheckFuncPtrCall(ctx, target, *StaticAs<ASTKind::CALL_EXPR>(ce.desugarExpr.get()),
+            *const_cast<FuncTy*>(&funcTy));
+        std::vector<Diagnostic> retryDiags;
+        if (diagnostics.empty()) {
+            retryDiags = ds.GetSuppressedDiag();
+        }
+        if (success) {
+            ce.SetTy(ce.desugarExpr->GetTy());
+            return true;
+        }
+        RecoverFromVariadicCallExpr(ce);
+        std::for_each(retryDiags.cbegin(), retryDiags.cend(), [this](auto info) { diag.Diagnose(info); });
+    }
+    ce.SetTy(TypeManager::GetInvalidTy());
+    return false;
+}
+
 bool TypeChecker::TypeCheckerImpl::CheckNonNormalCall(ASTContext& ctx, Ptr<Ty> target, CallExpr& ce)
 {
     CJC_NULLPTR_CHECK(ce.baseFunc);
@@ -3026,25 +3053,8 @@ bool TypeChecker::TypeCheckerImpl::CheckNonNormalCall(ASTContext& ctx, Ptr<Ty> t
         } else {
             res = CheckFuncPtrCall(ctx, target, ce, *funcTy);
         }
-        if (!res && maybeVariadic) {
-            DesugarVariadicCallExpr(ctx, ce, funcTy->paramTys.size() - 1);
-            bool success = false;
-            {
-                auto ds = DiagSuppressor(diag);
-                success = CheckFuncPtrCall(ctx, target, *StaticAs<ASTKind::CALL_EXPR>(ce.desugarExpr.get()), *funcTy);
-                if (diagnostics.empty()) {
-                    diagnostics = ds.GetSuppressedDiag();
-                }
-            }
-            if (success) {
-                ce.SetTy(ce.desugarExpr->GetTy());
-                res = true;
-            } else {
-                RecoverFromVariadicCallExpr(ce);
-                std::for_each(diagnostics.cbegin(), diagnostics.cend(), [this](auto info) { diag.Diagnose(info); });
-                ce.SetTy(TypeManager::GetInvalidTy());
-                res = false;
-            }
+        if (maybeVariadic) {
+            res = CheckVariadicFuncPtrCall(ctx, target, ce, *funcTy, res, diagnostics);
         }
         // VArray must modify by 'inout' in CFunc lambda call.
         if (funcTy->IsCFunc()) {

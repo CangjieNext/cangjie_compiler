@@ -926,6 +926,11 @@ private:
         ASTContext& ctx, AST::CallExpr& ce, Ptr<AST::Decl>& target, std::vector<Ptr<AST::FuncDecl>>& candidates);
     bool ChkCurryCallBase(ASTContext& ctx, AST::CallExpr& ce, Ptr<AST::Ty>& targetRet);
     bool CheckNonNormalCall(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce);
+    /** Handle the variadic CFunc-call fallback inside CheckNonNormalCall: retry the call
+     * on the desugared variadic expression and recover when it still fails. Returns the
+     * final result and updates ce's type accordingly. */
+    bool CheckVariadicFuncPtrCall(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce, const AST::FuncTy& funcTy,
+        bool res, const std::vector<Diagnostic>& diagnostics);
     bool ChkFunctionCallExpr(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce);
     bool ChkVariadicCallExpr(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce,
         const std::vector<Ptr<AST::FuncDecl>>& candidates, std::vector<Diagnostic>& diagnostics);
