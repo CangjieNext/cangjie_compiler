@@ -282,3 +282,28 @@ TEST(ParseType, RejectNewlineAfterOptionPrefix)
         EXPECT_EQ(diagnostics[0].rKind, DiagKindRefactor::parse_newline_not_allowed_between_quest_and_type);
     }
 }
+
+TEST(ParseType, UnclosedOptionalTypeArgumentPosition)
+{
+    for (const std::string type : {"A<O", "?A<O", "? ?A<O", "?A<OtherType"}) {
+        for (const std::string suffix : {"", "\n", "\n// trailing comment\n"}) {
+            const std::string line = "type C = " + type;
+            const std::string code = line + suffix;
+            SCOPED_TRACE(code);
+            SourceManager sm;
+            DiagnosticEngine diag;
+            diag.SetSourceManager(&sm);
+            Parser parser(code, diag, sm);
+            auto file = parser.ParseTopLevel();
+            auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::PARSE);
+            ASSERT_EQ(diagnostics.size(), 1);
+            const auto& diagnostic = diagnostics[0];
+            EXPECT_EQ(diagnostic.rKind, DiagKindRefactor::parse_expected_right_delimiter);
+            // Point after the final type argument, even when newlines/comments precede EOF.
+            EXPECT_EQ(diagnostic.mainHint.range.begin.line, 1);
+            EXPECT_EQ(diagnostic.mainHint.range.begin.column, line.size() + 1);
+            ASSERT_EQ(diagnostic.otherHints.size(), 1);
+            EXPECT_EQ(diagnostic.otherHints[0].range.begin.column, line.find('<') + 1);
+        }
+    }
+}
