@@ -355,9 +355,11 @@ void Devirtualization::RewriteToApply(std::vector<RewriteInfo>& infos)
         }
         instParentCustomTy = AddRefIfNeeded(*instParentCustomTy, *realFunc);
         auto parent = invoke->GetParentBlock();
-        auto typecastRes = TypeCastOrBoxIfNeeded(*context.args[0], *instParentCustomTy, builder, *parent);
+        auto [typecastRes, newExprs] = TypeCastOrBoxIfNeeded(*context.args[0], *instParentCustomTy, builder, *parent);
         if (typecastRes != context.args[0]) {
-            StaticCast<LocalVar*>(typecastRes)->GetExpr()->MoveBefore(invoke);
+            for (auto newExpr : newExprs) {
+                newExpr->MoveBefore(invoke);
+            }
             context.args[0] = typecastRes;
         }
 

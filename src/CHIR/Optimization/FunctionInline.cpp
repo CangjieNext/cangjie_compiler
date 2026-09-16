@@ -343,11 +343,13 @@ void FunctionInline::ReplaceFuncResult(LocalVar* resNew, LocalVar* resOld)
             builder.CreateExpression<Load>(user->GetDebugLocation(), valType, resNew, user->GetParentBlock());
         newLoad->MoveBefore(user);
         user->ReplaceOperand(resOld, newLoad->GetResult());
-        auto cast = TypeCastOrBoxIfNeeded(
+        auto [cast, newExprs] = TypeCastOrBoxIfNeeded(
             *newLoad->GetResult(), *resOld->GetType(), builder, *newLoad->GetParentBlock(), INVALID_LOCATION);
         if (cast != newLoad->GetResult()) {
             CJC_ASSERT(cast->IsLocalVar());
-            StaticCast<LocalVar*>(cast)->GetExpr()->MoveBefore(user);
+            for (auto newExpr : newExprs) {
+                newExpr->MoveBefore(user);
+            }
             user->ReplaceOperand(newLoad->GetResult(), cast);
         }
     }

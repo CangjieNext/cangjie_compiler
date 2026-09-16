@@ -21,6 +21,7 @@
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <iostream>
 #include <optional>
@@ -484,18 +485,19 @@ FuncType* ConvertRealFuncTypeToVirtualFuncType(const FuncType& type, CHIRBuilder
     return builder.GetType<FuncType>(paramInVtable, builder.GetType<UnitType>());
 }
 
-Value* TypeCastIfNeeded(
+std::pair<Value*, std::vector<Expression*>> TypeCastIfNeeded(
     Value& val, Type& expectedTy, CHIRBuilder& builder, Block& parentBlock, const DebugLocation& loc, bool needCheck)
 {
     // Do not cast a nothing type value, otherwise it will mess up the dead code elimination
     if (val.GetType()->IsNothing()) {
-        return &val;
+        return {&val, {}};
     }
     if (val.GetType() != &expectedTy) {
+        std::vector<Expression*> newExprs;
         Value* tmpValue = &val;
         if (val.GetType()->StripAllRefs()->IsGeneric() && val.GetType()->IsRef()) {
             auto load = builder.CreateExpression<Load>(val.GetType()->StripAllRefs(), &val, &parentBlock);
-            parentBlock.AppendExpression(load);
+            newExprs.emplace_back(load);
             tmpValue = load->GetResult();
         }
         Expression* ret = nullptr;
@@ -505,11 +507,11 @@ Value* TypeCastIfNeeded(
         } else {
             ret = builder.CreateExpression<ClassStaticCast>(loc, &expectedTy, tmpValue, &parentBlock);
         }
-        parentBlock.AppendExpression(ret);
+        newExprs.emplace_back(ret);
         ret->Set<NeedCheckCast>(needCheck);
-        return ret->GetResult();
+        return {ret->GetResult(), newExprs};
     }
-    return &val;
+    return {&val, {}};
 }
 
 static bool HasGenericInNonFuncScope(const Type& type)
@@ -528,33 +530,31 @@ static bool HasGenericInNonFuncScope(const Type& type)
     return hasGenericInNonFuncScope;
 }
 
-Ptr<Value> TransformGenericIfNeeded(
+std::pair<Value*, std::vector<Expression*>> TransformGenericIfNeeded(
     Value& val, Type& expectedTy, CHIRBuilder& builder, Block& parentBlock, const DebugLocation& loc, bool needCheck)
 {
     (void)needCheck;
     // Specially, the cast for generation/de-generation enum still use type-cast
     if (val.GetType()->IsEnum() && (expectedTy.IsTuple() || expectedTy.IsUnsignedInteger())) {
-        return nullptr;
+        return {nullptr, {}};
     }
     if ((val.GetType()->IsTuple() || val.GetType()->IsUnsignedInteger()) && expectedTy.IsEnum()) {
-        return nullptr;
+        return {nullptr, {}};
     }
 
     // this should be deleted after supported by codegen
     if (val.GetType()->IsStructArray() && expectedTy.IsStructArray()) {
-        return nullptr;
+        return {nullptr, {}};
     }
 
     if (HasGenericInNonFuncScope(expectedTy) && !HasGenericInNonFuncScope(*val.GetType())) {
         auto ret = builder.CreateExpression<CastToGeneric>(loc, &expectedTy, &val, &parentBlock);
-        parentBlock.AppendExpression(ret);
-        return ret->GetResult();
+        return {ret->GetResult(), {ret}};
     } else if (HasGenericInNonFuncScope(*val.GetType()) && !HasGenericInNonFuncScope(expectedTy)) {
         auto ret = builder.CreateExpression<CastToConcrete>(loc, &expectedTy, &val, &parentBlock);
-        parentBlock.AppendExpression(ret);
-        return ret->GetResult();
+        return {ret->GetResult(), {ret}};
     }
-    return nullptr;
+    return {nullptr, {}};
 }
 
 bool LeftTypeIsBoxOfRightType(const Type& left, const Type& right)
@@ -571,7 +571,7 @@ bool LeftTypeIsBoxOfRightType(const Type& left, const Type& right)
     return &right == boxType->GetBaseType();
 }
 
-Ptr<Value> BoxIfNeeded(
+std::pair<Value*, std::vector<Expression*>> BoxIfNeeded(
     Value& val, Type& expectedTy, CHIRBuilder& builder, Block& parentBlock, const DebugLocation& loc, bool needCheck)
 {
     (void)needCheck;
@@ -590,49 +590,45 @@ Ptr<Value> BoxIfNeeded(
     }
     auto dstIsReferenceTy = expectedTy.IsRef() && StaticCast<RefType*>(&expectedTy)->GetBaseType()->IsReferenceType();
     if (srcIsValueTy && dstIsReferenceTy) {
+        std::vector<Expression*> newExprs;
         auto boxSrcVal = &val;
         if (srcTy->IsRef()) {
             auto loadSrc = builder.CreateExpression<Load>(
                 loc, StaticCast<RefType*>(srcTy)->GetBaseType(), boxSrcVal, &parentBlock);
-            parentBlock.AppendExpression(loadSrc);
+            newExprs.emplace_back(loadSrc);
             boxSrcVal = loadSrc->GetResult();
         }
         auto ret = builder.CreateExpression<Box>(loc, &expectedTy, boxSrcVal, &parentBlock);
-        parentBlock.AppendExpression(ret);
-        return ret->GetResult();
+        newExprs.emplace_back(ret);
+        return {ret->GetResult(), newExprs};
     } else if (srcIsReferenceTy && dstIsValueTy) {
         if (expectedTy.IsRef()) {
             auto ret = builder.CreateExpression<UnBoxToRef>(loc, &expectedTy, &val, &parentBlock);
-            parentBlock.AppendExpression(ret);
-            return ret->GetResult();
+            return {ret->GetResult(), {ret}};
         } else {
             auto ret = builder.CreateExpression<UnBoxToValue>(loc, &expectedTy, &val, &parentBlock);
-            parentBlock.AppendExpression(ret);
-            return ret->GetResult();
+            return {ret->GetResult(), {ret}};
         }
     } else if (LeftTypeIsBoxOfRightType(*srcTy, expectedTy)) {
         auto ret = builder.CreateExpression<UnBoxToValue>(loc, &expectedTy, &val, &parentBlock);
-        parentBlock.AppendExpression(ret);
-        return ret->GetResult();
+        return {ret->GetResult(), {ret}};
     } else if (LeftTypeIsBoxOfRightType(expectedTy, *srcTy)) {
         auto ret = builder.CreateExpression<Box>(loc, &expectedTy, &val, &parentBlock);
-        parentBlock.AppendExpression(ret);
-        return ret->GetResult();
+        return {ret->GetResult(), {ret}};
     }
-    return nullptr;
+    return {nullptr, {}};
 }
 
-// this API should not force to insert the generated expression into the end of block
-Ptr<Value> TypeCastOrBoxIfNeeded(
+// this API does not insert the generated expression into the block; caller must append or move them
+std::pair<Value*, std::vector<Expression*>> TypeCastOrBoxIfNeeded(
     Value& val, Type& expectedTy, CHIRBuilder& builder, Block& parentBlock, const DebugLocation& loc, bool needCheck)
 {
-    Ptr<Value> ret;
-    ret = BoxIfNeeded(val, expectedTy, builder, parentBlock, loc, needCheck);
-    if (ret != nullptr) {
+    auto ret = BoxIfNeeded(val, expectedTy, builder, parentBlock, loc, needCheck);
+    if (ret.first != nullptr) {
         return ret;
     }
     ret = TransformGenericIfNeeded(val, expectedTy, builder, parentBlock, loc, needCheck);
-    if (ret != nullptr) {
+    if (ret.first != nullptr) {
         return ret;
     }
     return TypeCastIfNeeded(val, expectedTy, builder, parentBlock, loc, needCheck);
@@ -1762,17 +1758,23 @@ void AddTypeCastForReturnVal(Expression& expr, Type& expectedTy, CHIRBuilder& bu
     }
     if (expr.IsTerminator()) {
         for (auto user : expr.GetResult()->GetUsers()) {
-            auto typecast = StaticCast<LocalVar*>(TypeCastOrBoxIfNeeded(
-                *expr.GetResult(), expectedTy, builder, *user->GetParentBlock()));
-            typecast->GetExpr()->MoveBefore(user);
+            auto [typecast, newExprs] = TypeCastOrBoxIfNeeded(
+                *expr.GetResult(), expectedTy, builder, *user->GetParentBlock());
+            for (auto newExpr : newExprs) {
+                newExpr->MoveBefore(user);
+            }
             user->ReplaceOperand(expr.GetResult(), typecast);
         }
     } else {
-        auto typecast = StaticCast<LocalVar*>(TypeCastOrBoxIfNeeded(
-            *expr.GetResult(), expectedTy, builder, *expr.GetParentBlock()));
-        typecast->GetExpr()->MoveAfter(&expr);
+        auto [typecast, newExprs] = TypeCastOrBoxIfNeeded(
+            *expr.GetResult(), expectedTy, builder, *expr.GetParentBlock());
+        Expression* insertAfter = &expr;
+        for (auto newExpr : newExprs) {
+            newExpr->MoveAfter(insertAfter);
+            insertAfter = newExpr;
+        }
         for (auto user : expr.GetResult()->GetUsers()) {
-            if (user == typecast->GetExpr()) {
+            if (std::find(newExprs.begin(), newExprs.end(), user) != newExprs.end()) {
                 continue;
             }
             user->ReplaceOperand(expr.GetResult(), typecast);

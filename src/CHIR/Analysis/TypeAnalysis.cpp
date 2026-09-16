@@ -288,7 +288,15 @@ void TypeAnalysis::HandleBoxExpr(TypeDomain& state, const Box* boxExpr) const
 {
     auto result = boxExpr->GetResult();
     auto obj = state.GetReferencedObjAndSetToTop(result, boxExpr);
-    state.Propagate(boxExpr->GetSourceValue(), obj);
+    auto srcTy = boxExpr->GetSourceType()->StripAllRefs();
+    // Allocate only records class types (to limit tracked sites). Box is where a value type
+    // becomes a reference (e.g. interface), so record EXACTLY here for de-virtualization of
+    // patterns like: var x: I = S(); x.foo().
+    if (srcTy->IsValueType()) {
+        state.Update(obj, std::make_unique<TypeValue>(DevirtualTyKind::EXACTLY, srcTy));
+    } else {
+        state.Propagate(boxExpr->GetSourceValue(), obj);
+    }
 }
 
 void TypeAnalysis::HandleClassStaticCastExpr(TypeDomain& state, const ClassStaticCast* typecast) const

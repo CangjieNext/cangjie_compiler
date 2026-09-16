@@ -119,7 +119,9 @@ DebugLocation Translator::TranslateFileLocation(unsigned fileID) const
 
 Ptr<Value> Translator::TypeCastOrBoxIfNeeded(Value& val, Type& expectedTy, const DebugLocation& loc, bool needCheck)
 {
-    return CHIR::TypeCastOrBoxIfNeeded(val, expectedTy, builder, *currentBlock, loc, needCheck);
+    auto [res, newExprs] = CHIR::TypeCastOrBoxIfNeeded(val, expectedTy, builder, *currentBlock, loc, needCheck);
+    currentBlock->AppendExpressions(newExprs);
+    return res;
 }
 
 Ptr<Value> Translator::GetDerefedValue(Ptr<Value> val, const DebugLocation& loc)
