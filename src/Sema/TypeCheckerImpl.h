@@ -907,6 +907,14 @@ private:
     bool CheckRefConstructor(const ASTContext& ctx, const AST::CallExpr& ce, const AST::RefExpr& re);
     /** Try to resolve a call to a numeric/rune type alias as a type conversion (Issue #1045). */
     bool TryResolveTypeAliasNumConv(AST::CallExpr& ce, AST::Expr& baseExpr);
+    /** If the call base is a numeric/rune type alias resolved as a conversion, check its
+     * single argument against the alias target type (Issue #1045). Returns true when the
+     * call base is such an alias (checked or diagnosed), false when it is not one. */
+    bool CheckTypeAliasConvArgs(ASTContext& ctx, AST::CallExpr& ce);
+    /** Shared type-alias dispatch used by ChkCallBaseRefExpr/ChkCallBaseMemberAccess:
+     * try the numeric-conversion path when the call base targets a type alias with no
+     * function candidates; otherwise let the caller fall through to its normal path. */
+    bool TryTypeAliasConvCall(AST::CallExpr& ce, const AST::Expr& base, bool aliasCandidate);
     /**
      * Check call expression's base expression. Get current target and function candidates.
      */
