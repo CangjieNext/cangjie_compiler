@@ -2392,6 +2392,15 @@ bool TypeChecker::TypeCheckerImpl::TryResolveTypeAliasNumConv(CallExpr& ce, Expr
     // `type word1 = Int64; type word = word1; word(1)` works (Issue #1045).
     auto realTarget = TypeCheckUtil::GetRealTarget(aliasDecl);
     auto origTy = realTarget ? realTarget->GetTy() : nullptr;
+    // For cross-package aliases, GetRealTarget may not fully resolve to the
+    // underlying primitive type (the RefType's target may be empty).  In that
+    // case, fall back to the alias's own type expression to determine if it
+    // references a numeric/rune type.
+    if (!origTy || origTy->kind == TypeKind::TYPE) {
+        if (auto tad = DynamicCast<TypeAliasDecl>(aliasDecl.get()); tad && tad->type) {
+            origTy = tad->type->GetTy();
+        }
+    }
     if (!origTy || !(origTy->IsNumeric() || origTy->kind == TypeKind::TYPE_RUNE)) {
         return false;
     }
@@ -2422,8 +2431,13 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseRefExpr(
         // GetCallBaseCandidates returns true even when the target is a user-defined
         // type alias with no function candidates.  In that case, the call is not a
         // function call but a potential numeric type conversion via the alias.
-        if (target && target->astKind == ASTKind::TYPE_ALIAS_DECL && candidates.empty()) {
-            return TryResolveTypeAliasNumConv(ce, *re);
+        // Use re->ref.target (the original resolved target) rather than the `target`
+        // parameter which may have been overwritten inside GetCallBaseCandidates.
+        if (re->ref.target && re->ref.target->astKind == ASTKind::TYPE_ALIAS_DECL && candidates.empty()) {
+            if (TryResolveTypeAliasNumConv(ce, *re)) {
+                return true;
+            }
+            // Not a numeric alias — fall through to the normal error path.
         }
         return true;
     }
@@ -2457,8 +2471,13 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseMemberAccess(
             // GetCallBaseCandidates returns true even when the target is a user-defined
             // type alias with no function candidates.  In that case, the call is not a
             // function call but a potential numeric type conversion via the alias.
-            if (target && target->astKind == ASTKind::TYPE_ALIAS_DECL && candidates.empty()) {
-                return TryResolveTypeAliasNumConv(ce, *ma);
+            // Use ma->target (the original resolved target) rather than the `target`
+            // parameter which may have been overwritten inside GetCallBaseCandidates.
+            if (ma->target && ma->target->astKind == ASTKind::TYPE_ALIAS_DECL && candidates.empty()) {
+                if (TryResolveTypeAliasNumConv(ce, *ma)) {
+                    return true;
+                }
+                // Not a numeric alias — fall through to the normal error path.
             }
             return true;
         }
@@ -2940,6 +2959,50 @@ Ptr<FuncTy> TryCastingToFuncTy(Ptr<Ty> ty, size_t arity, TypeManager& tyMgr)
 bool TypeChecker::TypeCheckerImpl::CheckNonNormalCall(ASTContext& ctx, Ptr<Ty> target, CallExpr& ce)
 {
     CJC_NULLPTR_CHECK(ce.baseFunc);
+    // Issue #1045: if the call base is a type alias to a numeric/rune type, the call has
+    // already been resolved as a type conversion by TryResolveTypeAliasNumConv (via
+    // ChkCallBaseRefExpr/ChkCallBaseMemberAccess).  In that case ce.GetTy() is already
+    // set to the underlying numeric type.  We must still type-check the argument against
+    // the target type (e.g. word("hello") should fail), so synthesize a function type
+    // (target) -> target and run the normal argument checking logic.
+    // Guard with a check that the base target is indeed a type alias, so that legitimate
+    // function-pointer calls returning a numeric type are not affected.
+    if (auto ceTy = ce.GetTy(); Ty::IsTyCorrect(ceTy) && !ceTy->IsNothing() &&
+        (ceTy->IsNumeric() || ceTy->kind == TypeKind::TYPE_RUNE)) {
+        auto baseTarget = ce.baseFunc->GetTarget();
+        if (baseTarget && baseTarget->astKind == ASTKind::TYPE_ALIAS_DECL) {
+            // A numeric type alias conversion takes exactly one argument.
+            if (ce.args.size() != 1) {
+                diag.Diagnose(ce, DiagKind::sema_parameters_and_arguments_mismatch);
+                return false;
+            }
+            // Synthesize the argument to ensure it is well-typed.
+            if (!Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, ce.args[0].get()))) {
+                return false;
+            }
+            // Check the argument can be converted to the target type.  For Rune, allow
+            // integer literals (which are IdealInt) since Rune(65) is a common pattern.
+            auto argTy = ce.args[0]->GetTy();
+            if (argTy && Ty::IsTyCorrect(argTy) && !argTy->IsNothing()) {
+                bool isCompatible = false;
+                if (ceTy->kind == TypeKind::TYPE_RUNE) {
+                    // Rune accepts integer literals and Rune values.
+                    isCompatible = argTy->IsNumeric() || argTy->kind == TypeKind::TYPE_RUNE ||
+                                   argTy->HasIdealTy();
+                } else {
+                    // Numeric types: use subtype check.
+                    isCompatible = typeManager.IsSubtype(argTy, ceTy) || argTy->HasIdealTy();
+                }
+                if (!isCompatible) {
+                    if (ce.ShouldDiagnose()) {
+                        diag.Diagnose(ce, DiagKind::sema_parameters_and_arguments_mismatch);
+                    }
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
     bool res = false;
     if (auto funcTy = TryCastingToFuncTy(ce.baseFunc->GetTy(), ce.args.size(), typeManager)) {
         auto maybeVariadic = IsPossibleVariadicFunction(*funcTy, ce);
