@@ -3005,7 +3005,7 @@ Ptr<FuncTy> TryCastingToFuncTy(Ptr<Ty> ty, size_t arity, TypeManager& tyMgr)
 }
 
 bool TypeChecker::TypeCheckerImpl::CheckVariadicFuncPtrCall(ASTContext& ctx, Ptr<Ty> target, CallExpr& ce,
-    const FuncTy& funcTy, bool res, const std::vector<Diagnostic>& diagnostics)
+    const FuncTy& funcTy, bool res, std::vector<Diagnostic>& diagnostics)
 {
     if (res) {
         return true;
@@ -3016,17 +3016,16 @@ bool TypeChecker::TypeCheckerImpl::CheckVariadicFuncPtrCall(ASTContext& ctx, Ptr
         auto ds = DiagSuppressor(diag);
         success = CheckFuncPtrCall(ctx, target, *StaticAs<ASTKind::CALL_EXPR>(ce.desugarExpr.get()),
             *const_cast<FuncTy*>(&funcTy));
-        std::vector<Diagnostic> retryDiags;
         if (diagnostics.empty()) {
-            retryDiags = ds.GetSuppressedDiag();
+            diagnostics = ds.GetSuppressedDiag();
         }
-        if (success) {
-            ce.SetTy(ce.desugarExpr->GetTy());
-            return true;
-        }
-        RecoverFromVariadicCallExpr(ce);
-        std::for_each(retryDiags.cbegin(), retryDiags.cend(), [this](auto info) { diag.Diagnose(info); });
     }
+    if (success) {
+        ce.SetTy(ce.desugarExpr->GetTy());
+        return true;
+    }
+    RecoverFromVariadicCallExpr(ce);
+    std::for_each(diagnostics.cbegin(), diagnostics.cend(), [this](auto info) { diag.Diagnose(info); });
     ce.SetTy(TypeManager::GetInvalidTy());
     return false;
 }
