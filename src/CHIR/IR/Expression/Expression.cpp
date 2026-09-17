@@ -409,6 +409,64 @@ void Expression::EraseOperands()
     operands.clear();
 }
 
+std::pair<Block*, Block*> Expression::GetSuccessAndErrorBlocks() const
+{
+    if (!IsTerminator()) {
+        return {nullptr, nullptr};
+    }
+    switch (kind) {
+        case ExprKind::TRY_ADD:
+        case ExprKind::TRY_SUB:
+        case ExprKind::TRY_MUL:
+        case ExprKind::TRY_DIV:
+        case ExprKind::TRY_MOD:
+        case ExprKind::TRY_EXP:
+        case ExprKind::TRY_LSHIFT:
+        case ExprKind::TRY_RSHIFT: {
+            auto e = StaticCast<const TryBinaryExpression*>(this);
+            return {e->GetSuccessBlock(), e->GetErrorBlock()};
+        }
+        case ExprKind::TRY_NEG: {
+            auto e = StaticCast<const TryUnaryExpression*>(this);
+            return {e->GetSuccessBlock(), e->GetErrorBlock()};
+        }
+        case ExprKind::TRY_APPLY: {
+            auto e = StaticCast<const TryApply*>(this);
+            return {e->GetSuccessBlock(), e->GetErrorBlock()};
+        }
+        case ExprKind::TRY_INVOKE: {
+            auto e = StaticCast<const TryInvoke*>(this);
+            return {e->GetSuccessBlock(), e->GetErrorBlock()};
+        }
+        case ExprKind::TRY_INVOKESTATIC: {
+            auto e = StaticCast<const TryInvokeStatic*>(this);
+            return {e->GetSuccessBlock(), e->GetErrorBlock()};
+        }
+        case ExprKind::TRY_SPAWN: {
+            auto e = StaticCast<const TrySpawn*>(this);
+            return {e->GetSuccessBlock(), e->GetErrorBlock()};
+        }
+        case ExprKind::TRY_NUMERIC_CAST: {
+            auto e = StaticCast<const TryNumericCast*>(this);
+            return {e->GetSuccessBlock(), e->GetErrorBlock()};
+        }
+        case ExprKind::TRY_INTRINSIC: {
+            auto e = StaticCast<const TryIntrinsic*>(this);
+            return {e->GetSuccessBlock(), e->GetErrorBlock()};
+        }
+        case ExprKind::TRY_ALLOCATE: {
+            auto e = StaticCast<const TryAllocate*>(this);
+            return {e->GetSuccessBlock(), e->GetErrorBlock()};
+        }
+        case ExprKind::TRY_RAW_ARRAY_ALLOCATE: {
+            auto e = StaticCast<const TryRawArrayAllocate*>(this);
+            return {e->GetSuccessBlock(), e->GetErrorBlock()};
+        }
+        default:
+            return {nullptr, nullptr};
+    }
+}
+
 std::string Expression::ToString(size_t indent) const
 {
     // [ret] %x[name]: type = expression(xxx) // comment
