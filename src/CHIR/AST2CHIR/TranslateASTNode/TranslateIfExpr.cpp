@@ -454,6 +454,15 @@ public:
         }
         tr.SetCurrentBlock(*endBlock);
         if (retVal) {
+            auto predecessors = endBlock->GetPredecessors();
+            // In a nested all-return form such as `if (useWide) { if (...) return ... } else { ... }`,
+            // expected-type propagation leaves one generated GoTo in each join predecessor but no
+            // stored value. Do not create a load for this type-only result.
+            if (std::all_of(predecessors.begin(), predecessors.end(), [](auto predecessor) {
+                    return predecessor->GetExpressions().size() == 1U;
+                })) {
+                return nullptr;
+            }
             auto ret = tr.GetDerefedValue(retVal, tr.TranslateLocation(e1));
             if (forceGenerateUnit) {
                 StaticCast<LocalVar>(ret)->GetExpr()->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
