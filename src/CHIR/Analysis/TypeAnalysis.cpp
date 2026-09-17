@@ -109,7 +109,9 @@ bool TypeAnalysis::CheckFuncHasInvoke(const Function& func)
 {
     bool hasInvoke = false;
     auto preVisit = [&hasInvoke](Expression& expr) {
-        if (Is<InvokeBase>(&expr)) {
+        // Include InvokeStatic / TryInvokeStatic so Devirtualization can rewrite
+        // trivial static dispatch in functions that have no instance Invoke.
+        if (Is<DynamicDispatch>(expr)) {
             hasInvoke = true;
             return VisitResult::STOP;
         }
