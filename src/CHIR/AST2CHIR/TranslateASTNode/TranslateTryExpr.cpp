@@ -96,6 +96,16 @@ Ptr<Value> Translator::Visit(const AST::TryExpr& tryExpr)
         return nullptr;
     } else {
         auto res = CreateAndAppendExpression<Load>(loc, tryTy, retVal, currentBlock);
+        auto users = retVal->GetUsers();
+        // Expected-type propagation can hide that every try/catch path terminates. If retVal
+        // has no Store with a non-zero source location, no normal source value was produced;
+        // the load below is only a type placeholder and must not own an unreachable warning.
+        if (std::none_of(users.begin(), users.end(), [](auto user) {
+                auto store = DynamicCast<Store>(user);
+                return store && !store->GetDebugLocation().GetBeginPos().IsZero();
+            })) {
+            res->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+        }
         return res->GetResult();
     }
 }
@@ -147,9 +157,16 @@ void Translator::TranslateFinallyRethrowFlows(const AST::Block& finally)
         .args = std::vector<Value*>{exception}
     };
     auto eVal = CreateAndAppendExpression<Intrinsic>(baseETy, callContext, currentBlock)->GetResult();
+    auto existingBlocks = exceptionTrans.blockGroupStack.back()->GetBlocks();
     // Generate rethrow finally block.
     TranslateASTNode(finally, exceptionTrans);
     auto finallyBlock = exceptionTrans.GetBlockByAST(finally);
+    // All blocks in this compiler-generated clone share diagnostics with the original finally body.
+    for (auto block : exceptionTrans.blockGroupStack.back()->GetBlocks()) {
+        if (std::find(existingBlocks.begin(), existingBlocks.end(), block) == existingBlocks.end()) {
+            block->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+        }
+    }
     CreateAndAppendTerminator<GoTo>(finallyBlock, exceptionBlock);
     auto endCatchBB = CreateBlock();
     CreateAndAppendTerminator<GoTo>(endCatchBB, exceptionTrans.currentBlock);
@@ -179,10 +196,16 @@ void Translator::TranslateFinallyNormalFlows(const AST::Block& finally, const Fi
         }
         for (auto [prevBlock, nextBlock] : info) {
             Translator normalTrans = *this; // Copy a translator for normal finally.
+            auto existingBlocks = normalTrans.blockGroupStack.back()->GetBlocks();
             TranslateASTNode(finally, normalTrans);
             auto finallyBlock = normalTrans.GetBlockByAST(finally);
             CreateAndAppendTerminator<GoTo>(finallyBlock, prevBlock);
-            finallyBlock->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+            // All blocks in this compiler-generated clone share diagnostics with the original finally body.
+            for (auto block : normalTrans.blockGroupStack.back()->GetBlocks()) {
+                if (std::find(existingBlocks.begin(), existingBlocks.end(), block) == existingBlocks.end()) {
+                    block->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+                }
+            }
             prevBlock->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
             bool isNormalCase = i == static_cast<uint8_t>(ControlType::NORMAL);
             if (normalTrans.finallyContext.empty() || isNormalCase) {
