@@ -293,6 +293,8 @@ public:
      */
     virtual void ReplaceOperand(Value* oldOperand, Value* newOperand);
 
+    std::pair<Block*, Block*> GetSuccessAndErrorBlocks() const;
+
     // ===--------------------------------------------------------------------===//
     // Successor
     // ===--------------------------------------------------------------------===//
