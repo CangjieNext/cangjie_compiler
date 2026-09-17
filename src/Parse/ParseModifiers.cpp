@@ -30,7 +30,7 @@ void ParserImpl::SetDeclBeginPos(AST::Decl& decl) const
         return;
     }
     auto modVec = SortModifierByPos(decl.modifiers);
-    if (inForeignBlock) {
+    if (!foreignBlockModifiers.empty()) {
         auto size = modVec.size();
         for (size_t i = 0; i < size; i++) {
             if (modVec[i]->modifier != TokenKind::FOREIGN) {

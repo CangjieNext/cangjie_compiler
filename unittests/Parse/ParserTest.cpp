@@ -2479,6 +2479,96 @@ TEST(ParserTestNative, NativePrint)
     EXPECT_EQ(0, diag.GetErrorCount());
 }
 
+TEST(ParserTestNative, MacroCallsInForeignBlock)
+{
+    const std::vector<std::string> cases = {
+        "foreign { @Pass(func first(): Unit) }",
+        "foreign { @Pass func first(): Unit }",
+        "foreign { @Outer @Inner func first(): Unit }",
+        "private foreign { @Pass(var first: Int32) }",
+        "foreign { @Pass(func first(): Unit)\n @Pass func second(): Unit }",
+    };
+    for (const auto& code : cases) {
+        SCOPED_TRACE(code);
+        SourceManager sm;
+        DiagnosticEngine diag;
+        diag.SetSourceManager(&sm);
+        Parser parser(code, diag, sm);
+        auto file = parser.ParseTopLevel();
+        ASSERT_EQ(diag.GetErrorCount(), 0);
+        ASSERT_FALSE(file->decls.empty());
+        for (const auto& decl : file->decls) {
+            auto macro = DynamicCast<MacroExpandDecl*>(decl.get());
+            ASSERT_NE(macro, nullptr);
+            EXPECT_EQ(macro->begin, macro->invocation.atPos);
+            EXPECT_TRUE(std::any_of(macro->modifiers.begin(), macro->modifiers.end(),
+                [](const Modifier& mod) { return mod.modifier == TokenKind::FOREIGN; }));
+        }
+    }
+}
+
+TEST(ParserTestNative, MacroExpansionInheritsForeignBlockModifiers)
+{
+    const std::vector<std::string> cases = {
+        R"(foreign {
+            @Pass(func first(): Unit
+                func second(): Int32
+                var value: Int32)
+        })",
+        R"(private foreign {
+            @Pass(var first: Int32
+                var second: Int32
+                var value: Int32)
+        })",
+    };
+    for (const auto& code : cases) {
+        SCOPED_TRACE(code);
+        SourceManager sm;
+        DiagnosticEngine diag;
+        diag.SetSourceManager(&sm);
+        Parser parser(code, diag, sm);
+        auto file = parser.ParseTopLevel();
+        ASSERT_EQ(diag.GetErrorCount(), 0);
+        ASSERT_EQ(file->decls.size(), 1);
+        auto macro = DynamicCast<MacroExpandDecl*>(file->decls[0].get());
+        ASSERT_NE(macro, nullptr);
+        Parser expansion(macro->invocation.args, diag, sm);
+        auto nodes = expansion.ParseNodes(macro->invocation.scope, *macro, macro->modifiers);
+        ASSERT_EQ(diag.GetErrorCount(), 0);
+        ASSERT_EQ(nodes.size(), 3);
+        const std::vector<std::string> names = {"first", "second", "value"};
+        for (size_t i = 0; i < nodes.size(); ++i) {
+            auto decl = DynamicCast<Decl*>(nodes[i].get());
+            ASSERT_NE(decl, nullptr);
+            EXPECT_EQ(decl->identifier, names[i]);
+            EXPECT_TRUE(decl->TestAttr(Attribute::FOREIGN));
+            EXPECT_EQ(decl->TestAttr(Attribute::PRIVATE), code.find("private") == 0);
+            EXPECT_GT(decl->begin.line, file->decls[0]->modifiers.begin()->begin.line);
+        }
+    }
+}
+
+TEST(ParserTestNative, RejectExplicitModifiersBeforeMacroCall)
+{
+    const std::vector<std::string> cases = {
+        "foreign @Pass(func first(): Unit)",
+        "public @Pass(func first(): Unit)",
+        "foreign { public @Pass(func first(): Unit) }",
+        "foreign { unsafe @Pass(func first(): Unit) }",
+    };
+    for (const auto& code : cases) {
+        SCOPED_TRACE(code);
+        SourceManager sm;
+        DiagnosticEngine diag;
+        diag.SetSourceManager(&sm);
+        Parser parser(code, diag, sm);
+        auto file = parser.ParseTopLevel();
+        auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::PARSE);
+        ASSERT_EQ(diagnostics.size(), 1);
+        EXPECT_EQ(diagnostics[0].rKind, DiagKindRefactor::parse_expected_no_modifier);
+    }
+}
+
 TEST(ParserTestSpawn, Spawn)
 {
     std::string code = R"(

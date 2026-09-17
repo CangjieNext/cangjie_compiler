@@ -20,7 +20,13 @@ OwnedPtr<AST::File> Parser::ParseTopLevel()
 }
 OwnedPtr<AST::Decl> Parser::ParseDecl(ScopeKind scopeKind)
 {
-    return impl->ParseDecl(scopeKind, {}, {});
+    return impl->ParseDecl(scopeKind, impl->foreignBlockModifiers, {});
+}
+
+Parser& Parser::SetForeignBlockModifiers(const std::set<AST::Modifier>& modifiers)
+{
+    impl->foreignBlockModifiers = modifiers;
+    return *this;
 }
 
 OwnedPtr<AST::Expr> Parser::ParseExpr()

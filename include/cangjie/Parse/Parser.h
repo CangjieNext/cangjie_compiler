@@ -125,6 +125,8 @@ public:
     Parser& SetPrimaryDecl(const std::string& decl);
     Parser& SetForImport(bool isForImport);
     Parser& SetCurFile(Ptr<AST::File> curFile);
+    /// Preserve the enclosing foreign block when reparsing macro input declarations.
+    Parser& SetForeignBlockModifiers(const std::set<AST::Modifier>& modifiers);
 
     void SetCompileOptions(const GlobalOptions& opts);
 
