@@ -74720,10 +74720,10 @@ index 000000000..8983672b8
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJGCInstrRestore.cpp b/llvm/lib/Transforms/Scalar/CJGCInstrRestore.cpp
 new file mode 100644
-index 000000000..80e8be1e5
+index 000000000..331d379b7
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJGCInstrRestore.cpp
-@@ -0,0 +1,301 @@
+@@ -0,0 +1,303 @@
 +//===- CJGCInstrRestore.cpp - -----------------------------------------*- C++
 +//-*-===//
 +//
@@ -74976,6 +74976,7 @@ index 000000000..80e8be1e5
 +      }
 +      LI->replaceAllUsesWith(ReplacerValue);
 +      LI->eraseFromParent();
++      ValueToBasePointer.erase(LI);
 +    }
 +  }
 +  return Changed;
@@ -75003,6 +75004,7 @@ index 000000000..80e8be1e5
 +  }
 +  for (auto *I : ToBeErased) {
 +    I->eraseFromParent();
++    ValueToBasePointer.erase(I);
 +  }
 +  return Changed;
 +}
