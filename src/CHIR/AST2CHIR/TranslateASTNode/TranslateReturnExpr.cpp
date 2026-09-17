@@ -64,6 +64,15 @@ Ptr<Value> Translator::Visit(const AST::ReturnExpr& expr)
     const auto& loc = TranslateLocation(expr);
     CJC_NULLPTR_CHECK(expr.expr);
     auto retVal = TranslateExprArg(*expr.expr);
+    auto continuationExpressions = currentBlock->GetExpressions();
+    // When an operand terminates without leaving a source expression in its detached continuation, only the generated
+    // outer return remains there. Skip that redundant warning; source expressions such as operators remain reportable.
+    if (currentBlock->GetPredecessors().empty() &&
+        std::all_of(continuationExpressions.begin(), continuationExpressions.end(), [](auto expression) {
+            return expression->GetDebugLocation().GetBeginPos().IsZero();
+        })) {
+        currentBlock->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+    }
     int64_t level = CalculateDelayExitLevelForReturn();
     Ptr<Value> ret = GetOuterBlockGroupReturnValLocation();
     if (ret != nullptr) {
