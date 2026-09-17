@@ -437,6 +437,66 @@ Cangjie::Range GetUnreachableRange(const UnreachableExpr& unreachable)
     return ToRange(unreachable.expr->GetDebugLocation());
 }
 
+/// Return whether every edge into `block` is a compiler-generated continuation.
+bool IsSkippedJoin(const Block& block)
+{
+    auto predecessors = block.GetPredecessors();
+    if (predecessors.empty()) {
+        return false;
+    }
+    return std::all_of(predecessors.begin(), predecessors.end(), [](auto predecessor) {
+        auto terminator = predecessor->GetTerminator();
+        return terminator && terminator->template Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING;
+    });
+}
+
+/// Return the join location, falling back to its first located expression.
+DebugLocation GetJoinLocation(const Block& block)
+{
+    auto location = block.GetDebugLocation();
+    if (!location.GetBeginPos().IsZero()) {
+        return location;
+    }
+    for (auto expression : block.GetExpressions()) {
+        if (!expression->GetDebugLocation().GetBeginPos().IsZero()) {
+            return expression->GetDebugLocation();
+        }
+    }
+    return location;
+}
+
+/*
+ * Select the complete source construct that terminates before the unreachable
+ * expression. Skipped joins carry try/match ranges; an IF_EXPR Branch carries
+ * the if range even when its join is split into another unreachable region.
+ * Only earlier, wider candidates replace the current control-transfer hint.
+ */
+Cangjie::Range GetRegionHintRange(const UnreachableBlockRegion& region,
+    const Cangjie::Range& unreachableRange, Cangjie::Range hintRange)
+{
+    auto useLocation = [&region, &unreachableRange, &hintRange](const DebugLocation& location) {
+        auto [hasRange, range] = ToRangeIfNotZero(location);
+        if (hasRange && Contains(location, region.rootLocation) &&
+            unreachableRange.begin > range.end && hintRange.begin > range.begin) {
+            hintRange = range;
+        }
+    };
+    for (auto block : region.blocks) {
+        if (!IsSkippedJoin(*block)) {
+            continue;
+        }
+        auto joinLocation = GetJoinLocation(*block);
+        useLocation(joinLocation);
+    }
+    for (auto block : region.owner->GetBlocks()) {
+        auto branch = DynamicCast<Branch>(block->GetTerminator());
+        if (branch && branch->GetSourceExpr() == SourceExpr::IF_EXPR) {
+            useLocation(branch->GetDebugLocation());
+        }
+    }
+    return hintRange;
+}
+
 /*
  * Warning-location sites use chir_dce_unreachable so APPLY/operator print
  * "unreachable 'call'" / "unreachable 'operator'". Source-location sites, and
@@ -446,23 +506,33 @@ void DiagnoseUnreachable(DiagnosticEngine& diag, const UnreachableExpr& unreacha
     const Cangjie::Range& range, const Cangjie::Range& terminalRange)
 {
     auto& expr = *unreachable.expr;
+    // A containing source expression may include the control transfer that makes it unreachable.
+    // Keep the primary warning, but do not render an overlapping "following this expression" hint.
+    const bool hasSeparateHint = range.begin.fileID != terminalRange.begin.fileID ||
+        range.end < terminalRange.begin || terminalRange.end < range.begin;
     // Nothing-typed binary/unary: squiggle the operator via the warning location.
     if (unreachable.useWarningLocation &&
         (Is<BinaryExpression>(&expr) || Is<UnaryExpression>(&expr))) {
         auto diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable, range, "operator");
         diagBuilder.AddMainHintArguments("operator");
-        diagBuilder.AddHint(terminalRange);
+        if (hasSeparateHint) {
+            diagBuilder.AddHint(terminalRange);
+        }
         return;
     }
     // Nothing-typed call: squiggle the callee via the warning location.
-    if (unreachable.useWarningLocation && expr.GetExprKind() == ExprKind::APPLY) {
+    if (unreachable.useWarningLocation && Is<FuncCall>(&expr)) {
         auto diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable, range, "call");
         diagBuilder.AddMainHintArguments("call");
-        diagBuilder.AddHint(terminalRange);
+        if (hasSeparateHint) {
+            diagBuilder.AddHint(terminalRange);
+        }
         return;
     }
     auto diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_expression_hint, range);
-    diagBuilder.AddHint(terminalRange);
+    if (hasSeparateHint) {
+        diagBuilder.AddHint(terminalRange);
+    }
 }
 
 /// Code source-inside the terminator (e.g. finally in a try) is not "following" it.
@@ -494,7 +564,8 @@ void ReportRegion(
         return;
     }
     for (auto block : region.blocks) {
-        // Unreachable match cases mark the synthesized body entry; pattern diagnostics own them.
+        // Unreachable match cases and finally clones mark their synthesized body entry;
+        // their diagnostics are owned elsewhere.
         if (block->Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING) {
             continue;
         }
@@ -503,10 +574,11 @@ void ReportRegion(
             continue;
         }
         auto range = GetUnreachableRange(unreachable);
-        if (IsWarningSuppressed(*unreachable.expr, range, terminalRange, diag, packageName)) {
+        auto hintRange = GetRegionHintRange(region, range, terminalRange);
+        if (IsWarningSuppressed(*unreachable.expr, range, hintRange, diag, packageName)) {
             continue;
         }
-        DiagnoseUnreachable(diag, unreachable, range, terminalRange);
+        DiagnoseUnreachable(diag, unreachable, range, hintRange);
         return;
     }
 }
