@@ -668,6 +668,44 @@ bool CheckUseTrailingClosureWithFunctionType(
     return false;
 }
 
+bool HasAnyLocalParam(TypeManager& tm, const FunctionMatchingUnit& u)
+{
+    if (tm.HasThisParam(u.fd) && TypeManager::GetThisParamMode(u.fd).local != Mode::NOT) {
+        return true;
+    }
+    for (auto& ty : u.tysInArgOrder) {
+        if (ty.Mode().local != Mode::NOT) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// If any remaining overload is all-~local, drop those with any local param.
+void FilterPreferNotLocalOverLocal(TypeManager& tm,
+    const std::vector<OwnedPtr<FunctionMatchingUnit>>& candidates, std::vector<bool>& targetMark)
+{
+    auto remain = static_cast<size_t>(std::count(targetMark.begin(), targetMark.end(), true));
+    if (remain <= 1) {
+        return;
+    }
+    bool hasAllNotLocal = false;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (targetMark[i] && !HasAnyLocalParam(tm, *candidates[i])) {
+            hasAllNotLocal = true;
+            break;
+        }
+    }
+    if (!hasAllNotLocal) {
+        return;
+    }
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (targetMark[i] && HasAnyLocalParam(tm, *candidates[i])) {
+            targetMark[i] = false;
+        }
+    }
+}
+
 /// For `let c = C()`: drop ctor overloads whose `this` is local when an ~local ctor exists.
 /// When it is not ctor call, or target exists, do not call this fun.
 void FilterBetterThisModeCtorCall(TypeManager& tm,
@@ -738,73 +776,6 @@ void FilterOverriden(
     }
 }
 
-/// for nested call, if inner call is ctor, does not have explicit ctor mode, and has @~local ctor,
-/// drop local ctor's for disambiguation such as.
-// class A {
-//     init() {}
-//     exclave init(this @local!) {}
-// }
-// class File {
-//     func read(_: A) {}
-//     func read(_: A @local!) {}
-// }
-// func foo(f: File) {
-//     f.read(A())
-// }
-// the read call can be resolved to both, but add this disambiguator to make only the non-local ctor work.
-void FilterNestedCtorCall(
-    const NodeStack& stack, const CallExpr& ce, std::vector<OwnedPtr<FunctionMatchingUnit>>& candidates)
-{
-    if (ce.modal.HasLocal()) {
-        return;
-    }
-    // Skip `ce` itself and any outer CallExpr that still has desugarExpr (mid-check sugar left on the stack).
-    auto outerCall = DynamicCast<CallExpr>(stack.FindFirstOf([&ce](Ptr<Node> n) {
-        auto expr = DynamicCast<Expr>(n);
-        if (!expr || expr->desugarExpr) {
-            return false;
-        }
-        while (expr->desugarExpr) {
-            expr = expr->desugarExpr.get();
-        }
-        return expr != &ce && Is<CallExpr>(expr);
-    }));
-    if (!outerCall || ce.desugarExpr) {
-        return;
-    }
-    bool isNestedCall = false;
-    if (outerCall->desugarArgs) {
-        for (auto arg : *outerCall->desugarArgs) {
-            if (arg->expr.get() == &ce) {
-                isNestedCall = true;
-            }
-        }
-    } else {
-        for (auto& arg : outerCall->args) {
-            if (!arg) {
-                // desugared, skip, this won't be a problem because this is a disambiguator.
-                break;
-            }
-            if (arg->expr.get() == &ce) {
-                isNestedCall = true;
-            }
-        }
-    }
-    if (!isNestedCall) {
-        return;
-    }
-    for (size_t i = 0; i < candidates.size();) {
-        if (!TypeManager::HasThisParam(candidates[i]->fd)) {
-            ++i;
-            continue;
-        }
-        if (auto mode = TypeManager::GetThisParamMode(candidates[i]->fd); mode.local != Mode::NOT) {
-            candidates.erase(candidates.begin() + static_cast<int>(i));
-        } else {
-            ++i;
-        }
-    }
-}
 } // namespace
 
 bool TypeChecker::TypeCheckerImpl::CheckArgsWithParamName(const CallExpr& ce, const FuncDecl& fd)
@@ -1087,6 +1058,8 @@ std::vector<size_t> TypeChecker::TypeCheckerImpl::ResolveOverload(const ASTConte
         }
     }
 
+    FilterPreferNotLocalOverLocal(typeManager, candidates, targetMark);
+
     std::vector<size_t> results;
     for (size_t i = 0; i < targetMark.size(); ++i) {
         if (targetMark[i]) {
@@ -1293,51 +1266,39 @@ void TypeChecker::TypeCheckerImpl::FilterTypeMappings(
 bool TypeChecker::TypeCheckerImpl::CheckThisParamCompatible(
     ASTContext& ctx, const FuncDecl& fd, const CallExpr& ce, ModalTy target)
 {
-    if (fd.TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
+    if (fd.TestAttr(Attribute::ENUM_CONSTRUCTOR) || !TypeManager::HasThisParam(fd)) {
         return true;
     }
-    if (TypeManager::HasThisParam(fd)) {
+    auto fdParamTy = typeManager.GetThisParamTy(fd);
+    // this() or super() call, must call with the same modal
+    if (auto ref = DynamicCast<RefExpr>(&*ce.baseFunc); ref && (ref->isThis || ref->isSuper)) {
         auto callArgTy = GetThisArgTy(ctx, ce);
-        auto fdParamTy = typeManager.GetThisParamTy(fd);
-        if (typeManager.ImplementsCopyInterface(callArgTy.Ty())) {
+        return typeManager.ImplementsCopyInterface(callArgTy.Ty()) || callArgTy.Mode() == fdParamTy.Mode();
+    }
+    if (fd.TestAttr(Attribute::CONSTRUCTOR) && !fd.TestAttr(Attribute::STATIC)) {
+        if (typeManager.ImplementsCopyInterface(fdParamTy.Ty())) {
             return true;
         }
-        bool good;
-        ModalTy expect;
-        ModalTy found;
-        if (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) {
-            found = fdParamTy;
-            if (ce.modal.HasLocal()) {
-                auto ceModal = ce.modal.ToModalInfo();
-                // Call-site modal (e.g. C()@local!) selects ctor; not the declared target type.
-                expect = fdParamTy.With(ceModal);
-                good = found.Mode() == ceModal;
-            } else if (target) {
-                expect = target;
-                good = found.Mode().IsSubModal(expect.Mode());
-            } else {
-                expect = fdParamTy;
-                good = true;
-            }
-        } else if (auto ref = DynamicCast<RefExpr>(&*ce.baseFunc); ref && (ref->isThis || ref->isSuper)) {
-            // must call init or super with the same modal
-            expect = callArgTy;
-            found = fdParamTy;
-            good = expect.Mode() == found.Mode();
-        } else {
-            // normal function call, sub modal is ok
-            expect = fdParamTy;
-            found = callArgTy;
-            good = found.Mode().IsSubModal(expect.Mode());
+        if (ce.modal.HasLocal()) {
+            // Call-site modal (e.g. C()@local!) selects ctor; not the declared target type.
+            return fdParamTy.Mode() == ce.modal.ToModalInfo();
         }
-        if (!good) {
-            if (ce.baseFunc->ShouldDiagnose() && !CanSkipDiag(*ce.baseFunc)) {
-                DiagMismatchedTypesWithFoundTy(diag, *ce.baseFunc, expect, found);
-            }
-            return false;
+        if (target.IsCorrect()) {
+            return fdParamTy.Mode().IsSubModal(target.Mode());
         }
+        return true;
     }
-    return true;
+    // normal function call, sub modal is ok
+    auto callArgTy = GetThisArgTy(ctx, ce);
+    return typeManager.ImplementsCopyInterface(callArgTy.Ty()) || callArgTy.Mode().IsSubModal(fdParamTy.Mode());
+}
+
+void TypeChecker::TypeCheckerImpl::FilterIncompatibleThisParamCandidates(
+    ASTContext& ctx, CallExpr& ce, ModalTy target, std::vector<Ptr<FuncDecl>>& candidates)
+{
+    Utils::EraseIf(candidates, [this, &ctx, &ce, target](Ptr<FuncDecl> fd) {
+        return !CheckThisParamCompatible(ctx, *fd, ce, target);
+    });
 }
 
 bool TypeChecker::TypeCheckerImpl::CheckGenericCallCompatible(
@@ -1376,10 +1337,6 @@ bool TypeChecker::TypeCheckerImpl::CheckGenericCallCompatible(
     for (auto mapping = resMappings.begin(); mapping != resMappings.end();) {
         auto ds = DiagSuppressor(diag);
         bool matched = true;
-        if (!CheckThisParamCompatible(ctx, fd, ce, targetRet)) {
-            ce.SetTy({TypeManager::GetInvalidTy()});
-            matched = false;
-        }
         size_t currentCnt = 0;
         for (size_t i = 0; i < paramTysInArgOrder.size(); ++i) {
             auto paramTy = paramTysInArgOrder[i];
@@ -1599,10 +1556,6 @@ bool TypeChecker::TypeCheckerImpl::CheckCallCompatible(ASTContext& ctx, Function
         for (size_t i{0}; i < paramTysInArgOrder.size(); ++i) {
             paramTysInArgOrder[i] = paramTysInArgOrder[i].With(targetMode);
         }
-    }
-    if (!CheckThisParamCompatible(ctx, fd, ce, target)) {
-        ce.SetTy({TypeManager::GetInvalidTy()});
-        return false;
     }
     for (size_t i = 0; i < paramTysInArgOrder.size(); ++i) {
         ce.args[i]->Clear();
@@ -2617,11 +2570,6 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::CheckMatchResult(ASTCon
         CheckEmptyMatchResult(diag, ce, illegals);
         return {};
     }
-    if (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION ||
-        legals[0]->fd.TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
-        // cannot call this in ResolveOverload, because this can be used to exclude all candidates
-        FilterNestedCtorCall(nodeStack, ce, legals);
-    }
     // Only one legal target.
     uint64_t id;
     if (legals.size() == 1) {
@@ -3059,6 +3007,7 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseExpr(
             }
             break;
     }
+    FilterIncompatibleThisParamCandidates(ctx, ce, targetRet, candidates);
     if (!isWellTyped && !ce.baseFunc->GetTy().IsCorrect()) {
         setFuncArgsInvalidTy();
     }

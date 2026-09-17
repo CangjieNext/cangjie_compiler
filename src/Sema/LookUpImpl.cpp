@@ -14,7 +14,6 @@
 #include "TypeCheckerImpl.h"
 
 #include "cangjie/AST/ScopeManagerApi.h"
-#include "cangjie/AST/Utils.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -543,6 +542,12 @@ bool IsNodeInTypeAliasDecl(const Node& node, const TypeAliasDecl& tad)
 
 bool IsTargetVisibleToNode(const Decl& target, const Node& node)
 {
+    // arrayInitBy* are private but available in std.core
+    if (target.TestAttr(Attribute::PRIVATE) && node.curFile->curPackage->fullPackageName == CORE_PACKAGE_NAME) {
+        if (target.identifier == "arrayInitByFunction" || target.identifier == "arrayInitByCollection") {
+            return true;
+        }
+    }
     // In the LSP, the 'node' may be a new ast node, 'curFile' pointer consistency cannot be ensured.
     return !target.TestAttr(Attribute::PRIVATE) || (target.curFile && node.curFile && *target.curFile == *node.curFile);
 }
