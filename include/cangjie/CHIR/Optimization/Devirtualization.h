@@ -27,7 +27,7 @@ public:
      * @brief rewrite info if a invoke can be de-virtualize.
      */
     struct RewriteInfo {
-        InvokeBase* invoke;  // Invoke or TryInvoke
+        DynamicDispatch* invoke;
         Function* realCallee;
         Type* thisType;
     };
@@ -62,6 +62,8 @@ private:
     void RunOnFunc(const Function* func);
 
     std::pair<Function*, Type*> FindFinalCalleeAndThisType(const TypeValue* typeState, const InvokeBase& invoke) const;
+
+    Function* ResolveStaticCallee(InvokeStaticBase& invoke) const;
 
     /// Whether subtypeMap[@p def] is a complete subtype set (closed world).
     bool IsSubtypeSetComplete(const CustomTypeDef& def) const;
