@@ -92,6 +92,14 @@ std::vector<VTableSearchRes> GetWellMatchingResults(const std::vector<VTableSear
 void CustomTypeDef::AddMethod(Function* method)
 {
     CJC_NULLPTR_CHECK(method);
+    // Already owned by this def — avoid duplicate entries after common/specific re-attach.
+    if (method->declaredParent == this) {
+        return;
+    }
+    // Reparenting from another CustomTypeDef (e.g. common extend → specific extend): drop the old list entry.
+    if (method->declaredParent != nullptr) {
+        Utils::RemoveFromVec(method->declaredParent->methods, method);
+    }
     method->declaredParent = this;
     methods.emplace_back(method);
 }

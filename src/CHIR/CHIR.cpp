@@ -1045,14 +1045,18 @@ template <typename T> bool ToCHIR::IsAllApply(const T* curFunc)
 }
 
 namespace {
+// Resolve chir serialization path: -o <dir> → <dir>/<pkg>.chir; -o <file> → that file.
+std::string ResolveCHIROutputPath(const std::string& outputPath, const std::string& packageName)
+{
+    if (FileUtil::IsDir(outputPath)) {
+        return FileUtil::JoinPath(outputPath, packageName + std::string(CHIR_SERIALIZATION_FILE_EXTENSION));
+    }
+    return outputPath;
+}
+
 void EmitCHIR(const std::string& outputPath, const CHIR::Package& package, ToCHIR::Phase phase, bool dump)
 {
-    std::string path;
-    if (FileUtil::IsDir(outputPath)) {
-        path = FileUtil::JoinPath(outputPath, package.GetName() + std::string(CHIR_SERIALIZATION_FILE_EXTENSION));
-    } else {
-        path = outputPath;
-    }
+    std::string path = ResolveCHIROutputPath(outputPath, package.GetName());
     CHIRSerializer::Serialize(package, path, phase);
     if (dump) {
         const std::string dumpFileName =
@@ -1073,8 +1077,7 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
     }
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
-        auto fileName =
-            FileUtil::JoinPath(opts.output, chirPkg->GetName()) + std::string(CHIR_SERIALIZATION_FILE_EXTENSION);
+        auto fileName = ResolveCHIROutputPath(opts.output, chirPkg->GetName());
         CHIRSerializer::Serialize(*chirPkg, fileName, CHIR::ToCHIR::RAW);
         return true;
     }
@@ -1144,8 +1147,7 @@ bool ToCHIR::Run()
     }
     // 2. for cjmp, while compiling common package, just be here and save CHIR to file.
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
-        auto fileName =
-            FileUtil::JoinPath(opts.output, chirPkg->GetName()) + std::string(CHIR_SERIALIZATION_FILE_EXTENSION);
+        auto fileName = ResolveCHIROutputPath(opts.output, chirPkg->GetName());
         CHIRSerializer::Serialize(*chirPkg, fileName, CHIR::ToCHIR::RAW);
         return true;
     }

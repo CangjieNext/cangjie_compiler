@@ -58,9 +58,11 @@ void Translator::TranslateClassLikeDecl(ClassDef& classDef, const AST::ClassLike
         decl.TestAttr(AST::Attribute::IMPORTED) && decl.TestAttr(AST::Attribute::GENERIC_INSTANTIATED);
     classDef.Set<LinkTypeInfo>(isImportedInstantiated ? Linkage::INTERNAL : decl.linkage);
 
-    // common and specific upper bounds are same, do not set again
-    // specific instantiations require inheritance setup because common side uses templates without instantiation
-    bool needInitialSuperClassSetup = !decl.TestAttr(AST::Attribute::SPECIFIC) ||
+    // Skip inheritance setup only when merging a SPECIFIC decl onto a ClassDef already filled from common chir.
+    // SPECIFIC-only decls (e.g. in common-part compile) still need Object/interfaces set for AST2CHIRChecker.
+    bool mergingOntoDeserialized =
+        decl.TestAttr(AST::Attribute::SPECIFIC) && classDef.TestAttr(Attribute::DESERIALIZED);
+    bool needInitialSuperClassSetup = !mergingOntoDeserialized ||
         decl.TestAttr(AST::Attribute::IMPORTED) || decl.TestAttr(AST::Attribute::GENERIC_INSTANTIATED);
     if (needInitialSuperClassSetup) {
         // set super class

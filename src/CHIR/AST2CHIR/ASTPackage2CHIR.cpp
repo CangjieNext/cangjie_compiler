@@ -1576,6 +1576,11 @@ void AST2CHIR::BuildDeserializedTable()
 // Reset specific func for CJMP.
 void AST2CHIR::ResetSpecificFunc(const AST::FuncDecl& funcDecl, Function& func)
 {
+    // Reset type first (covariant return etc. may differ from the deserialized common signature).
+    auto fnTy = chirType.TranslateType(funcDecl.GetTy());
+    fnTy = AdjustFuncType(*StaticCast<FuncType*>(fnTy), funcDecl, builder, chirType);
+    func.SetType(*fnTy);
+
     // Reset body
     func.DestroyFuncBody();
     if (!funcDecl.TestAttr(AST::Attribute::ABSTRACT)) {

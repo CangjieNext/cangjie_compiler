@@ -301,14 +301,18 @@ bool CheckInheritDeclGlobalMember(
             StaticCast<const AST::FuncDecl&>(decl).IsFinalizer()) {
             return true;
         }
-        if (!decl.TestAttr(AST::Attribute::STATIC) && !CheckMethodType(decl.GetTy(), *chirCache->GetType())) {
+        // After CJMP merge, CHIR carries the specific signature (e.g. covariant return A→B).
+        const AST::Decl& typeSrc =
+            (decl.TestAttr(AST::Attribute::COMMON) && decl.specificImplementation) ? *decl.specificImplementation
+                                                                                  : decl;
+        if (!typeSrc.TestAttr(AST::Attribute::STATIC) && !CheckMethodType(typeSrc.GetTy(), *chirCache->GetType())) {
             Errorln(
-                chirCache->GetIdentifier() + " is expected to be promoted " + AST::Ty::ToString(decl.DataTy()) + ".");
+                chirCache->GetIdentifier() + " is expected to be promoted " + AST::Ty::ToString(typeSrc.DataTy()) + ".");
             return false;
         }
-        if (decl.TestAttr(AST::Attribute::STATIC) && !CheckFuncType(decl.GetTy(), *chirCache->GetType())) {
+        if (typeSrc.TestAttr(AST::Attribute::STATIC) && !CheckFuncType(typeSrc.GetTy(), *chirCache->GetType())) {
             Errorln(
-                chirCache->GetIdentifier() + " is expected to be promoted " + AST::Ty::ToString(decl.DataTy()) + ".");
+                chirCache->GetIdentifier() + " is expected to be promoted " + AST::Ty::ToString(typeSrc.DataTy()) + ".");
             return false;
         }
     }
@@ -424,18 +428,23 @@ bool CheckFunc(const AST::FuncDecl& decl, const Value& chirNode)
     if (decl.outerDecl != nullptr) {
         return true;
     }
-    auto astTy = decl.GetTy();
+    // After CJMP merge, CHIR signature reflects the specific override (covariant return / Nothing throw).
+    const AST::Decl* typeSrc = &decl;
+    if (decl.TestAttr(AST::Attribute::COMMON) && decl.specificImplementation) {
+        typeSrc = decl.specificImplementation;
+    }
+    auto astTy = typeSrc->GetTy();
     auto chirTy = chirNode.GetType();
     if (!CheckType(astTy, *chirTy)) {
         bool report = true;
-        if (decl.TestAttr(AST::Attribute::SPECIFIC) && chirNode.TestAttr(Attribute::DESERIALIZED)) {
+        if (typeSrc->TestAttr(AST::Attribute::SPECIFIC) && chirNode.TestAttr(Attribute::DESERIALIZED)) {
             // `specific` function type can be subtype of `common` function type.
             // We keep origin type in CHIR, however AST type is updated. Thus it's not an error.
             report = false;
         }
 
         if (report) {
-            Errorln(chirNode.GetIdentifier() + " is expected to be " + AST::Ty::ToString(astTy.Ty()) + ".");
+            Errorln(chirNode.GetIdentifier() + " is expected to be " + AST::Ty::ToString(typeSrc->DataTy()) + ".");
             return false;
         }
     }

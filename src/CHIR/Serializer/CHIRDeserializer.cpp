@@ -922,7 +922,7 @@ template <> Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
             CJC_ASSERT(operands.size() == 1);
             return builder.CreateExpression<ClassStaticCast>(resultTy, operands[0], owner);
         case ExprKind::VARRAY:
-            CJC_ASSERT(!operands.empty());
+            // Empty VArray literal (size $0) legitimately has no element operands.
             return builder.CreateExpression<VArray>(resultTy, operands, owner);
         case ExprKind::VARRAY_BUILDER:
             CJC_ASSERT(operands.size() == 3);
