@@ -10,11 +10,10 @@
 #include <unordered_set>
 
 #include "cangjie/CHIR/Analysis/DevirtualizationInfo.h"
-#include "cangjie/CHIR/Analysis/Utils.h"
-#include "cangjie/CHIR/IR/Type/ExtendDef.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
 #include "cangjie/CHIR/Utils/UserDefinedType.h"
 #include "cangjie/CHIR/Utils/Utils.h"
+#include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/CHIR/Optimization/BlockGroupCopyHelper.h"
 #include "cangjie/Mangle/CHIRManglingUtils.h"
 #include "cangjie/Modules/ModulesUtils.h"
@@ -47,7 +46,7 @@ std::vector<CustomTypeDef*> CollectAllDefs(const Type& type, CHIRBuilder& builde
     return defs;
 }
 
-Function* SearchRealCalleeInVtable(const Type& type, const InvokeBase& invoke, CHIRBuilder& builder)
+Function* SearchRealCalleeInVtable(const Type& type, const DynamicDispatch& invoke, CHIRBuilder& builder)
 {
     std::vector<CustomTypeDef*> allDefs = CollectAllDefs(type, builder);
     auto srcParentTypeInRT = invoke.GetInstSrcParentCustomTypeOfMethod(builder);
@@ -184,7 +183,7 @@ Devirtualization::Devirtualization(TypeAnalysisWrapper* typeAnalysisWrapper, Dev
 
 bool Devirtualization::IsSubtypeSetComplete(const CustomTypeDef& def) const
 {
-    // True iff subtypeMap[def] lists every possible subtype for FindFinalCalleeAndThisType.
+    // True iff subtypeMap[def] lists every possible subtype for ResolveNonStaticCalleeAndThisType.
     auto relation = Modules::GetPackageRelation(def.GetPackageName(), package.GetName());
     if (def.TestAttr(Attribute::PUBLIC) || def.TestAttr(Attribute::PROTECTED)) {
         // Closed-world only for a true whole-program executable.
@@ -192,7 +191,7 @@ bool Devirtualization::IsSubtypeSetComplete(const CustomTypeDef& def) const
         // defaults compileTarget to EXECUTABLE (SetupCompileTargetOptions), so a
         // per-package obj build of a library would also look "executable". Subtypes
         // defined in other packages that are linked later are invisible here;
-        // treating the type as closed would let FindFinalCalleeAndThisType rewrite Invoke to a
+        // treating the type as closed would let ResolveNonStaticCalleeAndThisType rewrite Invoke to a
         // unique local Apply and silently mis-dispatch at run time.
         if (opts.outputMode == GlobalOptions::OutputMode::EXECUTABLE &&
             relation == Modules::PackageRelation::SAME_PACKAGE) {
@@ -219,16 +218,46 @@ void Devirtualization::RunOnFuncs(const std::vector<Function*>& funcs)
 {
     rewriteInfos.clear();
     for (auto func : funcs) {
-        RunOnFunc(func);
+        RunOnFuncForInvoke(*func);
+        RunOnFuncForInvokeStatic(*func);
     }
     RewriteToApply(rewriteInfos);
 }
 
-void Devirtualization::RunOnFunc(const Function* func)
+Function* Devirtualization::ResolveStaticCallee(InvokeStaticBase& invoke) const
 {
-    auto result = analysisWrapper->CheckFuncResult(func);
-    if (result == nullptr && frozenStates.count(func) != 0) {
-        result = frozenStates.at(func).get();
+    auto rttiStatic = DynamicCast<GetRTTIStatic*>(StaticCast<LocalVar>(invoke.GetRTTIValue())->GetExpr());
+    // RTTI(value) or RTTIStatic(type), RTTI(value) means we get value's type in runtime,
+    // so we can't rewrite it in compile time.
+    if (rttiStatic == nullptr) {
+        return nullptr;
+    }
+    auto thisType = invoke.GetThisType()->StripAllRefs();
+    if (thisType->IsGeneric() || thisType->IsThis()) {
+        return nullptr;
+    }
+    return SearchRealCalleeInVtable(*thisType, invoke, builder);
+}
+
+void Devirtualization::RunOnFuncForInvokeStatic(const Function& func)
+{
+    Visitor::Visit(func, [this](Expression& expr) {
+        if (auto invokeStatic = DynamicCast<InvokeStaticBase*>(&expr)) {
+            auto realCallee = ResolveStaticCallee(*invokeStatic);
+            if (realCallee == nullptr) {
+                return VisitResult::CONTINUE;
+            }
+            rewriteInfos.emplace_back(RewriteInfo{invokeStatic, realCallee, invokeStatic->GetThisType()});
+        }
+        return VisitResult::CONTINUE;
+    });
+}
+
+void Devirtualization::RunOnFuncForInvoke(const Function& func)
+{
+    auto result = analysisWrapper->CheckFuncResult(&func);
+    if (result == nullptr && frozenStates.count(&func) != 0) {
+        result = frozenStates.at(&func).get();
     }
     if (result == nullptr) {
         return;
@@ -241,21 +270,23 @@ void Devirtualization::RunOnFunc(const Function* func)
         if (!resVal) {
             return;
         }
-        auto [realCallee, thisType] = FindFinalCalleeAndThisType(resVal, *invoke);
+        auto [realCallee, thisType] = ResolveNonStaticCalleeAndThisType(resVal, *invoke);
         if (realCallee == nullptr || thisType == nullptr) {
             return;
         }
         rewriteInfos.emplace_back(RewriteInfo{invoke, realCallee, thisType});
     };
 
-    const auto actionBeforeVisitExpr = [&tryCollect](const TypeDomain& state, Expression* expr, size_t) {
+    const auto actionBeforeVisitExpr =
+        [&tryCollect](const TypeDomain& state, Expression* expr, size_t) {
         if (auto invoke = DynamicCast<Invoke*>(expr)) {
             tryCollect(state, invoke);
         }
     };
 
     const auto actionAfterVisitExpr = [](const TypeDomain&, Expression*, size_t) {};
-    const auto actionOnTerminator = [&tryCollect](const TypeDomain& state, Expression* expr, std::optional<Block*>) {
+    const auto actionOnTerminator =
+        [&tryCollect](const TypeDomain& state, Expression* expr, std::optional<Block*>) {
         if (auto tryInvoke = DynamicCast<TryInvoke*>(expr)) {
             tryCollect(state, tryInvoke);
         }
@@ -290,10 +321,7 @@ bool Devirtualization::RewriteToBuiltinOp(const RewriteInfo& info)
     if (!leftOp->GetType()->IsPrimitive() || !rightOp->GetType()->IsPrimitive()) {
         return false;
     }
-    Block* nextBlock = nullptr;
-    if (auto tryInvoke = DynamicCast<TryInvoke*>(info.invoke)) {
-        nextBlock = tryInvoke->GetSuccessBlock();
-    }
+    auto nextBlock = info.invoke->GetSuccessAndErrorBlocks().first;
     auto loc = info.invoke->GetDebugLocation();
     auto retType = info.invoke->GetResultType();
     auto parent = info.invoke->GetParentBlock();
@@ -348,27 +376,31 @@ void Devirtualization::RewriteToApply(std::vector<RewriteInfo>& infos)
         }
 
         // 2. get a correct type for args[0]
-        auto instParentCustomTy = GetInstParentCustomTyOfCallee(*realFunc, context.args, context.thisType, builder);
-        // realFunc is instantiated to a new function, the new function is global, not a member method
-        if (instParentCustomTy == nullptr) {
-            instParentCustomTy = realFunc->GetFuncType()->GetParamType(0);
-        }
-        instParentCustomTy = AddRefIfNeeded(*instParentCustomTy, *realFunc);
         auto parent = invoke->GetParentBlock();
-        auto [typecastRes, newExprs] = TypeCastOrBoxIfNeeded(*context.args[0], *instParentCustomTy, builder, *parent);
-        if (typecastRes != context.args[0]) {
-            for (auto newExpr : newExprs) {
-                newExpr->MoveBefore(invoke);
+        if (Is<InvokeBase>(invoke)) {
+            auto instParentCustomTy = GetInstParentCustomTyOfCallee(*realFunc, context.args, context.thisType, builder);
+            // realFunc is instantiated to a new function, the new function is global, not a member method
+            if (instParentCustomTy == nullptr) {
+                instParentCustomTy = realFunc->GetFuncType()->GetParamType(0);
             }
-            context.args[0] = typecastRes;
+            instParentCustomTy = AddRefIfNeeded(*instParentCustomTy, *realFunc);
+            auto [typecastRes, newExprs] =
+                TypeCastOrBoxIfNeeded(*context.args[0], *instParentCustomTy, builder, *parent);
+            if (typecastRes != context.args[0]) {
+                for (auto newExpr : newExprs) {
+                    newExpr->MoveBefore(invoke);
+                }
+                context.args[0] = typecastRes;
+            }
         }
 
         // 3. rewrite to apply
         Expression* newCall = nullptr;
         auto loc = invoke->GetDebugLocation();
-        if (auto tryInvoke = DynamicCast<TryInvoke*>(invoke)) {
+        auto [successBlock, errorBlock] = invoke->GetSuccessAndErrorBlocks();
+        if (successBlock && errorBlock) {
             newCall = builder.CreateExpression<TryApply>(
-                loc, instRetTy, realFunc, context, tryInvoke->GetSuccessBlock(), tryInvoke->GetErrorBlock(), parent);
+                loc, instRetTy, realFunc, context, successBlock, errorBlock, parent);
         } else {
             newCall = builder.CreateExpression<Apply>(loc, instRetTy, realFunc, context, parent);
         }
@@ -417,6 +449,7 @@ Function* Devirtualization::CreateInstFuncIfPossible(Function* func, FuncCallCon
         newFunc->SetDebugLocation(func->GetDebugLocation());
         newFunc->AppendAttributeInfo(func->GetAttributeInfo());
         newFunc->DisableAttr(Attribute::GENERIC);
+        newFunc->DisableAttr(Attribute::STATIC);
         if (!context.instTypeArgs.empty()) {
             newFunc->EnableAttr(Attribute::GENERIC_INSTANTIATED);
         }
@@ -489,7 +522,7 @@ std::vector<Type*> Devirtualization::CollectAllSubTypes(ClassType& specific) con
     return allSubTypes;
 }
 
-std::pair<Function*, Type*> Devirtualization::FindFinalCalleeAndThisType(
+std::pair<Function*, Type*> Devirtualization::ResolveNonStaticCalleeAndThisType(
     const TypeValue* typeState, const InvokeBase& invoke) const
 {
     auto typeStateKind = typeState->GetTypeKind();
@@ -516,8 +549,8 @@ std::pair<Function*, Type*> Devirtualization::FindFinalCalleeAndThisType(
         }
         /*
          * EXACTLY / final (non-inheritable) receivers: keep TypeAnalysis's specificType as thisType so
-         * instantiated args (e.g. Impl<Int64>) are not lost. Matching the pre-refactor FindFinalCalleeAndThisType
-         * return of {callee, specificType}.
+         * instantiated args (e.g. Impl<Int64>) are not lost.
+         * Matching the pre-refactor ResolveNonStaticCalleeAndThisType return of {callee, specificType}.
          *
          * SUBTYPE_OF unique-impl: instantiate callee's declaring type from the invoke's vtable parent.
          * If the subtype introduces free generics not present on the parent (e.g. CA<T> <: I), skip:

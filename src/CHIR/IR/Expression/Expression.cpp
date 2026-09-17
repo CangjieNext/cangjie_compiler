@@ -409,6 +409,35 @@ void Expression::EraseOperands()
     operands.clear();
 }
 
+std::pair<Block*, Block*> Expression::GetSuccessAndErrorBlocks() const
+{
+    if (!IsTerminator()) {
+        return {nullptr, nullptr};
+    }
+    switch (kind) {
+        case ExprKind::TRY_ADD:
+        case ExprKind::TRY_SUB:
+        case ExprKind::TRY_MUL:
+        case ExprKind::TRY_DIV:
+        case ExprKind::TRY_MOD:
+        case ExprKind::TRY_EXP:
+        case ExprKind::TRY_LSHIFT:
+        case ExprKind::TRY_RSHIFT:
+        case ExprKind::TRY_NEG:
+        case ExprKind::TRY_APPLY:
+        case ExprKind::TRY_INVOKE:
+        case ExprKind::TRY_INVOKESTATIC:
+        case ExprKind::TRY_SPAWN:
+        case ExprKind::TRY_NUMERIC_CAST:
+        case ExprKind::TRY_INTRINSIC:
+        case ExprKind::TRY_ALLOCATE:
+        case ExprKind::TRY_RAW_ARRAY_ALLOCATE:
+            return {GetSuccessor(0), GetSuccessor(1)};
+        default:
+            return {nullptr, nullptr};
+    }
+}
+
 std::string Expression::ToString(size_t indent) const
 {
     // [ret] %x[name]: type = expression(xxx) // comment
