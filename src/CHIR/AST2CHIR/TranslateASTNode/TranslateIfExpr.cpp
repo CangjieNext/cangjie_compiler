@@ -454,6 +454,16 @@ public:
         }
         tr.SetCurrentBlock(*endBlock);
         if (retVal) {
+            auto predecessors = endBlock->GetPredecessors();
+            // For `return match (...) { case ... => return ... }` and equivalent nested ifs,
+            // expected-type propagation can hide that every branch terminates. The lowering
+            // leaves one generated goto in each predecessor of the join, but no value is stored.
+            // Do not create a load for that type-only if result.
+            if (std::all_of(predecessors.begin(), predecessors.end(), [](auto predecessor) {
+                    return predecessor->GetExpressions().size() == 1U;
+                })) {
+                return nullptr;
+            }
             auto ret = tr.GetDerefedValue(retVal, tr.TranslateLocation(e1));
             if (forceGenerateUnit) {
                 StaticCast<LocalVar>(ret)->GetExpr()->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
