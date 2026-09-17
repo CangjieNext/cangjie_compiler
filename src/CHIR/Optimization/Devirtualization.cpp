@@ -10,8 +10,6 @@
 #include <unordered_set>
 
 #include "cangjie/CHIR/Analysis/DevirtualizationInfo.h"
-#include "cangjie/CHIR/Analysis/Utils.h"
-#include "cangjie/CHIR/IR/Type/ExtendDef.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
 #include "cangjie/CHIR/Utils/UserDefinedType.h"
 #include "cangjie/CHIR/Utils/Utils.h"
@@ -47,7 +45,7 @@ std::vector<CustomTypeDef*> CollectAllDefs(const Type& type, CHIRBuilder& builde
     return defs;
 }
 
-Function* SearchRealCalleeInVtable(const Type& type, const InvokeBase& invoke, CHIRBuilder& builder)
+Function* SearchRealCalleeInVtable(const Type& type, const DynamicDispatch& invoke, CHIRBuilder& builder)
 {
     std::vector<CustomTypeDef*> allDefs = CollectAllDefs(type, builder);
     auto srcParentTypeInRT = invoke.GetInstSrcParentCustomTypeOfMethod(builder);
@@ -224,6 +222,21 @@ void Devirtualization::RunOnFuncs(const std::vector<Function*>& funcs)
     RewriteToApply(rewriteInfos);
 }
 
+Function* Devirtualization::ResolveStaticCallee(InvokeStaticBase& invoke) const
+{
+    auto rttiStatic = DynamicCast<GetRTTIStatic*>(StaticCast<LocalVar>(invoke.GetRTTIValue())->GetExpr());
+    // RTTI(value) or RTTIStatic(type), RTTI(value) means we get value's type in runtime,
+    // so we can't rewrite it in compile time.
+    if (rttiStatic == nullptr) {
+        return nullptr;
+    }
+    auto thisType = invoke.GetThisType()->StripAllRefs();
+    if (thisType->IsGeneric() || thisType->IsThis()) {
+        return nullptr;
+    }
+    return SearchRealCalleeInVtable(*thisType, invoke, builder);
+}
+
 void Devirtualization::RunOnFunc(const Function* func)
 {
     auto result = analysisWrapper->CheckFuncResult(func);
@@ -248,16 +261,34 @@ void Devirtualization::RunOnFunc(const Function* func)
         rewriteInfos.emplace_back(RewriteInfo{invoke, realCallee, thisType});
     };
 
-    const auto actionBeforeVisitExpr = [&tryCollect](const TypeDomain& state, Expression* expr, size_t) {
+    // Collect trivial InvokeStatic / TryInvokeStatic that can be rewritten to Apply.
+    // Filtering is aligned with DevirtualizeTrivialStatics, but lives in this pass so
+    // TypeAnalysis-based Invoke and static dispatch share one pipeline.
+    auto tryCollectStatic = [this](const TypeDomain& /*state*/, InvokeStaticBase* invoke) {
+        CJC_NULLPTR_CHECK(invoke);
+        auto realCallee = ResolveStaticCallee(*invoke);
+        if (realCallee == nullptr) {
+            return;
+        }
+        rewriteInfos.emplace_back(RewriteInfo{invoke, realCallee, invoke->GetThisType()});
+    };
+
+    const auto actionBeforeVisitExpr =
+        [&tryCollect, &tryCollectStatic](const TypeDomain& state, Expression* expr, size_t) {
         if (auto invoke = DynamicCast<Invoke*>(expr)) {
             tryCollect(state, invoke);
+        } else if (auto invokeStatic = DynamicCast<InvokeStatic*>(expr)) {
+            tryCollectStatic(state, invokeStatic);
         }
     };
 
     const auto actionAfterVisitExpr = [](const TypeDomain&, Expression*, size_t) {};
-    const auto actionOnTerminator = [&tryCollect](const TypeDomain& state, Expression* expr, std::optional<Block*>) {
+    const auto actionOnTerminator =
+        [&tryCollect, &tryCollectStatic](const TypeDomain& state, Expression* expr, std::optional<Block*>) {
         if (auto tryInvoke = DynamicCast<TryInvoke*>(expr)) {
             tryCollect(state, tryInvoke);
+        } else if (auto tryInvokeStatic = DynamicCast<TryInvokeStatic*>(expr)) {
+            tryCollectStatic(state, tryInvokeStatic);
         }
     };
     result->VisitWith(actionBeforeVisitExpr, actionAfterVisitExpr, actionOnTerminator);
@@ -348,27 +379,30 @@ void Devirtualization::RewriteToApply(std::vector<RewriteInfo>& infos)
         }
 
         // 2. get a correct type for args[0]
-        auto instParentCustomTy = GetInstParentCustomTyOfCallee(*realFunc, context.args, context.thisType, builder);
-        // realFunc is instantiated to a new function, the new function is global, not a member method
-        if (instParentCustomTy == nullptr) {
-            instParentCustomTy = realFunc->GetFuncType()->GetParamType(0);
-        }
-        instParentCustomTy = AddRefIfNeeded(*instParentCustomTy, *realFunc);
         auto parent = invoke->GetParentBlock();
-        auto [typecastRes, newExprs] = TypeCastOrBoxIfNeeded(*context.args[0], *instParentCustomTy, builder, *parent);
-        if (typecastRes != context.args[0]) {
-            for (auto newExpr : newExprs) {
-                newExpr->MoveBefore(invoke);
+        if (Is<InvokeBase>(invoke)) {
+            auto instParentCustomTy = GetInstParentCustomTyOfCallee(*realFunc, context.args, context.thisType, builder);
+            // realFunc is instantiated to a new function, the new function is global, not a member method
+            if (instParentCustomTy == nullptr) {
+                instParentCustomTy = realFunc->GetFuncType()->GetParamType(0);
             }
-            context.args[0] = typecastRes;
+            instParentCustomTy = AddRefIfNeeded(*instParentCustomTy, *realFunc);
+            auto [typecastRes, newExprs] = TypeCastOrBoxIfNeeded(*context.args[0], *instParentCustomTy, builder, *parent);
+            if (typecastRes != context.args[0]) {
+                for (auto newExpr : newExprs) {
+                    newExpr->MoveBefore(invoke);
+                }
+                context.args[0] = typecastRes;
+            }
         }
 
         // 3. rewrite to apply
         Expression* newCall = nullptr;
         auto loc = invoke->GetDebugLocation();
-        if (auto tryInvoke = DynamicCast<TryInvoke*>(invoke)) {
+        auto [successBlock, errorBlock] = invoke->GetSuccessAndErrorBlocks();
+        if (successBlock && errorBlock) {
             newCall = builder.CreateExpression<TryApply>(
-                loc, instRetTy, realFunc, context, tryInvoke->GetSuccessBlock(), tryInvoke->GetErrorBlock(), parent);
+                loc, instRetTy, realFunc, context, successBlock, errorBlock, parent);
         } else {
             newCall = builder.CreateExpression<Apply>(loc, instRetTy, realFunc, context, parent);
         }
