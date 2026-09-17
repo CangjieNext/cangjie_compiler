@@ -1592,7 +1592,12 @@ bool IsLegalAccess(Symbol* curComposite, const Decl& d, const AST::Node& node, I
         // When decl is private it can only be accessed in same file,
         if (d.TestAttr(Attribute::PRIVATE)) {
             // In the LSP, the 'node' may be a new ast node, 'curFile' pointer consistency cannot be ensured.
-            return node.curFile && d.curFile && *node.curFile == *d.curFile;
+            if (node.curFile && d.curFile && *node.curFile == *d.curFile) {
+                return true;
+            }
+            // arrayInitBy* are private but available in std.core
+            return node.curFile->curPackage->fullPackageName == CORE_PACKAGE_NAME &&
+                (d.identifier == "arrayInitByFunction" || d.identifier == "arrayInitByCollection");
         }
         return Modules::IsVisible(d, relation);
     }

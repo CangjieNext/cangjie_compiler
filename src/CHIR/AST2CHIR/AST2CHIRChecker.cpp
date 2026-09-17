@@ -303,16 +303,17 @@ bool CheckInheritDeclGlobalMember(
         }
         // After CJMP merge, CHIR carries the specific signature (e.g. covariant return A→B).
         const AST::Decl& typeSrc =
-            (decl.TestAttr(AST::Attribute::COMMON) && decl.specificImplementation) ? *decl.specificImplementation
-                                                                                  : decl;
+            decl.TestAttr(AST::Attribute::COMMON) && decl.specificImplementation ? *decl.specificImplementation : decl;
         if (!typeSrc.TestAttr(AST::Attribute::STATIC) && !CheckMethodType(typeSrc.GetTy(), *chirCache->GetType())) {
             Errorln(
-                chirCache->GetIdentifier() + " is expected to be promoted " + AST::Ty::ToString(typeSrc.DataTy()) + ".");
+                chirCache->GetIdentifier() +
+                " is expected to be promoted " + AST::Ty::ToString(typeSrc.DataTy()) + ".");
             return false;
         }
         if (typeSrc.TestAttr(AST::Attribute::STATIC) && !CheckFuncType(typeSrc.GetTy(), *chirCache->GetType())) {
             Errorln(
-                chirCache->GetIdentifier() + " is expected to be promoted " + AST::Ty::ToString(typeSrc.DataTy()) + ".");
+                chirCache->GetIdentifier() +
+                " is expected to be promoted " + AST::Ty::ToString(typeSrc.DataTy()) + ".");
             return false;
         }
     }

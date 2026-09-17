@@ -92,11 +92,18 @@ std::vector<VTableSearchRes> GetWellMatchingResults(const std::vector<VTableSear
 void CustomTypeDef::AddMethod(Function* method)
 {
     CJC_NULLPTR_CHECK(method);
-    // Already owned by this def — avoid duplicate entries after common/specific re-attach.
+    // Idempotent re-attach: CJMP merge/import may call AddMethod again on the same ExtendDef, e.g.
+    //   specific extend A { specific public func koo(): Unit {} }
+    // Without this, `koo` is pushed twice into methods and chir checker membership breaks.
     if (method->declaredParent == this) {
         return;
     }
-    // Reparenting from another CustomTypeDef (e.g. common extend → specific extend): drop the old list entry.
+    // Reparent common → specific (drop old list entry). e.g.
+    //   common extend A { common public func koo(): Unit {} }
+    //   specific extend A { specific public func koo(): Unit {} }
+    // Without RemoveFromVec: declaredParent is the specific ExtendDef but koo remains in the common
+    // ExtendDef's methods → chir checker: "parent CustomTypeDef of func ... is <specific>,
+    // but this function is also member method of <common>."
     if (method->declaredParent != nullptr) {
         Utils::RemoveFromVec(method->declaredParent->methods, method);
     }
