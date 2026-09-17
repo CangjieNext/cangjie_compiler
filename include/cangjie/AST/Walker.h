@@ -15,11 +15,8 @@
 
 #include <atomic>
 #include <functional>
-#include <type_traits>
 #include <utility>
-#include <vector>
 
-#include "cangjie/AST/ASTCasting.h"
 #include "cangjie/AST/Node.h"
 
 namespace Cangjie::AST {
@@ -32,67 +29,6 @@ enum class VisitAction : uint8_t {
     STOP_NOW,       /**< Stop walking immediately. */
     KEEP_DECISION   /**< Only clean up states. Keep action as it is. */
 };
-
-template <class NodeT> class WalkerT;
-
-/**
- * Stack of ancestor nodes (root at index 0, current node at the back while visiting).
- *
- * Mid-check desugaring may attach desugarExpr to a node already on the stack. Push, Pop,
- * operator[], and FindFirstOf rewrite the accessed slot via AutoDesugar before returning or
- * applying predicates, so callers always observe the sugar-free node. `stack` is mutable so
- * const accessors can perform that rewrite without dropping const on the NodeStackT.
- */
-template <class NodeT>
-struct NodeStackT {
-    size_t Size() const
-    {
-        return stack.size();
-    }
-
-    Ptr<NodeT> operator[](size_t i) const;
-
-    void Push(Ptr<NodeT> n);
-
-    void Pop();
-
-    /**
-     * Search from the top of the stack downward until @p pred returns true.
-     * Each slot is AutoDesugared before pred/stop see it. If @p stop returns true first, return nullptr.
-     */
-    Ptr<NodeT> FindFirstOf(const std::function<bool(Ptr<NodeT>)>& pred,
-        const std::function<bool(Ptr<NodeT>)>& stop = nullptr) const;
-
-    /**
-     * Find the first node of type @p T from the top of the stack.
-     * When @p T is Expr or a subclass of Expr, stop at function boundaries and return nullptr.
-     * Slots are AutoDesugared via FindFirstOf(pred, stop).
-     */
-    template <typename T>
-    Ptr<T> FindFirstOf() const
-    {
-        static_assert(std::is_base_of_v<Node, T>, "T must derive from Node");
-        auto pred = [](Ptr<NodeT> n) { return dynamic_cast<T*>(n.get()); };
-        if constexpr (std::is_base_of_v<Expr, T>) {
-            return DynamicCast<T>(FindFirstOf(pred, [](Ptr<NodeT> n) {
-                return n->IsFuncLike() || n->astKind == ASTKind::MAIN_DECL;
-            }));
-        } else {
-            return DynamicCast<T>(FindFirstOf(pred));
-        }
-    }
-
-private:
-    /** Follow desugarExpr to the sugar-free node; non-Expr nodes are returned unchanged. */
-    static Ptr<NodeT> AutoDesugar(Ptr<NodeT> n);
-    std::vector<Ptr<NodeT>> stack;
-    friend class WalkerT<NodeT>;
-};
-
-using NodeStack = NodeStackT<Node>;
-using ConstNodeStack = NodeStackT<const Node>;
-extern template struct NodeStackT<Node>;
-extern template struct NodeStackT<const Node>;
 
 /**
  * The main class used for walking the Rune AST.
@@ -132,17 +68,12 @@ public:
     /**
      * The function starts an AST walking.
      */
-    void Walk()
+    void Walk() const
     {
         Walk(node);
     };
 
     static unsigned GetNextWalkerID();
-
-    const NodeStackT<NodeT>& GetStack() const
-    {
-        return nodeStack;
-    }
 
 private:
     /**
@@ -165,17 +96,13 @@ private:
      * Next Walker ID.
      */
     static std::atomic_uint nextWalkerID;
-    /**
-     * Ancestor stack while walking.
-     */
-    NodeStackT<NodeT> nodeStack;
 
     /**
      * The function used internally for walking a certain AST node.
      * @param curNode The node to be walked.
      * @return VisitAction decision after walking into it.
      */
-    VisitAction Walk(Ptr<NodeT> curNode);
+    VisitAction Walk(Ptr<NodeT> curNode) const;
     template <typename T> friend class WalkerT;
 };
 using Walker = WalkerT<Node>;

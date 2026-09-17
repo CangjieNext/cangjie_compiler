@@ -1027,13 +1027,11 @@ private:
      */
     bool CheckGenericCallCompatible(
         ASTContext& ctx, FunctionCandidate& candidate, SubstPack& typeMapping, AST::ModalTy targetRet);
-    /**
-     * Check if the this parameter is compatible with the call expression. That is, the this param has the correct
-     * modal. Returns true if no this param, false if checking failed.
-     * @param target target type when it is a ctor call. Unused when it is normal func call.
-     */
+    /** @param target ctor expected type; unused for normal calls. */
     bool CheckThisParamCompatible(
         ASTContext& ctx, const AST::FuncDecl& fd, const AST::CallExpr& ce, AST::ModalTy target);
+    void FilterIncompatibleThisParamCandidates(
+        ASTContext& ctx, AST::CallExpr& ce, AST::ModalTy target, std::vector<Ptr<AST::FuncDecl>>& candidates);
     void FilterTypeMappings(
         const AST::Expr& expr, AST::FuncDecl& fd, std::vector<MultiTypeSubst>& typeMappings);
     bool CheckCandidateConstrains(const AST::CallExpr& ce, const AST::FuncDecl& fd, const SubstPack& typeMapping);
@@ -1865,8 +1863,6 @@ private:
     Ptr<AST::Node> deprecatedContext = nullptr;
     // strict version of outermost @Deprecated declaration
     Ptr<AST::Node> strictDeprecatedContext = nullptr;
-    /** Node stack while Synthesize/Check (same NodeStack as Walker). */
-    AST::NodeStack nodeStack;
     // cjmp typechecker implementation class
     class MPTypeCheckerImpl* mpImpl;
     // checker impl of Modal type
