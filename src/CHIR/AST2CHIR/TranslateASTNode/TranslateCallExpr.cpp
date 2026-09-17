@@ -917,7 +917,7 @@ Value* Translator::TranslateMemberFuncCall(const AST::CallExpr& expr)
         }
         const auto& warningLoc = TranslateLocation(*expr.baseFunc);
         if (auto firstNothingArgIndex = GetFirstNothingTypeArgIndex(args); firstNothingArgIndex.has_value()) {
-            FinalizeNothingCallArguments(*ret->GetExpr(), *firstNothingArgIndex, args.size(), loc, warningLoc);
+            FinalizeNothingCallArguments(*ret->GetExpr(), loc, warningLoc);
         }
     } else {
         auto callee = GetSymbolTable(*resolvedFunction);
@@ -1118,17 +1118,10 @@ std::optional<size_t> Translator::GetFirstNothingTypeArgIndex(const std::vector<
     return static_cast<size_t>(std::distance(args.begin(), it));
 }
 
-void Translator::FinalizeNothingCallArguments(Expression& call, size_t firstNothingArgIndex, size_t argsSize,
-    const DebugLocation& callLoc, const DebugLocation& warningLoc)
+void Translator::FinalizeNothingCallArguments(
+    Expression& call, const DebugLocation& callLoc, const DebugLocation& warningLoc)
 {
     call.Set<DebugLocationInfoForWarning>(warningLoc);
-    if (firstNothingArgIndex + 1U < argsSize) {
-        call.Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
-    } else {
-        call.GetParentBlock()->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
-        // TryCreate advances currentBlock to the normal successor, whose synthetic Exit shares the call location.
-        currentBlock->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
-    }
     CreateAndAppendTerminator<Exit>(callLoc, currentBlock);
     currentBlock = CreateBlock();
     currentBlock->SetDebugLocation(callLoc);

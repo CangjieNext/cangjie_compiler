@@ -63,8 +63,16 @@ Ptr<Value> Translator::Visit(const AST::ArrayExpr& array)
 Expression* Translator::CreateAndAppendApplyCallFromCallExpr(
     Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::CallExpr& expr)
 {
-    auto funcCall = TryCreate<Apply>(currentBlock, instFuncTy.GetReturnType(), &callee, context);
     const auto& loc = TranslateLocation(expr);
+    auto firstNothingArgIndex = GetFirstNothingTypeArgIndex(context.args);
+    if (context.args.size() == expr.args.size() && firstNothingArgIndex.has_value()) {
+        // The never-executed call is a separate unreachable source region from its terminating argument.
+        auto argumentRootLocation = currentBlock->GetDebugLocation();
+        CreateAndAppendTerminator<Exit>(currentBlock);
+        currentBlock = CreateBlock();
+        currentBlock->SetDebugLocation(argumentRootLocation);
+    }
+    auto funcCall = TryCreate<Apply>(currentBlock, instFuncTy.GetReturnType(), &callee, context);
     funcCall->SetDebugLocation(loc);
     if (expr.callKind == AST::CallKind::CALL_SUPER_FUNCTION) {
         if (auto apply = DynamicCast<Apply*>(funcCall)) {
@@ -72,8 +80,8 @@ Expression* Translator::CreateAndAppendApplyCallFromCallExpr(
         }
     }
     const auto& warningLoc = expr.baseFunc != nullptr ? TranslateLocation(*expr.baseFunc) : loc;
-    if (auto firstNothingArgIndex = GetFirstNothingTypeArgIndex(context.args); firstNothingArgIndex.has_value()) {
-        FinalizeNothingCallArguments(*funcCall, *firstNothingArgIndex, context.args.size(), loc, warningLoc);
+    if (firstNothingArgIndex.has_value()) {
+        FinalizeNothingCallArguments(*funcCall, loc, warningLoc);
         return funcCall;
     }
     if (instFuncTy.GetReturnType()->IsNothing()) {
