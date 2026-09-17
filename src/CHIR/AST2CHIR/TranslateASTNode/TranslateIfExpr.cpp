@@ -454,6 +454,14 @@ public:
         }
         tr.SetCurrentBlock(*endBlock);
         if (retVal) {
+            auto predecessors = endBlock->GetPredecessors();
+            // Expected-type propagation can hide that every nested branch terminates. Empty predecessor blocks ending
+            // in skipped gotos are detached continuations, so the if expression has no value to load.
+            if (std::all_of(predecessors.begin(), predecessors.end(), [](auto predecessor) {
+                    return predecessor->GetExpressions().size() == 1U;
+                })) {
+                return nullptr;
+            }
             auto ret = tr.GetDerefedValue(retVal, tr.TranslateLocation(e1));
             if (forceGenerateUnit) {
                 StaticCast<LocalVar>(ret)->GetExpr()->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);

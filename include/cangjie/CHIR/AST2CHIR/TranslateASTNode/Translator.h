@@ -714,8 +714,7 @@ private:
 
     Expression* CreateAndAppendApplyCallFromCallExpr(
         Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::CallExpr& expr);
-    void FinalizeNothingCallArguments(Expression& call, size_t firstNothingArgIndex, size_t argsSize,
-        const DebugLocation& callLoc, const DebugLocation& warningLoc);
+    void FinalizeNothingCallArguments(Expression& call, const DebugLocation& callLoc, const DebugLocation& warningLoc);
     Expression* CreateAndAppendApplyCallFromArray(
         Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::Expr& array);
     Expression* CreateAndAppendGVInitFuncCall(Value& callee);
