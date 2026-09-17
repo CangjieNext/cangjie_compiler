@@ -143,7 +143,7 @@ private:
     // should be set true, and set false while leaving.
     bool enableThis{false};
     bool deadlocked{false};
-    bool inForeignBlock{false};
+    std::set<AST::Modifier> foreignBlockModifiers; // Modifiers inherited from the enclosing foreign block.
     bool enableCustomAnno{false}; // parse macrocall as custom annotation.
 
     std::unique_ptr<Lexer> lexer;

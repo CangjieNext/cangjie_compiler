@@ -144,6 +144,33 @@ protected:
     std::unique_ptr<TestCompilerInstance> instance;
 };
 
+TEST_F(MacroTest, ForeignBlockMacroExpansion)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    ASSERT_EQ(system(command.c_str()), 0);
+
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {srcPath + "foreign_block.cj"};
+    instance->Compile(CompileStage::PARSE);
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    instance->PerformImportPackage();
+    instance->PerformMacroExpand();
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+
+    const auto& decls = instance->GetSourcePackages()[0]->files[0]->decls;
+    ASSERT_EQ(decls.size(), 5);
+    const std::vector<std::string> names = {"first", "second", "third", "fourth", "ordinary"};
+    for (size_t i = 0; i < decls.size(); ++i) {
+        auto func = AST::As<ASTKind::FUNC_DECL>(decls[i].get());
+        ASSERT_NE(func, nullptr);
+        EXPECT_EQ(func->identifier, names[i]);
+        EXPECT_EQ(func->TestAttr(Attribute::FOREIGN), i < 4);
+        ASSERT_NE(func->funcBody, nullptr);
+        EXPECT_EQ(func->funcBody->body == nullptr, i < 4);
+    }
+}
+
 TEST_F(MacroTest, MacroProcess_Curfile)
 {
     auto src = srcPath + "func.cj";

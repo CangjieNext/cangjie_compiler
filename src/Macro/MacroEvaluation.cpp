@@ -367,6 +367,7 @@ void CheckMacroCallArgs(MacroCall& macCall, DiagnosticEngine& diag, bool compile
         auto errCnt = diag.GetErrorCount();
         Parser parser{newTokens, diag, diag.GetSourceManager(), false, compileCjd};
         parser.SetPrimaryDecl(primaryName).SetCurFile(macCall.GetNode()->curFile);
+        parser.SetForeignBlockModifiers(macCall.GetModifiers());
         parser.ParseDecl(scopeKind);
         if (diag.GetErrorCount() > errCnt) {
             macCall.status = MacroEvalStatus::FAIL;
@@ -667,6 +668,7 @@ void MacroEvaluation::CreateChildMacroCall(
     Parser parser{tokensToParse, diag, ci->diag.GetSourceManager(), false,
         ci->invocation.globalOptions.compileCjd};
     parser.SetPrimaryDecl(primaryName).SetCurFile(macCall.GetNode()->curFile);
+    parser.SetForeignBlockModifiers(macCall.GetModifiers());
     parser.SetCompileOptions(ci->invocation.globalOptions);
     auto decl = parser.ParseDecl(ScopeKind(scopeKind));
     if (!decl->IsMacroCallNode()) {
