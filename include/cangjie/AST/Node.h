@@ -2808,7 +2808,6 @@ struct TypeConvExpr : Expr {
     Position leftParenPos;  /**< Position of '('. */
     OwnedPtr<Expr> expr;    /**< The expr to be convert. */
     Position rightParenPos; /**< Position of ')'. */
-    ASTModalInfo modal;     /**< Postfix modal on type conv, Optional. e.g. Int64(3) @local!. */
     TypeConvExpr() : Expr(ASTKind::TYPE_CONV_EXPR)
     {
     }

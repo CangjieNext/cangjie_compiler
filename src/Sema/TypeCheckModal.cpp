@@ -227,8 +227,8 @@ private:
 /// 6. Check non-struct types cannot inherit Copyable (in PreCheckInvalidInherit);
 ///    extend of non-struct cannot inherit Copyable (in CheckExtendInterfaces)
 /// 7. Check assignment/member-assignment
-/// 8. Check exclave expr is inside a func-like body whose signature has a non-Copyable or
-/// non-data return/parameter/this type; not in param default values or global/static initializer
+/// 8. Check exclave expr is inside a func-like body whose signature has a non copy local! or local? return type, or
+///    non copy local! param type; not in param default values or global/static initializer
 /// 9. Check exclave expr is not nested inside another exclave or exclave function
 /// 10. Check exclave expr is not in static init, finalizer, main, spawn, or try/catch/handle block
 /// 11. Check abstract func cannot be exclave
@@ -368,9 +368,7 @@ private:
             if (func->IsFinalizer()) {
                 CheckFinalizerThisParam(*func);
             }
-            // Default-value exprs cannot capture a `@local!` variable of non copy type: other
-            // params, in-scope locals, or implicit-`this` members when `this` is `@local!`
-            // non copy type.
+            // Default-value exprs cannot capture a `@local!` variable of non copy type
             if (func->funcBody && !func->funcBody->paramLists.empty()) {
                 for (auto& fp : func->funcBody->paramLists[0]->params) {
                     if (fp && fp->assignment) {
@@ -378,6 +376,7 @@ private:
                     }
                 }
             }
+            CheckExclaveModifierInInvalidFunSig(*func);
         }
         if (Is<SpawnExpr>(node)) {
             PushForbiddenContext("spawn expr");
@@ -655,7 +654,7 @@ private:
     }
 
     /// Exclave must be in a func that has a
-    /// non-copy @local (or equivalent) parameter, return, or this type.
+    /// non-copy @local! parameter, or non copy local! or local? return type.
     void CheckExclaveInInvalidFunSig(const ASTContext& ctx, const ExclaveExpr& expr)
     {
         std::string scopeName = ScopeManagerApi::GetScopeNameWithoutTail(expr.scopeName);
@@ -667,6 +666,24 @@ private:
         auto funcSym = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, scopeName);
         if (!funcSym || !funcSym->node || !FuncLikeSignatureAllowsExclave(*funcSym->node)) {
             DiagExclaveInvalidFuncSignature(expr);
+        }
+    }
+
+    /// check exclave func with the same logic as exclave block
+    void CheckExclaveModifierInInvalidFunSig(const FuncDecl& func)
+    {
+        const Modifier* mod{};
+        for (auto& m : func.modifiers) {
+            if (m.modifier == TokenKind::EXCLAVE) {
+                mod = &m;
+                break;
+            }
+        }
+        if (!mod) {
+            return;
+        }
+        if (!FuncLikeSignatureAllowsExclave(func)) {
+            DiagExclaveInvalidFuncSignature(*mod);
         }
     }
 
@@ -721,8 +738,9 @@ private:
         d.DiagnoseRefactor(DiagKindRefactor::sema_exclave_outside_function, expr);
     }
 
-    void DiagExclaveInvalidFuncSignature(const ExclaveExpr& expr)
+    void DiagExclaveInvalidFuncSignature(const Node& expr)
     {
+        // either report on an exclave func, or on a exclave modifier of a func
         d.DiagnoseRefactor(DiagKindRefactor::sema_exclave_invalid_func_signature, expr);
     }
 

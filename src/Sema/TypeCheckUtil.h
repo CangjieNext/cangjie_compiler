@@ -344,6 +344,12 @@ T* GetMemberDecl(
 }
 
 /**
+ * Whether a (possibly private) target is visible to @p node.
+ * Private decls are visible in the same file; arrayInitBy* are also visible in std.core.
+ */
+bool IsTargetVisibleToNode(const AST::Decl& target, const AST::Node& node);
+
+/**
  * Filter out the targets without access rights in the searched targets.
  * @param curComposite Represents the position of the referrer.
  * NOTICE: Whether the modifier will be downgraded in spec is not yet determined.

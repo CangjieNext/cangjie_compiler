@@ -129,6 +129,31 @@ std::string GetPrimaryName(const MacroInvocation& invocation)
     return "";
 }
 
+// True when tokens at `atIndex` are a local-mode token pattern: @local! / @local? / @~local.
+// Positions are not checked here — macro-emitted tokens may share a column until RefreshNewTokensPos;
+// adjacency for ~local / local!/? is restored there via IsAdjacentLocalModePair.
+bool IsModalAfterAt(const TokenVector& tokens, size_t atIndex)
+{
+    // Local mode is three tokens: @ ~ local  or  @ local !/?
+    constexpr size_t localModeLastOffset = 2;
+    constexpr std::string_view localMode{"local"};
+    if (atIndex + 1 >= tokens.size()) {
+        return false;
+    }
+    const Token& t1 = tokens[atIndex + 1];
+    if (t1.kind == TokenKind::BITNOT) {
+        return atIndex + localModeLastOffset < tokens.size() &&
+            tokens[atIndex + localModeLastOffset].kind == TokenKind::IDENTIFIER &&
+            tokens[atIndex + localModeLastOffset].Value() == localMode;
+    }
+    if (t1.kind == TokenKind::IDENTIFIER && t1.Value() == localMode &&
+        atIndex + localModeLastOffset < tokens.size()) {
+        auto k = tokens[atIndex + localModeLastOffset].kind;
+        return k == TokenKind::NOT || k == TokenKind::QUEST;
+    }
+    return false;
+}
+
 bool HasMacroCallToEval(const std::string& moduleName, const TokenVector& inputTokens, size_t curIndex,
     size_t tokenSize, std::vector<Position>& escapePosVec)
 {
@@ -140,6 +165,10 @@ bool HasMacroCallToEval(const std::string& moduleName, const TokenVector& inputT
         return false;
     }
     if (IsBuiltinAnnotation(moduleName, inputTokens[curIndex + 1].Value())) {
+        return false;
+    }
+    // @local! / @local? / @~local are modal type/this-mode, not macro calls.
+    if (IsModalAfterAt(inputTokens, curIndex)) {
         return false;
     }
     if (!IsIdentifierOrContextualKeyword(inputTokens[curIndex + 1].kind)) {
@@ -168,7 +197,7 @@ static bool HasMacroCallInTokens(const TokenVector& tokens, const std::string& m
                                  const std::string& currentIdentifier)
 {
     for (size_t i = 0; i + 1 < tokens.size(); i++) {
-        if (tokens[i].Value() == "@" &&
+        if (tokens[i].Value() == "@" && !IsModalAfterAt(tokens, i) &&
             IsIdentifierOrContextualKeyword(tokens[i + 1].kind) &&
             !IsBuiltinAnnotation(moduleName, tokens[i + 1].Value()) &&
             tokens[i + 1].Value() != currentIdentifier) {
@@ -849,9 +878,11 @@ void MacroEvaluation::CreateMacroCallTree(MacroCall& macCall, bool reEval)
     auto tokenSize = inputTokens.size();
     while (curIndex < tokenSize) {
         auto posTmp = inputTokens[curIndex].Begin();
-        // if current Token is not escaped @ or not macrocall like @MacroIdentidier, should be error
+        // Bare `@` that is neither an escaped quote-`@`, a macro call `@Name`, nor a modal
+        // `@local!` / `@local?` / `@~local` is illegal in macro input/output.
         if (inputTokens[curIndex].kind == TokenKind::AT &&
             std::find(escapePosVec.begin(), escapePosVec.end(), posTmp) == escapePosVec.end() &&
+            !IsModalAfterAt(inputTokens, curIndex) &&
             (curIndex == tokenSize - 1 || !IsIdentifierOrContextualKeyword(inputTokens[curIndex + 1].kind))) {
             (void)ci->diag.Diagnose(posTmp, DiagKind::macro_expand_invalid_input_tokens);
         }
