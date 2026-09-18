@@ -539,18 +539,6 @@ bool IsNodeInTypeAliasDecl(const Node& node, const TypeAliasDecl& tad)
     walker.Walk();
     return found;
 }
-
-bool IsTargetVisibleToNode(const Decl& target, const Node& node)
-{
-    // arrayInitBy* are private but available in std.core
-    if (target.TestAttr(Attribute::PRIVATE) && node.curFile->curPackage->fullPackageName == CORE_PACKAGE_NAME) {
-        if (target.identifier == "arrayInitByFunction" || target.identifier == "arrayInitByCollection") {
-            return true;
-        }
-    }
-    // In the LSP, the 'node' may be a new ast node, 'curFile' pointer consistency cannot be ensured.
-    return !target.TestAttr(Attribute::PRIVATE) || (target.curFile && node.curFile && *target.curFile == *node.curFile);
-}
 } // namespace
 
 bool LookUpImpl::IsTargetMemberVisibleToNode(const Decl& target, const Node& node)

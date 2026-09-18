@@ -1554,6 +1554,19 @@ inline bool IsNormalCtorRef(const AST::Node& node)
     return !re || (!re->isThis && !re->isSuper);
 }
 
+bool IsTargetVisibleToNode(const Decl& target, const Node& node)
+{
+    // arrayInitBy* are private but available in std.core
+    if (target.TestAttr(Attribute::PRIVATE) && node.curFile && node.curFile->curPackage &&
+        node.curFile->curPackage->fullPackageName == CORE_PACKAGE_NAME) {
+        if (target.identifier == "arrayInitByFunction" || target.identifier == "arrayInitByCollection") {
+            return true;
+        }
+    }
+    // In the LSP, the 'node' may be a new ast node, 'curFile' pointer consistency cannot be ensured.
+    return !target.TestAttr(Attribute::PRIVATE) || (target.curFile && node.curFile && *target.curFile == *node.curFile);
+}
+
 bool IsLegalAccess(Symbol* curComposite, const Decl& d, const AST::Node& node, ImportManager& importManager,
     TypeManager& typeManager)
 {
@@ -1591,13 +1604,7 @@ bool IsLegalAccess(Symbol* curComposite, const Decl& d, const AST::Node& node, I
     if (d.TestAttr(Attribute::GLOBAL) || flag) {
         // When decl is private it can only be accessed in same file,
         if (d.TestAttr(Attribute::PRIVATE)) {
-            // In the LSP, the 'node' may be a new ast node, 'curFile' pointer consistency cannot be ensured.
-            if (node.curFile && d.curFile && *node.curFile == *d.curFile) {
-                return true;
-            }
-            // arrayInitBy* are private but available in std.core
-            return node.curFile->curPackage->fullPackageName == CORE_PACKAGE_NAME &&
-                (d.identifier == "arrayInitByFunction" || d.identifier == "arrayInitByCollection");
+            return IsTargetVisibleToNode(d, node);
         }
         return Modules::IsVisible(d, relation);
     }

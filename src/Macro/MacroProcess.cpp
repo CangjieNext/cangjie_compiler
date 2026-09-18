@@ -6,6 +6,7 @@
 
 #include <fstream>
 #include <algorithm>
+#include <string_view>
 
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
@@ -32,6 +33,43 @@ bool IsSpecialToken(TokenKind prevTokenKind, TokenKind curTokenKind)
         tkSet1.find(std::pair<TokenKind, TokenKind>(prevTokenKind, curTokenKind)) != tkSet1.end();
 }
 
+size_t GetTokenLenth(const Token& token)
+{
+    return GetTokenLength(token.Value().size(), token.kind, token.delimiterNum);
+}
+
+Position EffectiveTokenEnd(const Token& tok)
+{
+    if (tok.End() != tok.Begin()) {
+        return tok.End();
+    }
+    // End unset on some macro tokens — recover span from Begin + length.
+    return tok.Begin() + GetTokenLenth(tok);
+}
+
+// RefreshNewTokensPos inserts a column gap by default. For @local! / @local? / @~local, skip the gap unless the
+// original tokens already had a column gap (e.g. @local !). Named-param name!: is not local-mode (@ absent).
+// Macro tokens may share Begin until refresh; that is not a gap, so still glue.
+bool HasSourceColumnGap(const Token& prev, const Token& cur)
+{
+    return cur.Begin() > EffectiveTokenEnd(prev);
+}
+
+bool IsAdjacentLocalModePair(const Token& at, const Token& prev, const Token& cur)
+{
+    if (at.kind != TokenKind::AT || HasSourceColumnGap(prev, cur)) {
+        return false;
+    }
+    constexpr std::string_view localMode{"local"};
+    // @~local: glue ~ and local
+    if (prev.kind == TokenKind::BITNOT && cur.kind == TokenKind::IDENTIFIER && cur.Value() == localMode) {
+        return true;
+    }
+    // @local! / @local?: glue local and !/?
+    return prev.kind == TokenKind::IDENTIFIER && prev.Value() == localMode &&
+        (cur.kind == TokenKind::NOT || cur.kind == TokenKind::QUEST);
+}
+
 void ReportMappingFailedDiag(
     std::vector<Token>& oldTokens, std::vector<Token>& newTokens, const Position mcPos, CompilerInstance& ci)
 {
@@ -55,11 +93,6 @@ void ReportMappingFailedDiag(
         }
     }
     return;
-}
-
-size_t GetTokenLenth(const Token& token)
-{
-    return GetTokenLength(token.Value().size(), token.kind, token.delimiterNum);
 }
 
 void CollectMacroDebugPosition(MacroInvocation& invocation, const Token& token, unsigned int lastColumn)
@@ -157,7 +190,8 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
     auto mcPos = node.begin;
     pMacroInvocation->origin2newPosMap[mcPos.Hash64()] = mcPos;
     auto lastColumn = static_cast<unsigned int>(sm.GetLineEnd(mcPos) + 1);
-    auto prevTokenKind = TokenKind::END;
+    Token prevOrig{TokenKind::END};
+    Token beforePrevOrig{TokenKind::END};
     pMacroInvocation->macroAtPosition.emplace_back(mcPos);
     size_t threadNum = std::thread::hardware_concurrency();
     Cangjie::Utils::TaskQueue taskQueue(threadNum);
@@ -178,8 +212,9 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
     }
     taskQueue.RunAndWaitForAllTasksCompleted();
     for (auto& token : pMacroInvocation->newTokens) {
-        // For case: A() A[] A<> A?? >> >=.
-        if (!IsSpecialToken(prevTokenKind, token.kind)) {
+        // No column gap for A() A[] A<> A?? >> >= ~init, or local-mode pairs that must stay adjacent.
+        if (!IsSpecialToken(prevOrig.kind, token.kind) &&
+            !IsAdjacentLocalModePair(beforePrevOrig, prevOrig, token)) {
             lastColumn += 1;
         }
         if (ci.invocation.globalOptions.enableCompileDebug || ci.invocation.globalOptions.displayLineInfo) {
@@ -197,6 +232,8 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
             pMacroInvocation->macroCallDiagInfo.new2originPosMap[keyPos.Hash32()] = token.Begin();
         }
         auto key = token.Begin().Hash64();
+        // Snapshot original positions before SetValuePos; adjacency checks need the pre-refresh Begin/End.
+        Token tokenOrig = token;
         Position begin = token.Begin();
         begin.fileID = mcPos.fileID;
         begin.line = mcPos.line;
@@ -213,7 +250,8 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
             pMacroInvocation->origin2newPosMap.find(key) == pMacroInvocation->origin2newPosMap.end()) {
             pMacroInvocation->origin2newPosMap[key] = token.Begin();
         }
-        prevTokenKind = token.kind;
+        beforePrevOrig = prevOrig;
+        prevOrig = std::move(tokenOrig);
     }
     if (ci.invocation.globalOptions.enableCompileDebug || ci.invocation.globalOptions.displayLineInfo) {
         pMacroInvocation->macroDebugMap[lastColumn] = node.end;
