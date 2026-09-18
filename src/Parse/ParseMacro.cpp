@@ -60,7 +60,7 @@ std::vector<OwnedPtr<Node>> ParserImpl::ParseNodes(std::variant<ScopeKind, ExprK
     this->currentFile = currentMacroCall.curFile;
     this->curMacroCall = &currentMacroCall;
     if (currentMacroCall.astKind == ASTKind::MACRO_EXPAND_DECL && HasModifier(modifiers, TokenKind::FOREIGN)) {
-        foreignBlockModifiers = modifiers;
+        std::set<Modifier>(modifiers).swap(foreignBlockModifiers);
     }
     auto isConnectedByComma = false;
     auto isParamMacro = false;
