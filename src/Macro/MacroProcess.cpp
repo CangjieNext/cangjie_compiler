@@ -6,6 +6,7 @@
 
 #include <fstream>
 #include <algorithm>
+#include <string_view>
 
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
@@ -30,6 +31,33 @@ bool IsSpecialToken(TokenKind prevTokenKind, TokenKind curTokenKind)
         std::pair<TokenKind, TokenKind>(TokenKind::BITNOT, TokenKind::INIT)};
     return tkSet0.find(curTokenKind) != tkSet0.end() ||
         tkSet1.find(std::pair<TokenKind, TokenKind>(prevTokenKind, curTokenKind)) != tkSet1.end();
+}
+
+// RefreshNewTokensPos inserts a column gap between most tokens. A local mode is
+// only formed when its tokens are adjacent (@local! / @local? / @~local), matching
+// ParseModeSpecifier's End()==Begin() checks — so keep that whole chain glued.
+bool NoSpaceBetween(const Token& prev, const Token& cur)
+{
+    if (IsSpecialToken(prev.kind, cur.kind)) {
+        return true;
+    }
+    constexpr std::string_view localMode{"local"};
+    if (prev.kind == TokenKind::AT) {
+        if (cur.kind == TokenKind::BITNOT) {
+            return true; // @~
+        }
+        if (cur.kind == TokenKind::IDENTIFIER && cur.Value() == localMode) {
+            return true; // @local
+        }
+    }
+    if (prev.kind == TokenKind::BITNOT && cur.kind == TokenKind::IDENTIFIER && cur.Value() == localMode) {
+        return true; // ~local
+    }
+    if (prev.kind == TokenKind::IDENTIFIER && prev.Value() == localMode &&
+        (cur.kind == TokenKind::NOT || cur.kind == TokenKind::QUEST)) {
+        return true; // local! / local?
+    }
+    return false;
 }
 
 void ReportMappingFailedDiag(
@@ -157,7 +185,7 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
     auto mcPos = node.begin;
     pMacroInvocation->origin2newPosMap[mcPos.Hash64()] = mcPos;
     auto lastColumn = static_cast<unsigned int>(sm.GetLineEnd(mcPos) + 1);
-    auto prevTokenKind = TokenKind::END;
+    Token prevToken{TokenKind::END};
     pMacroInvocation->macroAtPosition.emplace_back(mcPos);
     size_t threadNum = std::thread::hardware_concurrency();
     Cangjie::Utils::TaskQueue taskQueue(threadNum);
@@ -178,8 +206,8 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
     }
     taskQueue.RunAndWaitForAllTasksCompleted();
     for (auto& token : pMacroInvocation->newTokens) {
-        // For case: A() A[] A<> A?? >> >=.
-        if (!IsSpecialToken(prevTokenKind, token.kind)) {
+        // For case: A() A[] A<> A?? >> >=, and modal @local! / @~local.
+        if (!NoSpaceBetween(prevToken, token)) {
             lastColumn += 1;
         }
         if (ci.invocation.globalOptions.enableCompileDebug || ci.invocation.globalOptions.displayLineInfo) {
@@ -213,7 +241,7 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
             pMacroInvocation->origin2newPosMap.find(key) == pMacroInvocation->origin2newPosMap.end()) {
             pMacroInvocation->origin2newPosMap[key] = token.Begin();
         }
-        prevTokenKind = token.kind;
+        prevToken = token;
     }
     if (ci.invocation.globalOptions.enableCompileDebug || ci.invocation.globalOptions.displayLineInfo) {
         pMacroInvocation->macroDebugMap[lastColumn] = node.end;
