@@ -25,7 +25,8 @@ OwnedPtr<AST::Decl> Parser::ParseDecl(ScopeKind scopeKind)
 
 Parser& Parser::SetForeignBlockModifiers(const std::set<AST::Modifier>& modifiers)
 {
-    impl->foreignBlockModifiers = modifiers;
+    // Modifier is copy-constructible but not copy-assignable.
+    std::set<AST::Modifier>(modifiers).swap(impl->foreignBlockModifiers);
     return *this;
 }
 
