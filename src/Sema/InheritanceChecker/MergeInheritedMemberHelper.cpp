@@ -9,13 +9,10 @@
  *
  * This file implements how to merge inherited parent member to child member.
  */
-#include "cangjie/AST/Node.h"
-#include "cangjie/AST/Types.h"
-#include "cangjie/AST/Utils.h"
-#include "cangjie/Sema/TypeManager.h"
+#include "StructInheritanceChecker.h"
+
+#include "Promotion.h"
 #include "TypeCheckUtil.h"
-#include "NativeFFI/Java/TypeCheck/InheritanceChecker.h"
-#include "InheritanceChecker/MemberSignature.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -172,7 +169,9 @@ MemberSignature StructInheritanceChecker::UpdateInheritedMemberIfNeeded(
             continue;
         }
         bool shouldUpdate = true;
-        bool inconsistentType = needImplement && (parent.ty != child.ty || parent.thisMode != child.thisMode);
+        // Compare after promoting onto the most derived type so generic diamond paths are not false conflicts.
+        bool inconsistentType = needImplement && (parent.thisMode != child.thisMode ||
+            !typeManager.IsTyEqual(PromoteMemberTyToCheckingDecl(parent), PromoteMemberTyToCheckingDecl(child)));
         if (parent.decl->IsFunc()) {
             if (child.decl->TestAttr(Attribute::GENERIC) && parent.decl->TestAttr(Attribute::GENERIC)) {
                 TypeSubst typeMapping = typeManager.GenerateGenericMappingFromGeneric(
@@ -216,27 +215,69 @@ MemberSignature StructInheritanceChecker::UpdateInheritedMemberIfNeeded(
                 it->second.extendDecl = nullptr;
             }
             it->second.isInheritedInterface = child.isInheritedInterface && inheritedInterfaces; // Update status.
-            // If default interface member merged to other default interface member, and:
-            // 1. current is merging members of type inherited interfaces, or
-            // 2. current is merging extend visible members in other extend
-            // eg: interface I1 { func foo(): Unit {} }; interface I2 <: I1 { func foo(): Unit {} };
-            //     open class C1 <: I1; class C2 <: C1 & I1; is allowed to ignore 'foo' in C2.
-            //     class A <: I1 & I2; the 'foo' must be implemented.
-            //     extend A <: I1 {}; extend A <: I2; the 'foo' does not have to be implemented.
-            //     interface I3 { func foo(): Unit {} }; extend A <: I1 {}; extend A <: I3; the 'foo' must be
-            //     implemented.
+            // Dual default members: require an explicit impl only when they are distinct defaults that still
+            // share a signature after promotion onto the most derived type. The same default inherited via
+            // multiple paths (diamond: C <: B & A where B <: A) is not a conflict. Mismatched promoted types
+            // are handled by normal overload / inconsistent-type checking above.
             bool isRelationExtend = true;
             if (!checkingDecls.empty() && checkingDecls[0]->astKind == ASTKind::EXTEND_DECL && child.extendDecl) {
                 auto curExtend = StaticCast<ExtendDecl*>(checkingDecls[0].get());
                 isRelationExtend = typeManager.IsExtendInheritRelation(*curExtend, *child.extendDecl).first;
             }
-            it->second.shouldBeImplemented = (it->second.isInheritedInterface || !isRelationExtend) &&
-                child.decl->TestAttr(Attribute::DEFAULT) && parent.decl->TestAttr(Attribute::DEFAULT);
+            bool dualDefaultContext = it->second.isInheritedInterface || !isRelationExtend;
+            it->second.shouldBeImplemented = NeedReimplementMergedDefaults(parent, child, dualDefaultContext);
             return it->second;
         }
     }
     inheritedMembers.emplace(child.decl->identifier, updated);
     return updated;
+}
+
+DataTy StructInheritanceChecker::PromoteMemberTyToCheckingDecl(const MemberSignature& member) const
+{
+    if (!Ty::IsTyCorrect(member.ty) || !member.decl || !member.decl->outerDecl) {
+        return member.ty;
+    }
+    auto outerTy = member.decl->outerDecl->DataTy();
+    if (!Ty::IsTyCorrect(outerTy)) {
+        return member.ty;
+    }
+    // Inheritance-path interface type keeps diamond instantiations (A<Int> vs A<String>) distinct.
+    DataTy pathTy = Ty::IsTyCorrect(member.structTy) ? member.structTy : outerTy;
+    auto pathSubst = GenerateTypeMappingByTy(outerTy, pathTy);
+    DataTy pathInstTy =
+        pathSubst.empty() ? member.decl->DataTy() : typeManager.GetInstantiatedTy(member.decl->DataTy(), pathSubst);
+    if (checkingDecls.empty() || !Ty::IsTyCorrect(checkingDecls.back()->DataTy())) {
+        return Ty::IsTyCorrect(pathInstTy) ? pathInstTy : member.ty;
+    }
+    auto derivedTy = checkingDecls.back()->DataTy();
+    auto mts = Promotion(typeManager).GetPromoteTypeMapping(derivedTy, pathTy);
+    if (mts.empty()) {
+        return Ty::IsTyCorrect(pathInstTy) ? pathInstTy : member.ty;
+    }
+    auto instTys = typeManager.GetInstantiatedTys(pathInstTy, mts);
+    if (instTys.size() == 1) {
+        return *instTys.begin();
+    }
+    // Ambiguous promotion set: keep the path-resolved type already carried by the member.
+    return member.ty;
+}
+
+bool StructInheritanceChecker::NeedReimplementMergedDefaults(
+    const MemberSignature& parent, const MemberSignature& child, bool dualDefaultContext) const
+{
+    if (!dualDefaultContext || !parent.decl || !child.decl) {
+        return false;
+    }
+    if (!parent.decl->TestAttr(Attribute::DEFAULT) || !child.decl->TestAttr(Attribute::DEFAULT)) {
+        return false;
+    }
+    // Same underlying default (diamond inheritance): never require a re-implementation here.
+    // Distinct defaults with the same promoted signature still must be implemented explicitly.
+    if (parent.decl == child.decl || parent.thisMode != child.thisMode) {
+        return false;
+    }
+    return typeManager.IsTyEqual(PromoteMemberTyToCheckingDecl(parent), PromoteMemberTyToCheckingDecl(child));
 }
 
 /**

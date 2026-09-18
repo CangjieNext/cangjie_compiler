@@ -61,6 +61,18 @@ private:
         MemberMap& inheritedMembers, const MemberSignature& child, bool inheritedInterfaces = false);
     bool ComputeInconsistentTypes(const MemberSignature& child, const MemberSignature& parent, MemberSignature& updated,
         const std::pair<bool, bool>& status, std::vector<AST::ModalTy>& inconsistentTypes) const;
+    /**
+     * Promote @p member's signature type onto the decl currently under check (most derived / non-interface type).
+     * Used to compare inherited defaults that arrive via different interface paths with different generic views.
+     */
+    AST::DataTy PromoteMemberTyToCheckingDecl(const MemberSignature& member) const;
+    /**
+     * True when two default interface members must be re-implemented by the current type.
+     * Same default inherited via multiple paths (diamond) is not a conflict when promoted types match.
+     * Distinct defaults with the same promoted type still require an explicit implementation.
+     */
+    bool NeedReimplementMergedDefaults(const MemberSignature& parent, const MemberSignature& child,
+        bool dualDefaultContext) const;
     void MergeInheritedMembers(
         MemberMap& members, const MemberMap& otherMembers, DataTy structTy, bool inheritedInterfaces = false);
     void DiagnoseForOverriddenMember(const MemberSignature& child) const;
