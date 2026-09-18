@@ -145,13 +145,14 @@ ModalWriteKind CodeGen::ClassifyModalWrite(CHIRBuilder& builder, const Expressio
                                                              : ModalWriteKind::DEMODE;
     }
 
-    // Keep all local-aware writes out of the ordinary MCC_WriteRefField hot path:
-    //   - NONE (`~local`) : owner/value are ordinary heap references, use gcwrite.ref.
-    //   - MUST (`local!`) : owner/value live in a local region; the local-aware runtime ABI
-    //                       performs the direct local-to-local store.
-    //   - MAYBE (`local?`): the runtime has to classify owner/value dynamically.
-    // Reusing maybe.local.write.ref for MUST avoids adding IsLocalObject checks to every
-    // normal-mode field write and does not require another LLVM intrinsic.
-    return memberDataType->GetModalInfo().Local() == CHIR::Mode::NONE ? ModalWriteKind::NONE
-                                                                      : ModalWriteKind::MAYBE_LOCAL;
+    auto ownerMode = member.ownerModal.Local();
+    auto valueMode = memberDataType->GetModalInfo().Local();
+    // gcwrite.ref lowers to MCC_WriteRefField, which directly stores when the owner is not a
+    // tracing-heap object. A proven local! -> local! write can therefore reuse that path without
+    // runtime local-object classification. Any local? side still requires dynamic classification.
+    if (valueMode == CHIR::Mode::NONE ||
+        (ownerMode == CHIR::Mode::MUST && valueMode == CHIR::Mode::MUST)) {
+        return ModalWriteKind::NONE;
+    }
+    return ModalWriteKind::MAYBE_LOCAL;
 }

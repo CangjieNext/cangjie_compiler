@@ -2247,7 +2247,14 @@ llvm::Value* IRBuilder2::GetTypeInfoFromObject(llvm::Value* obj)
     auto inst =
         LLVMIRBuilder2::CreateLoad(tiPtrType, LLVMIRBuilder2::CreateBitCast(obj, tiPtrType->getPointerTo(1U)), "ti");
     inst->setMetadata(llvm::LLVMContext::MD_invariant_load, llvm::MDNode::get(getContext(), {}));
-    return inst;
+    if (GetCGContext().GetCompileOptions().target.arch == Triple::ArchType::ARM32) {
+        return inst;
+    }
+
+    // The high 16 bits of the 64-bit object header are used by runtime StateWord state codes.
+    auto rawTi = LLVMIRBuilder2::CreatePtrToInt(inst, getInt64Ty());
+    auto tiAddress = LLVMIRBuilder2::CreateAnd(rawTi, getInt64(0x0000FFFFFFFFFFFFULL), "ti.addr");
+    return LLVMIRBuilder2::CreateIntToPtr(tiAddress, tiPtrType);
 }
 
 llvm::Value* IRBuilder2::GetPayloadFromObject(llvm::Value* obj)

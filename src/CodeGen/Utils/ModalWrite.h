@@ -28,7 +28,7 @@ namespace CodeGen {
 /// Which write barrier a store to an instance member variable must use.
 enum class ModalWriteKind : uint8_t {
     NONE,        ///< ordinary GC write barrier (llvm.cj.gcwrite.ref)
-    MAYBE_LOCAL, ///< llvm.cj.maybe.local.write.ref -- local-aware write for local! / local? fields
+    MAYBE_LOCAL, ///< llvm.cj.maybe.local.write.ref -- local-aware write when localness is uncertain
     DEMODE,      ///< llvm.cj.demode.write.ref -- demoded field, value is always on the heap
 };
 
