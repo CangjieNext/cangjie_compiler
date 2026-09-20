@@ -13,6 +13,8 @@ ERROR(module_version_not_identical,
     "cjo file '%s' for package '%s' is incompatible: compiled with cjc '%s', but the current compiler is cjc '%s'")
 ERROR(module_open_bcFile_failed, "can't open output file '%s': '%s'")
 ERROR(module_loaded_ast_failed, "validation of %s file '%s' failed, please confirm it was created by compiler whose version is '%s'.")
+ERROR(module_loaded_ast_failed_with_version,
+    "validation of %s file '%s' failed: it was compiled with cjc '%s', but the current compiler is cjc '%s'.")
 ERROR(module_same_name_with_indirect_dependent_pkg, "failed to load dependent package '%s' for package '%s', which have same package name with source package")
 
 WARNING(module_common_cjo_no_options, DEPRECATED, "common part cjo is missing serialized options, possibly compiled by an old cjc")
