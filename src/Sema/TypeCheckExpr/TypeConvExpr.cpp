@@ -34,10 +34,14 @@ ModalTy TypeChecker::TypeCheckerImpl::SynTypeConvExpr(ASTContext& ctx, TypeConvE
 
 ModalTy TypeChecker::TypeCheckerImpl::SynNumTypeConvExpr(TypeConvExpr& tce)
 {
-    // use explicit modal written after Int64(3) ...
-    // although most primitive types are copy type.
-    tce.SetTy({TypeManager::GetPrimitiveTy(StaticCast<PrimitiveType*>(tce.type.get())->kind), tce.modal.ToModalInfo()});
-    if (!tce.expr->GetTy().IsCorrect() || !tce.GetTy().IsCorrect()) {
+    if (!tce.expr->GetTy().IsCorrect()) {
+        tce.SetTy({TypeManager::GetInvalidTy()});
+        return tce.GetTy();
+    }
+    // No postfix mode on TypeConv; result mode follows the operand type.
+    tce.SetTy(ModalTy{
+        TypeManager::GetPrimitiveTy(StaticCast<PrimitiveType>(tce.type.get())->kind), tce.expr->GetTy().Mode()});
+    if (!tce.GetTy().IsCorrect()) {
         tce.SetTy({TypeManager::GetInvalidTy()});
         return tce.GetTy();
     }
@@ -63,14 +67,13 @@ ModalTy TypeChecker::TypeCheckerImpl::SynNumTypeConvExpr(TypeConvExpr& tce)
 
 bool TypeChecker::TypeCheckerImpl::ChkTypeConvExpr(ASTContext& ctx, ModalTy targetTy, TypeConvExpr& tce)
 {
-    // Additionally, given a context type T0 and an expression T1(t), since T1(t) : T1, we always require T1 <: T0.
+    // Result mode follows the operand (see SynNumTypeConvExpr); require converted type <: target.
     if (SynTypeConvExpr(ctx, tce).IsCorrect() && typeManager.IsSubtype(tce.GetTy(), targetTy)) {
         return true;
-    } else {
-        if (!CanSkipDiag(tce)) {
-            DiagMismatchedTypes(diag, tce, targetTy);
-        }
-        tce.SetTy({TypeManager::GetInvalidTy()});
-        return false;
     }
+    if (!CanSkipDiag(tce)) {
+        DiagMismatchedTypes(diag, tce, targetTy);
+    }
+    tce.SetTy({TypeManager::GetInvalidTy()});
+    return false;
 }

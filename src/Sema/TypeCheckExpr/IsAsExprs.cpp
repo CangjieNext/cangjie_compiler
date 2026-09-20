@@ -33,7 +33,7 @@ bool TypeChecker::TypeCheckerImpl::ChkIsExpr(ASTContext& ctx, ModalTy target, Is
 
     auto boolTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
     if (!typeManager.IsLitBoxableType(boolTy, target.Ty())) {
-        DiagMismatchedTypesWithFoundTy(diag, ie, target, ModalTy{boolTy});
+        DiagMismatchedTypesWithFoundTy(diag, ie, target, {boolTy});
         isWellTyped = false;
     }
 
@@ -45,9 +45,8 @@ ModalTy TypeChecker::TypeCheckerImpl::SynAsExpr(ASTContext& ctx, AsExpr& ae)
 {
     if (Synthesize({ctx, SynPos::EXPR_ARG}, ae.leftExpr.get()).IsCorrect() &&
         Synthesize({ctx, SynPos::NONE}, ae.asType.get()).IsCorrect() && ReplaceIdealTy(*ae.leftExpr)) {
-        auto optionDecl = RawStaticCast<EnumDecl*>(importManager.GetCoreDecl("Option"));
-        if (optionDecl) {
-            ae.SetTy({typeManager.GetEnumTy(*optionDecl, {ae.asType->DataTy()})});
+        if (auto optionDecl = DynamicCast<EnumDecl>(importManager.GetCoreDecl("Option"))) {
+            ae.SetTy({typeManager.GetEnumTy(*optionDecl, {ae.asType->DataTy()}), ae.leftExpr->TyMode()});
         } else {
             diag.Diagnose(ae, DiagKind::sema_no_core_object);
             ae.SetTy({TypeManager::GetInvalidTy()});

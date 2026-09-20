@@ -256,14 +256,21 @@ struct ModalTypeChecker {
     /// 1. external local! used in exclave expr is internal
     /// 2. internal local! used in returned expr of inside exclave expr is external
     /// 3. member access of external local! is external
-    /// 4. reference to param of `T` local! is external local!
-    /// 5. reference to global/static var is external
-    /// 6. all other cases are internal
+    /// 4. tuple, varray index of external local! is external
+    /// 5. reference to param of `T` local! is external local!
+    /// 6. reference to global/static var is external
+    /// 7. all other cases are internal
     bool IsExternalLocal(const ASTContext& ctx, const Expr& expr)
     {
         if (IsInExclaveExpr(ctx, expr)) {
             // rule 2
             return IsReturnedExpr(ctx, expr);
+        }
+        if (expr.desugarExpr) {
+            return IsExternalLocal(ctx, *expr.desugarExpr);
+        }
+        if (auto id = DynamicCast<SubscriptExpr>(&expr)) {
+            return IsExternalLocal(ctx, *id->baseExpr);
         }
         if (auto ref = DynamicCast<RefExpr>(&expr)) {
             if (ref->isThis || ref->isSuper) {
@@ -1030,7 +1037,7 @@ private:
         // @local!: both @local!, external vs internal
         if (rLocal == Mode::FULL) {
             auto lext = IsExternalLocal(ctx, *left);
-            auto rext = IsExternalLocal(ctx, *assign.rightExpr.get());
+            auto rext = IsExternalLocal(ctx, *assign.rightExpr);
             if (lext != rext) {
                 DiagBadAssignment(assign, {Mode::FULL}, assign.rightExpr->GetTy(), lext, rext);
             }
