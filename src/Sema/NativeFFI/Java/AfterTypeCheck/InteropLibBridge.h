@@ -472,6 +472,8 @@ public:
      * Converts a Cangjie expression to its JNI jvalue representation.
      */
     OwnedPtr<Expr> CreateJValueExpr(OwnedPtr<Expr> expr);
+    
+    OwnedPtr<Expr> CreateJObjectExpr(OwnedPtr<Expr> cjExpr);
 
     OwnedPtr<Expr> CreateJNIHandlePendingExceptionCall(Ptr<Expr> jniEnvPtr);
 

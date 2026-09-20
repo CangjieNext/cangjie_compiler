@@ -877,6 +877,12 @@ OwnedPtr<Expr> InteropLibBridge::CreateJValueExpr(OwnedPtr<Expr> expr)
     return CreateAsJvalueCall(std::move(entityExpr));
 }
 
+OwnedPtr<Expr> InteropLibBridge::CreateJObjectExpr(OwnedPtr<Expr> cjExpr)
+{
+    auto entityExpr = WrapJavaEntity(std::move(cjExpr));
+    return CreateAsJniJobjectCall(std::move(entityExpr));
+}
+
 OwnedPtr<Expr> InteropLibBridge::ConvertJavaResultToCJ(OwnedPtr<Expr> result, Ptr<Ty> resultTy, const Ptr<Decl> scope)
 {
     CJC_NULLPTR_CHECK(result);

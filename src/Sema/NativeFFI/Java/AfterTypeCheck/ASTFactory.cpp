@@ -332,11 +332,18 @@ OwnedPtr<AST::Block> ASTFactory::CreateJavaFieldSetCall(AfterTypeCheckContext& c
     auto jclass = jclassCache.CreateJClassAccess(ctx, field.GetClassSignature(), jniEnvPtr);
     auto jfield = jfieldIdCache.CreateJFieldIdAccess(ctx, field, ASTCloner::Clone(jclass.get()), jniEnvPtr);
 
-    // 1. (*jniEnv)->SetField(jclass/jobject, jfield, JValue(value))
+    OwnedPtr<AST::Expr> jniValue;
+    if (ty.IsPrimitive()) {
+        jniValue = ilib.CreateJValueExpr(std::move(value));
+    } else {
+        jniValue = ilib.CreateJObjectExpr(std::move(value));
+    }
+
+    // 1. (*jniEnv)->SetField(jclass/jobject, jfield, value)
     auto jniFieldSetCall = field.IsStatic()
-        ? jni.CreateSetStaticJavaFieldCall(ty, jniEnvPtr, jclass, jfield, ilib.CreateJValueExpr(std::move(value)))
-        : jni.CreateSetInstanceJavaFieldCall(ty, jniEnvPtr, jobjectInstance, jfield,
-            ilib.CreateJValueExpr(std::move(value)));
+        ? jni.CreateSetStaticJavaFieldCall(ty, jniEnvPtr, jclass, jfield, std::move(jniValue))
+        : jni.CreateSetInstanceJavaFieldCall(ty, jniEnvPtr, jobjectInstance, jfield, std::move(jniValue));
+
     block->body.push_back(std::move(jniFieldSetCall));
 
     // 2. handlePendingException()
