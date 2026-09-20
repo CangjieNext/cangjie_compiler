@@ -31,8 +31,8 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTypeConvExpr(ASTContext& ctx, TypeConvE
     if (tce.type->astKind == ASTKind::REF_TYPE) {
         Synthesize({ctx, SynPos::NONE}, tce.type.get());
         if (auto aliasTy = DynamicCast<TypeAliasTy*>(tce.type->GetTy()); aliasTy && aliasTy->declPtr) {
-            auto underlyingTy = typeManager.GetUnaliasedTypeFromTypeAlias(*aliasTy, {});
-            if (underlyingTy->IsPrimitive()) {
+            auto underlyingTy = typeManager.SubstituteTypeAliasInTy(*aliasTy);
+            if (underlyingTy && underlyingTy->IsPrimitive()) {
                 return SynNumTypeConvExprForAlias(tce, *underlyingTy);
             }
         }
