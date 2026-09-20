@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 
 #define private public
 #define protected public
@@ -22,6 +23,7 @@
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
+#include "cangjie/Basic/Version.h"
 #include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
 #include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/CjoManager.h"
@@ -1275,8 +1277,6 @@ TEST_F(PackageTest, CjoVersionCompatLogic)
 {
     // The expectations below are written against the compiler's own constants so they stay
     // valid when CJO_MAJOR_VERSION / CJO_MINOR_VERSION are bumped.
-    EXPECT_EQ(CJO_MAJOR_VERSION, 0);
-
     diag.ClearError();
     instance = std::make_unique<TestCompilerInstance>(invocation, diag);
     instance->invocation.globalOptions.implicitPrelude = true;
@@ -1442,7 +1442,64 @@ TEST_F(PackageTest, CjoVersionCheckOnLoad)
     diag.Reset();
 }
 
-// Incremental-compilation cache path: an incompatible cache cjo must be rejected *silently* —
+TEST_F(PackageTest, CjoValidationDiagnosticIncludesProducerVersion)
+{
+    diag.ClearError();
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->code = "import vardecl.*";
+    instance->Compile(CompileStage::IMPORT_PACKAGE);
+    ASSERT_FALSE(instance->GetSourcePackages().empty());
+
+    std::vector<uint8_t> cjoData;
+    instance->importManager->ExportAST(false, cjoData, *instance->GetSourcePackages()[0]);
+    ASSERT_FALSE(cjoData.empty());
+    auto* package = PackageFormat::GetPackage(cjoData.data());
+    ASSERT_NE(package, nullptr);
+    auto* fullPkgName = package->fullPkgName();
+    ASSERT_NE(fullPkgName, nullptr);
+
+    // Keep the root table and producer version valid, but make another string invalid so that
+    // full verification fails after the diagnostic-only version check can still succeed.
+    auto* fullPkgNameLength = const_cast<uint32_t*>(
+        reinterpret_cast<const uint32_t*>(fullPkgName) - 1);
+    *fullPkgNameLength = std::numeric_limits<uint32_t>::max();
+
+    auto loader = std::make_unique<ASTLoader>(std::move(cjoData), "diagnostic.package", *instance->typeManager,
+        *instance->importManager->cjoManager, instance->invocation.globalOptions);
+    loader->SetCjoPath("diagnostic.cjo");
+    diag.Reset();
+    EXPECT_EQ(loader->LoadPackageDepInfo(), "");
+
+    auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::MODULE);
+    ASSERT_EQ(diagnostics.size(), 1u);
+    EXPECT_EQ(diagnostics[0].rKind, DiagKindRefactor::module_loaded_ast_failed_with_version);
+    EXPECT_NE(diagnostics[0].errorMessage.find("compiled with cjc '" + std::string(CANGJIE_VERSION) + "'"),
+        std::string::npos);
+    EXPECT_NE(diagnostics[0].errorMessage.find("diagnostic.package"), std::string::npos);
+}
+
+TEST_F(PackageTest, CjoValidationDiagnosticFallsBackWhenProducerVersionIsUnavailable)
+{
+    diag.ClearError();
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    auto cjoManager = instance->importManager->GetCjoManager();
+    ASSERT_NE(cjoManager, nullptr);
+
+    std::vector<uint8_t> invalidCjo(sizeof(flatbuffers::uoffset_t), 0);
+    auto loader = std::make_unique<ASTLoader>(std::move(invalidCjo), "diagnostic.package", *instance->typeManager,
+        *cjoManager, instance->invocation.globalOptions);
+    loader->SetCjoPath("diagnostic.cjo");
+    diag.Reset();
+    EXPECT_EQ(loader->LoadPackageDepInfo(), "");
+
+    auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::MODULE);
+    ASSERT_EQ(diagnostics.size(), 1u);
+    EXPECT_EQ(diagnostics[0].rKind, DiagKindRefactor::module_loaded_ast_failed);
+    EXPECT_NE(diagnostics[0].errorMessage.find("compiler whose version is '" + std::string(CANGJIE_VERSION) + "'"),
+        std::string::npos);
+}
+
 // no diagnostic is emitted and no cached type is consumed (sema keeps running incrementally,
 // there is no rollback to a full recompile). Compatible caches are still consumed.
 TEST_F(PackageTest, CjoVersionCheckOnIncrCache)
@@ -1462,38 +1519,46 @@ TEST_F(PackageTest, CjoVersionCheckOnIncrCache)
     ASSERT_FALSE(cacheData.empty());
     srcPkg->EnableAttr(Attribute::INCRE_COMPILE);
 
-    auto loadCache = [this, &srcPkg, &mangledName2DeclMap](std::vector<uint8_t> data) {
+    auto loadCache = [this, &srcPkg](std::vector<uint8_t> data,
+                           const std::map<std::string, Ptr<Decl>>& declMap) {
         auto loader = std::make_unique<ASTLoader>(std::move(data), srcPkg->fullPackageName, *instance->typeManager,
             *instance->importManager->cjoManager, instance->invocation.globalOptions);
-        return loader->LoadCachedTypeForPackage(*srcPkg, mangledName2DeclMap);
+        return loader->LoadCachedTypeForPackage(*srcPkg, declMap);
     };
 
-    // 1) Major mismatch cache: rejected silently, no diagnostic.
+    // Use the current declaration map for incompatible cases. The source package is unchanged,
+    // so an accepted cache would have no declarations to remove.
+    //
+    // 1) Major mismatch cache: rejected silently, no diagnostic, and no removed declarations.
     {
         std::vector<uint8_t> mutated = cacheData;
         auto* ver = MutableCjoVersionBytes(mutated);
         ASSERT_NE(ver, nullptr);
         ver[0] = static_cast<uint8_t>(CJO_MAJOR_VERSION + 1);
         diag.Reset();
-        auto unfounded = loadCache(std::move(mutated));
+        auto unfounded = loadCache(std::move(mutated), mangledName2DeclMap);
+        EXPECT_TRUE(unfounded.empty());
         EXPECT_EQ(diag.GetErrorCount(), 0u); // degrades silently, no error
     }
 
-    // 2) Minor too new cache: rejected silently, no diagnostic.
+    // 2) Minor too new cache: rejected silently, no diagnostic, and no removed declarations.
     {
         std::vector<uint8_t> mutated = cacheData;
         auto* ver = MutableCjoVersionBytes(mutated);
         ASSERT_NE(ver, nullptr);
         ver[1] = static_cast<uint8_t>(CJO_MINOR_VERSION + 1);
         diag.Reset();
-        auto unfounded = loadCache(std::move(mutated));
+        auto unfounded = loadCache(std::move(mutated), mangledName2DeclMap);
+        EXPECT_TRUE(unfounded.empty());
         EXPECT_EQ(diag.GetErrorCount(), 0u);
     }
 
-    // 3) Compatible cache (same version): consumed, no diagnostic.
+    // 3) Compatible cache: accepted without a diagnostic. The loader API returns only removed
+    // declarations, so a cache containing no removed declarations is represented by an empty set.
     {
         diag.Reset();
-        auto unfounded = loadCache(cacheData);
+        auto unfounded = loadCache(cacheData, mangledName2DeclMap);
+        EXPECT_TRUE(unfounded.empty());
         EXPECT_EQ(diag.GetErrorCount(), 0u);
     }
 }
