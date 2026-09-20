@@ -256,14 +256,21 @@ struct ModalTypeChecker {
     /// 1. external local! used in exclave expr is internal
     /// 2. internal local! used in returned expr of inside exclave expr is external
     /// 3. member access of external local! is external
-    /// 4. reference to param of `T` local! is external local!
-    /// 5. reference to global/static var is external
-    /// 6. all other cases are internal
+    /// 4. tuple, varray index of external local! is external
+    /// 5. reference to param of `T` local! is external local!
+    /// 6. reference to global/static var is external
+    /// 7. all other cases are internal
     bool IsExternalLocal(const ASTContext& ctx, const Expr& expr)
     {
         if (IsInExclaveExpr(ctx, expr)) {
             // rule 2
             return IsReturnedExpr(ctx, expr);
+        }
+        if (expr.desugarExpr) {
+            return IsExternalLocal(ctx, *expr.desugarExpr);
+        }
+        if (auto id = DynamicCast<SubscriptExpr>(&expr)) {
+            return IsExternalLocal(ctx, *id->baseExpr);
         }
         if (auto ref = DynamicCast<RefExpr>(&expr)) {
             if (ref->isThis || ref->isSuper) {
@@ -518,9 +525,11 @@ private:
         WalkSubtree(ctx, te.finallyLambda.get());
     }
 
-    /// Functions that return internal @local!/? must return so via exclave. External @local! and copy type are ok.
-    /// Note that there is no 'internal/external' @local? in spec, but since the check here are the same, so we use
-    /// the same check.
+    // returned value must be either
+    // inside exclave, or
+    // is @~local, or
+    // is external @local! or @local?, or
+    // is @local! or @local? copy type, and the return type of the function is not an interface type
     void CheckReturnModalType(const ASTContext& ctx, Node& func)
     {
         auto body = TypeCheckUtil::GetFuncBody(func);
@@ -532,9 +541,14 @@ private:
         }
         auto r = CollectReturnedExpr(*body);
         for (auto& e : r) {
-            if (!IsExternalLocal(ctx, *e) && IsNonCopyLocalTy(e->GetTy()) && !IsInExclaveExpr(ctx, *e)) {
-                DiagBadInternalLocalReturn(*e);
+            if (IsInExclaveExpr(ctx, *e) || IsExternalLocal(ctx, *e) || e->GetTy().IsDataType()) {
+                continue;
             }
+            if (type.ImplementsCopyInterface(e->DataTy()) &&
+                Is<InterfaceTy>(StaticCast<FuncTy>(func.DataTy())->retTy.Ty())) {
+                continue;
+            }
+            DiagBadInternalLocalReturn(*e);
         }
     }
 
@@ -1030,7 +1044,7 @@ private:
         // @local!: both @local!, external vs internal
         if (rLocal == Mode::FULL) {
             auto lext = IsExternalLocal(ctx, *left);
-            auto rext = IsExternalLocal(ctx, *assign.rightExpr.get());
+            auto rext = IsExternalLocal(ctx, *assign.rightExpr);
             if (lext != rext) {
                 DiagBadAssignment(assign, {Mode::FULL}, assign.rightExpr->GetTy(), lext, rext);
             }
@@ -1391,14 +1405,14 @@ private:
         }
         if (call.desugarArgs) {
             for (auto& arg : *call.desugarArgs) {
-                if (arg->TyMode().local == Mode::FULL && IsExternalLocal(ctx, *arg->expr) &&
+                if (arg->TyMode().local == Mode::FULL && arg->expr && IsExternalLocal(ctx, *arg->expr) &&
                     !type.ImplementsCopyInterface(arg->expr->DataTy())) {
                     DiagBadExternalLocalArg(*arg->expr);
                 }
             }
         } else {
             for (auto& arg : call.args) {
-                if (arg->TyMode().local == Mode::FULL && IsExternalLocal(ctx, *arg->expr) &&
+                if (arg->TyMode().local == Mode::FULL && arg->expr && IsExternalLocal(ctx, *arg->expr) &&
                     !type.ImplementsCopyInterface(arg->expr->DataTy())) {
                     DiagBadExternalLocalArg(*arg->expr);
                 }
