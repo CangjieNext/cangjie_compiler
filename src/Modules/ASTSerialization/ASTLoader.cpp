@@ -27,6 +27,34 @@ using namespace AST;
 
 namespace Cangjie {
 namespace {
+std::string ReadPackageVersionForDiagnostic(const std::vector<uint8_t>& data)
+{
+    if (data.size() < sizeof(flatbuffers::uoffset_t)) {
+        return {};
+    }
+
+    flatbuffers::Verifier verifier(data.data(), data.size(), FB_MAX_DEPTH, FB_MAX_TABLES);
+    auto rootOffset = verifier.VerifyOffset(0);
+    if (rootOffset == 0) {
+        return {};
+    }
+    auto packageAddress = data.data() + rootOffset;
+    if (!verifier.VerifyTableStart(packageAddress)) {
+        return {};
+    }
+    auto package = reinterpret_cast<const PackageFormat::Package*>(packageAddress);
+    auto table = reinterpret_cast<const flatbuffers::Table*>(packageAddress);
+    auto versionOffset = table->GetOptionalFieldOffset(PackageFormat::Package::VT_VERSION);
+    if (versionOffset == 0 || !verifier.VerifyOffset(packageAddress, versionOffset)) {
+        return {};
+    }
+    auto version = package->version();
+    if (version == nullptr || !verifier.VerifyString(version)) {
+        return {};
+    }
+    return version->str();
+}
+
 // Result of comparing a cjo file's version against the version the current compiler supports.
 enum class CjoVersionCompat : uint8_t {
     // Same major and cjo's minor <= compiler's minor: the cjo can be read.
@@ -342,8 +370,18 @@ bool ASTLoader::ASTLoaderImpl::VerifyForData(const std::string& id)
     // We need to verify the size first.
     flatbuffers::Verifier verifier(data.data(), size, FB_MAX_DEPTH, FB_MAX_TABLES);
     if (!PackageFormat::VerifyPackageBuffer(verifier)) {
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::module_loaded_ast_failed, DEFAULT_POSITION, id, importedPackageName, CANGJIE_VERSION);
+        auto packageName = importedPackageName.empty() ? cjoPath : importedPackageName;
+        if (packageName.empty()) {
+            packageName = "unknown package";
+        }
+        auto producerVersion = ReadPackageVersionForDiagnostic(data);
+        if (producerVersion.empty() || producerVersion == CANGJIE_VERSION) {
+            diag.DiagnoseRefactor(
+                DiagKindRefactor::module_loaded_ast_failed, DEFAULT_POSITION, id, packageName, CANGJIE_VERSION);
+        } else {
+            diag.DiagnoseRefactor(DiagKindRefactor::module_loaded_ast_failed_with_version, DEFAULT_POSITION, id,
+                packageName, producerVersion, CANGJIE_VERSION);
+        }
         return false;
     }
     return true;
