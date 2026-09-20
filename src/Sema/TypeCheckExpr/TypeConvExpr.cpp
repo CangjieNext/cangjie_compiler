@@ -25,6 +25,19 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTypeConvExpr(ASTContext& ctx, TypeConvE
         return SynNumTypeConvExpr(tce);
     }
 
+    // Handle type alias: if the target type is a type alias that resolves to a primitive type,
+    // we should allow numeric type conversion through the alias.
+    // For example: `type MyInt = Int64; let x = MyInt(42)` should work.
+    if (tce.type->astKind == ASTKind::REF_TYPE) {
+        Synthesize({ctx, SynPos::NONE}, tce.type.get());
+        if (auto aliasTy = DynamicCast<TypeAliasTy*>(tce.type->GetTy()); aliasTy && aliasTy->declPtr) {
+            auto underlyingTy = typeManager.GetUnaliasedTypeFromTypeAlias(*aliasTy, {});
+            if (underlyingTy->IsPrimitive()) {
+                return SynNumTypeConvExprForAlias(tce, *underlyingTy);
+            }
+        }
+    }
+
     // The TypeConvExpr supports conversion between primitive types and conversion from CPointer to CFunc.
     // Therefore, the function should be returned in either of the above two branches.
     // Otherwise, there must be errors reported by other modules or logic codes.
@@ -45,6 +58,34 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynNumTypeConvExpr(TypeConvExpr& tce)
     // Case 1: Rune to UInt32, e.g., `UInt32('a')`
     bool isRuneToUInt32 = tce.TyKind() == TypeKind::TYPE_UINT32 && tce.expr->TyKind() == TypeKind::TYPE_RUNE;
     // Case 2: Integer to Rune, e.g., `Rune(97)`
+    bool isIntegerToChar = tce.TyKind() == TypeKind::TYPE_RUNE && tce.expr->GetTy()->IsInteger();
+    // Case 3: convert between numeric types
+    bool isBetweenNumeric = tce.GetTy()->IsNumeric() && tce.expr->GetTy()->IsNumeric();
+    if (isExprNothing || isRuneToUInt32 || isIntegerToChar || isBetweenNumeric) {
+        return tce.GetTy();
+    }
+    // Otherwise, return false.
+    if (!CanSkipDiag(*tce.expr)) {
+        diag.Diagnose(*tce.expr, DiagKind::sema_numeric_convert_must_be_numeric);
+    }
+    tce.SetTy(TypeManager::GetInvalidTy());
+    return tce.GetTy();
+}
+
+Ptr<Ty> TypeChecker::TypeCheckerImpl::SynNumTypeConvExprForAlias(TypeConvExpr& tce, Ty& underlyingTy)
+{
+    // Set the target type to the underlying primitive type of the alias.
+    tce.SetTy(&underlyingTy);
+    if (!Ty::IsTyCorrect(tce.expr->GetTy()) || !Ty::IsTyCorrect(tce.GetTy())) {
+        tce.SetTy(TypeManager::GetInvalidTy());
+        return tce.GetTy();
+    }
+    // Case 0: expr is of Nothing type, e.g., `MyInt(return)` where MyInt = Int64
+    bool isExprNothing =
+        (tce.TyKind() == TypeKind::TYPE_RUNE || tce.GetTy()->IsNumeric()) && tce.expr->GetTy()->IsNothing();
+    // Case 1: Rune to UInt32 alias, e.g., `MyUInt32('a')` where MyUInt32 = UInt32
+    bool isRuneToUInt32 = tce.TyKind() == TypeKind::TYPE_UINT32 && tce.expr->TyKind() == TypeKind::TYPE_RUNE;
+    // Case 2: Integer to Rune alias, e.g., `MyRune(97)` where MyRune = Rune
     bool isIntegerToChar = tce.TyKind() == TypeKind::TYPE_RUNE && tce.expr->GetTy()->IsInteger();
     // Case 3: convert between numeric types
     bool isBetweenNumeric = tce.GetTy()->IsNumeric() && tce.expr->GetTy()->IsNumeric();

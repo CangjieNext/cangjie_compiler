@@ -220,6 +220,15 @@ main() {
     EXPECT_EQ(diag.GetErrorCount(), 0);
 }
 
+
+TEST_F(TypeCheckerTest, TypeAliasNumericConvTest)
+{
+    std::string srcPath = projectPath + "/unittests/Sema/SemaCangjieFiles/";
+    instance->srcFilePaths = {srcPath + "TypeAliasNumericConvTest.cj"};
+    invocation.globalOptions.enableCompileTest = true;
+    instance->Compile(CompileStage::SEMA);
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
 TEST_F(TypeCheckerTest, InvalidVariadicFunctionIsNotCallTarget)
 {
     CheckInvalidVariadicOverload(R"(
