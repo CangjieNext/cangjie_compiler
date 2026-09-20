@@ -1717,8 +1717,13 @@ OwnedPtr<AST::Expr> ParserImpl::ParseTypeConvExprWith(Token&& tok)
         return MakeOwned<InvalidExpr>(lookahead.Begin());
     }
     ret->rightParenPos = lastToken.Begin();
-    // it is allowed to have mode after PrimitiveTypeExpr like CallExpr, e.g. Int64(...) @local!
-    ret->modal = ParseModalInfo();
+    // Primitive numeric cast is TypeConvExpr, not CallExpr; postfix mode is only for ctors.
+    if (!newlineSkipped) {
+        if (auto modal = ParseModalInfo()) {
+            DiagUnexpectedModal(MakeRange(modal.LocalBegin(), modal.LocalEnd()));
+            ret->EnableAttr(Attribute::IS_BROKEN);
+        }
+    }
     ret->end = lastToken.End();
     return ret;
 }
