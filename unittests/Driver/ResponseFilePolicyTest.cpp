@@ -143,6 +143,36 @@ TEST(ResponseFilePolicyTest, RoundTripThroughGnuStyleParser)
     EXPECT_EQ(parsed, expected);
 }
 
+TEST(ResponseFilePolicyTest, SerializeRspForHostMatchesHostStyle)
+{
+    // Tool::Execute serializes through this entry point; the style must
+    // follow the host OS (CRT rules for Windows-hosted ld.lld, GNU rules
+    // everywhere else).
+    const std::vector<std::string> args = {"ld.lld", "-o", "C:\\Build\\My App\\out.exe", "-DNAME='foo'", "a b"};
+#ifdef _WIN32
+    EXPECT_EQ(SerializeRspForHost(args), WindowsStyleRspSerialize(args));
+#else
+    EXPECT_EQ(SerializeRspForHost(args), GnuStyleRspSerialize(args));
+#endif
+}
+
+TEST(ResponseFilePolicyTest, GnuStyleRspParserHandlesRawShellSyntax)
+{
+    // Raw parser inputs that GnuStyleRspSerialize never emits on its own
+    // (single-quoted tokens, bare backslash escapes, '#' comments and a
+    // trailing token without newline), exercising every tokenizer branch.
+    EXPECT_EQ(GnuStyleRspParse("-o\n'single quote'\n"), std::vector<std::string>({"-o", "single quote"}));
+    EXPECT_EQ(GnuStyleRspParse("'it\\'s'\n"), std::vector<std::string>({"it's"}));
+    EXPECT_EQ(GnuStyleRspParse("a\\ b"), std::vector<std::string>({"a b"}));
+    EXPECT_EQ(GnuStyleRspParse("#comment\n-o"), std::vector<std::string>({"-o"}));
+    // Trailing backslashes hit the "i + 1 < content.size()" false arms of the
+    // escape checks; a comment without a trailing newline exercises the
+    // end-of-input stop of the '#' skip loop.
+    EXPECT_EQ(GnuStyleRspParse("'a\\"), std::vector<std::string>({"a\\"}));
+    EXPECT_EQ(GnuStyleRspParse("a\\"), std::vector<std::string>({"a\\"}));
+    EXPECT_EQ(GnuStyleRspParse("-o\n#tail"), std::vector<std::string>({"-o"}));
+}
+
 TEST(ResponseFilePolicyTest, UnknownToolsKeepOriginalPath)
 {
     for (const std::string& tool : {"cjc-frontend", "CacheCopy", "RemoveFile", "opt.exe", "clang", "llvm-ar", "gold"}) {
@@ -337,4 +367,36 @@ TEST(ResponseFilePolicyTest, OversizedCommandLineWritesRspFile)
 
     const std::vector<std::string> expected(args.begin() + 1, args.end());
     EXPECT_EQ(WindowsStyleRspParse(*written), expected);
+}
+
+TEST(ResponseFilePolicyTest, ShouldUseRspForcedByEnv)
+{
+    // CJC_FORCE_RSP bypasses the length threshold: "1" forces the fallback,
+    // "0" disables the force and "" counts as unset. Restore the ambient
+    // environment (unset) before returning.
+    const ResponseFilePolicy policy{true, 32000};
+#ifdef _WIN32
+    _putenv_s("CJC_FORCE_RSP", "1");
+#else
+    setenv("CJC_FORCE_RSP", "1", 1);
+#endif
+    EXPECT_TRUE(ShouldUseRsp(policy, size_t{5}));
+#ifdef _WIN32
+    _putenv_s("CJC_FORCE_RSP", "0");
+#else
+    setenv("CJC_FORCE_RSP", "0", 1);
+#endif
+    EXPECT_FALSE(ShouldUseRsp(policy, size_t{5}));
+    EXPECT_TRUE(ShouldUseRsp(policy, size_t{32000}));
+#ifdef _WIN32
+    _putenv_s("CJC_FORCE_RSP", "");
+#else
+    setenv("CJC_FORCE_RSP", "", 1);
+#endif
+    EXPECT_FALSE(ShouldUseRsp(policy, size_t{5}));
+#ifdef _WIN32
+    _putenv_s("CJC_FORCE_RSP", "");
+#else
+    unsetenv("CJC_FORCE_RSP");
+#endif
 }
