@@ -106,8 +106,8 @@ void DesugarJArray::TransformConstructorCallsToPassJNIParam(File& file) const
             // constructor call of java.lang.JArray expected to be RefExpr
             CJC_ASSERT(newCallExpr->baseFunc->astKind == ASTKind::REF_EXPR);
             auto base = StaticAs<ASTKind::REF_EXPR>(newCallExpr->baseFunc.get());
-            CJC_ASSERT_WITH_MSG(!base->typeArguments.empty(), "JArray type must be generic");
-            jarrayElementType = base->typeArguments[0]->GetTy();
+            CJC_ASSERT_WITH_MSG(base->instTys.size() == 1, "JArray type must have exactly one generic argument");
+            jarrayElementType = base->instTys.front();
             base->ref.target = jniTypeConstr;
             base->SetTy(jniTypeConstr->GetTy());
         }
@@ -167,7 +167,7 @@ void DesugarJArray::InsertConstructorBody(FuncDecl& constr) const
     }
 
     auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, ilib.CreateGetJniEnvCall(constr.curFile));
-    
+
     // SwapLocalWithGlobalReference(Java_CFFI_newJavaArray($jniEnvPtr, $jniType, length).asJobject())
     auto newObjectCall = ilib.CreateSwapLocalWithGlobalRefCall(
         WithinFile(CreateRefExpr(*jniEnvVar), constr.curFile),
