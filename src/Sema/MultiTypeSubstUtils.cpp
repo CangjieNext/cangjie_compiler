@@ -217,14 +217,19 @@ MultiTypeSubst ReduceMultiTypeSubst(TypeManager& tyMgr, const TyVars& tyVars,
     }
     auto mapping = mts;
     // Erase self-reference mappings.
-    std::unordered_set<Ptr<Ty>> visited;
+    // A mapping `key -> ty` is self-referencing when `key` appears inside `ty`, and it can never
+    // be applied finitely, so it is dropped. Cache the generic tys per target, but still check
+    // every (key, target) pair: two different keys may map to the same target, and only some of
+    // them are self-references (e.g. `extend<Y> EnumTest<Y>` makes `Y -> EnumTest<Y>` a
+    // self-reference while `X -> EnumTest<Y>` is not).
+    std::unordered_map<Ptr<Ty>, std::unordered_set<Ptr<Ty>>> gtysCache;
     for (auto& p : mts) {
         for (Ptr<Ty> ty : p.second) {
-            if (auto [_, succ] = visited.emplace(ty); !succ) {
-                continue;
+            auto it = gtysCache.find(ty);
+            if (it == gtysCache.end()) {
+                it = gtysCache.emplace(ty, GetAllGenericTys(ty)).first;
             }
-            auto gtys = GetAllGenericTys(ty);
-            if (gtys.find(p.first) != gtys.cend()) {
+            if (it->second.find(p.first) != it->second.cend()) {
                 mapping.erase(p.first);
             }
         }
