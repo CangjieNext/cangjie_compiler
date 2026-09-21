@@ -355,7 +355,10 @@ std::string Utils::GetJavaObjectTypeName(const Ty& ty)
  */
 std::string GetJavaJniClassName(const Ty& cjtype)
 {
-    CJC_ASSERT(!IsJArray(cjtype));
+    if (IsJArray(cjtype)) {
+        // arrays use full signatures and work for primitives
+        return GetJniTypeSignature(cjtype);
+    }
     return NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(cjtype).commonDecl));
 }
 

@@ -98,11 +98,9 @@ OwnedPtr<Expr> DesugarTypeCheckingAndCasting::CreateIsInstanceCall(Ptr<VarDecl> 
 }
 
 OwnedPtr<Expr> DesugarTypeCheckingAndCasting::CreateJObjectCast(Ptr<VarDecl> jObjectVar,
-    Ptr<ClassLikeDecl> castDecl, Ptr<File> curFile) const
+    Ptr<ClassLikeDecl> castDecl, Ptr<Ty> castTy, Ptr<File> curFile) const
 {
     CJC_ASSERT(castDecl->IsJavaMirror() || castDecl->IsJavaImpl());
-    auto castTy = castDecl->GetTy();
-
     // match (IsInstance(obj.javaref, ...))
     auto isInstanceCall = CreateIsInstanceCall(jObjectVar, castTy, curFile);
 
@@ -131,7 +129,7 @@ OwnedPtr<Block> DesugarTypeCheckingAndCasting::CastAndSubstituteVars(
         auto castDecl = StaticAs<ASTKind::CLASS_LIKE_DECL>(Ty::GetDeclOfTy(castTy));
 
         auto javarefExpr = CreateJavaRefCall(WithinFile(CreateRefExpr(*varDecl), curFile));
-        OwnedPtr<Expr> initializer = ilib.UnwrapJavaEntity(std::move(javarefExpr), castDecl->GetTy(), castDecl);
+        OwnedPtr<Expr> initializer = ilib.UnwrapJavaEntity(std::move(javarefExpr), castTy, castDecl);
         auto castedVar = WithinFile(CreateTmpVarDecl(CreateType(castDecl->GetTy()), std::move(initializer)), curFile);
         varsMapping[varDecl] = castedVar;
         varsBlock->body.emplace_back(std::move(castedVar));
@@ -205,7 +203,7 @@ void DesugarTypeCheckingAndCasting::DesugarAsExpression(AsExpr& ae) const
     auto jObjVarPattern = WithinFile(CreateVarPattern(V_COMPILER, jObjectDecl->GetTy()), curFile);
     jObjVarPattern->varDecl->curFile = curFile;
     auto jObjectType = CreateType(jObjectDecl->GetTy());
-    auto isInstanceMatch = CreateJObjectCast(jObjVarPattern->varDecl, castDecl, curFile);
+    auto isInstanceMatch = CreateJObjectCast(jObjVarPattern->varDecl, castDecl, castTy, curFile);
     auto typePattern = CreateTypePattern(std::move(jObjVarPattern), std::move(jObjectType), *ae.leftExpr);
     typePattern->needRuntimeTypeCheck = true;
     typePattern->matchBeforeRuntime = false;
