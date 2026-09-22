@@ -756,8 +756,9 @@ std::vector<ModalTy> TypeChecker::TypeCheckerImpl::GetModalTysFromASTType(
     typeArgs.reserve(typeArguments.size());
     for (auto& arg : typeArguments) {
         if (Ty::IsInitialTy(arg->DataTy())) {
-            arg->SetTy(GetTyFromASTType(ctx, arg.get()));
-            CJC_ASSERT(arg->GetTy().IsDataType());
+            auto ty = GetTyFromASTType(ctx, arg.get());
+            arg->SetTy({ty.Ty()});
+            CJC_ASSERT(arg->TestAttr(Attribute::IS_BROKEN) || arg->GetTy().IsDataType());
         }
         typeArgs.push_back(arg->GetTy());
     }
@@ -2072,7 +2073,7 @@ void TypeChecker::TypeCheckerImpl::PreSetDeclType(const ASTContext& ctx)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::PreCheckUsage(ASTContext& ctx, const Package& pkg)
+void TypeChecker::TypeCheckerImpl::PreCheckUsage(ASTContext& ctx, Package& pkg)
 {
     // NOTE: processing order is important.
     // Build enum constructors map.
@@ -2080,6 +2081,10 @@ void TypeChecker::TypeCheckerImpl::PreCheckUsage(ASTContext& ctx, const Package&
     BuildEnumConstructorMap(ctx);
     // Resolve all type names.
     ResolveNames(ctx);
+    // Default-param desugar funcs already exist; attach exclave now that param tys are resolved.
+    Utils::ProfileRecorder::Start("PreCheck", "AttachDefaultParamExclave");
+    AttachExclaveToDefaultParamFunctions(pkg);
+    Utils::ProfileRecorder::Stop("PreCheck", "AttachDefaultParamExclave");
     // Build and check extend decls for each type.
     BuildExtendMap(ctx);
 

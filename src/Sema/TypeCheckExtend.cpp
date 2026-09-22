@@ -174,7 +174,7 @@ void TypeChecker::TypeCheckerImpl::CheckExtendInterfaces(
                 if (auto sd = DynamicCast<StructDecl>(Ty::GetDeclPtrOfTy(ty))) {
                     sd->SetIsCopyType();
                 } else {
-                    diag.DiagnoseRefactor(DiagKindRefactor::sema_illegal_copyable_type_usage, *interface);
+                    diag.DiagnoseRefactor(DiagKindRefactor::sema_illegal_copy_type_usage, *interface);
                 }
             }
         }
