@@ -235,14 +235,16 @@ const OrderedDeclSet& CjoManager::GetPackageMembersByName(
     return EMPTY_DECLS;
 }
 
-Ptr<Decl> CjoManager::GetImplicitPackageMembersByName(const std::string& fullPackageName, const std::string& name) const
+const OrderedDeclSet& CjoManager::GetImplicitPackageMembersByName(
+    const std::string& fullPackageName, const std::string& name) const
 {
+    const static OrderedDeclSet EMPTY_DECLS;
     auto info = impl->GetPackageInfo(fullPackageName);
     if (!info) {
-        return nullptr;
+        return EMPTY_DECLS;
     }
     auto found = info->implicitDeclMap.find(name);
-    return found == info->implicitDeclMap.end() ? nullptr : found->second;
+    return found == info->implicitDeclMap.end() ? EMPTY_DECLS : found->second;
 }
 
 bool CjoManager::LoadPackageHeader(const std::string& fullPackageName, const std::string& cjoPath) const
@@ -559,7 +561,7 @@ void CjoManager::AddPackageDeclMap(const std::string& fullPackageName, const std
         }
         for (auto& decl : file->exportedInternalDecls) {
             if (decl->TestAttr(Attribute::IMPLICIT_USED)) {
-                pkgInfo->implicitDeclMap.emplace(decl->identifier, decl.get());
+                pkgInfo->implicitDeclMap[decl->identifier].emplace(decl.get());
             }
         }
     }

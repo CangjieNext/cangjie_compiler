@@ -2312,6 +2312,40 @@ VisitAction TypeChecker::TypeCheckerImpl::CheckDefaultParamFunc(const EnumDecl& 
     return VisitAction::WALK_CHILDREN;
 }
 
+void TypeChecker::TypeCheckerImpl::AttachExclaveToDefaultParamFunctions(Package& pkg)
+{
+    Walker(&pkg, [this](Ptr<Node> node) -> VisitAction {
+        auto fd = DynamicCast<FuncDecl>(node);
+        if (!fd || !fd->ownerFunc || !fd->TestAttr(Attribute::HAS_INITIAL)) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        if (HasModifier(fd->modifiers, TokenKind::EXCLAVE)) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        auto owner = fd->ownerFunc;
+        if (!owner->funcBody || owner->funcBody->paramLists.empty()) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        // Find the original FuncParam via ownerFunc (desugarDecl back-link); pos = param identifier.
+        Ptr<FuncParam> fp{};
+        for (auto& p : owner->funcBody->paramLists[0]->params) {
+            if (p && p->desugarDecl.get() == fd) {
+                fp = p.get();
+                break;
+            }
+        }
+        if (!fp || !fp->type) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        auto ty = fp->type->GetTy();
+        if (!Ty::IsTyCorrect(ty) || !ty.IsLocalType() || typeManager.ImplementsCopyInterface(ty.Ty())) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        fd->modifiers.emplace(TokenKind::EXCLAVE, fp->identifier.Begin());
+        return VisitAction::WALK_CHILDREN;
+    }).Walk();
+}
+
 void TypeChecker::TypeCheckerImpl::CheckDefaultParamFuncsEntry(File& file)
 {
     auto visitFunc = [&file, this](Ptr<Node> node) -> VisitAction {

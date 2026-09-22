@@ -288,6 +288,10 @@ void TypeChecker::TypeCheckerImpl::UnsafeCheck(const FuncBody& fb)
         if (!fb.retType->GetTy().IsCorrect()) {
             return;
         }
+        if (fb.retType->GetTy().IsLocalType()) {
+            DiagExpectedDataType(*fb.retType);
+            return;
+        }
         if (!fb.retType->GetTy()->IsMetCType()) {
             auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_cfunc_return_type, *fb.retType,
                 GetFuncBodyRange(fb, *fb.retType));
@@ -308,6 +312,14 @@ void TypeChecker::TypeCheckerImpl::CheckCFuncParam(const AST::FuncParam& fp)
     if (fp.isNamedParam) {
         diag.Diagnose(fp, DiagKind::sema_cfunc_cannot_have_named_args);
     }
+    if (fp.GetTy().IsLocalType()) {
+        if (fp.type) {
+            DiagExpectedDataType(*fp.type);
+        } else {
+            DiagExpectedDataType(fp);
+        }
+        return;
+    }
     if (fp.GetTy()->IsUnit()) {
         diag.Diagnose(fp.identifier.Begin(), fp.type->end, DiagKind::sema_cfunc_cannot_have_unit_args);
     } else if (!fp.GetTy()->IsMetCType()) {
@@ -317,6 +329,13 @@ void TypeChecker::TypeCheckerImpl::CheckCFuncParam(const AST::FuncParam& fp)
 
 void TypeChecker::TypeCheckerImpl::CheckCFuncParamType(const AST::Type& type)
 {
+    if (!type.GetTy().IsCorrect()) {
+        return;
+    }
+    if (type.GetTy().IsLocalType()) {
+        DiagExpectedDataType(type);
+        return;
+    }
     if (type.GetTy()->IsUnit()) {
         diag.Diagnose(type.begin, type.end, DiagKind::sema_cfunc_cannot_have_unit_args);
     } else if (!type.GetTy()->IsMetCType()) {

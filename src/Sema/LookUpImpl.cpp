@@ -475,14 +475,23 @@ std::vector<Ptr<Decl>> LookUpImpl::FieldLookup(Ptr<Decl> decl, const std::string
 std::vector<Ptr<Decl>> LookUpImpl::StdLibFieldLookup(const Node& node, const std::string& fieldName)
 {
     std::vector<Ptr<Decl>> results;
-    Ptr<Decl> target = nullptr;
+    std::string pkgName;
     if (node.TestAttr(Attribute::IN_CORE)) {
-        target = importManager.GetCoreDecl(fieldName);
+        pkgName = CORE_PACKAGE_NAME;
     } else if (node.TestAttr(Attribute::IN_MACRO)) {
-        target = importManager.GetAstDecl(fieldName);
+        pkgName = AST_PACKAGE_NAME;
+    } else {
+        return results;
     }
-    if (target) {
-        results.emplace_back(target);
+    // Collect all overloads: GetCoreDecl/GetAstDecl only return one Decl, which drops
+    // dual-mode stdlib helpers such as composition(~local) / composition(@local?).
+    auto cjo = importManager.GetCjoManager();
+    CJC_NULLPTR_CHECK(cjo);
+    auto& decls = cjo->GetPackageMembersByName(pkgName, fieldName);
+    results.insert(results.end(), decls.begin(), decls.end());
+    if (results.empty()) {
+        auto& implicits = cjo->GetImplicitPackageMembersByName(pkgName, fieldName);
+        results.insert(results.end(), implicits.begin(), implicits.end());
     }
     return results;
 }

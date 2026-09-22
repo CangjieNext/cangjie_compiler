@@ -432,9 +432,8 @@ flatbuffers::Offset<NodeFormat::Expr> NodeWriter::SerializeTypeConvExpr(AstExpr 
     auto leftParenPos = FlatPosCreateHelper(typeConvExpr->leftParenPos);
     auto fbExpr = SerializeExpr(typeConvExpr->expr.get());
     auto rightParenPos = FlatPosCreateHelper(typeConvExpr->rightParenPos);
-    auto modal = SerializeModalInfo(typeConvExpr->modal);
     auto fbTypeConvExpr = NodeFormat::CreateTypeConvExpr(
-        builder, fbNodeBase, fbPrimitiveType, &leftParenPos, fbExpr, &rightParenPos, modal);
+        builder, fbNodeBase, fbPrimitiveType, &leftParenPos, fbExpr, &rightParenPos);
     return NodeFormat::CreateExpr(builder, fbNodeBase, type, fbTypeConvExpr.Union());
 }
 
