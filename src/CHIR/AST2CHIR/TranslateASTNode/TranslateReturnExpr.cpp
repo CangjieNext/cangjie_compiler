@@ -64,16 +64,6 @@ Ptr<Value> Translator::Visit(const AST::ReturnExpr& expr)
     const auto& loc = TranslateLocation(expr);
     CJC_NULLPTR_CHECK(expr.expr);
     auto retVal = TranslateExprArg(*expr.expr);
-    auto continuationExpressions = currentBlock->GetExpressions();
-    // For `return match (...) { case ... => return ... }`, translation resumes in a
-    // detached continuation for the outer return. Zero debug locations identify only
-    // generated IR, so skip that warning; a source-located expression remains reportable.
-    if (currentBlock->GetPredecessors().empty() &&
-        std::all_of(continuationExpressions.begin(), continuationExpressions.end(), [](auto expression) {
-            return expression->GetDebugLocation().GetBeginPos().IsZero();
-        })) {
-        currentBlock->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
-    }
     int64_t level = CalculateDelayExitLevelForReturn();
     Ptr<Value> ret = GetOuterBlockGroupReturnValLocation();
     if (ret != nullptr) {
