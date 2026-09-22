@@ -345,6 +345,13 @@ void TypeChecker::TypeCheckerImpl::CheckFuncType(ASTContext& ctx, FuncType& ft)
 
 void TypeChecker::TypeCheckerImpl::CheckCFuncReturnType(const Type& type)
 {
+    if (!type.GetTy().IsCorrect()) {
+        return;
+    }
+    if (type.GetTy().IsLocalType()) {
+        DiagExpectedDataType(type);
+        return;
+    }
     if (!type.GetTy()->IsMetCType()) {
         auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_cfunc_return_type, type);
         builder.AddNote("return type is " + type.GetTy().String());

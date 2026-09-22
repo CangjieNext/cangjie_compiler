@@ -1321,8 +1321,8 @@ Ptr<Decl> ImportManager::GetImportedDecl(const std::string& fullPackageName, con
 {
     auto& decls = cjoManager->GetPackageMembersByName(fullPackageName, name);
     if (decls.empty()) {
-        auto decl = cjoManager->GetImplicitPackageMembersByName(fullPackageName, name);
-        return decl;
+        auto& implicits = cjoManager->GetImplicitPackageMembersByName(fullPackageName, name);
+        return implicits.empty() ? nullptr : *implicits.begin();
     }
     return *decls.begin();
 }

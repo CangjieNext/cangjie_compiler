@@ -197,7 +197,7 @@ bool TypeChecker::TypeCheckerImpl::ChkPattern(
     // External @local! selector infers the pattern modal to @local?
     if (Ty::IsTyCorrect(target) && selector) {
         if (selector->TyMode().local == Mode::FULL && IsExternalLocal(ctx, *selector)) {
-            target = target.With(ModalInfo{Mode::HALF});
+            target = target.With({Mode::HALF});
         }
     }
     switch (p.astKind) {

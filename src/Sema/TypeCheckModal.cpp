@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <optional>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 namespace Cangjie {
@@ -198,7 +199,7 @@ private:
         }
         if (type.IsCopyInterfaceTy(ty)) {
             if (!allowRootCopyable) {
-                d.DiagnoseRefactor(DiagKindRefactor::sema_illegal_copyable_type_usage, at);
+                d.DiagnoseRefactor(DiagKindRefactor::sema_illegal_copy_type_usage, at);
             }
             return;
         }
@@ -228,7 +229,7 @@ private:
 ///    extend of non-struct cannot inherit Copyable (in CheckExtendInterfaces)
 /// 7. Check assignment/member-assignment
 /// 8. Check exclave expr is inside a func-like body whose signature has a non copy local! or local? return type, or
-///    non copy local! param type; not in param default values or global/static initializer
+///    non copy local! param type; not in global/static initializer
 /// 9. Check exclave expr is not nested inside another exclave or exclave function
 /// 10. Check exclave expr is not in static init, finalizer, main, spawn, or try/catch/handle block
 /// 11. Check abstract func cannot be exclave
@@ -238,6 +239,7 @@ private:
 /// 15. Check finalizer this mode is supermode of all ctor this mode
 /// 16. Check type arguments of a type are data type (function type allowed); skip for function type and fun call
 /// 17. Check 'Copyable' is only used as a struct supertype or a generic upper bound
+/// 18. Check spawn does not refer to a non-copy local variable declared outside it
 struct ModalTypeChecker {
     ModalTypeChecker(DiagnosticEngine& diag, TypeManager& m) : d(diag), type{m}
     {
@@ -256,14 +258,21 @@ struct ModalTypeChecker {
     /// 1. external local! used in exclave expr is internal
     /// 2. internal local! used in returned expr of inside exclave expr is external
     /// 3. member access of external local! is external
-    /// 4. reference to param of `T` local! is external local!
-    /// 5. reference to global/static var is external
-    /// 6. all other cases are internal
+    /// 4. tuple, varray index of external local! is external
+    /// 5. reference to param of `T` local! is external local!
+    /// 6. reference to global/static var is external
+    /// 7. all other cases are internal
     bool IsExternalLocal(const ASTContext& ctx, const Expr& expr)
     {
         if (IsInExclaveExpr(ctx, expr)) {
             // rule 2
             return IsReturnedExpr(ctx, expr);
+        }
+        if (expr.desugarExpr) {
+            return IsExternalLocal(ctx, *expr.desugarExpr);
+        }
+        if (auto id = DynamicCast<SubscriptExpr>(&expr)) {
+            return IsExternalLocal(ctx, *id->baseExpr);
         }
         if (auto ref = DynamicCast<RefExpr>(&expr)) {
             if (ref->isThis || ref->isSuper) {
@@ -378,8 +387,9 @@ private:
             }
             CheckExclaveModifierInInvalidFunSig(*func);
         }
-        if (Is<SpawnExpr>(node)) {
+        if (auto spawn = DynamicCast<SpawnExpr>(node)) {
             PushForbiddenContext("spawn expr");
+            CheckLocalVarRefOutsideSpawn(*spawn);
         }
         if (auto exclave = DynamicCast<ExclaveExpr>(node)) {
             CheckNestedExclave(ctx, *exclave);
@@ -392,6 +402,56 @@ private:
         return VisitAction::WALK_CHILDREN;
     }
 
+    /// A non-copy local variable declared outside a spawn cannot be referred to from inside that spawn.
+    void CheckLocalVarRefOutsideSpawn(const SpawnExpr& spawn)
+    {
+        if (!spawn.task) {
+            return;
+        }
+        // Nested spawn is checked by its own visit. Vars declared there are not in this spawn.
+        std::unordered_set<Ptr<VarDecl>> declared;
+        Walker collect(spawn.task.get(), [&declared](Ptr<Node> node) {
+            if (Is<SpawnExpr>(node)) { // skip nested spawn, but didn't skip nested funs
+                return VisitAction::SKIP_CHILDREN;
+            }
+            if (auto var = DynamicCast<VarDecl>(node)) {
+                declared.insert(var);
+            }
+            return VisitAction::WALK_CHILDREN;
+        });
+        collect.Walk();
+        Walker refs(spawn.task.get(), [this, &declared](Ptr<Node> node) {
+            if (Is<SpawnExpr>(node)) {
+                return VisitAction::SKIP_CHILDREN;
+            }
+            if (auto ref = DynamicCast<RefExpr>(node)) {
+                DiagLocalVarRefOutsideSpawn(*ref, declared);
+            }
+            return VisitAction::WALK_CHILDREN;
+        });
+        refs.Walk();
+    }
+
+    /// Referee must be a local `VarDecl` (not a param, member, global, `this`, or `super`) of non-copy
+    /// local type, and not declared in this spawn.
+    void DiagLocalVarRefOutsideSpawn(const RefExpr& ref, const std::unordered_set<Ptr<VarDecl>>& declared)
+    {
+        auto var = DynamicCast<VarDecl>(ref.GetTarget());
+        if (!var || var->astKind != ASTKind::VAR_DECL || IsThisOrSuper(ref) || var->IsMemberDecl() ||
+            IsGlobalOrStaticVar(*var)) {
+            return;
+        }
+        auto varTy = var->GetTy();
+        // actually @local! reference in spawn is reported sema_bad_capture_local, which is checked in TypeCheck,
+        // and when that stage has error this will never be run. Only @local? reference will be reported here.
+        if (!IsNonCopyLocalTy(varTy) || declared.find(var) != declared.end()) {
+            return;
+        }
+        auto builder = d.DiagnoseRefactor(DiagKindRefactor::sema_cannot_access_local_var_outside_exclave, ref,
+            std::string{var->identifier.Val()}, varTy.String(), std::string{"spawn"});
+        builder.AddHint(MakeRange(var->begin, var->end));
+    }
+
     /// A local variable of non-copy @local! or @local? type declared outside
     /// an exclave cannot be referred to from inside that exclave.
     void CheckLocalVarRefOutsideExclave(const ASTContext& ctx, const RefExpr& ref)
@@ -400,15 +460,12 @@ private:
         if (!var || var->astKind == ASTKind::PROP_DECL) {
             return;
         }
-        if (Is<FuncParam>(var) || IsGlobalOrStaticVar(*var)) {
+        if (IsThisOrSuper(ref) || Is<FuncParam>(var) || IsGlobalOrStaticVar(*var)) {
             return;
         }
         auto varTy = var->GetTy();
-        if (!varTy.IsCorrect() || type.ImplementsCopyInterface(varTy.Ty())) {
-            return;
-        }
-        auto localMode = varTy.Mode().local;
-        if (localMode != Mode::FULL && localMode != Mode::HALF) {
+        // this excludes member var ref as well, because they're considered ref to this, which is a func param
+        if (!varTy.IsCorrect() || varTy.IsDataType() || type.ImplementsCopyInterface(varTy.Ty())) {
             return;
         }
         // this check is valid because exclave cannot be nested
@@ -417,7 +474,7 @@ private:
         }
         auto builder = d.DiagnoseRefactor(
             DiagKindRefactor::sema_cannot_access_local_var_outside_exclave, ref,
-            std::string{var->identifier.Val()}, varTy.String());
+            std::string{var->identifier.Val()}, varTy.String(), "exclave");
         builder.AddHint(MakeRange(var->begin, var->end));
     }
 
@@ -484,9 +541,6 @@ private:
 
     void WalkInForbiddenContext(const ASTContext& ctx, std::string_view ctxName, Ptr<Node> node)
     {
-        if (!node) {
-            return;
-        }
         PushForbiddenContext(ctxName);
         WalkSubtree(ctx, node);
         PopForbiddenContext();
@@ -518,9 +572,11 @@ private:
         WalkSubtree(ctx, te.finallyLambda.get());
     }
 
-    /// Functions that return internal @local!/? must return so via exclave. External @local! and copy type are ok.
-    /// Note that there is no 'internal/external' @local? in spec, but since the check here are the same, so we use
-    /// the same check.
+    // returned value must be either
+    // inside exclave, or
+    // is @~local, or
+    // is external @local! or @local?, or
+    // is @local! or @local? copy type, and the return type of the function is not an interface type
     void CheckReturnModalType(const ASTContext& ctx, Node& func)
     {
         auto body = TypeCheckUtil::GetFuncBody(func);
@@ -531,10 +587,17 @@ private:
             return;
         }
         auto r = CollectReturnedExpr(*body);
+        auto retTy = StaticCast<FuncTy>(func.DataTy())->retTy;
         for (auto& e : r) {
-            if (!IsExternalLocal(ctx, *e) && IsNonCopyLocalTy(e->GetTy()) && !IsInExclaveExpr(ctx, *e)) {
-                DiagBadInternalLocalReturn(*e);
+            // per spec we should check e->ty is non local copy type, but we check retTy because there can be Some box,
+            // and it is boxed after Sema.
+            if (IsInExclaveExpr(ctx, *e) || IsExternalLocal(ctx, *e) || retTy.IsDataType() || e->GetTy()->IsNothing()) {
+                continue;
             }
+            if (type.ImplementsCopyInterface(retTy.Ty()) && !Is<InterfaceTy>(retTy.Ty())) {
+                continue;
+            }
+            DiagBadInternalLocalReturn(*e);
         }
     }
 
@@ -731,6 +794,12 @@ private:
             }
         }
         if (auto func = DynamicCast<FuncDecl>(&funcLike); func && type.HasThisParam(*func)) {
+            if (funcLike.TestAttr(Attribute::CONSTRUCTOR)) {
+                // local! and local? ctor always allow exclave, even copy type
+                if (auto mode = TypeManager::GetThisParamMode(*func); mode != Mode::NOT) {
+                    return true;
+                }
+            }
             if (isNonCopyLocalFull(type.GetThisParamTy(*func))) {
                 return true;
             }
@@ -792,7 +861,7 @@ private:
 
     void DiagExclaveInForbiddenContext(const ExclaveExpr& expr, std::string_view contextName)
     {
-        d.DiagnoseRefactor(DiagKindRefactor::sema_exclave_in_main, expr, std::string{contextName});
+        d.DiagnoseRefactor(DiagKindRefactor::sema_invalid_exclave, expr, std::string{contextName});
     }
 
     bool IsNonCopyLocalTy(ModalTy targetTy)
@@ -1035,7 +1104,7 @@ private:
         // @local!: both @local!, external vs internal
         if (rLocal == Mode::FULL) {
             auto lext = IsExternalLocal(ctx, *left);
-            auto rext = IsExternalLocal(ctx, *assign.rightExpr.get());
+            auto rext = IsExternalLocal(ctx, *assign.rightExpr);
             if (lext != rext) {
                 DiagBadAssignment(assign, {Mode::FULL}, assign.rightExpr->GetTy(), lext, rext);
             }
@@ -1072,6 +1141,40 @@ private:
         }
     }
 
+    /// VArray `arr[n] = e`: if T is copy, @local! / @local? assign both allowed; if T is non-copy,
+    /// @local? always illegal, @local! only if both arr and e are internal local! (e <: T checked by
+    /// ordinary assignment typing).
+    void CheckAssignExprSub(
+        const ASTContext& ctx, const AssignExpr& assign, const Expr* left, Mode lLocal, Mode rLocal)
+    {
+        auto sub = StaticCast<SubscriptExpr>(left);
+        if (!sub->IsVArrayAccess()) {
+            return;
+        }
+        if (type.ImplementsCopyInterface(StaticCast<VArrayTy>(sub->baseExpr->DataTy())->TyArg(0))) {
+            return;
+        }
+        if (lLocal == Mode::HALF) {
+            DiagBadAssigmentToLocalHalf(assign);
+            return;
+        }
+        if (lLocal == Mode::NOT) {
+            if (rLocal != Mode::NOT) {
+                DiagBadAssignment(assign, {}, assign.rightExpr->GetTy());
+            }
+            return;
+        }
+        if (rLocal != Mode::FULL) {
+            DiagBadAssignment(assign, {lLocal}, assign.rightExpr->GetTy());
+            return;
+        }
+        auto lext = IsExternalLocal(ctx, *left);
+        auto rext = IsExternalLocal(ctx, *assign.rightExpr);
+        if (lext || rext) {
+            DiagBadAssignment(assign, {Mode::FULL}, assign.rightExpr->GetTy(), lext, rext);
+        }
+    }
+
     void CheckAssignExpr(const ASTContext& ctx, const AssignExpr& assign)
     {
         if (assign.desugarExpr) {
@@ -1094,6 +1197,8 @@ private:
             CheckAssignExprRef(ctx, assign, left, lLocal, rLocal);
         } else if (DynamicCast<MemberAccess>(left)) {
             CheckAssignExprMa(ctx, assign, left, lLocal, rLocal);
+        } else if (DynamicCast<SubscriptExpr>(left)) {
+            CheckAssignExprSub(ctx, assign, left, lLocal, rLocal);
         }
     }
 
@@ -1125,8 +1230,8 @@ private:
     DiagnosticBuilder DiagBadAssignment(
         const Node& position, const ModalInfo& lModal, ModalTy rTy, bool lExternal, bool rExternal)
     {
-        std::string arg1 = (lExternal ? " external " : " internal ") + lModal.LocalString();
-        std::string arg2 = (rExternal ? " external " : " internal ") + rTy.String();
+        std::string arg1 = (lExternal ? " external " : "internal ") + lModal.LocalString();
+        std::string arg2 = (rExternal ? " external " : "internal ") + rTy.String();
         return d.DiagnoseRefactor(DiagKindRefactor::sema_bad_local_assignment, position, arg1, arg2);
     }
 
@@ -1328,56 +1433,19 @@ private:
                     [](const Modifier& m) { return m.modifier == TokenKind::EXCLAVE; })) {
                     return true;
                 }
-                // Default-value body of a non copy type not @~local is translated as if wrapped in
-                // `exclave {}` (CHIR does the wrapping); Sema exclave-context checks must recognize it.
-                if (IsInImplicitExclaveOfDefaultParam(*fd)) {
-                    return true;
-                }
             }
         }
         return false;
     }
 
-    // Returns the FuncParam whose default-value function is `fd`, or null.
-    FuncParam* GetCorrespondingFuncParam(const FuncDecl& fd)
-    {
-        if (!fd.ownerFunc || !fd.ownerFunc->funcBody || fd.ownerFunc->funcBody->paramLists.empty()) {
-            return nullptr;
-        }
-        for (auto& fp : fd.ownerFunc->funcBody->paramLists[0]->params) {
-            if (!fp) {
-                continue;
-            }
-            if (fd.identifier.Val() == fp->identifier.Val() ||
-                fd.identifier.Val().rfind(fp->identifier.Val() + ".", 0) == 0) {
-                return fp.get();
-            }
-        }
-        return nullptr;
-    }
-
-    // True for a desugared default-value func whose param is a non copy type not @~local; CHIR
-    // translates its body as if wrapped in `exclave {}`. Sema exclave-context checks treat it so.
-    bool IsInImplicitExclaveOfDefaultParam(const FuncDecl& fd)
-    {
-        if (!fd.ownerFunc || !fd.TestAttr(Attribute::HAS_INITIAL)) {
-            return false;
-        }
-        auto fp = GetCorrespondingFuncParam(fd);
-        if (!fp) {
-            return false;
-        }
-        return IsNonCopyLocalTy(fp->GetTy());
-    }
-
     void DiagBadExternalLocalArg(const Node& pos)
     {
-        d.DiagnoseRefactor(DiagKindRefactor::sema_bad_external_local_arg, pos);
+        d.DiagnoseRefactor(DiagKindRefactor::sema_external_local_arg, pos);
     }
 
     void DiagBadInternalLocalReturn(const Expr& expr)
     {
-        d.DiagnoseRefactor(DiagKindRefactor::sema_bad_internal_local_return, expr, expr.TyMode().ToString());
+        d.DiagnoseRefactor(DiagKindRefactor::sema_internal_local_return, expr);
     }
 
     /// Check call expr args cannot be external @local! type if the param is non Copy @local!
@@ -1396,14 +1464,14 @@ private:
         }
         if (call.desugarArgs) {
             for (auto& arg : *call.desugarArgs) {
-                if (arg->TyMode().local == Mode::FULL && IsExternalLocal(ctx, *arg->expr) &&
+                if (arg->TyMode().local == Mode::FULL && arg->expr && IsExternalLocal(ctx, *arg->expr) &&
                     !type.ImplementsCopyInterface(arg->expr->DataTy())) {
                     DiagBadExternalLocalArg(*arg->expr);
                 }
             }
         } else {
             for (auto& arg : call.args) {
-                if (arg->TyMode().local == Mode::FULL && IsExternalLocal(ctx, *arg->expr) &&
+                if (arg->TyMode().local == Mode::FULL && arg->expr && IsExternalLocal(ctx, *arg->expr) &&
                     !type.ImplementsCopyInterface(arg->expr->DataTy())) {
                     DiagBadExternalLocalArg(*arg->expr);
                 }
@@ -1494,7 +1562,7 @@ private:
 
     DiagnosticEngine& d;
     TypeManager& type;
-    // Stack of forbidden-context markers for sema_exclave_in_main (%s).
+    // Stack of forbidden-context markers for sema_invalid_exclave (%s).
     // - nullopt: boundary of a func-like body (FuncDecl / LambdaExpr). Exclave checks only
     //   consider entries above the innermost frame, so outer try/catch/spawn do not apply
     //   inside nested functions or lambdas.

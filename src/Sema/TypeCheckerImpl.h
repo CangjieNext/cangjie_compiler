@@ -317,7 +317,7 @@ private:
      * @param contexts the context of source packages to be checked.
      */
     void PreCheck(const std::vector<Ptr<ASTContext>>& contexts);
-    void PreCheckUsage(ASTContext& ctx, const AST::Package& pkg);
+    void PreCheckUsage(ASTContext& ctx, AST::Package& pkg);
     void PreCheckInvalidInherit(const ASTContext& ctx, const AST::Package& pkg);
     /**
      * Check if there is a TypeAlias circle after all Decls are resolved.
@@ -531,6 +531,8 @@ private:
     AST::VisitAction CheckDefaultParamFunc(const AST::InterfaceDecl& ifd) const;
     AST::VisitAction CheckDefaultParamFunc(const AST::EnumDecl& ed) const;
     void GetSingleParamFunc(AST::Decl& decl);
+    /// After ResolveNames: mark desugared default-param funcs as `exclave` when the param is non-copy local!/local?.
+    void AttachExclaveToDefaultParamFunctions(AST::Package& pkg);
     void CheckPrimaryCtorForClassOrStruct(AST::InheritableDecl& id);
     /**
      * ReturnExpr must in FuncBody and JumpExpr must in LoopExpr.
