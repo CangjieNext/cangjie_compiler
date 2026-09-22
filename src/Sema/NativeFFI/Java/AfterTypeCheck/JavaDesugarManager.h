@@ -73,6 +73,7 @@ public:
     void GenerateJavaSourceCode(AfterTypeCheckContext& ctx);
 
     void ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx, std::function<void(AST::Node&)> desugarPropRef);
+    void ProcessCallSiteDesugarStages(AfterTypeCheckContext& ctx);
 private:
     /**
      * Processes logically isolated interop stage.
