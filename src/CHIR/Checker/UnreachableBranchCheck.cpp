@@ -296,6 +296,16 @@ void UnreachableBranchCheck::PrintWarning(
     if (node.GetExprKind() == ExprKind::BRANCH) {
         auto branch = StaticCast<const Branch*>(&node);
         auto sourceExpr = branch->GetSourceExpr();
+        auto nested = DynamicCast<Branch*>(block.GetTerminator());
+        // Direct else-if entries share their source position with the nested Branch.
+        // Diagnose each sibling body, but do not enter an ordinary `else { if ... }` body.
+        if (sourceExpr == SourceExpr::IF_EXPR && &block == branch->GetFalseBlock() && nested &&
+            nested->GetSourceExpr() == SourceExpr::IF_EXPR &&
+            nested->GetDebugLocation() == block.GetDebugLocation()) {
+            PrintWarning(*nested, *nested->GetTrueBlock(), hasProcessed);
+            PrintWarning(*nested, *nested->GetFalseBlock(), hasProcessed);
+            return;
+        }
         if (sourceExpr == SourceExpr::QUEST || sourceExpr == SourceExpr::BINARY) {
             (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_expression, range);
         } else if (sourceExpr == SourceExpr::MATCH_EXPR || sourceExpr == SourceExpr::MATCH_CASE) {
