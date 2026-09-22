@@ -1840,6 +1840,10 @@ std::vector<OwnedPtr<GenericConstraint>> ParserImpl::ParseGenericConstraints()
     for (auto& gc : ret) {
         if (gc && gc->type->astKind == AST::ASTKind::REF_TYPE) {
             auto rt = StaticAs<AST::ASTKind::REF_TYPE>(gc->type.get());
+            // Invalid names share a recovery placeholder, not a source-level identifier.
+            if (!rt->ref.identifier.Valid()) {
+                continue;
+            }
             if (posRecord.count(rt->ref.identifier.Val()) > 0) {
                 DiagDuplicatedItem("type name", rt->ref.identifier, rt->begin, posRecord[rt->ref.identifier.Val()],
                     " in generic constrain");

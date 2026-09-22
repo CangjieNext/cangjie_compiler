@@ -3361,6 +3361,49 @@ TEST(PositionTest, SubscriptExpr)
     EXPECT_EQ(e.commaPos[0], Position(1, 12));
 }
 
+TEST(ParserTestGenericConstraint, InvalidNamesDoNotCauseDuplicateDiagnostics)
+{
+    struct TestCase {
+        std::string code;
+        size_t invalidNameCount;
+        size_t duplicateCount;
+    };
+    const std::vector<TestCase> cases = {
+        {"func f<T>(): Unit where This <: Int64, Unit <: Int64 {}", 2, 0},
+        {"func f<T, U>(): Unit where This <: Int64, T <: Int64, Unit <: Int64, U <: Int64 {}", 2, 0},
+        {"func f<T>(): Unit where This <: Int64, T <: Int64, Unit <: Int64, T <: Int64 {}", 2, 1},
+        {"func f<T>(): Unit where T <: Int64, T <: Int64 {}", 0, 1},
+        {"func f<`This`, `Unit`>(): Unit where `This` <: Int64, `Unit` <: Int64 {}", 0, 0},
+        {"func f<`This`>(): Unit where `This` <: Int64, `This` <: Int64 {}", 0, 1},
+    };
+    for (const auto& test : cases) {
+        SCOPED_TRACE(test.code);
+        SourceManager sm;
+        DiagnosticEngine diag;
+        diag.SetSourceManager(&sm);
+        Parser parser(test.code, diag, sm);
+        auto file = parser.ParseTopLevel();
+        ASSERT_NE(file, nullptr);
+        const auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::PARSE);
+        size_t invalidNameCount = 0;
+        size_t duplicateCount = 0;
+        for (const auto& diagnostic : diagnostics) {
+            if (diagnostic.rKind == DiagKindRefactor::parse_expected_name) {
+                ++invalidNameCount;
+            }
+            if (diagnostic.rKind == DiagKindRefactor::parse_duplicated_item) {
+                ++duplicateCount;
+                EXPECT_EQ(diagnostic.errorMessage.find(INVALID_IDENTIFIER), std::string::npos);
+            }
+        }
+        EXPECT_EQ(invalidNameCount, test.invalidNameCount);
+        EXPECT_EQ(duplicateCount, test.duplicateCount);
+        if (test.invalidNameCount == 0 && test.duplicateCount == 0) {
+            EXPECT_EQ(diag.GetErrorCount(), 0);
+        }
+    }
+}
+
 TEST(PositionTest, GenericConstraintBegin)
 {
     std::string code = R"(func foo<T>(a: T): Unit where T <: ToString {})";
