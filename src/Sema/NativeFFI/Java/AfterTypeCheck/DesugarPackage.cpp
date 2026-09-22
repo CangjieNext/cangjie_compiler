@@ -44,8 +44,12 @@ void JavaDesugarManager::ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx,
 
     Process<PopulateJavaMirrorStubs>(ctx, typeManager, lib, factory);
 
-    Process<DesugarJArray>(ctx, typeManager, importManager, lib);
     GenerateJavaSourceCode(ctx);
+}
+
+void JavaDesugarManager::ProcessCallSiteDesugarStages(AfterTypeCheckContext& ctx)
+{
+    Process<DesugarJArray>(ctx, typeManager, importManager, lib);
     Process<DesugarTypeCheckingAndCasting>(ctx, lib, diag, utils);
 }
 
@@ -54,20 +58,22 @@ void JavaInteropManager::DesugarPackage(Package& pkg,
     MemberMap>& memberMap,
     std::function<void(AST::Node&)> desugarPropRef)
 {
-    if (!hasMirrorOrImpl) {
+    // if interoplib is accessible, there could be some mirror/impl declarations imported
+    if (!InteropLibBridge::IsInteropLibAccessible(importManager)) {
+        if (hasMirrorOrImpl) {
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_interoplib_must_be_imported, DEFAULT_POSITION);
+        }
         return;
     }
+
     JavaDesugarManager desugarer{
         importManager, typeManager, diag, mangler, javagenOutputPath, outputPath, memberMap};
 
-    if (!InteropLibBridge::IsInteropLibAccessible(importManager)) {
-        return;
-    }
-
+    AfterTypeCheckContext ctx{importManager, typeManager, pkg, hasMirrorOrImpl};
     if (hasMirrorOrImpl) {
-        AfterTypeCheckContext ctx{importManager, typeManager, pkg};
         desugarer.ProcessJavaMirrorImplStages(ctx, desugarPropRef);
     }
+    desugarer.ProcessCallSiteDesugarStages(ctx);
 }
 
 } // namespace Cangjie::Interop::Java

@@ -1360,11 +1360,6 @@ void InteropLibBridge::CheckInteropLibVersion()
 {
     auto versionDecl = GetInteropLibVersionVarDecl();
 
-    if (!versionDecl && !IsInteropLibAccessible()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_interoplib_must_be_imported, DEFAULT_POSITION);
-        return;
-    }
-
     if (!versionDecl || !versionDecl->initializer || versionDecl->initializer->astKind != ASTKind::LIT_CONST_EXPR ||
         versionDecl->initializer->TyKind() != TypeKind::TYPE_INT64) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interoplib_version_too_old, DEFAULT_POSITION,
