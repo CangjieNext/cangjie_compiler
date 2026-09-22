@@ -68,9 +68,8 @@ std::string SerializeRspForHost(const std::vector<std::string>& args);
 /**
  * @brief Decide whether a tool invocation should fall back to an rsp file.
  *
- * True when `cmdLength >= policy.threshold`, or when `CJC_FORCE_RSP` is set
- * to a non-empty value other than "0" (testing escape hatch). Always false
- * for tools without a registered policy.
+ * True when `cmdLength >= policy.threshold`. Always false for tools without
+ * a registered policy.
  */
 bool ShouldUseRsp(const ResponseFilePolicy& policy, size_t cmdLength);
 
