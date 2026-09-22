@@ -8,6 +8,7 @@
 
 #include "cangjie/CHIR/IR/Annotation.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
+#include "cangjie/CHIR/IR/Value/Value.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
@@ -29,7 +30,38 @@ std::vector<BlockGroup*> GetAllBlockGroups(const Lambda& start, BlockGroup& end)
     res.emplace_back(&end);
     return res;
 }
+
+bool IsInExclave(const Expression& expr)
+{
+    auto blockGroup = expr.GetParentBlockGroup();
+    CJC_NULLPTR_CHECK(blockGroup);
+    auto owner = blockGroup->GetOwnerExpression();
+    if (owner == nullptr) {
+        return false;
+    }
+    if (Cangjie::Is<Exclave>(owner)) {
+        return true;
+    }
+    return IsInExclave(*owner);
 }
+
+bool AllReturnValuesInExclave(const LocalVar& result)
+{
+    if (!result.IsRetValue()) {
+        return false;
+    }
+    for (auto user : result.GetUsers()) {
+        auto store = Cangjie::DynamicCast<Store*>(user);
+        if (store == nullptr || store->GetLocation() != &result) {
+            continue;
+        }
+        if (!IsInExclave(*store)) {
+            return false;
+        }
+    }
+    return true;
+}
+} // namespace
 
 SetMemRegion::SetMemRegion(CHIRBuilder& builder)
     : builder(builder)
@@ -88,7 +120,8 @@ std::unordered_set<BlockGroup*> SetMemRegion::CollectFunctionRegionBlockGroup(co
             // 4. allocate a non-trivial enum whose type has mode `local!` or `local?`
             auto resultType = expr.GetResult()->GetType()->StripAllRefs();
             if (resultType->IsLocalRegion() && resultType->IsEnum() &&
-                !StaticCast<EnumType*>(resultType)->GetEnumDef()->IsAllCtorsTrivial()) {
+                !StaticCast<EnumType*>(resultType)->GetEnumDef()->IsAllCtorsTrivial() &&
+                !AllReturnValuesInExclave(*expr.GetResult())) {
                 auto body = expr.GetFuncOrLambdaBody();
                 CJC_NULLPTR_CHECK(body);
                 scopeNeedsRegion.emplace(body);
@@ -133,18 +166,6 @@ void SetMemRegion::SetRegions(const std::unordered_set<BlockGroup*>& bgsNeedRegi
             if (Is<Lambda>(expr) || Is<Exclave>(expr)) {
                 return VisitResult::SKIP;
             } else if (Is<Exit>(expr)) {
-                auto parentBlock = expr.GetParentBlock();
-                auto endRegion = builder.CreateExpression<EndRegion>(builder.GetUnitTy(), parentBlock);
-                endRegion->MoveBefore(&expr);
-                return VisitResult::CONTINUE;
-            } else if (auto raise = DynamicCast<RaiseException*>(&expr)) {
-                // Same-frame catch must keep the current local region alive (see catch.cj):
-                // EndRegion before RaiseException(..., catchBlock) would free the region, then
-                // post-catch `@local!` allocations fail with "without local object region".
-                // Only end the region when unwinding out of this frame (no exception successor).
-                if (raise->GetExceptionBlock() != nullptr) {
-                    return VisitResult::CONTINUE;
-                }
                 auto parentBlock = expr.GetParentBlock();
                 auto endRegion = builder.CreateExpression<EndRegion>(builder.GetUnitTy(), parentBlock);
                 endRegion->MoveBefore(&expr);

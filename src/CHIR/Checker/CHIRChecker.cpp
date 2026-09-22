@@ -8,6 +8,7 @@
 #include "cangjie/CHIR/Utils/ToStringUtils.h"
 #include "cangjie/Mangle/CHIRManglingUtils.h"
 #include <sstream>
+#include <unordered_map>
 
 using namespace Cangjie::CHIR;
 
@@ -1631,12 +1632,7 @@ void CHIRChecker::CheckBlockGroup(const BlockGroup& blockGroup, const Function& 
     // 2. block group's top-level function must be correct
     CheckTopLevelFunc(blockGroup.GetTopLevelFunc(), topLevelFunc, "block group", blockGroup.GetIdentifier());
 
-    // 3. there must be entry block in block group
-    if (blockGroup.GetEntryBlock() == nullptr) {
-        ErrorInFunc(topLevelFunc, "there is no entry block in block group " + blockGroup.GetIdentifier() + ".");
-    }
-
-    // 4. owner func and owner expression, there can only be one
+    // 3. owner func and owner expression, there can only be one
     auto ownerFunc = blockGroup.GetOwnerFunc();
     auto ownerExpr = blockGroup.GetOwnerExpression();
     if (ownerFunc == nullptr && ownerExpr == nullptr) {
@@ -1647,13 +1643,14 @@ void CHIRChecker::CheckBlockGroup(const BlockGroup& blockGroup, const Function& 
             blockGroup.GetIdentifier() + ".");
     }
 
-    // 5. there must be blocks in block group
+    // 4. there must be blocks in block group
     auto blocks = blockGroup.GetBlocks();
     if (blocks.empty()) {
         ErrorInFunc(topLevelFunc, "there is no block in block group " + blockGroup.GetIdentifier() + ".");
+        return;
     }
 
-    // 6. block's id can not be empty and not be same
+    // 5. block's id can not be empty and not be same
     std::unordered_set<std::string> ids;
     for (size_t i = 0; i < blocks.size(); ++i) {
         auto id = blocks[i]->GetIdentifier();
@@ -1667,9 +1664,137 @@ void CHIRChecker::CheckBlockGroup(const BlockGroup& blockGroup, const Function& 
         }
     }
 
-    // 7. check every block
+    // 6. check every block
     for (auto block : blocks) {
         CheckBlock(*block, topLevelFunc);
+    }
+
+    // 7. there must be entry block in block group
+    if (blockGroup.GetEntryBlock() == nullptr) {
+        ErrorInFunc(topLevelFunc, "there is no entry block in block group " + blockGroup.GetIdentifier() + ".");
+        return;
+    }
+
+    // 8. pair StartRegion and EndRegion along this block group's CFG. EndRegion closes only the
+    //    innermost StartRegion. A cycle must enter each block at the same nesting depth, so the
+    //    loop itself must not open or close a region. Nested block groups are checked on their own.
+    CheckStartEndRegion(blockGroup, topLevelFunc);
+}
+
+void CHIRChecker::CheckShouldNotHaveRegionExpr(const BlockGroup& blockGroup, const Function& topLevelFunc)
+{
+    // An exclave function body and an Exclave expression body are one block group each. They must
+    // not contain StartRegion or EndRegion. A lambda nested inside them is another block group and
+    // is not part of this check.
+    auto rejectRegion = [this, &blockGroup, &topLevelFunc](const std::string& where) {
+        for (auto block : blockGroup.GetBlocks()) {
+            for (auto node : block->GetExpressions()) {
+                if (!Is<StartRegion>(node) && !Is<EndRegion>(node)) {
+                    continue;
+                }
+                ErrorInExpr(topLevelFunc, *node, node->GetExprKindName() + " is not allowed in " + where + ".");
+            }
+        }
+    };
+    if (auto ownerFunc = blockGroup.GetOwnerFunc(); ownerFunc != nullptr &&
+        ownerFunc->TestAttr(Attribute::EXCLAVE)) {
+        rejectRegion("an exclave function body");
+    } else if (auto ownerExpr = blockGroup.GetOwnerExpression(); ownerExpr != nullptr &&
+        Is<Exclave>(ownerExpr)) {
+        rejectRegion("an exclave expression body");
+    }
+}
+
+std::pair<std::vector<Block*>, size_t> CHIRChecker::CheckStartEndRegionInBlock(
+    const Block& block, size_t depth, const BlockGroup& blockGroup, const Function& topLevelFunc)
+{
+    std::vector<Block*> successors;
+    for (auto node : block.GetExpressions()) {
+        if (Is<StartRegion>(node)) {
+            ++depth;
+            continue;
+        }
+        if (Is<EndRegion>(node)) {
+            if (depth == 0) {
+                ErrorInExpr(topLevelFunc, *node,
+                    "EndRegion does not match a StartRegion in this block group.");
+                break;
+            }
+            --depth;
+            continue;
+        }
+        if (!node->IsTerminator()) {
+            continue;
+        }
+        if (Is<Exit>(node) || Is<Exclave>(node)) {
+            if (depth != 0) {
+                ErrorInExpr(topLevelFunc, *node,
+                    "missing EndRegion before leaving the frame. StartRegion and EndRegion must be paired "
+                    "in the same block group.");
+            }
+            break;
+        }
+        for (auto succ : node->GetSuccessors()) {
+            CJC_NULLPTR_CHECK(succ);
+            if (succ->GetParentBlockGroup() != &blockGroup) {
+                if (depth != 0) {
+                    ErrorInExpr(topLevelFunc, *node,
+                        "control flow leaves this block group while StartRegion is still open. EndRegion in "
+                        "another block group, including a nested one, does not close it.");
+                }
+                continue;
+            }
+            successors.push_back(succ);
+        }
+    }
+    return {successors, depth};
+}
+
+void CHIRChecker::CheckStartEndRegion(const BlockGroup& blockGroup, const Function& topLevelFunc)
+{
+    CheckShouldNotHaveRegionExpr(blockGroup, topLevelFunc);
+
+    // One pass over this block group's CFG. StartRegion pushes and EndRegion pops only the
+    // innermost frame. Paths that meet again, including a cycle back to an earlier block, must
+    // carry the same depth; a different depth means the loop itself opened or closed a region.
+    // Exit require depth 0. Nested block groups are separate CFGs and are not entered.
+    auto entry = blockGroup.GetEntryBlock();
+    struct Cursor {
+        Block* block;
+        size_t depth;
+    };
+    std::vector<Cursor> worklist{{entry, 0}};
+    std::unordered_map<Block*, size_t> depthAtEntry;
+
+    while (!worklist.empty()) {
+        auto cur = worklist.back();
+        worklist.pop_back();
+        auto block = cur.block;
+        CJC_NULLPTR_CHECK(block);
+        if (block->GetParentBlockGroup() != &blockGroup) {
+            continue;
+        }
+        // A later edge into this block is a join or a cycle (a back edge to an earlier block).
+        // The depth must match the first entry. A loop that runs StartRegion without EndRegion,
+        // or EndRegion without StartRegion, changes the depth on the back edge and is rejected.
+        // The same depth means the region stack is unchanged around the cycle, so walking this
+        // block again would not find a new pairing.
+        if (auto it = depthAtEntry.find(block); it != depthAtEntry.end()) {
+            if (it->second != cur.depth) {
+                ErrorInFunc(topLevelFunc, "block " + block->GetIdentifier() +
+                    " is reached again with StartRegion depth " + std::to_string(cur.depth) +
+                    ", but it was first entered with depth " + std::to_string(it->second) +
+                    ". A join or a cycle between blocks must not open or close a region: EndRegion "
+                    "closes only the innermost StartRegion, so every path into a block must pair "
+                    "them the same way.");
+            }
+            continue;
+        }
+        depthAtEntry.emplace(block, cur.depth);
+        auto [blocks, depth] = CheckStartEndRegionInBlock(*block, cur.depth, blockGroup, topLevelFunc);
+        for (auto b : blocks) {
+            worklist.push_back({b, depth});
+        }
     }
 }
 
