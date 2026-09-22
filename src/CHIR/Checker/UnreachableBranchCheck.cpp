@@ -27,6 +27,16 @@ std::string GetKeyWordBySourceExpr(SourceExpr sourceExpr)
     return "";
 }
 
+Branch* GetElseIfBranch(const Branch& branch, Block& block)
+{
+    auto nested = Cangjie::DynamicCast<Branch*>(block.GetTerminator());
+    // Direct else-if entries share their source position with the nested Branch.
+    // An ordinary `else { if ... }` body has a different source range.
+    return branch.GetSourceExpr() == SourceExpr::IF_EXPR && &block == branch.GetFalseBlock() && nested &&
+        nested->GetSourceExpr() == SourceExpr::IF_EXPR && nested->GetDebugLocation() == block.GetDebugLocation()
+        ? nested : nullptr;
+}
+
 /*
  * The GetNextMatchCase overloads return {boundary terminator, next source-case entry}. A null terminator with a
  * non-null block means traversal must continue inside the current case; two nulls mean this path has no case boundary.
@@ -296,6 +306,11 @@ void UnreachableBranchCheck::PrintWarning(
     if (node.GetExprKind() == ExprKind::BRANCH) {
         auto branch = StaticCast<const Branch*>(&node);
         auto sourceExpr = branch->GetSourceExpr();
+        if (auto nested = GetElseIfBranch(*branch, block)) {
+            PrintWarning(*nested, *nested->GetTrueBlock(), hasProcessed);
+            PrintWarning(*nested, *nested->GetFalseBlock(), hasProcessed);
+            return;
+        }
         if (sourceExpr == SourceExpr::QUEST || sourceExpr == SourceExpr::BINARY) {
             (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_expression, range);
         } else if (sourceExpr == SourceExpr::MATCH_EXPR || sourceExpr == SourceExpr::MATCH_CASE) {
