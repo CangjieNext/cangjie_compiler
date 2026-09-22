@@ -106,6 +106,7 @@ private:
         const LocalVar* retVal, const Type& retType, const Lambda* lambda, const Function& topLevelFunc);
     void CheckRetureTypeIfIsVoid(const Function& topLevelFunc, const FuncType& funcType, bool needBeVoid);
     void CheckBlockGroup(const BlockGroup& blockGroup, const Function& topLevelFunc);
+    void CheckStartEndRegion(const BlockGroup& blockGroup, const Function& topLevelFunc);
     void CheckBlock(const Block& block, const Function& topLevelFunc);
     /**
      * @brief the successor of current block's predecessor must be current block
