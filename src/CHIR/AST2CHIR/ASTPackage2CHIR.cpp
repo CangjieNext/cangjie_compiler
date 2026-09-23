@@ -21,6 +21,7 @@
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/CHIR/IR/Type/PrivateTypeConverter.h"
+#include "cangjie/CHIR/Transformation/PatchCJMPMembers.h"
 
 namespace Cangjie::CHIR {
 namespace {
@@ -629,6 +630,28 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
             fn = exist;
             // Update features set
             TryUpdateExistingValue(*fn, features);
+            // CJMP collision: Function already has body from a counterpart FuncDecl
+            // (e.g. common mirror getter created before this specific one, or vice versa).
+            // SPECIFIC replaces common; matched common just reuses the specific body.
+            if (fn->GetBody()) {
+                if (funcDecl.TestAttr(AST::Attribute::SPECIFIC)) {
+                    ResetSpecificFunc(funcDecl, *fn);
+                    globalCache.Set(funcDecl, *fn);
+                    if (IsSrcCodeImportedGlobalDecl(funcDecl, opts)) {
+                        srcCodeImportedFuncs.emplace(fn);
+                    }
+                    fn->SetFeatures(features);
+                    return;
+                }
+                // matched common decl (specificImplementation set by LinkMatchedCommonPropToSpecific):
+                // the SPECIFIC counterpart already set up this Function via ResetSpecificFunc,
+                // so just cache the mapping — skip InitBody/attributes/params to avoid overwriting SPECIFIC state
+                if (funcDecl.specificImplementation) {
+                    globalCache.Set(funcDecl, *fn);
+                    return;
+                }
+                fn->DestroyFuncBody(); // fallback: unexpected collision — destroy and recreate from scratch
+            }
         }
     }
     if (fn == nullptr) {
@@ -1090,12 +1113,11 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
         !decl.toBeCompiled) {
         customTypeDef->EnableAttr(Attribute::NON_RECOMPILE);
     }
-    if (!customTypeDef->TestAttr(Attribute::DESERIALIZED)) {
-        SetCustomTypeDefAttr(*customTypeDef, decl);
-        if (decl.TestAttr(AST::Attribute::IS_ANNOTATION)) {
-            classDeclWithAnnotation.emplace_back(
-                std::make_pair(StaticCast<const AST::ClassDecl*>(&decl), StaticCast<ClassDef*>(customTypeDef)));
-        }
+    SetCustomTypeDefAttr(*customTypeDef, decl);
+    if (!customTypeDef->TestAttr(Attribute::DESERIALIZED) &&
+        decl.TestAttr(AST::Attribute::IS_ANNOTATION)) {
+        classDeclWithAnnotation.emplace_back(
+            std::make_pair(StaticCast<const AST::ClassDecl*>(&decl), StaticCast<ClassDef*>(customTypeDef)));
     }
     chirType.SetGlobalNominalCache(decl, *customTypeDef);
     if (uniqueDecl != nullptr && uniqueDecl != &decl) {
@@ -1103,6 +1125,9 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
     }
     if (decl.TestAttr(AST::Attribute::COMMON) && !decl.TestAttr(AST::Attribute::FROM_COMMON_PART)) {
         customTypeDef->EnableAttr(Attribute::COMMON);
+    }
+    if (decl.TestAttr(AST::Attribute::FROM_COMMON_PART)) {
+        customTypeDef->EnableAttr(Attribute::FROM_COMMON_PART);
     }
     if (decl.TestAttr(AST::Attribute::SPECIFIC)) {
         customTypeDef->EnableAttr(Attribute::SPECIFIC);
@@ -1325,6 +1350,11 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
     trans.SetGenericFuncMap(genericFuncMap);
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "SetGenericFuncMap");
 
+    PatchCJMPMembers cjmpMemberPatcher(opts, *package, builder, chirType);
+    Utils::ProfileRecorder::Start("TranslateNominalDecls", "PatchCJMPSuperClass");
+    cjmpMemberPatcher.PatchSuperClass(nominalDecls, importedNominalDecls);
+    Utils::ProfileRecorder::Stop("TranslateNominalDecls", "PatchCJMPSuperClass");
+
     Utils::ProfileRecorder::Start("TranslateNominalDecls", "TranslateDecls");
     // Translate all nominal decls.
     TranslateVecDecl(importedNominalDecls, trans);
@@ -1336,9 +1366,13 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
     // Update some info for common specific
     Utils::ProfileRecorder::Start("TranslateNominalDecls", "ProcessCommonAndSpecific");
     ProcessCommonAndSpecificExtends();
+    cjmpMemberPatcher.PatchCommonFieldsForMirror();
+    cjmpMemberPatcher.PatchCommonFieldsForJavaImpl();
+    cjmpMemberPatcher.PatchFieldReferencesForMirror();
     SetExtendInfo();
     UpdateExtendParent();
     ProcessClassStructVarInits(trans);
+    cjmpMemberPatcher.PatchFieldReferencesForJavaImpl();
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "ProcessCommonAndSpecific");
 }
 
@@ -1380,9 +1414,12 @@ void AST2CHIR::TranslateVecDecl(const std::vector<Ptr<const AST::Decl>>& decls, 
 bool AST2CHIR::MaybeDeserialized(const AST::Decl& decl) const
 {
     // When the specific is compiled and decl is from common part or generic instantiated or imported or specific decl.
+    // matched common decl linked to specific at BeforeTypeCheck (e.g. mirror getter/setter with specific counterpart)
+    // — must be deserialized so CHIR can reuse the existing SPECIFIC Function instead of creating a new one
     if (mergingSpecific &&
-        decl.TestAnyAttr(AST::Attribute::SPECIFIC, AST::Attribute::FROM_COMMON_PART,
-            AST::Attribute::GENERIC_INSTANTIATED, AST::Attribute::IMPORTED)) {
+        (decl.TestAnyAttr(AST::Attribute::SPECIFIC, AST::Attribute::FROM_COMMON_PART,
+            AST::Attribute::GENERIC_INSTANTIATED, AST::Attribute::IMPORTED) ||
+        decl.specificImplementation)) {
         return true;
     }
     if (decl.outerDecl && decl.outerDecl->TestAttr(AST::Attribute::GENERIC_INSTANTIATED)) {
@@ -1665,7 +1702,6 @@ void AST2CHIR::ProcessClassStructVarInits(Translator& trans)
     for (auto& container : declContainers) {
         for (const auto& decl : container) {
             CJC_NULLPTR_CHECK(decl);
-            // Skip the common part varInit generation while comparing specific parts.
             if (decl->TestAttr(AST::Attribute::FROM_COMMON_PART)) {
                 continue;
             }
@@ -1676,4 +1712,5 @@ void AST2CHIR::ProcessClassStructVarInits(Translator& trans)
         }
     }
 }
+
 } // namespace Cangjie::CHIR
