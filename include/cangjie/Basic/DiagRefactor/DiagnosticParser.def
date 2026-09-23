@@ -49,7 +49,7 @@ ERROR(parse_expected_catch_or_finally_in_try, "expected 'catch' or 'finally' aft
 ERROR(parse_expected_catch_or_handle_or_finally_in_try, "expected 'catch', 'handle' or 'finally' after try block, found %s",
     "expected 'catch', 'handle' or 'finally' here", {"after try block"})
 ERROR(parse_expected_colon_in_catch_pattern, "expected ':' in exception type pattern, found %s", "expected ':' here")
-ERROR(parse_expected_colon_in_effect_pattern, "expected ':' in effect type pattern, found %s", "expected ':' here")    
+ERROR(parse_expected_colon_in_effect_pattern, "expected ':' in effect type pattern, found %s", "expected ':' here")
 ERROR(parse_expected_wildcard_or_exception_pattern, "expected wildcard or exception type pattern, found %s",
     "expected wildcard or exception type pattern here")
 ERROR(parse_expected_wildcard_or_effect_pattern, "expected wildcard or effect type pattern, found %s",
@@ -332,9 +332,11 @@ ERROR(parse_java_mirror_cannot_have_static_init, "java-mirrored declaration cann
 ERROR(parse_java_mirror_cannot_have_finalizer, "java-mirrored declaration cannot have finalizer")
 ERROR(parse_java_mirror_cannot_have_const_member, "java-mirrored declaration cannot have const member")
 ERROR(parse_java_mirror_cannot_be_sealed, "@JavaMirror declaration cannot be sealed")
+ERROR(parse_java_mirror_cannot_be_common_specific, "@JavaMirror declaration cannot be declared common or specific")
 ERROR(parse_java_impl_cannot_be_generic, "@JavaImpl declaration cannot be generic")
 ERROR(parse_java_impl_cannot_be_abstract, "@JavaImpl declaration cannot be abstract")
 ERROR(parse_java_impl_cannot_be_sealed, "@JavaImpl declaration cannot be sealed")
+ERROR(parse_java_impl_cannot_be_common_specific, "@JavaImpl declaration cannot be declared common or specific")
 ERROR(parse_java_impl_cannot_have_static_init, "@JavaImpl declaration cannot have static initializer")
 
 // java impl
@@ -347,10 +349,12 @@ ERROR(parse_objc_mirror_ctor_cannot_have_body, "@ObjCMirror declaration construc
 ERROR(parse_objc_mirror_method_cannot_have_body, "@ObjCMirror declaration method '%s' cannot have body", "@ObjCMirror declaration method cannot have body")
 ERROR(parse_objc_mirror_method_must_have_return_type, "@ObjCMirror declaration method must have return type", "@ObjCMirror declaration method must have return type")
 ERROR(parse_objc_mirror_cannot_be_sealed, "@ObjCMirror declaration cannot be sealed")
+ERROR(parse_objc_mirror_cannot_be_common_specific, "@ObjCMirror declaration cannot be declared common or specific")
 ERROR(parse_objc_mirror_cannot_have_private_member, "@ObjCMirror declaration cannot have private member")
 ERROR(parse_objc_mirror_cannot_have_static_init, "@ObjCMirror declaration cannot have static initializer")
 ERROR(parse_objc_mirror_cannot_have_finalizer, "@ObjCMirror declaration cannot have finalizer")
 ERROR(parse_objc_mirror_cannot_have_const_member, "@ObjCMirror declaration cannot have const member")
+ERROR(parse_objc_impl_cannot_be_common_specific, "@ObjCImpl declaration cannot be declared common or specific")
 ERROR(parse_objc_impl_cannot_be_generic, "@ObjCImpl declaration cannot be generic")
 ERROR(parse_objc_impl_cannot_be_abstract, "@ObjCImpl declaration cannot be abstract")
 ERROR(parse_objc_impl_cannot_be_sealed, "@ObjCImpl declaration cannot be sealed")

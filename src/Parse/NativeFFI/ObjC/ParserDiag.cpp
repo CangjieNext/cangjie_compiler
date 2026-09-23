@@ -23,6 +23,11 @@ void OCFFIParserImpl::DiagObjCMirrorCannotBeSealed(const Node& node) const
     p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_mirror_cannot_be_sealed, node);
 }
 
+void OCFFIParserImpl::DiagObjCMirrorCannotBeCommonOrSpecific(const Node& node) const
+{
+    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_mirror_cannot_be_common_specific, node);
+}
+
 void OCFFIParserImpl::DiagObjCMirrorCannotHaveFinalizer(const Node& node) const
 {
     p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_mirror_cannot_have_finalizer, node);
@@ -83,6 +88,11 @@ void OCFFIParserImpl::DiagObjCOptionalFuncMustBeInMirrorClass(const FuncDecl& fd
         || fd.outerDecl->astKind != ASTKind::INTERFACE_DECL);
 
     p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_optional_method_must_be_in_mirror_class, fd);
+}
+
+void OCFFIParserImpl::DiagObjCImplCannotBeCommonOrSpecific(const Node& node) const
+{
+    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_impl_cannot_be_common_specific, node);
 }
 
 void OCFFIParserImpl::DiagObjCImplCannotBeInterface(const Node& node) const
