@@ -448,6 +448,10 @@ TEST(UtilsTest, IsDirTest)
     err = system(command.c_str());
     ASSERT_EQ(0, err);
     EXPECT_TRUE(IsDir("./definitelyDirectory"));
+    // 恢复权限并删除 definitelyDirectory, 避免无读权限目录残留导致后续 build.py clean 失败
+    command = "chmod +rwx ./definitelyDirectory && rm -rf ./definitelyDirectory";
+    err = system(command.c_str());
+    ASSERT_EQ(0, err);
 #endif
 }
 
