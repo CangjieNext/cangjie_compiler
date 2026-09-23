@@ -77,11 +77,6 @@ void JFFIParserImpl::CheckMirrorSignature(AST::ClassLikeDecl& decl, const PtrVec
         DiagJavaMirrorCannotBeSealed(decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
-
-    if (decl.TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC)) {
-        DiagJavaMirrorCannotBeCommonOrSpecific(decl);
-        decl.EnableAttr(Attribute::IS_BROKEN);
-    }
 }
 
 void JFFIParserImpl::CheckImplSignature(AST::ClassLikeDecl& decl, const PtrVector<Annotation>& annos) const
@@ -102,11 +97,6 @@ void JFFIParserImpl::CheckImplSignature(AST::ClassLikeDecl& decl, const PtrVecto
 
     if (decl.TestAttr(Attribute::SEALED)) {
         DiagJavaImplCannotBeSealed(decl);
-        decl.EnableAttr(Attribute::IS_BROKEN);
-    }
-
-    if (decl.TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC)) {
-        DiagJavaImplCannotBeCommonOrSpecific(decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
 
