@@ -127,6 +127,7 @@ inline const std::string INTEROP_JSTRING_NAME = "JString";
 inline const std::string INTEROP_JARRAY_NAME = "JArray";
 inline const std::string INTEROP_JAVA_LANG_PACKAGE = "java.lang";
 inline const std::string JAVA_REF_FIELD_NAME = "$javaref";
+inline const std::string JAVA_IMPL_REGISTRY_COMPANION_REF_FIELD_NAME = "$reg";
 inline const std::string JAVA_SELF_OBJECT = "selfobj";
 constexpr auto JAVA_REF_GETTER_FUNC_NAME = "$getJavaRef";
 constexpr auto INTEROPLIB_CFFI_JAVA_ENTITY = "Java_CFFI_JavaEntity";
