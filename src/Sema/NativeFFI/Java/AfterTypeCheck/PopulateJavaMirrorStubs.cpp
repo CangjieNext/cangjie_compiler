@@ -21,6 +21,28 @@
 
 namespace Cangjie::Native::FFI::Java {
 
+namespace {
+/**
+ * Whether @p d originates from the common part of a CJMP compilation (either the
+ * declaration itself or its source file carries FROM_COMMON_PART).
+ */
+bool FromCommonPart(const AST::Decl& d)
+{
+    return d.TestAttr(Attribute::FROM_COMMON_PART) ||
+        (d.curFile && d.curFile->TestAttr(Attribute::FROM_COMMON_PART));
+}
+
+/**
+ * A `common` member that has no specific counterpart in the specific part.
+ * Such a member cannot be mirrored because no FFI glue is generated for it,
+ * so it is reported as an error.
+ */
+bool IsUnmatchedCommon(const AST::Decl& d)
+{
+    return FromCommonPart(d) && d.TestAttr(Attribute::COMMON) && !d.specificImplementation;
+}
+} // namespace
+
 void PopulateJavaMirrorStubs::PopulateUserConstructor(AfterTypeCheckContext& ctx,
     AST::FuncDecl& userCtor, AST::FuncDecl& wrappingCtor) const
 {
@@ -198,14 +220,35 @@ void PopulateJavaMirrorStubs::Process(AfterTypeCheckContext& ctx, ClassLikeDecl&
         if (member->TestAttr(Attribute::IS_BROKEN)) {
             continue;
         }
+        // Common members matched with a specific counterpart are desugared on the specific side.
+        if (FromCommonPart(*member) && member->specificImplementation) {
+            continue;
+        }
+        // Plain common members (not marked `common`) are part of the common implementation
+        // and must not receive FFI glue nor be reported as errors.
+        if (FromCommonPart(*member) && !member->TestAttr(Attribute::COMMON)) {
+            continue;
+        }
+
         if (auto fd = As<ASTKind::FUNC_DECL>(member.get())) {
             if (fd->IsFinalizer() || IsJavaRefGetter(*fd) || IsGeneratedJavaMirrorConstructor(*fd)) {
                 continue;
             }
 
             if (fd->TestAttr(Attribute::CONSTRUCTOR)) {
+                if (IsUnmatchedCommon(*fd)) {
+                    diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_mirror_ctor_from_common_has_body, *fd);
+                    fd->EnableAttr(Attribute::IS_BROKEN);
+                    continue;
+                }
                 PopulateUserConstructor(ctx, *fd, *wrappingCtor);
             } else {
+                if (IsUnmatchedCommon(*fd)) {
+                    diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_mirror_method_from_common_has_body, *fd);
+                    fd->EnableAttr(Attribute::IS_BROKEN);
+                    continue;
+                }
+
                 bool isStatic = member->TestAttr(Attribute::STATIC);
                 bool isDefault = member->TestAttr(Attribute::JAVA_HAS_DEFAULT);
                 if (mirror.IsInterfaceDecl() && !isStatic && !isDefault) {
@@ -215,13 +258,19 @@ void PopulateJavaMirrorStubs::Process(AfterTypeCheckContext& ctx, ClassLikeDecl&
                 PopulateUserMethod(ctx, mirror, *fd);
             }
         } else if (auto prop = As<ASTKind::PROP_DECL>(member.get())) {
+            if (IsUnmatchedCommon(*prop)) {
+                diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_mirror_prop_from_common, *prop);
+                prop->EnableAttr(Attribute::IS_BROKEN);
+                continue;
+            }
             PopulateUserProperty(ctx, mirror, *prop);
         }
     }
 }
 
-PopulateJavaMirrorStubs::PopulateJavaMirrorStubs(TypeManager& typeManager, InteropLibBridge& ilib, ASTFactory& factory)
-    : typeManager(typeManager), ilib(ilib), factory(factory)
+PopulateJavaMirrorStubs::PopulateJavaMirrorStubs(TypeManager& typeManager, InteropLibBridge& ilib, ASTFactory& factory,
+    DiagnosticEngine& diag)
+    : typeManager(typeManager), ilib(ilib), factory(factory), diag(diag)
 {
 }
 

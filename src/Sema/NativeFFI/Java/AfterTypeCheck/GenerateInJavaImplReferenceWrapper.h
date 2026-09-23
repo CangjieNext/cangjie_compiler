@@ -120,6 +120,12 @@ private:
      */
     void InsertFinalizer(AST::ClassDecl& refWrapper) const;
 
+    OwnedPtr<AST::FuncDecl> GenerateJavaSideConstructorForFromCommonPart(AST::FuncDecl& commonCtor,
+        AST::VarDecl& companionRefField, AST::ClassDecl& companion) const;
+
+    AST::FuncDecl& InsertJavaSideConstructorForFromCommonPart(AST::FuncDecl& commonCtor,
+        AST::VarDecl& companionRefField, AST::ClassDecl& companion, AfterTypeCheckContext& ctx) const;
+
     TypeManager& typeManager;
     const ImportManager& importManager;
     InteropLibBridge& ilib;

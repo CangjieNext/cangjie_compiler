@@ -20,6 +20,7 @@
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 
 namespace Cangjie::Native::FFI::Java {
 using namespace Interop::Java;
@@ -29,7 +30,8 @@ using namespace Interop::Java;
  */
 class PopulateJavaMirrorStubs : public AfterTypeCheckStage {
 public:
-    explicit PopulateJavaMirrorStubs(TypeManager& typeManager, InteropLibBridge& ilib, ASTFactory& factory);
+    explicit PopulateJavaMirrorStubs(TypeManager& typeManager, InteropLibBridge& ilib, ASTFactory& factory,
+        DiagnosticEngine& diag);
 
 protected:
     void Process(AfterTypeCheckContext& ctx) override;
@@ -111,6 +113,7 @@ private:
     TypeManager& typeManager;
     InteropLibBridge& ilib;
     ASTFactory& factory;
+    DiagnosticEngine& diag;
 };
 } // namespace Cangjie::Native::FFI::Java
 
