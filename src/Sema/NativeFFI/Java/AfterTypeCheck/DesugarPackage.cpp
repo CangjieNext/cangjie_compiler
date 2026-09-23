@@ -42,7 +42,7 @@ void JavaDesugarManager::ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx,
     Process<RewriteJavaImplReferenceWrapperFields>(ctx, typeManager, utils, desugarPropRef);
     Process<GenerateNativeBridgeForJavaImpl>(ctx, typeManager, importManager, lib, jniBridge);
 
-    Process<PopulateJavaMirrorStubs>(ctx, typeManager, lib, factory);
+    Process<PopulateJavaMirrorStubs>(ctx, typeManager, lib, factory, diag);
 
     GenerateJavaSourceCode(ctx);
 }

@@ -32,6 +32,12 @@ void DesugarMirrors::HandleImpl(InteropContext& ctx)
             if (memberDecl->TestAttr(Attribute::IS_BROKEN)) {
                 continue;
             }
+            // CJMP: Skip matched members from common part
+            // Unmatched members need validation
+            if (memberDecl->TestAttr(Attribute::FROM_COMMON_PART) &&
+                memberDecl->specificImplementation) {
+                continue;
+            }
 
             if (IsGeneratedMember(*memberDecl)) {
                 continue;
