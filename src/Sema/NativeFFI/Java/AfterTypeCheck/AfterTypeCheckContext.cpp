@@ -86,6 +86,9 @@ std::vector<Ptr<FuncDecl>> AfterTypeCheckContext::GetJavaImplUserDefinedConstruc
         if (!IsUserDefinedJavaImplConstructor(*member)) {
             continue;
         }
+        if (member->TestAttr(Attribute::FROM_COMMON_PART)) {
+            continue;
+        }
         ctors.emplace_back(StaticAs<ASTKind::FUNC_DECL>(member));
     }
     return ctors;
@@ -115,6 +118,32 @@ void AfterTypeCheckContext::CacheJavaImplSuperCtorCall(const FuncDecl& ctor, Own
 CallExpr& AfterTypeCheckContext::GetJavaImplSuperCtorCall(const AST::FuncDecl& ctor)
 {
     return *javaImplUserCtorToOriginalSuperCall[&ctor];
+}
+
+std::vector<Ptr<FuncDecl>> AfterTypeCheckContext::GetJavaImplFromCommonPartConstructors(ClassDecl& refWrapper)
+{
+    std::vector<Ptr<FuncDecl>> ctors;
+
+    for (auto member : refWrapper.GetMemberDeclPtrs()) {
+        if (!member->TestAttr(Attribute::CONSTRUCTOR)) {
+            continue;
+        }
+        if (!member->TestAttr(Attribute::FROM_COMMON_PART)) {
+            continue;
+        }
+
+        auto ctor = As<ASTKind::FUNC_DECL>(member);
+        if (!ctor) {
+            CJC_ABORT_WITH_MSG(
+                "GetJavaImplFromCommonPartConstructors: unexpected non-FuncDecl "
+                "member with CONSTRUCTOR + FROM_COMMON_PART; PrimaryCtorDecls "
+                "should never have FROM_COMMON_PART (doNotExport=true, never serialized)");
+            continue;
+        }
+
+        ctors.emplace_back(ctor);
+    }
+    return ctors;
 }
 
 void AfterTypeCheckContext::AddGeneratedDecl(OwnedPtr<Decl>&& decl)

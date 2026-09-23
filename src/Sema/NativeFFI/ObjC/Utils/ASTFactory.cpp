@@ -407,7 +407,7 @@ OwnedPtr<VarDecl> ASTFactory::CreateNativeHandleField(ClassDecl& target)
     nativeHandleField->SetTy(nativeHandleTy);
     // mark it initialized because sema initialization analysis is run before
     // objc desugaring
-    nativeHandleField->EnableAttr(Attribute::PUBLIC, Attribute::INITIALIZED);
+    nativeHandleField->EnableAttr(Attribute::PUBLIC, Attribute::INITIALIZED, Attribute::COMPILER_ADD);
 
     PutDeclToClassLikeBody(*nativeHandleField, target);
 
@@ -1719,7 +1719,8 @@ OwnedPtr<VarDecl> ASTFactory::CreateHasInitedField(ClassDecl& target)
     auto ret = CreateVarDecl(HAS_INITED_IDENT, std::move(initializer));
     ret->isVar = true;
     PutDeclToClassLikeBody(*ret, target);
-    ret->EnableAttr(Attribute::PRIVATE, Attribute::NO_REFLECT_INFO, Attribute::HAS_INITED_FIELD);
+    ret->EnableAttr(Attribute::PRIVATE, Attribute::NO_REFLECT_INFO,
+        Attribute::HAS_INITED_FIELD, Attribute::COMPILER_ADD);
 
     return ret;
 }
