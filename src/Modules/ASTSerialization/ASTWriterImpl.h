@@ -67,7 +67,7 @@ public:
     void SetSerializingCommon();
     void PreSaveFullExportDecls(AST::Package& package);
     void SaveOptions(bool debug, GlobalOptions::OptimizationLevel level);
-    inline bool NeedToExportDecl(Ptr<const AST::Decl> decl);
+    bool NeedToExportDecl(Ptr<const AST::Decl> decl);
     void DFSCollectFilesDeclarations(Ptr<AST::File> file,
         std::unordered_set<AST::File*>& alreadyVisitedFiles,
         std::vector<Ptr<const AST::Decl>>& topLevelDeclsOrdered,
@@ -135,6 +135,8 @@ private:
     FormattedIndex SavePackageName(const std::string& fullPackageName);
     // Save file names and add to savedFileMap.
     void SaveFileInfo(const AST::File& file);
+    void SaveFileInfo(const unsigned int fileID, const std::string& fullPackageName,
+        const std::string& filePath, const AST::Node& node, TFeaturesDirectiveOffset feature);
     flatbuffers::Offset<PackageFormat::Imports> SaveFileImports(const AST::File& file);
 
     TFeatureIdOffset CreateFeatureId(const AST::FeatureId& featureId);

@@ -30,6 +30,11 @@ const uint8_t WINDOWS_LINE_TERMINATOR_LENGTH = 2;
 ///
 /// If you don't need platform independent hashes, use `std::hash`
 uint64_t GetHash(const std::string& content);
+/// Compute the fileID for a CJMP file from its normalized path.
+/// Uses FNV-1a (GetHash) + XOR-folding to 32 bits. Must be used by BOTH
+/// SourceManager (reader) and ASTWriter (writer) so CJMP common-part fileIDs
+/// agree between CJO serialization and deserialization.
+unsigned int GetCJMPFileID(const std::string& normalizedPath);
 /// Split a string by '\r\n' and '\n' to form a vector of strings.
 std::vector<std::string> SplitLines(const std::string& str);
 /// Split a string by customised \ref delimiter. Typically used in command line arguments parsing.

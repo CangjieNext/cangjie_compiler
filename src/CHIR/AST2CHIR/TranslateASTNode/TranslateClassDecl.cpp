@@ -4,12 +4,15 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+#include "cangjie/AST/Utils.h"
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/Utils/UserDefinedType.h"
 #include "cangjie/Mangle/CHIRTypeManglingUtils.h"
 #include "cangjie/Modules/ModulesUtils.h"
+
+#include <algorithm>
 
 namespace Cangjie::CHIR {
 
@@ -121,6 +124,13 @@ void Translator::AddMemberVarDecl(CustomTypeDef& def, const AST::VarDecl& decl)
         auto memberVars = def.GetDirectInstanceVars();
         for (size_t i = 0; i < memberVars.size(); i++) {
             if (memberVars[i].TestAttr(Attribute::DESERIALIZED) && memberVars[i].name == decl.identifier) {
+                varInfo.initializerFunc = memberVars[i].initializerFunc;
+                // Preserve DESERIALIZED: BuildVarDeclAttr builds from AST attrs only,
+                // but DESERIALIZED is a CHIR-only attr set during CHIR deserialization.
+                // Without this, the updated member loses DESERIALIZED, causing
+                // VarInitCheck's skip (COMMON && !DESERIALIZED) to suppress
+                // chir_class_uninitialized_field errors for common constructors.
+                varInfo.attributeInfo.SetAttr(Attribute::DESERIALIZED, true);
                 memberVars[i] = varInfo;
                 def.SetDirectInstanceVars(memberVars);
                 return;
@@ -283,6 +293,14 @@ bool Translator::ShouldTranslateMember(const AST::Decl& decl, const AST::Decl& m
     bool justIntroducedSpecific = !decl.TestAttr(AST::Attribute::IMPORTED) && decl.TestAttr(AST::Attribute::SPECIFIC);
     if (mergingSpecific && justIntroducedSpecific && DeclaredInDifferentFiles(decl, member)) {
         // Skip decls from common part when compiling platform
+        if (member.astKind == AST::ASTKind::VAR_DECL && member.IsCommonMatchedWithSpecific()) {
+            // Exception: the second loop in MergeCommonIntoSpecific moved this
+            // common-matched VarDecl into the specific class body and emptied
+            // the common class body. Without this, AddMemberVarDecl never runs
+            // for it, leaving the deserialized CHIR MemberVarInfo stale
+            // (unrefreshed type/annoInfo), causing runtime type resolution failures.
+            return true;
+        }
         return false;
     }
 
@@ -295,6 +313,25 @@ void Translator::AddMemberMethodToCustomTypeDef(const AST::FuncDecl& decl, Custo
         return;
     }
     auto func = StaticCast<Function>(GetSymbolTable(decl));
+
+    // Remove any existing deserialized common constructor with matching mangled
+    // name so AddMethod below doesn't create a duplicate. Needed for @JavaImpl
+    // reference wrapper constructors (GenerateJavaSideConstructorForFromCommonPart):
+    // they have FROM_COMMON_PART+COMPILER_ADD, not SPECIFIC, so the general
+    // "specific wins" path (ResetSpecificFunc in CreateFuncSignatureAndSetGlobalCache,
+    // which fires only for SPECIFIC) doesn't replace the common Function in-place.
+    // The condition is intentionally broad — SPECIFIC and deserialized constructors
+    // that also match are no-ops (same Function* removed and re-added).
+    if (def.TestAttr(CHIR::Attribute::JAVA_IMPL) && decl.TestAttr(AST::Attribute::CONSTRUCTOR)) {
+        auto methods = def.GetMethods();
+        auto it = std::find_if(methods.begin(), methods.end(),
+            [&](Function* m) { return m->GetIdentifierWithoutPrefix() == decl.mangledName; });
+        if (it != methods.end()) {
+            methods.erase(it);
+            def.SetMethods(methods);
+        }
+    }
+
     def.AddMethod(func);
     for (auto& param : decl.funcBody->paramLists[0]->params) {
         if (param->desugarDecl != nullptr) {
@@ -358,23 +395,38 @@ void Translator::TranslateClassLikeMemberFuncDecl(ClassDef& classDef, const AST:
 
 bool Translator::SkipMemberFuncInSpecificMerging(ClassDef& classDef, const AST::FuncDecl& decl)
 {
-    // Check if we're in specific merging mode with deserialized class
-    if (!mergingSpecific || !classDef.TestAttr(CHIR::Attribute::DESERIALIZED)) {
+    if (!mergingSpecific) {
+        return false;
+    }
+
+    if (decl.isGetter || decl.isSetter) {
+        if (decl.outerDecl && Cangjie::Interop::Java::IsImpl(*decl.outerDecl) &&
+            decl.TestAttr(AST::Attribute::COMPILER_ADD)) {
+            return false;
+        }
+        for (auto method : classDef.GetMethods()) {
+            if ((method->GetFuncKind() == FuncKind::GETTER && decl.isGetter) ||
+                (method->GetFuncKind() == FuncKind::SETTER && decl.isSetter)) {
+                if (method->GetIdentifierWithoutPrefix() == decl.mangledName) {
+                    return true;
+                }
+            }
+        }
         return false;
     }
 
     auto it = genericFuncMap.find(&decl);
-
-    // Check if member function already exists in deserialized class
     for (auto method : classDef.GetMethods()) {
         if (method->GetIdentifierWithoutPrefix() == decl.mangledName) {
+            if (classDef.TestAttr(CHIR::Attribute::JAVA_IMPL) && decl.TestAttr(AST::Attribute::CONSTRUCTOR)) {
+                return false;
+            }
             if (it != genericFuncMap.end()) {
                 AddMemberFunctionGenericInstantiations(classDef, it->second, decl);
             }
-            return true; // Member function already exists, skip processing
+            return true;
         }
     }
-
     return false;
 }
 
