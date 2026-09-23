@@ -53,6 +53,7 @@ enum class Attribute {
     NO_SIDE_EFFECT,  ///< Mark a Function does't have side effect.
     COMMON,          ///< Mark whether it's common declaration.
     SPECIFIC,        ///< Mark whether it's specific declaration.
+    FROM_COMMON_PART, ///< Mark whether it's deserialized from common CHIR file (CJMP).
     SKIP_ANALYSIS,   ///< Mark node that is not used for analysis.
                      ///< e.g. Node can be skiped if it has no body when creating 'common part'
     DESERIALIZED,    ///< Node deserialized from .chir file
@@ -87,6 +88,7 @@ const std::unordered_map<Attribute, std::string> ATTR_TO_STRING{{Attribute::STAT
     {Attribute::NO_DEBUG_INFO, "noDebugInfo"}, {Attribute::UNREACHABLE, "unreachable"},
     {Attribute::NO_SIDE_EFFECT, "noSideEffect"}, {Attribute::FINAL, "final"},
     {Attribute::COMMON, "common"}, {Attribute::SPECIFIC, "specific"},
+    {Attribute::FROM_COMMON_PART, "fromCommonPart"},
     {Attribute::SKIP_ANALYSIS, "skip_analysis"}, {Attribute::DESERIALIZED, "deserialized"},
     {Attribute::INITIALIZER, "initializer"},
     {Attribute::UNSAFE, "unsafe"}, {Attribute::JAVA_MIRROR, "javaMirror"}, {Attribute::JAVA_IMPL, "javaImpl"},

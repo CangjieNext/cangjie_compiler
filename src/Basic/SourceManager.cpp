@@ -92,11 +92,7 @@ unsigned int SourceManager::GetFileId(
             // 1) Some IDs may already be used for parent source set files
             // 2) Or in neighbour source set.
             // Thus IDs are evaluated based path.
-
-            auto hash64 = Utils::GetHash(normalizedPath);
-
-            // XOR-folding down to 32 bits to avoid collisions
-            fileID = static_cast<uint32_t>(hash64 >> 32) ^ static_cast<uint32_t>(hash64 & 0xFFFFFFFF);
+            fileID = Utils::GetCJMPFileID(normalizedPath);
         }
 
         sources.emplace(fileID, Source(fileID, normalizedPath, buffer, fileHash, packageName));
