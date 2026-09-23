@@ -669,7 +669,15 @@ private:
 
     bool ChkCallExpr(const CallExpr& ce, bool isWeak)
     {
-        CJC_NULLPTR_CHECK(ce.baseFunc);
+        // The desugared call of an operator '()' may be desugared again (e.g. it is then treated as a possibly
+        // variadic call), which leaves this node with 'baseFunc' moved out and the new result in 'desugarExpr'.
+        if (ce.baseFunc == nullptr) {
+            if (ce.desugarExpr != nullptr) {
+                return ChkExpr(*ce.desugarExpr, isWeak);
+            }
+            return false;
+        }
+
         if (!ChkExpr(*ce.baseFunc, isWeak)) {
             return false;
         }

@@ -490,8 +490,9 @@ void DesugarCallExpr(ASTContext& ctx, CallExpr& ce)
     auto callExpr = MakeOwnedNode<CallExpr>();
     ctx.RemoveTypeCheckCache(*callExpr);
     callExpr->sourceExpr = &ce;
-    callExpr->begin = ce.begin;
-    callExpr->end = ce.end;
+    CopyBasicInfo(&ce, callExpr.get());
+    callExpr->leftParenPos = ce.leftParenPos;
+    callExpr->rightParenPos = ce.rightParenPos;
     auto ma = MakeOwnedNode<MemberAccess>();
     ctx.RemoveTypeCheckCache(*ma);
     ma->scopeName = ce.baseFunc->scopeName;
@@ -521,6 +522,8 @@ void DesugarVariadicCallExpr(ASTContext& ctx, CallExpr& ce, size_t fixedPosition
     ce.callKind = CallKind::CALL_VARIADIC_FUNCTION;
     callExpr->sourceExpr = &ce;
     CopyBasicInfo(&ce, callExpr.get());
+    callExpr->leftParenPos = ce.leftParenPos;
+    callExpr->rightParenPos = ce.rightParenPos;
     callExpr->baseFunc = std::move(ce.baseFunc);
     CJC_ASSERT(ce.args.size() >= fixedPositionalArity);
     size_t idx = 0;
