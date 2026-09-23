@@ -9,7 +9,9 @@
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Create.h"
+#include "cangjie/AST/Match.h"
 #include "cangjie/Utils/CheckUtils.h"
+#include "cangjie/Sema/TypeManager.h"
 
 using namespace Cangjie;
 using namespace Cangjie::AST;
@@ -70,6 +72,95 @@ void InsertMethodStub(FuncDecl& fd, const ImportManager& importManager, TypeMana
     nodes.emplace_back(std::move(throwExpr));
 
     fd.funcBody->body = CreateBlock(std::move(nodes));
+}
+
+/**
+ * Assigns the missing function type to each getter of @p pd. For getters whose
+ * type is not yet Ty::IsTyCorrect (InitialTy, typical for CJMP-deserialized
+ * properties before TypeCheck), sets it to GetFunctionTy({}, pd.GetTy()) and
+ * propagates it onto the getter body. Getters that already have a correct type
+ * are left untouched.
+ * @param pd Mirror property whose getters are completed.
+ * @param typeManager Used to build the function type.
+ */
+void AssignMirrorPropGetters(PropDecl& pd, TypeManager& typeManager)
+{
+    for (auto& getter : pd.getters) {
+        if (!Ty::IsTyCorrect(getter->GetTy())) {
+            getter->SetTy(typeManager.GetFunctionTy({}, pd.GetTy()));
+            getter->funcBody->SetTy(getter->GetTy());
+        }
+    }
+}
+
+/**
+ * Assigns @p pd's type to the single setter parameter when it is unresolved.
+ * No-op if the setter has no param list/params or the param type is already
+ * correct.
+ * @param pd Mirror property that owns the setter.
+ * @param setter Setter whose first parameter is completed.
+ */
+void AssignMirrorSetterParamType(PropDecl& pd, FuncDecl& setter)
+{
+    if (setter.funcBody->paramLists.empty() || setter.funcBody->paramLists[0]->params.empty()) {
+        return;
+    }
+    auto& setterParam = setter.funcBody->paramLists[0]->params[0];
+    if (!Ty::IsTyCorrect(setterParam->GetTy())) {
+        setterParam->SetTy(pd.GetTy());
+    }
+}
+
+/**
+ * Assigns the missing function type (and parameter type) to each setter of @p
+ * pd. For setters whose type is not yet Ty::IsTyCorrect, sets it to
+ * GetFunctionTy({pd.GetTy()}, TYPE_UNIT) and propagates it onto the setter body,
+ * then delegates the parameter type to AssignMirrorSetterParamType. Setters
+ * that already have a correct type are left untouched (only the param is fixed).
+ * @param pd Mirror property whose setters are completed.
+ * @param typeManager Used to build the function type.
+ */
+void AssignMirrorPropSetters(PropDecl& pd, TypeManager& typeManager)
+{
+    for (auto& setter : pd.setters) {
+        if (!Ty::IsTyCorrect(setter->GetTy())) {
+            setter->SetTy(typeManager.GetFunctionTy(
+                {pd.GetTy()}, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)));
+            setter->funcBody->SetTy(setter->GetTy());
+        }
+        AssignMirrorSetterParamType(pd, *setter);
+    }
+}
+
+/**
+ * Fills in function types for the getter/setter of every DESUGARED_MIRROR_FIELD
+ * property in a mirror class. Sema-layer companion to InsertMirrorVarProp,
+ * called right after it from RewriteJavaMirrorFields because GetFunctionTy needs
+ * a TypeManager that is unavailable in the AST layer. Only processes properties
+ * whose own type is already Ty::IsTyCorrect, skipping ones still at InitialTy;
+ * delegates to AssignMirrorPropGetters / AssignMirrorPropSetters. This is
+ * required because CJMP-deserialized VarDecls have InitialTy until TypeCheck
+ * resolves them - without it, setter parameters crash ASTTypeValidator and
+ * CreateJavaEntityCall.
+ * @param decl Mirror class whose converted properties are completed.
+ * @param typeManager Used to build getter/setter function types.
+ */
+void AssignMirrorPropGetterSetterTypes(ClassDecl& decl, TypeManager& typeManager)
+{
+    for (auto& d : decl.body->decls) {
+        if (d->astKind != ASTKind::PROP_DECL) {
+            continue;
+        }
+        auto& pd = *StaticAs<ASTKind::PROP_DECL>(d.get());
+        if (!pd.TestAttr(Attribute::DESUGARED_MIRROR_FIELD)) {
+            continue;
+        }
+        if (!Ty::IsTyCorrect(pd.GetTy())) {
+            continue;
+        }
+        AssignMirrorPropGetters(pd, typeManager);
+        AssignMirrorPropSetters(pd, typeManager);
+    }
 }
 
 } // namespace Cangjie::Native::FFI::Java

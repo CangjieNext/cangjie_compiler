@@ -113,9 +113,8 @@ void JavaDesugarManager::InsertJavaRefVarDecl(ClassDecl& decl)
 
     auto javaref = CreateVarDecl(JAVA_REF_FIELD_NAME, nullptr, CreateRefType(javaEntityDecl));
     javaref->SetTy(javaEntityDecl.GetTy());
-    javaref->EnableAttr(Attribute::INITIALIZATION_CHECKED, Attribute::INITIALIZED);
-    javaref->begin = decl.body ? decl.body->begin : decl.begin;
-    javaref->curFile = decl.curFile;
+    javaref->EnableAttr(Attribute::INITIALIZATION_CHECKED, Attribute::INITIALIZED, Attribute::COMPILER_ADD);
+    CopyBasicInfo(&decl, javaref.get());
 
     Modifier protectedMod = Modifier(TokenKind::PUBLIC, javaref->begin);
     protectedMod.curFile = decl.curFile;
@@ -124,6 +123,8 @@ void JavaDesugarManager::InsertJavaRefVarDecl(ClassDecl& decl)
     javaref->isVar = false;
     javaref->outerDecl = Ptr(&decl);
     javaref->fullPackageName = decl.fullPackageName;
+
+    AddCurFile(*javaref, decl.curFile);
 
     decl.body->decls.push_back(std::move(javaref));
 }
@@ -157,10 +158,14 @@ void JavaDesugarManager::InsertJavaMirrorHasInited(ClassDecl& mirror)
     auto initializer = CreateLitConstExpr(LitConstKind::BOOL, "false", boolTy);
     auto ret = WithinFile(CreateVarDecl(HAS_INITED_IDENT, std::move(initializer)), curFile);
     ret->isVar = true;
+    CopyBasicInfo(&mirror, ret.get());
     ret->fullPackageName = mirror.fullPackageName;
     ret->outerDecl = Ptr(&mirror);
     ret->EnableAttr(
-        Attribute::PRIVATE, Attribute::NO_REFLECT_INFO, Attribute::IN_CLASSLIKE, Attribute::HAS_INITED_FIELD);
+        Attribute::PRIVATE, Attribute::NO_REFLECT_INFO,
+        Attribute::IN_CLASSLIKE, Attribute::HAS_INITED_FIELD, Attribute::COMPILER_ADD);
+
+    AddCurFile(*ret, mirror.curFile);
 
     mirror.body->decls.emplace_back(std::move(ret));
 }

@@ -583,6 +583,9 @@ void JavaSourceCodeGenerator::AddConstructor(const FuncDecl& ctor)
 void JavaSourceCodeGenerator::AddConstructors()
 {
     for (OwnedPtr<Decl>& declPtr : decl->GetMemberDecls()) {
+        if (declPtr->TestAttr(Attribute::FROM_COMMON_PART) && declPtr->specificImplementation) {
+            continue;
+        }
         auto fd = As<ASTKind::FUNC_DECL>(declPtr.get());
         if (!fd || !fd->TestAttr(Attribute::CONSTRUCTOR)) {
             continue;
@@ -676,17 +679,26 @@ void JavaSourceCodeGenerator::AddMethods()
     std::vector<Ptr<Decl>> funcDecls;
     for (auto extendDecl : extendDecls) {
         for (OwnedPtr<Decl>& declPtr : extendDecl->GetMemberDecls()) {
+            if (declPtr->TestAttr(Attribute::FROM_COMMON_PART) && declPtr->specificImplementation) {
+                continue;
+            }
             if (declPtr->TestAttr(Attribute::PUBLIC) && IsFuncDeclAndNotConstructor(declPtr)) {
                 funcDecls.emplace_back(declPtr.get());
             }
         }
     }
     for (OwnedPtr<Decl>& declPtr : decl->GetMemberDecls()) {
+        if (declPtr->TestAttr(Attribute::FROM_COMMON_PART) && declPtr->specificImplementation) {
+            continue;
+        }
         if (IsMemberExportable(*declPtr) && IsFuncDeclAndNotConstructor(declPtr)) {
             funcDecls.emplace_back(declPtr.get());
         }
     }
     for (auto& fdecl : funcDecls) {
+        if (fdecl->TestAttr(Attribute::FROM_COMMON_PART) && fdecl->specificImplementation) {
+            continue;
+        }
         const FuncDecl& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(fdecl);
         if (funcDecl.funcBody && funcDecl.funcBody->retType) {
             if (funcDecl.TestAttr(Attribute::STATIC)) {
