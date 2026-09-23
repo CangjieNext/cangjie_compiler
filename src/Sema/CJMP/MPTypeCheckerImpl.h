@@ -19,6 +19,12 @@
 #include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie {
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+struct RelaxationInfo {
+    Ptr<const AST::Decl> commonDecl;
+    Ptr<const AST::Decl> specificDecl;
+};
+#endif
 class MPTypeCheckerImpl {
 public:
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
@@ -33,6 +39,7 @@ public:
     void RemoveCommonCandidatesIfHasSpecific(std::vector<Ptr<AST::FuncDecl>>& candidates);
     void CheckReturnAndVariableTypes(AST::Package& pkg);
     void ValidateMatchedAnnotationsAndModifiers(AST::Package& pkg);
+    void ValidateCJMPConstructorConstraints();
     void CheckMatchedFunctionReturnTypes(AST::FuncDecl& specificFunc, AST::FuncDecl& commonFunc);
     void CheckMatchedVariableTypes(AST::VarDecl& specificVar, AST::VarDecl& commonVar);
     void MatchSpecificWithCommon(AST::Package& pkg);
@@ -43,6 +50,7 @@ public:
     void UpdateGenericTyInMemberFromCommon(TypeSubst& genericTyMap, Ptr<AST::Decl>& member);
     void UpdateSpecificMemberGenericTy(
         ASTContext& ctx, const std::function<std::vector<AST::Symbol*>(ASTContext&, AST::ASTKind)>& getSymsFunc);
+    std::vector<RelaxationInfo>& GetPendingRelaxations() { return pendingRelaxations; }
 #endif
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 private:
@@ -57,6 +65,10 @@ private:
     void MatchCJMPDecls(std::vector<Ptr<AST::Decl>>& commonDecls, std::vector<Ptr<AST::Decl>>& specificDecls);
     bool MatchSpecificDeclWithCommonDecls(AST::Decl& specificDecl, const std::vector<Ptr<AST::Decl>>& commonDecls);
     void CheckAbstractClassMembers(const AST::InheritableDecl& specificDecl);
+    /// Check return-type compatibility for a common function matched with its specific implementation.
+    void CheckMatchedFuncDecl(const Ptr<AST::Node>& node);
+    /// Check type compatibility for a common variable matched with its specific implementation.
+    void CheckMatchedVarDecl(const Ptr<AST::Node>& node);
 
     bool MatchEnumFuncTypes(const AST::FuncDecl& specific, const AST::FuncDecl& common);
     bool MatchCJMPEnumConstructor(AST::Decl& specificDecl, AST::Decl& commonDecl);
@@ -82,6 +94,17 @@ private:
     /// Returns `true` if there is not platform declaration,
     /// in other cases check that common can me matched with platform(e.g. modifiers conform)
     bool MatchCommonNominalDeclWithSpecific(const AST::InheritableDecl& commonDecl);
+    bool MatchSuperInterfaces(const AST::InheritableDecl& commonDecl, const AST::Decl& specificDecl);
+    bool MatchSuperClass(const AST::InheritableDecl& commonDecl, const AST::Decl& specificDecl);
+    /// Build the common declaration's super-interface set, instantiating generic
+    /// type arguments through the common-to-specific mapping when one is present.
+    std::set<Ptr<AST::InterfaceTy>> BuildCommonSuperInterfaces(
+        const AST::InheritableDecl& commonDecl, const AST::Decl& specificDecl);
+    /// Check that every common super-interface has an equal counterpart in the
+    /// specific set. Returns false on cardinality mismatch or any unmatched
+    /// common interface; the caller is responsible for emitting the diagnostic.
+    bool InterfaceSetMatches(const std::set<Ptr<AST::InterfaceTy>>& commonSet,
+        const std::set<Ptr<AST::InterfaceTy>>& specificSet);
     void CheckCommonSpecificGenericMatch(const AST::Decl& specificDecl, const AST::Decl& commonDecl);
 
 public:
@@ -106,6 +129,7 @@ private:
     bool compileCommon{false};   // true if compiling common part
     bool compilePlatform{false}; // true if compiling platform part
     bool severalParents{false};  // true if there is more then one incomparable parent source sets
+    std::vector<RelaxationInfo> pendingRelaxations; // CJMP relaxation tracking for Object->AnyClass
 #endif
 };
 } // namespace Cangjie
