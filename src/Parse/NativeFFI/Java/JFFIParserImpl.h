@@ -38,7 +38,9 @@ public:
     void DiagJavaImplCannotBeGeneric(const Node& node) const;
     void DiagJavaImplCannotBeAbstract(const Node& node) const;
     void DiagJavaImplCannotBeSealed(const Node& node) const;
+    void DiagJavaImplCannotBeCommonOrSpecific(const Node& node) const;
     void DiagJavaMirrorCannotBeSealed(const Node& node) const;
+    void DiagJavaMirrorCannotBeCommonOrSpecific(const Node& node) const;
     void DiagJavaImplCannotHaveStaticInit(const Node& node) const;
 
 private:

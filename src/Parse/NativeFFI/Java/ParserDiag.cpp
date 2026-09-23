@@ -36,6 +36,11 @@ void JFFIParserImpl::DiagJavaMirrorCannotHaveConstMember(const AST::Node& node) 
     p.ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_cannot_have_const_member, node);
 }
 
+void JFFIParserImpl::DiagJavaMirrorCannotBeCommonOrSpecific(const AST::Node& node) const
+{
+    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_cannot_be_common_specific, node);
+}
+
 void JFFIParserImpl::DiagJavaImplCannotBeGeneric(const AST::Node& node) const
 {
     p.ParseDiagnoseRefactor(DiagKindRefactor::parse_java_impl_cannot_be_generic, node);
@@ -49,6 +54,11 @@ void JFFIParserImpl::DiagJavaImplCannotBeAbstract(const AST::Node& node) const
 void JFFIParserImpl::DiagJavaImplCannotBeSealed(const AST::Node& node) const
 {
     p.ParseDiagnoseRefactor(DiagKindRefactor::parse_java_impl_cannot_be_sealed, node);
+}
+
+void JFFIParserImpl::DiagJavaImplCannotBeCommonOrSpecific(const AST::Node& node) const
+{
+    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_java_impl_cannot_be_common_specific, node);
 }
 
 void JFFIParserImpl::DiagJavaMirrorCannotBeSealed(const AST::Node& node) const
