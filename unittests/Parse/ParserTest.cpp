@@ -326,6 +326,96 @@ TEST_F(ParserTest, ClassBody)
 {
 }
 
+TEST(ParserTestClassRecovery, InvalidInheritanceSeparator)
+{
+    const std::vector<std::string> headers = {
+        "class C <: I1, I2",
+        "class C <: I1, I2, I3",
+        "class C <: I1 I2",
+        "class C <: I1,\nI2",
+        "class C <: I1 & I2",
+    };
+    const std::vector<std::string> bodies = {
+        "{}",
+        "{\nlet value: Int64 = 1\nfunc member(): Unit { if (true) {} }\n}",
+    };
+    for (const auto& header : headers) {
+        for (const auto& body : bodies) {
+            const auto code = header + " " + body + "\nfunc after(): Unit {}";
+            SCOPED_TRACE(code);
+            SourceManager sm;
+            DiagnosticEngine diag;
+            diag.SetSourceManager(&sm);
+            Parser parser(code, diag, sm);
+            auto file = parser.ParseTopLevel();
+            const bool brokenHeader = header.find('&') == std::string::npos;
+            const auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::PARSE);
+            ASSERT_EQ(diagnostics.size(), brokenHeader ? 1U : 0U);
+            if (brokenHeader) {
+                EXPECT_EQ(diagnostics[0].rKind, DiagKindRefactor::parse_expected_left_brace);
+            }
+            ASSERT_EQ(file->decls.size(), 2);
+            auto cd = DynamicCast<ClassDecl*>(file->decls[0].get());
+            ASSERT_NE(cd, nullptr);
+            ASSERT_NE(cd->body, nullptr);
+            EXPECT_EQ(cd->body->TestAttr(Attribute::IS_BROKEN), brokenHeader);
+            EXPECT_FALSE(cd->body->leftCurlPos.IsZero());
+            EXPECT_FALSE(cd->body->rightCurlPos.IsZero());
+            EXPECT_EQ(cd->body->end, cd->body->rightCurlPos + 1);
+            ASSERT_EQ(cd->body->decls.size(), body == "{}" ? 0U : 2U);
+            if (!cd->body->decls.empty()) {
+                EXPECT_EQ(cd->body->decls[0]->identifier, "value");
+                EXPECT_EQ(cd->body->decls[1]->identifier, "member");
+                EXPECT_EQ(cd->body->decls[1]->outerDecl.get(), cd);
+            }
+            EXPECT_EQ(file->decls[1]->astKind, ASTKind::FUNC_DECL);
+            EXPECT_EQ(file->decls[1]->identifier, "after");
+        }
+    }
+}
+
+TEST(ParserTestClassRecovery, MissingBodyPreservesNextDeclaration)
+{
+    const std::string code = "class C <: I1, I2\nfunc after(): Unit {}";
+    SourceManager sm;
+    DiagnosticEngine diag;
+    diag.SetSourceManager(&sm);
+    Parser parser(code, diag, sm);
+    auto file = parser.ParseTopLevel();
+    const auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::PARSE);
+    ASSERT_EQ(diagnostics.size(), 1);
+    EXPECT_EQ(diagnostics[0].rKind, DiagKindRefactor::parse_expected_left_brace);
+    ASSERT_EQ(file->decls.size(), 2);
+    EXPECT_EQ(file->decls[0]->astKind, ASTKind::CLASS_DECL);
+    EXPECT_EQ(file->decls[1]->astKind, ASTKind::FUNC_DECL);
+    EXPECT_EQ(file->decls[1]->identifier, "after");
+}
+
+TEST(ParserTestClassRecovery, MissingClosingBraceStillDiagnosed)
+{
+    const std::vector<std::string> cases = {
+        "class C <: I1, I2 {",
+        "class C <: I1, I2 { func member(): Unit {}",
+    };
+    for (const auto& code : cases) {
+        SCOPED_TRACE(code);
+        SourceManager sm;
+        DiagnosticEngine diag;
+        diag.SetSourceManager(&sm);
+        Parser parser(code, diag, sm);
+        auto file = parser.ParseTopLevel();
+        ASSERT_NE(file, nullptr);
+        const auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::PARSE);
+        ASSERT_EQ(diagnostics.size(), 2);
+        EXPECT_EQ(std::count_if(diagnostics.begin(), diagnostics.end(), [](const auto& diagnostic) {
+            return diagnostic.rKind == DiagKindRefactor::parse_expected_left_brace;
+        }), 1);
+        EXPECT_EQ(std::count_if(diagnostics.begin(), diagnostics.end(), [](const auto& diagnostic) {
+            return diagnostic.rKind == DiagKindRefactor::parse_expected_right_delimiter;
+        }), 1);
+    }
+}
+
 TEST(ParserTest1, Package)
 {
     std::string code = R"(

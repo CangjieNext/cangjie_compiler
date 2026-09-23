@@ -1079,16 +1079,17 @@ template <typename T> bool ParserImpl::CheckSkipRcurOrPrematureEnd(T& ret)
 OwnedPtr<ClassBody> ParserImpl::ParseClassBody(ClassDecl& cd)
 {
     OwnedPtr<ClassBody> ret = MakeOwned<ClassBody>();
-    if (!Skip(TokenKind::LCURL)) {
+    const bool brokenHeader = !Skip(TokenKind::LCURL);
+    if (brokenHeader) {
         ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_left_brace, lookahead, ConvertToken(lookahead));
         ConsumeUntilDecl(TokenKind::LCURL);
-        Skip(TokenKind::LCURL);
-        ret->EnableAttr(Attribute::HAS_BROKEN);
-        ret->EnableAttr(Attribute::IS_BROKEN);
-        return ret;
-    } else {
-        ret->leftCurlPos = lastToken.Begin();
+        if (!Skip(TokenKind::LCURL)) {
+            ret->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
+            return ret;
+        }
     }
+    // Parse a recovered body in class scope, including its matching closing brace.
+    ret->leftCurlPos = lastToken.Begin();
     ret->begin = lookahead.Begin();
     while (true) {
         bool hasNLorSEMI = SkipNLOrSemi();
@@ -1125,6 +1126,10 @@ OwnedPtr<ClassBody> ParserImpl::ParseClassBody(ClassDecl& cd)
             continue;
         }
         ret->decls.emplace_back(std::move(decl));
+    }
+    if (brokenHeader) {
+        // Delay HAS_BROKEN so a genuinely missing closing brace is still diagnosed.
+        ret->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
     }
     ret->end = lastToken.End();
     return ret;
