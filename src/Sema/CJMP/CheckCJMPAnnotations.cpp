@@ -47,6 +47,17 @@ const std::unordered_map<AnnotationKind, Attribute> NonSerializedAnnotations = {
     {AnnotationKind::OBJ_C_OPTIONAL, Attribute::OBJ_C_OPTIONAL},
 };
 
+// Platform-specific annotations that are relaxed for common/specific matching
+// These annotations can appear on specific without requiring matching on common
+const std::unordered_set<AnnotationKind> PlatformSpecificAnnotations = {
+    AnnotationKind::JAVA_IMPL,
+    AnnotationKind::JAVA_MIRROR,
+    AnnotationKind::OBJ_C_MIRROR,
+    AnnotationKind::JAVA_HAS_DEFAULT,
+    AnnotationKind::OBJ_C_INIT,
+    AnnotationKind::OBJ_C_OPTIONAL,
+};
+
 // Annotations not supported on common/specific (neither serialized nor have attributes)
 const std::unordered_set<AnnotationKind> UnsupportedAnnotations = {AnnotationKind::JAVA, AnnotationKind::CALLING_CONV,
     AnnotationKind::FOREIGN_GETTER_NAME, AnnotationKind::FOREIGN_SETTER_NAME, AnnotationKind::CONSTSAFE,
@@ -174,6 +185,11 @@ bool PostCheckNonSerializedAnnotations(const AST::Decl& common, const AST::Decl&
 
     // Iterate over all non-serialized annotations and check attribute consistency
     for (const auto& [annoKind, attr] : NonSerializedAnnotations) {
+        // Relaxation: skip platform-specific annotations (can be on specific without common)
+        if (PlatformSpecificAnnotations.count(annoKind)) {
+            continue;
+        }
+
         if (common.TestAttr(attr) != specific.TestAttr(attr)) {
             // Find the specific annotation for this type to use in diagnostic
             auto specificAnno = FindFirstAnnotation(specific, annoKind);
@@ -199,7 +215,8 @@ bool IsSpecialHandledAnnotation(const Annotation& anno)
 {
     return anno.kind == AnnotationKind::DEPRECATED || anno.kind == AnnotationKind::ATTRIBUTE ||
         NonSerializedAnnotations.find(anno.kind) != NonSerializedAnnotations.end() ||
-        UnsupportedAnnotations.find(anno.kind) != UnsupportedAnnotations.end();
+        UnsupportedAnnotations.find(anno.kind) != UnsupportedAnnotations.end() ||
+        PlatformSpecificAnnotations.find(anno.kind) != PlatformSpecificAnnotations.end();
 }
 
 /**
