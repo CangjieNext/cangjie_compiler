@@ -68,10 +68,12 @@ private:
     void CheckOptionalAnnoTarget(const AST::Annotation& anno) const;
 
     void DiagObjCMirrorCannotBeSealed(const AST::Node& node) const;
+    void DiagObjCMirrorCannotBeCommonOrSpecific(const AST::Node& node) const;
 
     void DiagObjCImplCannotBeInterface(const AST::Node& node) const;
     void DiagObjCImplCannotBeAbstract(const AST::Node& node) const;
     void DiagObjCImplCannotBeSealed(const AST::Node& node) const;
+    void DiagObjCImplCannotBeCommonOrSpecific(const AST::Node& node) const;
 
     ParserImpl& p;
 };

@@ -56,6 +56,10 @@ void OCFFIParserImpl::CheckMirrorSignature(ClassLikeDecl& decl, const PtrVector<
         DiagObjCMirrorCannotBeSealed(decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
+    if (decl.TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC)) {
+        DiagObjCMirrorCannotBeCommonOrSpecific(decl);
+        decl.EnableAttr(Attribute::IS_BROKEN);
+    }
 }
 
 void OCFFIParserImpl::CheckMirrorSignature(FuncDecl& decl, const PtrVector<Annotation>& annos) const
@@ -89,6 +93,11 @@ void OCFFIParserImpl::CheckMirrorSignature(FuncDecl& decl, const PtrVector<Annot
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
 
+    if (decl.TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC)) {
+        DiagObjCMirrorCannotBeCommonOrSpecific(decl);
+        decl.EnableAttr(Attribute::IS_BROKEN);
+    }
+
     if (decl.outerDecl != nullptr) {
         DiagObjCMirrorFuncMustBeTopLevel(decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
@@ -118,6 +127,11 @@ void OCFFIParserImpl::CheckImplSignature(ClassLikeDecl& decl, const PtrVector<An
 
     if (decl.astKind == ASTKind::INTERFACE_DECL) {
         DiagObjCImplCannotBeInterface(decl);
+        decl.EnableAttr(Attribute::IS_BROKEN);
+    }
+
+    if (decl.TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC)) {
+        DiagObjCImplCannotBeCommonOrSpecific(decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
 }
