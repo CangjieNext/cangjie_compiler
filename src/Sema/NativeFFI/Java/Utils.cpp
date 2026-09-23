@@ -150,8 +150,6 @@ std::vector<Ptr<AST::ClassDecl>> GetJavaImplRegistryCompanions(AST::Package& pkg
     return impls;
 }
 
-constexpr std::string_view JAVA_IMPL_REGISTRY_COMPANION_REFERENCE_FIELD_NAME_IN_REFERENCE_WRAPPER = "$reg";
-
 bool IsJavaImplRegistryCompanionReferenceField(const AST::Node& node)
 {
     if (node.astKind != ASTKind::VAR_DECL) {
@@ -166,7 +164,7 @@ bool IsJavaImplRegistryCompanionReferenceField(const AST::Node& node)
         return false;
     }
 
-    return field->identifier == JAVA_IMPL_REGISTRY_COMPANION_REFERENCE_FIELD_NAME_IN_REFERENCE_WRAPPER;
+    return field->identifier == JAVA_IMPL_REGISTRY_COMPANION_REF_FIELD_NAME;
 }
 
 bool IsUserDefinedJavaImplConstructor(const AST::Decl& implMember)

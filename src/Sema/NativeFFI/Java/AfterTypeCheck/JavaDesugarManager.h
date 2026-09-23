@@ -106,6 +106,17 @@ private:
     void InsertJavaMirrorWrappingConstructorBody(ClassDecl& decl);
 
     /**
+     * Creates and appends the func decl + body for a mirror constructor from
+     * the pre-built ctorNodes and param. Extracted from InsertJavaMirrorCtor
+     * to reduce function size.
+     * @param decl Mirror class whose body receives the new ctor.
+     * @param ctorNodes Body nodes for the constructor.
+     * @param param The "$ref" function parameter.
+     */
+    void AppendMirrorCtorFuncDecl(ClassDecl& decl,
+        std::vector<OwnedPtr<Node>> ctorNodes, OwnedPtr<FuncParam> param);
+
+    /**
      * var $hasInited: Bool = false
      */
     void InsertJavaMirrorHasInited(ClassDecl& mirror);
