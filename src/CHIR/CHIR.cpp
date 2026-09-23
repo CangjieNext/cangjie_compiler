@@ -41,6 +41,7 @@
 #include "cangjie/CHIR/Transformation/MarkClassHasInited.h"
 #include "cangjie/CHIR/Transformation/MetaTransform.h"
 #include "cangjie/CHIR/Transformation/NoSideEffectMarker.h"
+#include "cangjie/CHIR/Transformation/PatchCJMPSuperCalls.h"
 #include "cangjie/CHIR/Transformation/ReplaceSrcCodeImportedVal.h"
 #include "cangjie/CHIR/Transformation/SanitizerCoverage.h"
 #include "cangjie/CHIR/Transformation/UpdateMemberVarPath.h"
@@ -1308,6 +1309,9 @@ void ToCHIR::Canonicalization()
 
     // 7. create box type for recursion value type
     BoxRecursionValueType(*chirPkg, builder).Run();
+
+    // 8. patch CJMP super() calls for platform-specific constructors
+    PatchCJMPSuperCalls(*chirPkg, builder).Run();
 
     DumpCHIRToFile("Canonicalization");
 }
