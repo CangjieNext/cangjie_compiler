@@ -319,8 +319,9 @@ void AddReturnTypeForPropMemDecl(PropDecl& pd)
         if (setter->funcBody->paramLists.empty() || setter->funcBody->paramLists[0]->params.empty()) {
             return;
         }
-        if (!setter->funcBody->paramLists[0]->params[0]->type) {
-            setter->funcBody->paramLists[0]->params[0]->type = ASTCloner::Clone(pd.type.get());
+        auto& setterParam = setter->funcBody->paramLists[0]->params[0];
+        if (!setterParam->type) {
+            setterParam->type = ASTCloner::Clone(pd.type.get());
         }
         AddUnitType(*setter);
     }
@@ -2056,6 +2057,7 @@ void TypeChecker::TypeCheckerImpl::PostTypeCheck(std::vector<Ptr<ASTContext>>& c
         Utils::ProfileRecorder::Start("Post TypeCheck", "CheckCJMPRules");
         mpImpl->CheckReturnAndVariableTypes(*ctx->curPackage);
         mpImpl->ValidateMatchedAnnotationsAndModifiers(*ctx->curPackage);
+        mpImpl->ValidateCJMPConstructorConstraints();
         Utils::ProfileRecorder::Stop("Post TypeCheck", "CheckCJMPRules");
         AddAttrForDefaultFuncParam(*ctx->curPackage);
         // Because of the cjlint checking policy, desugar of propDecl should be done in sema stage for now.

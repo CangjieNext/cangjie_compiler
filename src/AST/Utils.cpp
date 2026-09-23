@@ -15,7 +15,9 @@
 #include <mutex>
 #include <deque>
 #include <sstream>
+#include <unordered_map>
 
+#include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
@@ -656,6 +658,18 @@ std::vector<VarDeclWithPosition> GetVarsInitializationOrderWithPositions(const D
     return resultDecls;
 }
 
+/**
+ * Synthesizes the getter FuncDecl (signature + empty body) for @p prop and
+ * attaches it to prop.getters. Clones the property's attributes onto the
+ * getter, marks it COMPILER_ADD, and copies source positions from @p prop via
+ * CopyBasicInfo so that diagnostics, source mapping, and CJMP deserialization behave
+ * for compiler-synthesized getters. For interface properties the getter is
+ * forced PUBLIC. The getter is created with an empty param list and no return
+ * type here; the function type is filled in later by AssignMirrorPropGetters
+ * (Sema layer), since the AST layer has no TypeManager.
+ * @param prop Property to attach the getter to.
+ * @param attrToBeSet FFI attribute (e.g. JAVA_MIRROR) to enable on the getter.
+ */
 void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet)
 {
     auto getter = MakeOwned<FuncDecl>();
@@ -666,6 +680,7 @@ void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet)
     getter->CloneAttrs(prop);
     getter->DisableAttr(Attribute::MUT);
     getter->EnableAttr(Attribute::COMPILER_ADD, attrToBeSet);
+    CopyBasicInfo(&prop, getter.get());
 
     if (prop.outerDecl->astKind == ASTKind::INTERFACE_DECL) {
         getter->EnableAttr(Attribute::PUBLIC);
@@ -675,11 +690,25 @@ void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet)
     getterBody->EnableAttr(Attribute::COMPILER_ADD);
     getterBody->paramLists.push_back(MakeOwned<FuncParamList>());
     getterBody->paramLists.begin()->get()->EnableAttr(Attribute::COMPILER_ADD);
+    CopyBasicInfo(&prop, getterBody->paramLists.back().get());
+    CopyBasicInfo(&prop, getterBody.get());
     getter->funcBody = std::move(getterBody);
     getter->funcBody->funcDecl = getter.get();
+
     prop.getters.emplace_back(std::move(getter));
 }
 
+/**
+ * Synthesizes the setter FuncDecl (signature + empty body) for a mutable @p
+ * prop and attaches it to prop.setters. Like the getter, it clones attrs, marks
+ * COMPILER_ADD, and copies positions via CopyBasicInfo. Adds a single "set" FuncParam
+ * whose syntactic type is cloned from prop.type when present; this lets TypeCheck
+ * resolve the setter parameter even for CJMP-deserialized VarDecls whose semantic
+ * type is still InitialTy. The setter function type is assigned later by
+ * AssignMirrorPropSetters.
+ * @param prop Mutable property to attach the setter to.
+ * @param attrToBeSet FFI attribute (e.g. JAVA_MIRROR) to enable on the setter.
+ */
 void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet)
 {
     auto setter = MakeOwned<FuncDecl>();
@@ -690,6 +719,7 @@ void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet)
     setter->CloneAttrs(prop);
     setter->DisableAttr(Attribute::MUT);
     setter->EnableAttr(Attribute::COMPILER_ADD, attrToBeSet);
+    CopyBasicInfo(&prop, setter.get());
 
     if (prop.outerDecl->astKind == ASTKind::INTERFACE_DECL) {
         setter->EnableAttr(Attribute::PUBLIC);
@@ -698,21 +728,42 @@ void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet)
     OwnedPtr<FuncBody> setterBody = MakeOwned<FuncBody>();
     setterBody->EnableAttr(Attribute::COMPILER_ADD);
     setterBody->paramLists.push_back(MakeOwned<FuncParamList>());
+    CopyBasicInfo(&prop, setterBody->paramLists.back().get());
+    CopyBasicInfo(&prop, setterBody.get());
     auto setterParam = MakeOwned<FuncParam>();
     setterParam->EnableAttr(Attribute::COMPILER_ADD);
     setterParam->identifier = "set";
+    CopyBasicInfo(&prop, setterParam.get());
+    if (prop.type) {
+        setterParam->type = ASTCloner::Clone(prop.type.get());
+    }
     setterBody->paramLists.begin()->get()->params.push_back(std::move(setterParam));
     setterBody->paramLists.begin()->get()->EnableAttr(Attribute::COMPILER_ADD);
     setter->funcBody = std::move(setterBody);
     setter->funcBody->funcDecl = setter.get();
+
     prop.setters.emplace_back(std::move(setter));
 }
 
-void InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, Attribute attrToBeSet)
+/**
+ * Converts a VarDecl field into a PropDecl and appends it to @p decl's body,
+ * returning a reference to the created property. Moves the var's type, attrs,
+ * modifiers, and annotations onto the prop, enables DESUGARED_MIRROR_FIELD +
+ * COMPILER_ADD, copies positions via CopyBasicInfo, and synthesizes a getter (and a
+ * setter when the var is mutable) via InsertPropGetterSignature /
+ * InsertPropSetterSignature. The original VarDecl is left in place for the
+ * caller (InsertMirrorVarProp) to erase. Returns the PropDecl so the caller can
+ * track it in a var->prop map for CJMP common<->specific linking.
+ * @param decl Class whose body receives the new PropDecl.
+ * @param varDecl Source field to convert.
+ * @param attrToBeSet FFI attribute to enable on the property/getter/setter.
+ * @return Reference to the inserted PropDecl.
+ */
+PropDecl& InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, Attribute attrToBeSet)
 {
     auto propDecl = MakeOwned<PropDecl>();
-    propDecl->begin = varDecl.begin;
-    propDecl->end = varDecl.end;
+
+    CopyBasicInfo(&varDecl, propDecl.get());
     propDecl->keywordPos = varDecl.keywordPos;
     propDecl->identifier = varDecl.identifier;
     propDecl->colonPos = varDecl.colonPos;
@@ -732,38 +783,93 @@ void InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, Attribute att
         propDecl->modifiers.insert(std::move(mut));
     }
     propDecl->outerDecl = varDecl.outerDecl;
-    InsertPropGetterSignature(*propDecl.get(), attrToBeSet);
+    PropDecl* result = propDecl.get();
+    InsertPropGetterSignature(*propDecl, attrToBeSet);
     if (varDecl.isVar) {
-        InsertPropSetterSignature(*propDecl.get(), attrToBeSet);
+        InsertPropSetterSignature(*propDecl, attrToBeSet);
     }
     decl.body->decls.emplace_back(std::move(propDecl));
+    return *result;
 }
 
+/**
+ * Links a common-part PropDecl (and its first getter/setter) to its specific
+ * counterpart via specificImplementation. Sets commonProp.specificImplementation
+ * to &specificProp, and links the first getter and first setter when both sides
+ * have them. This is what makes the two-tier FFI filter
+ * (FROM_COMMON_PART + specificImplementation -> skip) work for mirror
+ * properties: matched common getters/setters are skipped during FFI desugaring
+ * and CHIR collision handling. Called from InsertMirrorVarProp after both the
+ * common and specific VarDecls have been converted to PropDecls.
+ * @param commonProp Common-part property (specificImplementation will be set).
+ * @param specificProp Specific counterpart property.
+ */
+void LinkMatchedCommonPropToSpecific(PropDecl& commonProp, PropDecl& specificProp)
+{
+    commonProp.specificImplementation = &specificProp;
+    if (!commonProp.getters.empty() && !specificProp.getters.empty()) {
+        commonProp.getters[0]->specificImplementation = specificProp.getters[0].get();
+    }
+    if (!commonProp.setters.empty() && !specificProp.setters.empty()) {
+        commonProp.setters[0]->specificImplementation = specificProp.setters[0].get();
+    }
+}
+
+/**
+ * Rewrites every VarDecl field of a @JavaMirror/@ObjCMirror class into a
+ * PropDecl with a synthesized getter/setter. Three phases: (1) convert each
+ * eligible VarDecl via InsertPropConvertedByField, recording a var->prop map and
+ * the transformed member indices; (2) CJMP linking loop - for each common
+ * VarDecl whose specificImplementation points at a specific VarDecl, look up
+ * both in the map and call LinkMatchedCommonPropToSpecific on the resulting
+ * PropDecls, so matched common/specific getter-setter pairs are linked and later
+ * skipped by FFI desugaring and CHIR dedup; (3) erase the original VarDecls. The
+ * Sema-layer AssignMirrorPropGetterSetterTypes runs immediately after (from
+ * RewriteJavaMirrorFields) to fill in function types, since the AST layer has no
+ * TypeManager. Fields without a syntactic type are skipped unless they carry
+ * COMMON/SPECIFIC attributes (CJMP matching markers that must survive even
+ * without a type).
+ * @param decl Mirror class whose VarDecl fields are rewritten.
+ * @param attrToBeSet FFI attribute (e.g. JAVA_MIRROR) to enable on generated
+ *                    properties/getters/setters.
+ */
 void InsertMirrorVarProp(ClassDecl& decl, Attribute attrToBeSet)
 {
     auto& members = decl.GetMemberDecls();
-    // Collect the original field
-    std::vector<VarDecl*> oldVars;
-    for (auto& member : members) {
+    std::unordered_map<VarDecl*, PropDecl*> varToPropMap;
+
+    for (size_t i = 0; i < members.size(); ++i) {
+        auto& member = members[i];
         if (member->astKind != ASTKind::VAR_DECL) {
-            // extra check for ast kind is required since prop decl inherits var decl
             continue;
         }
         auto field = StaticAs<ASTKind::VAR_DECL>(member.get());
-        if (!field->type) {
+        // fields without syntactic type specified are invalid and should be skipped here
+        // (unless they carry @common/@specific attributes for CJMP matching)
+        if (!field->type && !field->TestAttr(Attribute::COMMON) && !field->TestAttr(Attribute::SPECIFIC)) {
             continue;
         }
-        // fields without syntactic type specified are invalid and should be skipped here
-        oldVars.emplace_back(field);
+
+        auto& prop = InsertPropConvertedByField(decl, *field, attrToBeSet);
+        varToPropMap[field] = &prop;
     }
-    // Generate and insert the new prop
-    for (auto var : oldVars) {
-        InsertPropConvertedByField(decl, *var, attrToBeSet);
+
+    for (auto& [varDecl, propDecl] : varToPropMap) {
+        if (varDecl->specificImplementation) {
+            auto specificVar = StaticCast<VarDecl>(varDecl->specificImplementation.get());
+            auto it = varToPropMap.find(specificVar);
+            if (it != varToPropMap.end()) {
+                LinkMatchedCommonPropToSpecific(*propDecl, *StaticAs<ASTKind::PROP_DECL>(it->second));
+            }
+        }
     }
-    // Delete the original field
-    members.erase(std::remove_if(members.begin(), members.end(), [](auto& node) {
-        return node.get()->astKind == ASTKind::VAR_DECL;
-        }), members.end());
+
+    members.erase(std::remove_if(members.begin(), members.end(),
+        [&varToPropMap](auto& node) {
+            return node->astKind == ASTKind::VAR_DECL &&
+                   varToPropMap.count(StaticCast<VarDecl>(node.get()));
+        }),
+        members.end());
 }
 
 } // namespace Cangjie::AST
