@@ -48,6 +48,7 @@ constexpr auto INTEROPLIB_CFFI_GET_INSTANCE_FIELD_ID = "Java_CFFI_getInstanceFie
 constexpr auto INTEROPLIB_CFFI_GET_STATIC_FIELD_ID = "Java_CFFI_getStaticFieldId";
 constexpr auto INTEROPLIB_JNI_HANDLE_PENDING_EXCEPTION_DECL_ID = "handlePendingException";
 constexpr auto INTEROPLIB_CFFI_SWAP_LOCAL_WITH_GLOBAL_REF_ID = "Java_CFFI_swapLocalWithGlobalRef";
+constexpr auto INTEROPLIB_CFFI_NEW_GLOBAL_REF_ID = "Java_CFFI_newGlobalReference";
 constexpr auto INTEROPLIB_CFFI_DELETE_GLOBAL_REF_ID = "Java_CFFI_deleteGlobalRef";
 constexpr auto INTEROPLIB_CFFI_NEW_JAVA_ARRAY_ID = "Java_CFFI_newJavaArray";
 constexpr auto INTEROPLIB_CFFI_JAVA_ARRAY_GET_ID = "Java_CFFI_arrayGet";
@@ -112,6 +113,11 @@ Decl& InteropLibBridge::GetJavaEntityKindJObject()
 {
     auto entityKindDecl = GetJavaEntityKindDecl();
     return *LookupEnumMember(entityKindDecl, INTEROPLIB_JAVA_ENTITY_KIND_JOBJECT);
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetNewGlobalRefDecl()
+{
+    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_NEW_GLOBAL_REF_ID);
 }
 
 Ptr<FuncDecl> InteropLibBridge::GetDeleteGlobalRefDecl() const
@@ -695,6 +701,12 @@ Ptr<FuncDecl> InteropLibBridge::FindArrayJavaEntitySetDecl(ClassDecl& jArrayDecl
         }
     }
     return nullptr;
+}
+
+OwnedPtr<CallExpr> InteropLibBridge::CreateNewGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj)
+{
+    auto curFile = obj->curFile;
+    return CreateCall(GetNewGlobalRefDecl(), curFile, std::move(env), std::move(obj));
 }
 
 OwnedPtr<CallExpr> InteropLibBridge::CreateSwapLocalWithGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> localRef) const
