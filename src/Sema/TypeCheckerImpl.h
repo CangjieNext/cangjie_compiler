@@ -1072,6 +1072,14 @@ private:
     std::vector<SubstPack> GenerateTypeMappingByInference(
         ASTContext& ctx, const FunctionCandidate& candidate, AST::ModalTy retTarget);
     ErrOrSubst PrepareTyArgsSynthesis(ASTContext& ctx, const FunctionCandidate& candidate, AST::ModalTy const retTyUB);
+    /**
+     * Return the type that the type argument inference of a call to \p fd constrains against \p retTyUB:
+     * the declared return type of \p fd, except that an enum constructor call takes its result mode from
+     * the call-site modal or the expected type (see InferEnumCtorMode) rather than from the enum's
+     * declared mode. That context mode gives way to the declared mode whenever it does not fit
+     * \p retTyUB, i.e. when the call is ill-typed and the constraint must keep rejecting it.
+     */
+    AST::ModalTy GetRetTyForInference(const AST::FuncDecl& fd, const AST::CallExpr& ce, AST::ModalTy retTyUB);
     std::optional<TypeSubst> PropagatePlaceholderAndSolve(ASTContext& ctx, AST::CallExpr& ce,
         const std::vector<AST::ModalTy>& paramTys, AST::ModalTy retTy, AST::ModalTy const retTyUB);
     // static and deterministic version of unify, never result in branched versions of constraint

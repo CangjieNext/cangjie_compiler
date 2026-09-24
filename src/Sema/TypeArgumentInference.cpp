@@ -469,7 +469,7 @@ ErrOrSubst TypeChecker::TypeCheckerImpl::PrepareTyArgsSynthesis(
     for (size_t i = 0; i < paramsTyInOrder.size(); ++i) {
         paramsTyInOrder[i] = typeManager.InstOf(paramsTyInOrder[i]);
     }
-    ModalTy funcRetTy = typeManager.InstOf(RawStaticCast<FuncTy*>(fd.DataTy())->retTy);
+    ModalTy funcRetTy = GetRetTyForInference(fd, ce, retTyUB);
     LocTyArgSynArgPack argPack;
 
     while (stat.newInfo) {
@@ -538,6 +538,23 @@ ErrOrSubst TypeChecker::TypeCheckerImpl::PrepareTyArgsSynthesis(
     }
     PData::Reset(typeManager.constraints);
     return *stat.solution;
+}
+
+ModalTy TypeChecker::TypeCheckerImpl::GetRetTyForInference(const FuncDecl& fd, const CallExpr& ce, ModalTy retTyUB)
+{
+    auto funcRetTy = typeManager.InstOf(RawStaticCast<FuncTy*>(fd.DataTy())->retTy);
+    // An enum constructor call takes its result mode from the call-site modal or the expected type, not
+    // from the enum's declared @~local (see InferEnumCtorMode). Adopt that context mode whenever it fits
+    // the expected type; when it does not, the call is ill-typed and the declared mode stays, keeping the
+    // constraint rejecting it. A correct expected type is what makes the context mode meaningful here.
+    if (!fd.TestAttr(Attribute::ENUM_CONSTRUCTOR) || !Ty::IsTyCorrect(retTyUB)) {
+        return funcRetTy;
+    }
+    auto ctorMode = InferEnumCtorMode(ce, retTyUB);
+    if (!ctorMode.IsSubModal(retTyUB.Mode())) {
+        return funcRetTy;
+    }
+    return funcRetTy.With(ctorMode);
 }
 
 // Generate the type mapping table if the current call involves generic types. Before overload resolution, the fd may
