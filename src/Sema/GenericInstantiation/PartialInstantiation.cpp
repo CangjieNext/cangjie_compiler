@@ -788,6 +788,7 @@ OwnedPtr<StrInterpolationExpr> PartialInstantiation::InstantiateStrInterpolation
 OwnedPtr<ArrayLit> PartialInstantiation::InstantiateArrayLit(const ArrayLit& al, const VisitFunc& visitor)
 {
     auto expr = MakeOwned<ArrayLit>();
+    CopyBasicInfo(&al, expr.get());
     expr->leftSquarePos = al.leftSquarePos;
     for (auto& it : al.children) {
         expr->children.push_back(InstantiateExpr(it.get(), visitor));
