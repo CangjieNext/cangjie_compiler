@@ -470,6 +470,19 @@ ErrOrSubst TypeChecker::TypeCheckerImpl::PrepareTyArgsSynthesis(
         paramsTyInOrder[i] = typeManager.InstOf(paramsTyInOrder[i]);
     }
     ModalTy funcRetTy = typeManager.InstOf(RawStaticCast<FuncTy*>(fd.DataTy())->retTy);
+    // An enum constructor call takes its result mode from the call-site modal or the expected type
+    // (InferEnumCtorMode), not from the enum's declared @~local. Adopt that context mode here when it
+    // fits the expected type, so the return-type constraint below does not reject a well-typed call by
+    // comparing @~local against a concrete expected mode such as @local!; when it does not fit, the
+    // call is ill-typed and the declared mode stays, so the constraint still rejects it. Guarded by a
+    // correct expected type: the only case the constraint is added, and the one that keeps
+    // InferEnumCtorMode away from not yet synthesized argument types.
+    if (fd.TestAttr(Attribute::ENUM_CONSTRUCTOR) && Ty::IsTyCorrect(retTyUB)) {
+        auto ctorMode = InferEnumCtorMode(ce, retTyUB);
+        if (ctorMode.IsSubModal(retTyUB.Mode())) {
+            funcRetTy = funcRetTy.With(ctorMode);
+        }
+    }
     LocTyArgSynArgPack argPack;
 
     while (stat.newInfo) {
