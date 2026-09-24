@@ -106,10 +106,14 @@ OwnedPtr<Expr> DesugarTypeCheckingAndCasting::CreateJObjectCast(Ptr<VarDecl> jOb
 
     auto javarefExpr = CreateJavaRefCall(WithinFile(CreateRefExpr(*jObjectVar), curFile));
 
+    auto javarefAsJObject = ilib.CreateAsJniJobjectCall(std::move(javarefExpr));
+    auto newGlobalRefCall = ilib.CreateNewGlobalRefCall(
+        ilib.CreateGetJniEnvCall(curFile), WithinFile(std::move(javarefAsJObject), curFile));
+    auto newJavarefExpr = ilib.CreateJavaEntityJobjectCall(std::move(newGlobalRefCall));
     // cast true => ...
     // wrap into mirror constructor or into wrapping constructor of java impl on the reference from registry
     OwnedPtr<Expr> trueBranch = utils.CreateOptionSomeCall(
-        ilib.UnwrapJavaEntity(std::move(javarefExpr), castTy, castDecl),
+        ilib.UnwrapJavaEntity(std::move(newJavarefExpr), castTy, castDecl),
         castTy);
 
     // case false => None
