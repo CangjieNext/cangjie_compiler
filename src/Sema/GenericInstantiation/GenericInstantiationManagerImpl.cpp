@@ -891,6 +891,9 @@ void GIM::GenericInstantiationManagerImpl::GenericMemberAccessInstantiate(Member
     if (invalid || ma.target->astKind == ASTKind::PACKAGE_DECL || TestManager::IsMockAccessor(*ma.target)) {
         return;
     }
+    if (auto pd = DynamicCast<PropDecl>(ma.target)) {
+        ma.target = GetUsableAccessorForProperty(*pd, !ma.TestAttr(Attribute::LEFT_VALUE));
+    }
     auto target = GetRealTarget(ma.target);
     if (target->IsBuiltIn() || !RequireInstantiation(*target)) {
         return;
@@ -939,6 +942,9 @@ void GIM::GenericInstantiationManagerImpl::GenericRefExprInstantiate(RefExpr& re
     if (!re.ref.target || re.ref.target->astKind == ASTKind::PACKAGE_DECL || !re.GetTy().IsCorrect() ||
         re.ref.target->astKind == ASTKind::GENERIC_PARAM_DECL) {
         return;
+    }
+    if (auto pd = DynamicCast<PropDecl>(re.ref.target)) {
+        re.ref.target = GetUsableAccessorForProperty(*pd, !re.TestAttr(Attribute::LEFT_VALUE));
     }
     auto target = GetRealTarget(re.ref.target);
     if (target->IsBuiltIn() || !RequireInstantiation(*target)) {
