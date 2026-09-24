@@ -161,6 +161,19 @@ public:
     /** APIs to check type relations. */
     bool IsSubtype(AST::ModalTy leaf, AST::ModalTy root, bool implicitBoxed = true, bool allowOptionBox = true,
         ModalMatchMode modalMatchMode = ModalMatchMode::SUBTYPE);
+    /**
+     * Whether \p leaf is a subtype of \p root, comparing the data types themselves (their modals
+     * are ignored unless either side is a placeholder, see \p leafModal / \p rootModal).
+     * @param leaf the candidate (source) data type
+     * @param root the required (target) data type
+     * @param implicitBoxed whether implicit boxing to Any is allowed while comparing
+     * @param allowOptionBox whether implicit Option boxing is allowed while comparing
+     * @param leafModal the modal of \p leaf, meaningful only when \p leaf is a placeholder and
+     *        one side's modal is IDEAL: carried into the Unify bounds so the concrete bound
+     *        modal (e.g. @local!) is recorded for SolveLamExprParamTys to re-apply; otherwise
+     *        ignored, keeping the legacy modal-less bounds
+     * @param rootModal the modal of \p root, symmetric to \p leafModal
+     */
     bool IsSubtype(AST::DataTy leaf, AST::DataTy root, bool implicitBoxed = true, bool allowOptionBox = true,
         std::optional<Cangjie::ModalInfo> leafModal = std::nullopt,
         std::optional<Cangjie::ModalInfo> rootModal = std::nullopt);
@@ -618,6 +631,16 @@ private:
         const AST::Ty& nominalTy, const TypeSubst& typeMapping, std::unordered_set<AST::DataTy>& tyList);
     bool HasNominalSuperTy(AST::Ty& nominalTy, AST::Ty& superTy, const TypeSubst& typeMapping);
 
+    /**
+     * Whether \p leaf or \p root (at least one is a placeholder type variable) is a subtype of
+     * the other, by unifying them and recording the resulting constraints.
+     * @param leaf the leaf data type
+     * @param root the root data type
+     * @param leafModal the modal of \p leaf, carried into the Unify bounds only when one side's
+     *        modal is IDEAL, so the concrete bound modal is re-applied by SolveLamExprParamTys;
+     *        ignored otherwise, keeping the legacy modal-less bounds
+     * @param rootModal the modal of \p root, symmetric to \p leafModal
+     */
     bool IsPlaceholderSubtype(AST::Ty& leaf, AST::Ty& root,
         std::optional<Cangjie::ModalInfo> leafModal = std::nullopt,
         std::optional<Cangjie::ModalInfo> rootModal = std::nullopt);
