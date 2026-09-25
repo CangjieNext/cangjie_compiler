@@ -39,11 +39,9 @@ private:
    /**
     * Generates a body for Java mirror constructor to initialize the generated wrapper
     * with a Java object created via JNI.
-    *
     * before:
     *     init(a1: A, ..., an: N) {
     *     }
-    *
     * after:
     *     init(a1: A, ..., an: N) {
     *         this(exclusiveScope {
@@ -57,11 +55,8 @@ private:
 
    /**
     * For a mirror method:
-    *
     *     func foo(args): Ret
-    *
     * the following will be generated:
-    *
     *     func foo(args): Ret {
     *         return exclusiveScope {
     *             *UnwrapJavaEntity*(
@@ -75,7 +70,6 @@ private:
     *             )
     *         }
     *     }
-    *
     * where *UnwrapJavaEntity* is the generated unwrapper for Ret type value.
     */
     void PopulateUserMethod(AfterTypeCheckContext& ctx, AST::ClassLikeDecl& mirror, AST::FuncDecl& userMethod) const;
@@ -84,11 +78,8 @@ private:
 
    /**
     * For prop [prop]:
-    *
     *     mut prop p: Ret
-    *
     * the following will be generated:
-    *
     *     mut prop p: Ret {
     *         get() {
     *             return exclusiveScope {
