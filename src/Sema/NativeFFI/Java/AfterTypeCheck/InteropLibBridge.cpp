@@ -72,6 +72,7 @@ constexpr auto INTEROPLIB_CFFI_GET_REGISTRY_ID_OR_NONE = "Java_CFFI_getRegistryI
 constexpr auto INTEROPLIB_CFFI_JAVA_STRING_TO_CANGJIE = "Java_CFFI_JavaStringToCangjie";
 constexpr auto INTEROPLIB_CFFI_CANGJIE_STRING_TO_JAVA = "Java_CFFI_CangjieStringToJava";
 constexpr auto INTEROPLIB_CFFI_WITH_EXCEPTION_HANDLING_ID = "withExceptionHandling";
+constexpr auto INTEROPLIB_CFFI_WITH_EXCLUSIVE_SCOPE_ID = "withExclusiveScopeExceptionHandling";
 constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_GET_CLASS = "Java_CFFI_getClass";
 
 } // namespace
@@ -329,6 +330,11 @@ Ptr<FuncDecl> InteropLibBridge::GetIsInstanceOf()
 Ptr<FuncDecl> InteropLibBridge::GetWithExceptionHandlingDecl()
 {
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_WITH_EXCEPTION_HANDLING_ID);
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetWithExclusiveScopeExceptionHandlingDecl()
+{
+    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_WITH_EXCLUSIVE_SCOPE_ID);
 }
 
 Ptr<FuncDecl> InteropLibBridge::GetGetClassDecl() const

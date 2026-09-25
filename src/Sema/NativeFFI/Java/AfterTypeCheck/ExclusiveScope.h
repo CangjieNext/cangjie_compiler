@@ -6,10 +6,12 @@
 
 #include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "cangjie/AST/Node.h"
+#include "InteropLibBridge.h"
 
 namespace Cangjie::Native::FFI::Java {
 
     using namespace Cangjie::AST;
+    using InteropLibBridge = Cangjie::Interop::Java::InteropLibBridge;    
     
     /**
     * Wraps the given body with an exclusiveScope lambda call.
@@ -25,6 +27,7 @@ namespace Cangjie::Native::FFI::Java {
     *         // body
     *     }
     */
-    OwnedPtr<Expr> WrapWithExclusiveScope(AfterTypeCheckContext& ctx, OwnedPtr<Block> body, Ptr<Ty> retTy);
+    OwnedPtr<Expr> WrapWithExclusiveScope(AfterTypeCheckContext& ctx, InteropLibBridge& lib,
+        OwnedPtr<Block> body, Ptr<Ty> retTy);
 
 }

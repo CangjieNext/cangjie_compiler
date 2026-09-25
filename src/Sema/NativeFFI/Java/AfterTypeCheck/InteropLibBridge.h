@@ -191,6 +191,8 @@ public:
      */
     Ptr<FuncDecl> GetWithExceptionHandlingDecl();
 
+    Ptr<FuncDecl> GetWithExclusiveScopeExceptionHandlingDecl();
+
     Ptr<FuncDecl> GetGetClassDecl() const;
     Ptr<FuncDecl> GetGetMethodIdDecl() const;
     Ptr<FuncDecl> GetGetStaticMethodIdDecl() const;
