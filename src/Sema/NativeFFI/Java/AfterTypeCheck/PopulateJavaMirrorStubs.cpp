@@ -213,57 +213,76 @@ void PopulateJavaMirrorStubs::InsertPropSetter(AfterTypeCheckContext& ctx,
     InjectNodes(body, std::move(jniSetterCall));
 }
 
+bool PopulateJavaMirrorStubs::ShouldSkipMirrorMember(const AST::Decl& member) const
+{
+    if (member.TestAttr(Attribute::IS_BROKEN)) {
+        return true;
+    }
+    // Common members matched with a specific counterpart are desugared on the specific side.
+    // Plain common members (not marked `common`) are part of the common implementation
+    // and must not receive FFI glue nor be reported as errors.
+    return FromCommonPart(member) && (member.specificImplementation != nullptr || !member.TestAttr(Attribute::COMMON));
+}
+
+bool PopulateJavaMirrorStubs::RejectUnmatchedCommon(AST::Decl& member, DiagKindRefactor kind) const
+{
+    if (!IsUnmatchedCommon(member)) {
+        return false;
+    }
+    diag.DiagnoseRefactor(kind, member);
+    member.EnableAttr(Attribute::IS_BROKEN);
+    return true;
+}
+
+void PopulateJavaMirrorStubs::ProcessMirrorFunction(AfterTypeCheckContext& ctx, ClassLikeDecl& mirror, FuncDecl& fd,
+    Ptr<FuncDecl> wrappingCtor) const
+{
+    if (fd.IsFinalizer() || IsJavaRefGetter(fd) || IsGeneratedJavaMirrorConstructor(fd)) {
+        return;
+    }
+
+    if (!fd.TestAttr(Attribute::CONSTRUCTOR)) {
+        if (RejectUnmatchedCommon(fd, DiagKindRefactor::sema_cjmp_mirror_method_from_common_has_body)) {
+            return;
+        }
+
+        bool isStatic = fd.TestAttr(Attribute::STATIC);
+        bool isDefault = fd.TestAttr(Attribute::JAVA_HAS_DEFAULT);
+        if (mirror.IsInterfaceDecl() && !isStatic && !isDefault) {
+            return;
+        }
+
+        PopulateUserMethod(ctx, mirror, fd);
+        return;
+    }
+
+    if (RejectUnmatchedCommon(fd, DiagKindRefactor::sema_cjmp_mirror_ctor_from_common_has_body)) {
+        return;
+    }
+    PopulateUserConstructor(ctx, fd, *wrappingCtor);
+}
+
+void PopulateJavaMirrorStubs::ProcessMirrorProperty(
+    AfterTypeCheckContext& ctx, ClassLikeDecl& mirror, PropDecl& prop) const
+{
+    if (RejectUnmatchedCommon(prop, DiagKindRefactor::sema_cjmp_mirror_prop_from_common)) {
+        return;
+    }
+    PopulateUserProperty(ctx, mirror, prop);
+}
+
 void PopulateJavaMirrorStubs::Process(AfterTypeCheckContext& ctx, ClassLikeDecl& mirror) const
 {
     Ptr<FuncDecl> wrappingCtor = Is<ClassDecl>(mirror) ? GetJavaMirrorWrappingConstructor(mirror) : nullptr;
     for (auto& member : mirror.GetMemberDeclPtrs()) {
-        if (member->TestAttr(Attribute::IS_BROKEN)) {
-            continue;
-        }
-        // Common members matched with a specific counterpart are desugared on the specific side.
-        if (FromCommonPart(*member) && member->specificImplementation) {
-            continue;
-        }
-        // Plain common members (not marked `common`) are part of the common implementation
-        // and must not receive FFI glue nor be reported as errors.
-        if (FromCommonPart(*member) && !member->TestAttr(Attribute::COMMON)) {
+        if (ShouldSkipMirrorMember(*member)) {
             continue;
         }
 
         if (auto fd = As<ASTKind::FUNC_DECL>(member.get())) {
-            if (fd->IsFinalizer() || IsJavaRefGetter(*fd) || IsGeneratedJavaMirrorConstructor(*fd)) {
-                continue;
-            }
-
-            if (fd->TestAttr(Attribute::CONSTRUCTOR)) {
-                if (IsUnmatchedCommon(*fd)) {
-                    diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_mirror_ctor_from_common_has_body, *fd);
-                    fd->EnableAttr(Attribute::IS_BROKEN);
-                    continue;
-                }
-                PopulateUserConstructor(ctx, *fd, *wrappingCtor);
-            } else {
-                if (IsUnmatchedCommon(*fd)) {
-                    diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_mirror_method_from_common_has_body, *fd);
-                    fd->EnableAttr(Attribute::IS_BROKEN);
-                    continue;
-                }
-
-                bool isStatic = member->TestAttr(Attribute::STATIC);
-                bool isDefault = member->TestAttr(Attribute::JAVA_HAS_DEFAULT);
-                if (mirror.IsInterfaceDecl() && !isStatic && !isDefault) {
-                    continue;
-                }
-
-                PopulateUserMethod(ctx, mirror, *fd);
-            }
+            ProcessMirrorFunction(ctx, mirror, *fd, wrappingCtor);
         } else if (auto prop = As<ASTKind::PROP_DECL>(member.get())) {
-            if (IsUnmatchedCommon(*prop)) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_mirror_prop_from_common, *prop);
-                prop->EnableAttr(Attribute::IS_BROKEN);
-                continue;
-            }
-            PopulateUserProperty(ctx, mirror, *prop);
+            ProcessMirrorProperty(ctx, mirror, *prop);
         }
     }
 }
