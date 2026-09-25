@@ -39,6 +39,30 @@ private:
     void Process(AfterTypeCheckContext& ctx, AST::ClassLikeDecl& mirror) const;
 
     /**
+     * Whether @p member must be skipped by Process: broken declarations, common members
+     * already matched with a specific counterpart, and plain common members are ignored.
+     */
+    bool ShouldSkipMirrorMember(const AST::Decl& member) const;
+
+    /**
+     * If @p member is an unmatched `common` declaration, reports @p kind, marks it broken,
+     * and returns true. Returns false otherwise.
+     */
+    bool RejectUnmatchedCommon(AST::Decl& member, DiagKindRefactor kind) const;
+
+    /**
+     * Fills the body of a mirror function: unmatched-common diagnostics, the interface
+     * default/static filter, and dispatch to PopulateUserMethod/PopulateUserConstructor.
+     */
+    void ProcessMirrorFunction(AfterTypeCheckContext& ctx, AST::ClassLikeDecl& mirror,
+        AST::FuncDecl& fd, Ptr<AST::FuncDecl> wrappingCtor) const;
+
+    /**
+     * Fills the getter/setter bodies of a mirror property, rejecting unmatched common props.
+     */
+    void ProcessMirrorProperty(AfterTypeCheckContext& ctx, AST::ClassLikeDecl& mirror, AST::PropDecl& prop) const;
+
+    /**
     * Generates a body for Java mirror constructor to initialize the generated wrapper
     * with a Java object created via JNI.
     *
