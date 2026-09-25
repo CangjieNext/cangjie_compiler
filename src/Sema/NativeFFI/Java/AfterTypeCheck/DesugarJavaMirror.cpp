@@ -297,7 +297,7 @@ void JavaDesugarManager::InsertJStringOfStringCtorBody(AfterTypeCheckContext& ct
         return block;
    });
 
-    auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, std::move(block), lib.GetJavaEntityTy());
+    auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, lib, std::move(block), lib.GetJavaEntityTy());
     auto superCall = CreateSuperCall(decl, *jObjectCtor, jObjectCtor->GetTy());
     superCall->args.emplace_back(CreateFuncArg(std::move(exclusiveScopeCall)));
     generatedCtor.funcBody->body->body.emplace_back(std::move(superCall));
