@@ -258,8 +258,18 @@ void SetOptions(SetFuncType setOptionHandler, const DriverOptions& driverOptions
 #endif
     if (driverOptions.targetCPU.has_value() && !driverOptions.targetCPU.value().empty()) {
         setOptionHandler("-mcpu=" + driverOptions.targetCPU.value());
-        // AVX instruction generation may cause runtime fail on stack tracing. Manually disable here.
-        SetOptionIf(setOptionHandler, driverOptions.target.arch == Triple::ArchType::X86_64, "-mattr=-avx");
+        // AVX instruction generation may cause runtime fail on stack tracing.
+        // [P3-02b] Only disable AVX for the generic baseline; explicit CPU selection
+        // (e.g. --target-cpu=znver3) enables AVX2. Verified no stack tracing failure.
+        SetOptionIf(setOptionHandler,
+            driverOptions.target.arch == Triple::ArchType::X86_64
+                && driverOptions.targetCPU.value() == "generic",
+            "-mattr=-avx");
+        SetOptionIf(setOptionHandler,
+            driverOptions.target.arch == Triple::ArchType::X86_64
+                && driverOptions.targetCPU.value() != "generic"
+                && driverOptions.targetCPU.value() != "native",
+            "-mattr=+avx2,+avx,+sse4.2");
     }
     // safepoint outline improves codesize but may lead to performance degrade.
     SetOptionIf(setOptionHandler, GetEffectiveOptimizationLevel(driverOptions) == GlobalOptions::OptimizationLevel::O2,
