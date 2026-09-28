@@ -6,7 +6,6 @@
 
 #include <fstream>
 #include <algorithm>
-#include <string_view>
 
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
@@ -47,27 +46,9 @@ Position EffectiveTokenEnd(const Token& tok)
     return tok.Begin() + GetTokenLenth(tok);
 }
 
-// RefreshNewTokensPos inserts a column gap by default. For @local! / @local? / @~local, skip the gap unless the
-// original tokens already had a column gap (e.g. @local !). Named-param name!: is not local-mode (@ absent).
-// Macro tokens may share Begin until refresh; that is not a gap, so still glue.
 bool HasSourceColumnGap(const Token& prev, const Token& cur)
 {
     return cur.Begin() > EffectiveTokenEnd(prev);
-}
-
-bool IsAdjacentLocalModePair(const Token& at, const Token& prev, const Token& cur)
-{
-    if (at.kind != TokenKind::AT || HasSourceColumnGap(prev, cur)) {
-        return false;
-    }
-    constexpr std::string_view localMode{"local"};
-    // @~local: glue ~ and local
-    if (prev.kind == TokenKind::BITNOT && cur.kind == TokenKind::IDENTIFIER && cur.Value() == localMode) {
-        return true;
-    }
-    // @local! / @local?: glue local and !/?
-    return prev.kind == TokenKind::IDENTIFIER && prev.Value() == localMode &&
-        (cur.kind == TokenKind::NOT || cur.kind == TokenKind::QUEST);
 }
 
 void ReportMappingFailedDiag(
@@ -191,7 +172,6 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
     pMacroInvocation->origin2newPosMap[mcPos.Hash64()] = mcPos;
     auto lastColumn = static_cast<unsigned int>(sm.GetLineEnd(mcPos) + 1);
     Token prevOrig{TokenKind::END};
-    Token beforePrevOrig{TokenKind::END};
     pMacroInvocation->macroAtPosition.emplace_back(mcPos);
     size_t threadNum = std::thread::hardware_concurrency();
     Cangjie::Utils::TaskQueue taskQueue(threadNum);
@@ -212,9 +192,9 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
     }
     taskQueue.RunAndWaitForAllTasksCompleted();
     for (auto& token : pMacroInvocation->newTokens) {
-        // No column gap for A() A[] A<> A?? >> >= ~init, or local-mode pairs that must stay adjacent.
-        if (!IsSpecialToken(prevOrig.kind, token.kind) &&
-            !IsAdjacentLocalModePair(beforePrevOrig, prevOrig, token)) {
+        // No column gap for A() A[] A<> A?? >> >= ~init. Otherwise insert a gap only when the
+        // original tokens already had one (preserve source adjacency, including @local!).
+        if (!IsSpecialToken(prevOrig.kind, token.kind) && HasSourceColumnGap(prevOrig, token)) {
             lastColumn += 1;
         }
         if (ci.invocation.globalOptions.enableCompileDebug || ci.invocation.globalOptions.displayLineInfo) {
@@ -232,7 +212,6 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
             pMacroInvocation->macroCallDiagInfo.new2originPosMap[keyPos.Hash32()] = token.Begin();
         }
         auto key = token.Begin().Hash64();
-        // Snapshot original positions before SetValuePos; adjacency checks need the pre-refresh Begin/End.
         Token tokenOrig = token;
         Position begin = token.Begin();
         begin.fileID = mcPos.fileID;
@@ -250,7 +229,6 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
             pMacroInvocation->origin2newPosMap.find(key) == pMacroInvocation->origin2newPosMap.end()) {
             pMacroInvocation->origin2newPosMap[key] = token.Begin();
         }
-        beforePrevOrig = prevOrig;
         prevOrig = std::move(tokenOrig);
     }
     if (ci.invocation.globalOptions.enableCompileDebug || ci.invocation.globalOptions.displayLineInfo) {

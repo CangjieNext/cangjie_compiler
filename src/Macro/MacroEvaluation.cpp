@@ -130,8 +130,7 @@ std::string GetPrimaryName(const MacroInvocation& invocation)
 }
 
 // True when tokens at `atIndex` are a local-mode token pattern: @local! / @local? / @~local.
-// Positions are not checked here — macro-emitted tokens may share a column until RefreshNewTokensPos;
-// adjacency for ~local / local!/? is restored there via IsAdjacentLocalModePair.
+// Positions are not checked here.
 bool IsModalAfterAt(const TokenVector& tokens, size_t atIndex)
 {
     // Local mode is three tokens: @ ~ local  or  @ local !/?
