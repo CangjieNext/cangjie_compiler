@@ -129,31 +129,6 @@ std::string GetPrimaryName(const MacroInvocation& invocation)
     return "";
 }
 
-// True when tokens at `atIndex` are a local-mode token pattern: @local! / @local? / @~local.
-// Positions are not checked here — macro-emitted tokens may share a column until RefreshNewTokensPos;
-// adjacency for ~local / local!/? is restored there via IsAdjacentLocalModePair.
-bool IsModalAfterAt(const TokenVector& tokens, size_t atIndex)
-{
-    // Local mode is three tokens: @ ~ local  or  @ local !/?
-    constexpr size_t localModeLastOffset = 2;
-    constexpr std::string_view localMode{"local"};
-    if (atIndex + 1 >= tokens.size()) {
-        return false;
-    }
-    const Token& t1 = tokens[atIndex + 1];
-    if (t1.kind == TokenKind::BITNOT) {
-        return atIndex + localModeLastOffset < tokens.size() &&
-            tokens[atIndex + localModeLastOffset].kind == TokenKind::IDENTIFIER &&
-            tokens[atIndex + localModeLastOffset].Value() == localMode;
-    }
-    if (t1.kind == TokenKind::IDENTIFIER && t1.Value() == localMode &&
-        atIndex + localModeLastOffset < tokens.size()) {
-        auto k = tokens[atIndex + localModeLastOffset].kind;
-        return k == TokenKind::NOT || k == TokenKind::QUEST;
-    }
-    return false;
-}
-
 bool HasMacroCallToEval(const std::string& moduleName, const TokenVector& inputTokens, size_t curIndex,
     size_t tokenSize, std::vector<Position>& escapePosVec)
 {

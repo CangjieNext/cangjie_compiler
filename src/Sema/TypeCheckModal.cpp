@@ -449,7 +449,7 @@ private:
         }
         auto builder = d.DiagnoseRefactor(DiagKindRefactor::sema_cannot_access_local_var_outside_exclave, ref,
             std::string{var->identifier.Val()}, varTy.String(), std::string{"spawn"});
-        builder.AddHint(MakeRange(var->begin, var->end));
+        builder.AddHint(MakeRange(var->begin, var->end), "variable declared here");
     }
 
     /// A local variable of non-copy @local! or @local? type declared outside
@@ -475,7 +475,7 @@ private:
         auto builder = d.DiagnoseRefactor(
             DiagKindRefactor::sema_cannot_access_local_var_outside_exclave, ref,
             std::string{var->identifier.Val()}, varTy.String(), "exclave");
-        builder.AddHint(MakeRange(var->begin, var->end));
+        builder.AddHint(MakeRange(var->begin, var->end), "variable declared here");
     }
 
     VisitAction VisitPost(Ptr<Node> node)
@@ -1230,8 +1230,10 @@ private:
     DiagnosticBuilder DiagBadAssignment(
         const Node& position, const ModalInfo& lModal, ModalTy rTy, bool lExternal, bool rExternal)
     {
-        std::string arg1 = (lExternal ? " external " : "internal ") + lModal.LocalString();
-        std::string arg2 = (rExternal ? " external " : "internal ") + rTy.String();
+        // Template is "cannot assign%s to expression of '%s' type":
+        // arg1 needs a leading space; arg2 is inside quotes and must not.
+        std::string arg1 = (lExternal ? " external " : " internal ") + lModal.LocalString();
+        std::string arg2 = (rExternal ? "external " : "internal ") + rTy.String();
         return d.DiagnoseRefactor(DiagKindRefactor::sema_bad_local_assignment, position, arg1, arg2);
     }
 

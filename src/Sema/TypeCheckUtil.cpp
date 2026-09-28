@@ -519,13 +519,22 @@ std::pair<Ptr<FuncDecl>, Ptr<FuncDecl>> GetUsableGetterSetterForProperty(PropDec
 
 Ptr<FuncDecl> GetUsableAccessorForProperty(PropDecl& pd, bool isGetter)
 {
+    // invalid prop, skip
+    if (pd.TestAttr(Attribute::HAS_BROKEN)) {
+        return {};
+    }
     Ptr<FuncDecl> fun = nullptr;
     auto cd = DynamicCast<ClassDecl>(pd.outerDecl);
     auto& col = isGetter ? pd.getters : pd.setters;
     if (col.empty()) {
-        CJC_ASSERT(cd);
-        fun = GetValidPropAccessor(*cd, isGetter, pd.TyMode(), pd.identifier);
+        if (cd) {
+            fun = GetValidPropAccessor(*cd, isGetter, pd.TyMode(), pd.identifier);
+        }
     } else {
+        // defensive check for invalid prop
+        if (col.empty()) {
+            return {};
+        }
         fun = col[0];
     }
     return fun;
