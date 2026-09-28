@@ -58,6 +58,10 @@ if (MINGW)
     # to avoid "multiple definition" error.
     # Refer to offiical manual of boundscheck library for more information.
     list(APPEND SRC_FILE src/memset_s.c src/snprintf_s.c src/vsnprintf_s.c src/secureprintoutput_a.c)
+    # MinGW sec_api/stdio_s.h provides vsnprintf_s as an inline function.
+    # Disable boundscheck's own implementation to avoid redefinition;
+    # vsnprintf_truncated_s is still compiled since MinGW does not provide it.
+    add_compile_definitions(SECUREC_ENABLE_VSNPRINTF=0)
 else()
     aux_source_directory(./src SRC_FILE)
 endif()

@@ -1192,7 +1192,8 @@ OwnedPtr<Decl> ParserImpl::ParseEnumConstructor(
         DiagExpectNoModifier(firstMod);
     }
     for (auto& anno : annos) {
-        if (!(anno->kind == AnnotationKind::WHEN || anno->kind == AnnotationKind::DEPRECATED)) {
+        if (!(anno->kind == AnnotationKind::WHEN || anno->kind == AnnotationKind::DEPRECATED ||
+                anno->kind == AnnotationKind::ARKTS)) {
             DiagUnexpectedAnnoOn(*annos[0], caseIdentPos, annos[0]->identifier, caseIdent);
         }
     }

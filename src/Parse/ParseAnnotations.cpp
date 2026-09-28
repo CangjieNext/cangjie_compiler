@@ -337,6 +337,48 @@ void ParserImpl::CheckObjCMirrorAnnotation(Annotation& anno) const
     ffiParser->CheckZeroOrSingleStringLitArgAnnotation(anno, annotationName);
 }
 
+void ParserImpl::CheckArkTSAnnotation(const Annotation& anno)
+{
+    bool moduleFound = false;
+    bool nameFound = false;
+    bool valueFound = false;
+
+    for (auto& arg : anno.args) {
+        CJC_NULLPTR_CHECK(arg);
+        if (arg->name.Empty()) {
+            ParseDiagnoseRefactor(DiagKindRefactor::parse_arkts_argument_not_named, *arg);
+            continue;
+        }
+        const auto& argName = arg->name.Val();
+        auto lce = (arg->expr != nullptr && arg->expr->astKind == ASTKind::LIT_CONST_EXPR)
+                       ? DynamicCast<LitConstExpr*>(arg->expr.get())
+                       : nullptr;
+        if (argName == "module" || argName == "name") {
+            bool& found = (argName == "module") ? moduleFound : nameFound;
+            if (found) {
+                ParseDiagnoseRefactor(DiagKindRefactor::parse_arkts_argument_duplication, *arg, argName);
+            }
+            found = true;
+            if (lce == nullptr || lce->kind != LitConstKind::STRING) {
+                ParseDiagnoseRefactor(DiagKindRefactor::parse_arkts_wrong_argument, *arg, argName, "'String' literal");
+            }
+        } else if (argName == "value") {
+            if (valueFound) {
+                ParseDiagnoseRefactor(DiagKindRefactor::parse_arkts_argument_duplication, *arg, argName);
+            }
+            valueFound = true;
+            if (lce == nullptr ||
+                (lce->kind != LitConstKind::INTEGER && lce->kind != LitConstKind::FLOAT &&
+                    lce->kind != LitConstKind::STRING && lce->kind != LitConstKind::BOOL)) {
+                ParseDiagnoseRefactor(DiagKindRefactor::parse_arkts_wrong_argument, *arg, argName,
+                    "'Int64', 'Float64', 'String' or 'Bool' literal");
+            }
+        } else {
+            ParseDiagnoseRefactor(DiagKindRefactor::parse_arkts_unknown_argument, *arg, argName);
+        }
+    }
+}
+
 OwnedPtr<Annotation> ParserImpl::ParseAnnotation()
 {
     if (this->enableCustomAnno && SeeingMacroCallDecl()) {
@@ -387,6 +429,11 @@ OwnedPtr<Annotation> ParserImpl::ParseAnnotation()
         case AnnotationKind::OBJ_C_IMPL: {
             ParseAnnotationArguments(*annotation);
             CheckObjCMirrorAnnotation(*annotation);
+            break;
+        }
+        case AnnotationKind::ARKTS: {
+            ParseAnnotationArguments(*annotation);
+            CheckArkTSAnnotation(*annotation);
             break;
         }
         default: {

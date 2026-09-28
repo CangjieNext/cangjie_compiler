@@ -1027,6 +1027,8 @@ private:
 
     // Cangjie Native & Java/ObjC FFI
     void CheckObjCMirrorAnnotation(AST::Annotation& anno) const;
+    // Check @ArkTS annotation arguments: 'module'/'name' must be String, 'value' must be literal.
+    void CheckArkTSAnnotation(const AST::Annotation& anno);
     // Check whether member decl can be abstract
     bool CanBeAbstract(const AST::Decl& decl, ScopeKind scopeKind) const;
     void CheckConstructorBody(AST::FuncDecl& ctor, ScopeKind scopeKind, bool inMacro = false);

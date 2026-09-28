@@ -321,6 +321,13 @@ ERROR(parse_annotation_no_arguments, "%s accepts no arguments", "unexpected argu
 // interop
 ERROR(parse_foreign_name_on_ffi_decl_member, "@ForeignName could only be used on FFI declaration member")
 
+// @ArkTS annotation
+ERROR(parse_arkts_argument_not_named, "argument of @ArkTS must be a named argument", "expected 'module', 'name' or 'value' here")
+ERROR(parse_arkts_wrong_argument, "argument '%s' of @ArkTS should be %s")
+ERROR(parse_arkts_argument_duplication, "argument '%s' of @ArkTS can not be duplicated")
+ERROR(parse_arkts_unknown_argument, "unknown argument '%s' in @ArkTS", "expected 'module', 'name' or 'value' here")
+ERROR(parse_arkts_value_not_on_enum_ctor, "'value' option of @ArkTS could only be used on a 'foreign enum' constructor")
+
 // java mirror
 ERROR(parse_java_mirror_function_cannot_have_body, "java-mirrored function '%s' cannot have body", "java-mirrored function cannot have body")
 ERROR(parse_java_mirror_function_must_have_return_type, "java-mirrored function must have return type", "java-mirrored function must have return type")

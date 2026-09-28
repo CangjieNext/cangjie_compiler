@@ -50,7 +50,8 @@ const std::unordered_map<AnnotationKind, Attribute> NonSerializedAnnotations = {
 // Annotations not supported on common/specific (neither serialized nor have attributes)
 const std::unordered_set<AnnotationKind> UnsupportedAnnotations = {AnnotationKind::JAVA, AnnotationKind::CALLING_CONV,
     AnnotationKind::FOREIGN_GETTER_NAME, AnnotationKind::FOREIGN_SETTER_NAME, AnnotationKind::CONSTSAFE,
-    AnnotationKind::ENSURE_PREPARED_TO_MOCK, AnnotationKind::NON_PRODUCT, AnnotationKind::UNKNOWN};
+    AnnotationKind::ENSURE_PREPARED_TO_MOCK, AnnotationKind::NON_PRODUCT, AnnotationKind::UNKNOWN,
+    AnnotationKind::ARKTS};
 
 bool PostCheckDeprecatedAnnotation(const AST::Decl& specific, DiagnosticEngine& diag)
 {

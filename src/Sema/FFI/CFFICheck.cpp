@@ -96,6 +96,35 @@ void CheckAnnoFrozen(const Decl& decl, const Annotation& anno, DiagnosticEngine&
     }
 }
 
+void CheckAnnoArkTS(Decl& decl, const Annotation& anno, DiagnosticEngine& diag)
+{
+    bool hasValue = false;
+    for (auto& arg : anno.args) {
+        CJC_NULLPTR_CHECK(arg);
+        const auto& argName = arg->name.Val();
+        if (argName == "value") {
+            hasValue = true;
+        }
+    }
+
+    // `value` option is only allowed on a 'foreign enum' constructor.
+    if (hasValue) {
+        bool isEnumCtor = (decl.astKind == ASTKind::FUNC_DECL) && decl.TestAttr(Attribute::ENUM_CONSTRUCTOR);
+        bool isForeignEnumCtor = isEnumCtor && decl.TestAttr(Attribute::FOREIGN) &&
+            decl.outerDecl != nullptr && decl.outerDecl->TestAttr(Attribute::FOREIGN);
+        if (!isForeignEnumCtor) {
+            diag.DiagnoseRefactor(DiagKindRefactor::parse_arkts_value_not_on_enum_ctor, anno);
+        }
+    }
+
+    if (!decl.TestAttr(Attribute::FOREIGN) &&
+        Utils::NotIn(decl.astKind,
+            {ASTKind::FUNC_DECL, ASTKind::CLASS_DECL, ASTKind::INTERFACE_DECL, ASTKind::ENUM_DECL,
+                ASTKind::VAR_DECL, ASTKind::PROP_DECL})) {
+        diag.Diagnose(anno, DiagKind::sema_illegal_use_of_annotation, DeclKindToString(decl), "@ArkTS");
+    }
+}
+
 using AnnoCheckMap = std::unordered_map<AnnotationKind, std::function<void(Decl&, Annotation&, DiagnosticEngine&)>>;
 
 AnnoCheckMap& GetAnnoCheckMap()
@@ -105,6 +134,7 @@ AnnoCheckMap& GetAnnoCheckMap()
         {AnnotationKind::CALLING_CONV, CheckAnnoCallingConv},
         {AnnotationKind::FASTNATIVE, CheckAnnoFastNative},
         {AnnotationKind::FROZEN, CheckAnnoFrozen},
+        {AnnotationKind::ARKTS, CheckAnnoArkTS},
     };
     return annoCheckMap;
 }

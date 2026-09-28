@@ -549,6 +549,7 @@ enum class AnnotationKind {
     FOREIGN_NAME,
     FOREIGN_GETTER_NAME,
     FOREIGN_SETTER_NAME,
+    ARKTS, // Indicate @ArkTS, used to bind foreign declarations to the ArkTS runtime.
     ATTRIBUTE,
     /**
      * NOTE: 'OVERFLOW' is a macro in early versions of glibc (VERSION < 2.27).
