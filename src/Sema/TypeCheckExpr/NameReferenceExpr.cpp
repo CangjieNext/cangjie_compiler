@@ -1076,7 +1076,7 @@ void TypeChecker::TypeCheckerImpl::InferInstanceAccess(const ASTContext& ctx, Me
             auto isGetter = !ma.TestAttr(Attribute::LEFT_VALUE);
             auto acc = GetUsableAccessorForProperty(*res, isGetter);
             if (!acc) {
-                // resolution succeed but accessor doesn't exist, the error should be report elsewhere (e.g. assign to
+                // resolution succeed but accessor doesn't exist, the error should be reported elsewhere (e.g. assign to
                 // immutable prop), don't report again.
                 ma.target = nullptr;
                 return;

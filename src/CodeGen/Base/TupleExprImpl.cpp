@@ -113,8 +113,9 @@ llvm::Value* GenerateOptionLikeT(IRBuilder2& irBuilder, const CHIR::Tuple& tuple
     auto p1i8 = irBuilder.getInt8PtrTy(1U);
     auto chirEnumType = StaticCast<CHIR::EnumType*>(tuple.GetResult()->GetType());
     auto enumTi = irBuilder.CreateTypeInfo(chirEnumType);
+    bool isLocalEnum = chirEnumType->IsLocalRegion();
     auto enumVal = irBuilder.CallIntrinsicAllocaGeneric(
-        {enumTi, irBuilder.GetSizeFromTypeInfo(enumTi)}, chirEnumType->IsLocalRegion());
+        {enumTi, irBuilder.GetSizeFromTypeInfo(enumTi)}, isLocalEnum);
     auto payload = irBuilder.GetPayloadFromObject(enumVal);
     auto castedPayload = irBuilder.CreateBitCast(payload, p1i8);
     auto associatedType = chirEnumType->GetTypeArgs()[0];
@@ -124,11 +125,11 @@ llvm::Value* GenerateOptionLikeT(IRBuilder2& irBuilder, const CHIR::Tuple& tuple
     irBuilder.CreateCondBr(isRef, refBB, nonRefBB);
     irBuilder.SetInsertPoint(refBB);
     if (hasAssociatedValue) {
-        auto modalWrite = chirEnumType->IsLocalRegion() ? ModalWriteKind::MAYBE_LOCAL : ModalWriteKind::NONE;
+        auto modalWrite = isLocalEnum ? ModalWriteKind::MAYBE_LOCAL : ModalWriteKind::NONE;
         (void)irBuilder.CallGCWrite({**(cgMod | tuple.GetOperand(1)), enumVal, castedPayload}, modalWrite);
     } else {
         (void)irBuilder.CallGCWrite({llvm::Constant::getNullValue(p1i8), enumVal, castedPayload},
-                                    ModalWriteKind::NONE);
+            ModalWriteKind::NONE);
     }
     irBuilder.CreateBr(endBB);
 

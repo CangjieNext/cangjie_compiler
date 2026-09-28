@@ -34,9 +34,7 @@ namespace Cangjie::CHIR {
 static const std::string SIZE_OF_NAME = "sizeOfType";
 static const std::string ALIGN_OF_NAME = "alignOfType";
 static const std::string ARRAY_ACQUIRE_RAW_DATA_NAME = "acquireRawData";
-static const std::string ARRAY_ACQUIRE_RAW_DATA2_NAME = "acquireRawData2";
 static const std::string ARRAY_RELEASE_RAW_DATA_NAME = "releaseRawData";
-static const std::string ARRAY_RELEASE_RAW_DATA2_NAME = "releaseRawData2";
 static const std::string ARRAY_BUILT_IN_COPY_TO_NAME = "intrinsicBuiltInCopyTo";
 static const std::string ARRAY_BUILT_IN_COPY_TO2_NAME = "intrinsicBuiltInCopyTo2";
 static const std::string ARRAY_BUILT_IN_COPY_TO3_NAME = "intrinsicBuiltInCopyTo3";

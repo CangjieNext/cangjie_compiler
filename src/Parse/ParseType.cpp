@@ -360,6 +360,14 @@ ASTModalInfo ParserImpl::ParseModalInfo()
     return modalInfo;
 }
 
+bool ParserImpl::IsTokenAdjacent(const Token& first, const Token& second) const
+{
+    if (first.End() == second.Begin()) {
+        return true;
+    }
+    return lexer->HasTokens() && first.Begin() == second.Begin();
+}
+
 // Parse the mode specifier that follows the '@' (already consumed by the caller):
 //   modeSpecifier
 //       : '~' 'local'   // @~local  -> NOT
@@ -382,7 +390,7 @@ bool ParserImpl::ParseModeSpecifier(ASTModalInfo& out)
         return false;
     }
     if (hasTilde) {
-        if (lastToken.End() != Peek().Begin()) {
+        if (!IsTokenAdjacent(lastToken, Peek())) {
             scope.ResetParserScope();
             return false;
         }
@@ -391,7 +399,7 @@ bool ParserImpl::ParseModeSpecifier(ASTModalInfo& out)
     }
     Next();
     if (Seeing(TokenKind::NOT)) {
-        if (lastToken.End() != Peek().Begin()) {
+        if (!IsTokenAdjacent(lastToken, Peek())) {
             scope.ResetParserScope();
             return false;
         }
@@ -400,7 +408,7 @@ bool ParserImpl::ParseModeSpecifier(ASTModalInfo& out)
         return true;
     }
     if (Seeing(TokenKind::QUEST)) {
-        if (lastToken.End() != Peek().Begin()) {
+        if (!IsTokenAdjacent(lastToken, Peek())) {
             scope.ResetParserScope();
             return false;
         }
@@ -435,13 +443,13 @@ bool ParserImpl::SeeingModalInfo()
         if (second.kind != TokenKind::IDENTIFIER || second.Value() != LOCAL_MODE_SPECIFIER) {
             return false;
         }
-        return first.End() == second.Begin();
+        return IsTokenAdjacent(first, second);
     }
     if (first.kind == TokenKind::IDENTIFIER && first.Value() == LOCAL_MODE_SPECIFIER) {
         if (second.kind != TokenKind::NOT && second.kind != TokenKind::QUEST) {
             return false;
         }
-        return first.End() == second.Begin();
+        return IsTokenAdjacent(first, second);
     }
     return false;
 }

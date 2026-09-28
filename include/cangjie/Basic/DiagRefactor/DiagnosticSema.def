@@ -436,7 +436,7 @@ ERROR(sema_prop_method_target_type_mismatch, "expect the same data type '%s' as 
 ERROR(sema_invalid_local_func_type, "cannot define a %s with @local! function type")
 ERROR(sema_static_prop_overload, "static prop cannot be overloaded")
 ERROR(sema_cannot_access_local_var_outside_exclave,
-    "cannot access local variable %s of '%s' type defined outside %s", "variable declared here")
+    "cannot access local variable %s of '%s' type defined outside %s")
 
 WARNING(sema_unused_import, UNUSED, "unused import '%s'", "unused import")
 
