@@ -48,7 +48,7 @@ public:
     Decl& GetJavaEntityKindJObject();
 
     /**
-     * Java_CFFI_newGlobalReference
+     * Java_CFFI_newGlobalRef
      */
     Ptr<FuncDecl> GetNewGlobalRefDecl();
 
@@ -300,7 +300,7 @@ public:
     OwnedPtr<CallExpr> CreateSwapLocalWithGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> localRef) const;
 
     /**
-     * Java_CFFI_newGlobalReference(env, obj)
+     * Java_CFFI_newGlobalRef(env, obj)
      */
     OwnedPtr<CallExpr> CreateNewGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj);
 
