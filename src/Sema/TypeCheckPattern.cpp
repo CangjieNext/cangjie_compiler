@@ -391,7 +391,7 @@ bool TypeChecker::TypeCheckerImpl::ChkEnumPattern(ASTContext& ctx, ModalTy targe
         auto enumTy = Is<FuncTy>(p.constructor->DataTy())
             ? p.constructor->GetTy()->typeArgs[1].Ty() : p.constructor->DataTy();
         auto placeholderEnumTy = typeManager.ConstrainByCtor(StaticCast<GenericsTy>(*target), *enumTy);
-        if (placeholderEnumTy) {
+        if (placeholderEnumTy.IsCorrect()) {
             SetTyForEnumPatternConstructor(typeManager, *StaticCast<EnumTy>(placeholderEnumTy.Ty()), p);
             mayMatch = true;
         }

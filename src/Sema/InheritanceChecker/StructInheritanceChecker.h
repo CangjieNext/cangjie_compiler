@@ -90,13 +90,17 @@ private:
     bool AreReturnTypesCompatible(
         const FuncTy& parentTy, const FuncTy& childTy, const std::unordered_set<ModalTy> inconsistentTypes = {}) const
     {
+        // Override checking must not use copy-type mode erasure as the subtyping basis.
         bool isSubOfAll = std::all_of(inconsistentTypes.begin(), inconsistentTypes.end(),
-            [&childTy, this](auto ty) { return typeManager.IsSubtype(childTy.retTy, ty, false); });
+            [&childTy, this](auto ty) {
+                return typeManager.IsSubtype(childTy.retTy, ty, false, true, ModalMatchMode::NON_COPY);
+            });
         if (!CheckReturnOverrideByGeneric(parentTy, childTy)) {
             return false;
         }
         // Return types are the same or return types have subtype relations.
-        return isSubOfAll && typeManager.IsSubtype(childTy.retTy, parentTy.retTy, false);
+        return isSubOfAll &&
+            typeManager.IsSubtype(childTy.retTy, parentTy.retTy, false, true, ModalMatchMode::NON_COPY);
     }
     void CheckAllUpperBoundsConfliction();
     void CheckUpperBoundsConfliction(const Generic& generic);

@@ -6,7 +6,6 @@
 
 #include <fstream>
 #include <algorithm>
-#include <string_view>
 
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
@@ -36,38 +35,6 @@ bool IsSpecialToken(TokenKind prevTokenKind, TokenKind curTokenKind)
 size_t GetTokenLenth(const Token& token)
 {
     return GetTokenLength(token.Value().size(), token.kind, token.delimiterNum);
-}
-
-Position EffectiveTokenEnd(const Token& tok)
-{
-    if (tok.End() != tok.Begin()) {
-        return tok.End();
-    }
-    // End unset on some macro tokens — recover span from Begin + length.
-    return tok.Begin() + GetTokenLenth(tok);
-}
-
-// RefreshNewTokensPos inserts a column gap by default. For @local! / @local? / @~local, skip the gap unless the
-// original tokens already had a column gap (e.g. @local !). Named-param name!: is not local-mode (@ absent).
-// Macro tokens may share Begin until refresh; that is not a gap, so still glue.
-bool HasSourceColumnGap(const Token& prev, const Token& cur)
-{
-    return cur.Begin() > EffectiveTokenEnd(prev);
-}
-
-bool IsAdjacentLocalModePair(const Token& at, const Token& prev, const Token& cur)
-{
-    if (at.kind != TokenKind::AT || HasSourceColumnGap(prev, cur)) {
-        return false;
-    }
-    constexpr std::string_view localMode{"local"};
-    // @~local: glue ~ and local
-    if (prev.kind == TokenKind::BITNOT && cur.kind == TokenKind::IDENTIFIER && cur.Value() == localMode) {
-        return true;
-    }
-    // @local! / @local?: glue local and !/?
-    return prev.kind == TokenKind::IDENTIFIER && prev.Value() == localMode &&
-        (cur.kind == TokenKind::NOT || cur.kind == TokenKind::QUEST);
 }
 
 void ReportMappingFailedDiag(
@@ -212,9 +179,9 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
     }
     taskQueue.RunAndWaitForAllTasksCompleted();
     for (auto& token : pMacroInvocation->newTokens) {
-        // No column gap for A() A[] A<> A?? >> >= ~init, or local-mode pairs that must stay adjacent.
-        if (!IsSpecialToken(prevOrig.kind, token.kind) &&
-            !IsAdjacentLocalModePair(beforePrevOrig, prevOrig, token)) {
+        // No column gap for A() A[] A<> A?? >> >= ~init, or @local! / @local? / @~local that must stay adjacent.
+        TokenVector localModeTokens{beforePrevOrig, prevOrig, token};
+        if (!IsSpecialToken(prevOrig.kind, token.kind) && !IsModalAfterAt(localModeTokens, 0, true)) {
             lastColumn += 1;
         }
         if (ci.invocation.globalOptions.enableCompileDebug || ci.invocation.globalOptions.displayLineInfo) {
