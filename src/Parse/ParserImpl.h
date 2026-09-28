@@ -1025,6 +1025,7 @@ private:
     AST::ASTModalInfo ParseModalInfo();
     bool ParseModeSpecifier(AST::ASTModalInfo& out);
     bool SeeingModalInfo();
+    bool IsTokenAdjacent(const Token& first, const Token& second) const;
     bool SeeingPrimitiveType();
 
     // Cangjie Native & Java/ObjC FFI

@@ -14,6 +14,7 @@
 
 #include <fstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "cangjie/Basic/Print.h"
@@ -322,5 +323,50 @@ bool MacroExpandFailed(const std::vector<Token>& retTokens)
         return true;
     }
     return false;
+}
+
+namespace {
+size_t TokenSpanLength(const Token& token)
+{
+    return GetTokenLength(token.Value().size(), token.kind, token.delimiterNum);
+}
+
+Position EffectiveTokenEnd(const Token& tok)
+{
+    if (tok.End() != tok.Begin()) {
+        return tok.End();
+    }
+    // End unset on some macro tokens — recover span from Begin + length.
+    return tok.Begin() + TokenSpanLength(tok);
+}
+
+bool HasSourceColumnGap(const Token& prev, const Token& cur)
+{
+    return cur.Begin() > EffectiveTokenEnd(prev);
+}
+} // namespace
+
+bool IsModalAfterAt(const TokenVector& tokens, size_t atIndex, bool requireAdjacent)
+{
+    // Local mode is three tokens: @ ~ local  or  @ local !/?
+    constexpr size_t localModeLastOffset = 2;
+    constexpr std::string_view localMode{"local"};
+    if (atIndex + localModeLastOffset >= tokens.size() || tokens[atIndex].Value() != "@") {
+        return false;
+    }
+    const Token& t1 = tokens[atIndex + 1];
+    const Token& t2 = tokens[atIndex + localModeLastOffset];
+    bool isModal = false;
+    if (t1.kind == TokenKind::BITNOT) {
+        isModal = t2.kind == TokenKind::IDENTIFIER && t2.Value() == localMode;
+    } else if (t1.kind == TokenKind::IDENTIFIER && t1.Value() == localMode) {
+        isModal = t2.kind == TokenKind::NOT || t2.kind == TokenKind::QUEST;
+    }
+    if (!isModal) {
+        return false;
+    }
+    // Macro-emitted tokens may share a column until RefreshNewTokensPos; that is not a gap, so still glue.
+    // Skip glue only when the source already had a column gap (e.g. @local !).
+    return !requireAdjacent || !HasSourceColumnGap(t1, t2);
 }
 }

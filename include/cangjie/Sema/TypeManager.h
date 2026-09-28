@@ -39,8 +39,9 @@ const size_t INT32_SIZE = 4;
 class TyVarScope;
 class InstCtxScope;
 enum class ModalMatchMode {
-    SUBTYPE,
-    EXACT,
+    SUBTYPE,  // Modal subtype, including copy-type mode erasure.
+    EXACT,    // Exact mode match (copy type may still erase mode).
+    NON_COPY, // Modal subtype without copy-type mode erasure (override checking).
 };
 
 class TypeManager {

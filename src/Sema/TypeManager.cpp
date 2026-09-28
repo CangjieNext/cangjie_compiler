@@ -948,7 +948,7 @@ bool TypeManager::IsFuncSubtype(const Ty& leaf, const Ty& root)
     auto& rootFuncType = static_cast<const FuncTy&>(root);
     if (IsFuncParametersSubtype(leafFuncType, rootFuncType)) {
         bool noCast = leafFuncType.noCast || rootFuncType.noCast;
-        return IsSubtype(leafFuncType.retTy, rootFuncType.retTy, noCast);
+        return IsSubtype(leafFuncType.retTy, rootFuncType.retTy, noCast, true, ModalMatchMode::NON_COPY);
     }
     return false;
 }
@@ -959,7 +959,8 @@ bool TypeManager::IsFuncParametersSubtype(const FuncTy& leaf, const FuncTy& root
     if (leaf.paramTys.size() == root.paramTys.size()) {
         bool result = true;
         for (size_t i = 0; i < leaf.paramTys.size(); i++) {
-            result = result && IsSubtype(root.paramTys[i], leaf.paramTys[i], noCast);
+            // Contravariant params: no copy-type mode erasure as subtyping basis.
+            result = result && IsSubtype(root.paramTys[i], leaf.paramTys[i], noCast, true, ModalMatchMode::NON_COPY);
             if (!result) {
                 return false;
             }
@@ -1081,10 +1082,20 @@ bool TypeManager::IsSubtype(
     //        a) the 'root' type is the 'Any' type, OR
     //        b) the 'leaf' is one of cffi types and the 'root' is 'CType', OR
     // 4. currently disallowing implicit boxing but the 'leaf' is classLike type and the 'root' is the 'Any' type.
-    bool modalSubtyping = modalMatchMode == ModalMatchMode::SUBTYPE ? IsModalSubtype(leaf, root)
-        : modalMatchMode == ModalMatchMode::EXACT ? leaf.Mode() == root.Mode() : true;
-    if (ImplementsCopyInterface(leaf.Ty())) {
-        modalSubtyping = true;
+    bool modalSubtyping = false;
+    switch (modalMatchMode) {
+        case ModalMatchMode::SUBTYPE:
+            modalSubtyping = IsModalSubtype(leaf, root) || ImplementsCopyInterface(leaf.Ty());
+            break;
+        case ModalMatchMode::EXACT:
+            modalSubtyping = leaf.Mode() == root.Mode();
+            break;
+        case ModalMatchMode::NON_COPY:
+            modalSubtyping = IsModalSubtype(leaf.Mode(), root.Mode());
+            break;
+        default:
+            CJC_ABORT();
+            break;
     }
     return modalSubtyping && IsSubtype(leaf.Ty(), root.Ty(), implicitBoxed, allowOptionBox);
 }
@@ -2243,7 +2254,9 @@ bool TypeManager::IsFuncDeclSubType(const FuncDecl& decl, const FuncDecl& funcDe
 
 bool TypeManager::IsFuncTySubType(const AST::FuncTy& type1, const AST::FuncTy& type2)
 {
-    return IsFuncParameterTypesIdentical(type1.paramTys, type2.paramTys) && IsSubtype(type1.retTy, type2.retTy);
+    // Override/implementation relation: do not treat copy-type mode erasure as return subtyping.
+    return IsFuncParameterTypesIdentical(type1.paramTys, type2.paramTys) &&
+        IsSubtype(type1.retTy, type2.retTy, true, true, ModalMatchMode::NON_COPY);
 }
 #endif
 
