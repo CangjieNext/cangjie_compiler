@@ -131,9 +131,12 @@ ModalWriteKind CodeGen::ClassifyModalWrite(CHIRBuilder& builder, const Expressio
     if (memberDataType == nullptr) {
         return ModalWriteKind::NONE;
     }
-    // A `Copyable` field contains no references, so it cannot create a cross-boundary edge.
+    // A `Copyable` field contains no references, so it cannot create a cross-boundary *ref*
+    // edge. An opaque non-ref write into a local owner still needs MaybeLocalWriteGeneric:
+    // WriteGeneric rejects local objects.
     if (memberDataType->IsCopyable()) {
-        return ModalWriteKind::NONE;
+        return member.ownerModal.Local() == CHIR::Mode::NONE ? ModalWriteKind::NONE
+            : ModalWriteKind::MAYBE_LOCAL;
     }
 
     if (member.isDemode) {
