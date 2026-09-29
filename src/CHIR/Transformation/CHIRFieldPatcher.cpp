@@ -26,7 +26,11 @@ void CHIRFieldPatcher::PatchCommonFieldsForMirror(ClassDef* classDef, Attribute 
         }
 
         if (FindInstanceGetterByName(*classDef, var.name)) {
+            // Step 2: the field's accesses are redirected to its getter/setter, so its
+            // storage is unused; collapse it to Unit. INITIALIZED is kept so VarInitCheck
+            // still treats the field as initialized.
             MarkFieldInitialized(var);
+            PatchFieldToUnit(var);
             continue;
         }
         CJC_ASSERT_WITH_MSG(!IsPatchableMirrorField(var),
