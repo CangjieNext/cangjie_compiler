@@ -54,6 +54,15 @@ target_link_libraries(
     GTest::gtest_main)
 add_test(NAME UtilsTest COMMAND UtilsTest)
 
+add_executable(MacroCallDiagInfoTest MacroCallDiagInfoTest.cpp)
+target_link_libraries(
+    MacroCallDiagInfoTest
+    ${CMAKE_DL_LIBS}
+    ${BASE_UTIL_SRC}
+    GTest::gtest
+    GTest::gtest_main)
+add_test(NAME MacroCallDiagInfoTest COMMAND MacroCallDiagInfoTest)
+
 if(WIN32)
     add_executable(StringConvertorTest StringConvertorTest.cpp StringConvertorTest.cpp)
     target_link_libraries(
