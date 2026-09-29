@@ -226,13 +226,6 @@ void JavaDesugarManager::GenerateInMirror(ClassDecl& classDecl)
 
 void JavaDesugarManager::GenerateInMirrors(File& file)
 {
-    auto pkg = file.curPackage;
-
-    std::once_flag flag;
-    std::call_once(flag, [this, &pkg]() {
-        TypeCheckUtil::GenerateGetTypeForTypeParamIntrinsic(*pkg, typeManager);
-    });
-
     for (auto& decl : file.decls) {
         if (auto cldecl = As<ASTKind::CLASS_LIKE_DECL>(decl.get())) {
             if (!cldecl->IsJavaMirror()) {

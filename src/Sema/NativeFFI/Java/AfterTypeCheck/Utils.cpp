@@ -591,13 +591,9 @@ bool IsJArray(const Ty& ty)
 
 Ptr<FuncDecl> InteropLibBridge::FindGetTypeForTypeParamDecl(File& file) const
 {
-    for (auto& decl : file.curPackage->files[0]->decls) {
-        if (decl->identifier.Val() == GET_TYPE_FOR_TYPE_PARAMETER_FUNC_NAME) {
-            return As<ASTKind::FUNC_DECL>(decl.get());
-        }
-    }
-    CJC_ABORT();
-    return nullptr;
+    static auto typeParamIntrinsicDecl =
+        TypeCheckUtil::GenerateGetTypeForTypeParamIntrinsic(*file.curPackage, typeManager);
+    return typeParamIntrinsicDecl;
 }
 
 Ptr<FuncDecl> InteropLibBridge::FindCStringToStringDecl()

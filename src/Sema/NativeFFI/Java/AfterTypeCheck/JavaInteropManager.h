@@ -58,6 +58,7 @@ private:
     void CheckJavaMirrorSubtypeAttrClassLikeDecl(ClassLikeDecl& decl) const;
     void CheckExtendDecl(ExtendDecl& decl) const;
     void CheckGenericsInstantiation(Decl& file);
+    void CheckJArrayArguments(File* file);
 
     ImportManager& importManager;
     TypeManager& typeManager;
