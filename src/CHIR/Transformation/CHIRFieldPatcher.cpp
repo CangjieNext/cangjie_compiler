@@ -5,6 +5,8 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "cangjie/CHIR/Transformation/CHIRFieldPatcher.h"
+#include "cangjie/CHIR/Utils/JavaMirrorFieldHelper.h"
+#include "cangjie/Utils/CheckUtils.h"
 
 namespace Cangjie::CHIR {
 
@@ -15,6 +17,7 @@ void CHIRFieldPatcher::PatchCommonFieldsForMirror(ClassDef* classDef, Attribute 
     if (!classDef) {
         return;
     }
+    (void)mirrorAttr;
 
     auto vars = classDef->GetDirectInstanceVars();
     for (auto& var : vars) {
@@ -22,10 +25,12 @@ void CHIRFieldPatcher::PatchCommonFieldsForMirror(ClassDef* classDef, Attribute 
             continue;
         }
 
-        Function* getter = FindGetterForField(classDef, var, mirrorAttr);
-        if (getter) {
-            PatchFieldToUnit(var);
+        if (FindInstanceGetterByName(*classDef, var.name)) {
+            MarkFieldInitialized(var);
+            continue;
         }
+        CJC_ASSERT_WITH_MSG(!IsPatchableMirrorField(var),
+            "CJMP mirror direct field has no matching getter");
     }
     classDef->SetDirectInstanceVars(vars);
 }
@@ -49,12 +54,17 @@ Function* CHIRFieldPatcher::FindGetterForField(ClassDef* classDef, const MemberV
 
 bool CHIRFieldPatcher::IsFFIAddedField(const MemberVarInfo& var)
 {
-    return var.TestAttr(Attribute::COMPILER_ADD);
+    return !IsPatchableMirrorField(var);
 }
 
 void CHIRFieldPatcher::PatchFieldToUnit(MemberVarInfo& var)
 {
     var.type = builder.GetUnitTy();
+}
+
+void CHIRFieldPatcher::MarkFieldInitialized(MemberVarInfo& var)
+{
+    var.attributeInfo.SetAttr(Attribute::INITIALIZED, true);
 }
 
 void CHIRFieldPatcher::PatchCommonFieldsForJavaImpl(ClassDef* classDef)
@@ -69,9 +79,8 @@ void CHIRFieldPatcher::PatchCommonFieldsForJavaImpl(ClassDef* classDef)
             continue;
         }
 
-        Function* getter = FindGetterForField(classDef, var, Attribute::JAVA_IMPL);
-        if (getter) {
-            PatchFieldToUnit(var);
+        if (FindInstanceGetterByName(*classDef, var.name)) {
+            MarkFieldInitialized(var);
         }
     }
     classDef->SetDirectInstanceVars(vars);
