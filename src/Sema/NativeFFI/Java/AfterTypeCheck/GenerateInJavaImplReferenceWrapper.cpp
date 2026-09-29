@@ -470,6 +470,10 @@ FuncDecl& GenerateInJavaImplReferenceWrapper::InsertJavaSideConstructorForFromCo
     ctor->begin = refWrapper->body->begin;
     ctor->end = refWrapper->body->begin;
     ctor->EnableAttr(Attribute::IN_CLASSLIKE, Attribute::PROTECTED);
+    // The FROM_COMMON_PART constructor shell is built without a curFile; AST2CHIR
+    // (CreateFuncSignatureAndSetGlobalCache) dereferences it and would ICE. Attach the
+    // originating file so the generated constructor is well-formed.
+    AddCurFile(*ctor, commonCtor.curFile);
 
     refWrapper->GetMemberDecls().emplace_back(std::move(ctor));
     ctx.CacheJavaImplReferenceWrapperConstructorsPair(commonCtor, res);
