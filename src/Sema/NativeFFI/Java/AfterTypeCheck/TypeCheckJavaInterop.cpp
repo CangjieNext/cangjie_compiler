@@ -13,6 +13,7 @@
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/Utils.h"
 
@@ -79,11 +80,6 @@ struct JavaInteropTypeChecker {
      */
     bool IsSupported(const Ty& ty, Position pos)
     {
-        auto areJavaMirrorTypes = [this](const std::vector<Ptr<Ty>>& typeArgs, Position pos) {
-            return std::all_of(
-                typeArgs.begin(), typeArgs.end(), [this, pos](const auto& argTy) { return IsSupported(*argTy, pos); });
-        };
-
         switch (ty.kind) {
             case TypeKind::TYPE_UNIT:
                 return pos == Position::OUT;
@@ -97,15 +93,17 @@ struct JavaInteropTypeChecker {
             case TypeKind::TYPE_FLOAT64:
                 return true;
             case TypeKind::TYPE_ENUM:
-                if (!ty.IsCoreOptionType() || ty.typeArgs[0]->IsCoreOptionType()) {
+            {
+                if (!ty.IsCoreOptionType()) {
                     return false;
                 };
-                return !ty.typeArgs[0]->IsPrimitive() && areJavaMirrorTypes(ty.typeArgs, pos);
+                CJC_ASSERT(ty.typeArgs.size() == 1);
+                auto argTy = ty.typeArgs.front();
+                CJC_NULLPTR_CHECK(argTy);
+                return !argTy->IsPrimitive() && !argTy->IsCoreOptionType() && IsSupported(*argTy, pos);
+            }
             case TypeKind::TYPE_CLASS:
             case TypeKind::TYPE_INTERFACE:
-                if (ty.IsObject()) {
-                    return true;
-                }
                 return StaticCast<ClassLikeTy&>(ty).commonDecl->IsJavaForeign();
             case TypeKind::TYPE_STRUCT:
                 if (ty.name == INTEROPLIB_CFFI_JAVA_ENTITY) {
@@ -130,9 +128,6 @@ struct JavaInteropTypeChecker {
     bool IsJavaCompatible(const Ty& ty, Position pos = Position::BOTH)
     {
         if (IsSupported(ty, pos)) {
-            if (auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty); classLikeTy && IsJArray(*classLikeTy)) {
-                return IsJavaCompatible(*ty.typeArgs[0]);
-            }
             return true;
         }
 
@@ -224,6 +219,52 @@ struct JavaInteropTypeChecker {
                     continue;
             }
         }
+    }
+
+    void CheckJArrayConstructorCall(CallExpr* callExpr)
+    {
+        CJC_NULLPTR_CHECK(callExpr);
+        auto ty = callExpr->GetTy();
+        CJC_NULLPTR_CHECK(ty);
+        CJC_ASSERT(ty->typeArgs.size() == 1);
+        if (IsJavaCompatible(*ty->typeArgs.front())) {
+            return;
+        }
+
+        Ptr<Expr> refExpr = callExpr->baseFunc;
+        CJC_NULLPTR_CHECK(refExpr);
+        Ptr<Node> errorRef = refExpr;
+        auto typeArgs = refExpr->GetTypeArgs();
+        // JArray<T>(x) ==> report error on "T"
+        if (typeArgs.size() > 0) {
+            errorRef = typeArgs.front();
+            CJC_NULLPTR_CHECK(errorRef);
+        }
+        // else report error on the type name
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_jarray_argument_must_be_java_compatible, *errorRef);
+        callExpr->EnableAttr(Attribute::IS_BROKEN);
+    }
+
+    void CheckJArrayTypeUsage(Type* type)
+    {
+        CJC_NULLPTR_CHECK(type);
+        auto ty = type->GetTy();
+        CJC_NULLPTR_CHECK(ty);
+        CJC_ASSERT(ty->typeArgs.size() == 1);
+        if (IsJavaCompatible(*ty->typeArgs.front())) {
+            return;
+        }
+
+        Ptr<Node> errorRef = type;
+        auto typeArgs = type->GetTypeArgs();
+        // JArray<T> ==> report error on "T"
+        if (typeArgs.size() > 0) {
+            errorRef = typeArgs.front();
+            CJC_NULLPTR_CHECK(errorRef);
+        }
+        // else report error on the type name
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_jarray_argument_must_be_java_compatible, *errorRef);
+        type->EnableAttr(Attribute::IS_BROKEN);
     }
 };
 } // namespace
@@ -338,6 +379,7 @@ void JavaInteropManager::CheckTypes(File& file)
 
         CheckGenericsInstantiation(*decl);
     }
+    CheckJArrayArguments(&file);
 }
 
 void JavaInteropManager::CheckTypes(ClassLikeDecl& classLikeDecl)
@@ -356,6 +398,36 @@ void JavaInteropManager::CheckTypes(ClassLikeDecl& classLikeDecl)
         CJC_ASSERT(!classLikeDecl.TestAttr(Attribute::ABSTRACT));
         CheckJavaImplTypes(classLikeDecl);
     }
+}
+
+void JavaInteropManager::CheckJArrayArguments(File* file)
+{
+    Walker(file, [this, file](Ptr<Node> node) -> VisitAction {
+        if (!node->IsSamePackage(*file->curPackage)) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        if (node->TestAttr(Attribute::COMPILER_ADD)) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        if (Ptr<Type> typeUsage = As<ASTKind::TYPE>(node)) {
+            auto semaTy = typeUsage->GetTy();
+            CJC_NULLPTR_CHECK(semaTy);
+            if (!IsJArray(*semaTy)) {
+                return VisitAction::WALK_CHILDREN;
+            }
+            JavaInteropTypeChecker checker { .isImpl = false, .diag = diag };
+            checker.CheckJArrayTypeUsage(typeUsage);
+        }
+        if (Ptr<CallExpr> constructorCall = As<ASTKind::CALL_EXPR>(node)) {
+            if (constructorCall->callKind != CallKind::CALL_OBJECT_CREATION
+                || !IsJArray(*constructorCall->GetTy())) {
+                return VisitAction::WALK_CHILDREN;
+            }
+            JavaInteropTypeChecker checker { .isImpl = false, .diag = diag };
+            checker.CheckJArrayConstructorCall(constructorCall);
+        }
+        return VisitAction::WALK_CHILDREN;
+    }).Walk();
 }
 
 } // namespace Cangjie::Interop::Java

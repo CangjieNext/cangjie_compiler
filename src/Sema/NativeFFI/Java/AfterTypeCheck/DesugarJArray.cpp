@@ -83,6 +83,9 @@ void DesugarJArray::TransformConstructorCallsToPassJNIParam(File& file) const
         if (!node->IsSamePackage(*file.curPackage)) { // if node is imported
             return VisitAction::WALK_CHILDREN;
         }
+        if (node->TestAttr(Attribute::IS_BROKEN)) {
+            return VisitAction::SKIP_CHILDREN;
+        }
 
         Ptr<CallExpr> callExpr = As<ASTKind::CALL_EXPR>(node);
         if (!callExpr) {
