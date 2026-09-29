@@ -246,6 +246,11 @@ bool CheckClass(const Cangjie::AST::ClassDecl& decl, const ClassDef& classDef)
             return false;
         }
     } else if (astSupClsTy != nullptr) {
+        // CJMP: a specific class may get its CHIR super class only during Canonicalization
+        // (PatchCJMPMembers::PatchSuperClass), so a not-yet-set super is not an error here.
+        if (decl.TestAttr(AST::Attribute::SPECIFIC)) {
+            return true;
+        }
         Errorln(classDef.GetIdentifier() + " not set super class.");
         return false;
     } else if (chirSupClsTy != nullptr) {

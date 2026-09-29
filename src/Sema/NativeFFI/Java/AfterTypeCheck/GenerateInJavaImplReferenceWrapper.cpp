@@ -471,9 +471,12 @@ FuncDecl& GenerateInJavaImplReferenceWrapper::InsertJavaSideConstructorForFromCo
     ctor->end = refWrapper->body->begin;
     ctor->EnableAttr(Attribute::IN_CLASSLIKE, Attribute::PROTECTED);
     // The FROM_COMMON_PART constructor shell is built without a curFile; AST2CHIR
-    // (CreateFuncSignatureAndSetGlobalCache) dereferences it and would ICE. Attach the
-    // originating file so the generated constructor is well-formed.
-    AddCurFile(*ctor, commonCtor.curFile);
+    // (CreateFuncSignatureAndSetGlobalCache) dereferences it and would ICE. Use the wrapper's
+    // (specific) file, not the common ctor's: AST2CHIR::ShouldTranslateMember skips a member
+    // whose curFile differs from the specific class's (DeclaredInDifferentFiles), and the
+    // common ctor carries a distinct deserialized File object, which would drop the generated
+    // constructor from the class.
+    AddCurFile(*ctor, refWrapper->curFile ? refWrapper->curFile : commonCtor.curFile);
 
     refWrapper->GetMemberDecls().emplace_back(std::move(ctor));
     ctx.CacheJavaImplReferenceWrapperConstructorsPair(commonCtor, res);
