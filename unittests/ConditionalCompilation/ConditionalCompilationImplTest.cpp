@@ -49,6 +49,16 @@ OwnedPtr<LitConstExpr> MakeStringLit(const std::string& value)
     return MakeOwned<LitConstExpr>(LitConstKind::STRING, value);
 }
 
+// A hand-made AST node keeps the default-constructed position (0,0), which the diagnostic
+// emitter rejects: DiagnosticEmitterImpl::EmitErrorLocation asserts on a zero position.
+// Mark the node as having no source position (the same marker driver-level diagnostics pass)
+// so these white-box cases reach the error branch under test instead of aborting in the emitter.
+void MarkNoSourcePos(Node& node)
+{
+    node.begin = DEFAULT_POSITION;
+    node.end = DEFAULT_POSITION;
+}
+
 class ConditionalCompilationImplTest : public ::testing::Test {
 protected:
     void SetUp() override
@@ -241,6 +251,7 @@ TEST_F(ConditionalCompilationImplTest, EvalJudgeBinaryExpr_NullOperands)
 {
     ResetImpl();
     BinaryExpr be;
+    MarkNoSourcePos(be);
     be.op = TokenKind::EQUAL;
     EXPECT_FALSE(impl->EvalJudgeBinaryExpr(be));
     EXPECT_GT(diag.GetErrorCount(), 0);
@@ -250,6 +261,7 @@ TEST_F(ConditionalCompilationImplTest, EvalJudgeBinaryExpr_NonRefLeft)
 {
     ResetImpl();
     BinaryExpr be;
+    MarkNoSourcePos(be);
     be.op = TokenKind::EQUAL;
     be.leftExpr = MakeStringLit("Linux");
     be.rightExpr = MakeStringLit("Linux");
@@ -264,6 +276,7 @@ TEST_F(ConditionalCompilationImplTest, EvalJudgeBinaryExpr_NonLitRight)
     be.op = TokenKind::EQUAL;
     be.leftExpr = MakeRef("os");
     be.rightExpr = OwnedPtr<Expr>(MakeRef("Linux").release());
+    MarkNoSourcePos(*be.rightExpr);
     EXPECT_FALSE(impl->EvalJudgeBinaryExpr(be));
     EXPECT_GT(diag.GetErrorCount(), 0);
 }
@@ -275,6 +288,7 @@ TEST_F(ConditionalCompilationImplTest, EvalJudgeBinaryExpr_NonStringLiteral)
     be.op = TokenKind::EQUAL;
     be.leftExpr = MakeRef("os");
     be.rightExpr = OwnedPtr<Expr>(MakeOwned<LitConstExpr>(LitConstKind::INTEGER, "1").release());
+    MarkNoSourcePos(*be.rightExpr);
     EXPECT_FALSE(impl->EvalJudgeBinaryExpr(be));
     EXPECT_GT(diag.GetErrorCount(), 0);
 }
@@ -288,6 +302,7 @@ TEST_F(ConditionalCompilationImplTest, EvalJudgeBinaryExpr_SiExpr)
     auto lit = MakeOwned<LitConstExpr>(LitConstKind::STRING, "Linux");
     lit->siExpr = MakeOwned<StrInterpolationExpr>();
     be.rightExpr = OwnedPtr<Expr>(lit.release());
+    MarkNoSourcePos(*be.rightExpr);
     EXPECT_FALSE(impl->EvalJudgeBinaryExpr(be));
     EXPECT_GT(diag.GetErrorCount(), 0);
 }
@@ -296,6 +311,7 @@ TEST_F(ConditionalCompilationImplTest, EvalJudgeBinaryExpr_UnknownCondition)
 {
     ResetImpl();
     BinaryExpr be;
+    MarkNoSourcePos(be);
     be.op = TokenKind::EQUAL;
     be.leftExpr = MakeRef("not_exists");
     be.rightExpr = MakeStringLit("v");
@@ -308,6 +324,7 @@ TEST_F(ConditionalCompilationImplTest, EvalJudgeBinaryExpr_UnsupportedOp)
     ResetImpl();
     // <, >, <=, >= are unsupported for os.
     BinaryExpr be;
+    MarkNoSourcePos(be);
     be.op = TokenKind::LT;
     be.leftExpr = MakeRef("os");
     be.rightExpr = MakeStringLit("Linux");
@@ -343,6 +360,7 @@ TEST_F(ConditionalCompilationImplTest, EvalJudgeBinaryExpr_CjcVersionBadValue)
 {
     ResetImpl();
     BinaryExpr be;
+    MarkNoSourcePos(be);
     be.op = TokenKind::EQUAL;
     be.leftExpr = MakeRef("cjc_version");
     be.rightExpr = MakeStringLit("not-a-version");
@@ -401,6 +419,7 @@ TEST_F(ConditionalCompilationImplTest, EvalUnaryExpr_NullExpr)
 {
     ResetImpl();
     UnaryExpr ue;
+    MarkNoSourcePos(ue);
     ue.op = TokenKind::NOT;
     EXPECT_FALSE(impl->EvalUnaryExpr(ue));
     EXPECT_GT(diag.GetErrorCount(), 0);
@@ -410,6 +429,7 @@ TEST_F(ConditionalCompilationImplTest, EvalUnaryExpr_NonRef)
 {
     ResetImpl();
     UnaryExpr ue;
+    MarkNoSourcePos(ue);
     ue.op = TokenKind::NOT;
     ue.expr = OwnedPtr<Expr>(MakeStringLit("x").release());
     EXPECT_FALSE(impl->EvalUnaryExpr(ue));
@@ -420,6 +440,7 @@ TEST_F(ConditionalCompilationImplTest, EvalUnaryExpr_NotDebugOrTest)
 {
     ResetImpl();
     UnaryExpr ue;
+    MarkNoSourcePos(ue);
     ue.op = TokenKind::NOT;
     ue.expr = OwnedPtr<Expr>(MakeRef("os").release());
     EXPECT_FALSE(impl->EvalUnaryExpr(ue));
@@ -430,6 +451,7 @@ TEST_F(ConditionalCompilationImplTest, EvalUnaryExpr_NonNotOperator)
 {
     ResetImpl();
     UnaryExpr ue;
+    MarkNoSourcePos(ue);
     ue.op = TokenKind::BITNOT;
     ue.expr = OwnedPtr<Expr>(MakeRef("debug").release());
     EXPECT_FALSE(impl->EvalUnaryExpr(ue));
@@ -462,6 +484,7 @@ TEST_F(ConditionalCompilationImplTest, EvalRefExpr_NotDebugOrTest)
 {
     ResetImpl();
     RefExpr re;
+    MarkNoSourcePos(re);
     re.ref = Reference("os");
     EXPECT_FALSE(impl->EvalRefExpr(re));
     EXPECT_GT(diag.GetErrorCount(), 0);
@@ -525,6 +548,7 @@ TEST_F(ConditionalCompilationImplTest, EvalLogicBinaryExpr_AndOr)
     orBe.op = TokenKind::OR;
     orBe.leftExpr = OwnedPtr<Expr>(orLeft.release());
     orBe.rightExpr = OwnedPtr<Expr>(MakeRef("os").release()); // invalid -> false
+    MarkNoSourcePos(*orBe.rightExpr);
     EXPECT_TRUE(impl->EvalLogicBinaryExpr(orBe));
 }
 
@@ -535,6 +559,7 @@ TEST_F(ConditionalCompilationImplTest, EvalConditionExpr_UnknownKind)
 {
     ResetImpl();
     Expr e; // ASTKind::EXPR hits the default branch.
+    MarkNoSourcePos(e);
     EXPECT_FALSE(impl->EvalConditionExpr(e));
     EXPECT_GT(diag.GetErrorCount(), 0);
 }
@@ -546,6 +571,7 @@ TEST_F(ConditionalCompilationImplTest, EvalBinaryExpr_InvalidOp)
 {
     ResetImpl();
     BinaryExpr be;
+    MarkNoSourcePos(be);
     be.op = TokenKind::ADD;
     be.leftExpr = MakeRef("os");
     be.rightExpr = MakeStringLit("Linux");
@@ -562,6 +588,7 @@ TEST_F(ConditionalCompilationImplTest, EvalNodeCondition_WhenWithoutCondExpr)
     auto decl = MakeOwned<Decl>();
     auto anno = MakeOwned<Annotation>();
     anno->kind = AnnotationKind::WHEN;
+    MarkNoSourcePos(*anno);
     decl->annotations.push_back(std::move(anno));
     Ptr<Decl> node = decl.get();
     EXPECT_TRUE(impl->EvalNodeCondition<Decl>(node));
