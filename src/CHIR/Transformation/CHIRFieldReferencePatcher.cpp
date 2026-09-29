@@ -75,56 +75,40 @@ void CHIRFieldReferencePatcher::PatchFunction(Function& func)
     Visitor::Visit(func, preVisit);
 }
 
+Expression* CHIRFieldReferencePatcher::TryPatchGlobalExpr(Expression& e)
+{
+    if (auto load = DynamicCast<Load*>(&e)) {
+        auto newExpr = TryPatchLoadGlobalVar(*load);
+        return newExpr ? newExpr : TryPatchLoadGlobal(*load);
+    }
+    if (auto store = DynamicCast<Store*>(&e)) {
+        return TryPatchStoreGlobalVar(*store);
+    }
+    if (auto fieldExpr = DynamicCast<Field*>(&e)) {
+        return TryPatchFieldGlobal(*fieldExpr);
+    }
+    if (auto storeElementRef = DynamicCast<StoreElementRef*>(&e)) {
+        auto mirrorClass = GetMirrorClassDefFromType(storeElementRef->GetBase()->GetType());
+        return mirrorClass ? TryPatchStoreElementRef(*storeElementRef, *mirrorClass) : nullptr;
+    }
+    if (auto storeByName = DynamicCast<StoreElementByName*>(&e)) {
+        auto location = storeByName->GetLocation();
+        auto mirrorClass = location ? GetMirrorClassDefFromType(location->GetType()) : nullptr;
+        return mirrorClass ? TryPatchStoreElementByName(*storeByName, *mirrorClass) : nullptr;
+    }
+    if (auto fieldByName = DynamicCast<FieldByName*>(&e)) {
+        auto baseValue = fieldByName->GetBase();
+        auto mirrorClass = baseValue ? GetMirrorClassDefFromType(baseValue->GetType()) : nullptr;
+        return mirrorClass ? TryPatchFieldByName(*fieldByName, *mirrorClass) : nullptr;
+    }
+    return nullptr;
+}
+
 void CHIRFieldReferencePatcher::PatchGlobalFunction(Function& func)
 {
     auto preVisit = [this](Expression& e) {
-        if (auto load = DynamicCast<Load*>(&e)) {
-            auto newExpr = TryPatchLoadGlobalVar(*load);
-            if (!newExpr) {
-                newExpr = TryPatchLoadGlobal(*load);
-            }
-            if (newExpr) {
-                load->ReplaceWith(*newExpr);
-            }
-        } else if (auto store = DynamicCast<Store*>(&e)) {
-            auto newExpr = TryPatchStoreGlobalVar(*store);
-            if (newExpr) {
-                store->ReplaceWith(*newExpr);
-            }
-        } else if (auto fieldExpr = DynamicCast<Field*>(&e)) {
-            auto newExpr = TryPatchFieldGlobal(*fieldExpr);
-            if (newExpr) {
-                fieldExpr->ReplaceWith(*newExpr);
-            }
-        } else if (auto storeElementRef = DynamicCast<StoreElementRef*>(&e)) {
-            auto mirrorClass = GetMirrorClassDefFromType(storeElementRef->GetBase()->GetType());
-            if (!mirrorClass) {
-                return VisitResult::CONTINUE;
-            }
-            auto newExpr = TryPatchStoreElementRef(*storeElementRef, *mirrorClass);
-            if (newExpr) {
-                storeElementRef->ReplaceWith(*newExpr);
-            }
-        } else if (auto storeByName = DynamicCast<StoreElementByName*>(&e)) {
-            auto location = storeByName->GetLocation();
-            auto mirrorClass = location ? GetMirrorClassDefFromType(location->GetType()) : nullptr;
-            if (!mirrorClass) {
-                return VisitResult::CONTINUE;
-            }
-            auto newExpr = TryPatchStoreElementByName(*storeByName, *mirrorClass);
-            if (newExpr) {
-                storeByName->ReplaceWith(*newExpr);
-            }
-        } else if (auto fieldByName = DynamicCast<FieldByName*>(&e)) {
-            auto baseValue = fieldByName->GetBase();
-            auto mirrorClass = baseValue ? GetMirrorClassDefFromType(baseValue->GetType()) : nullptr;
-            if (!mirrorClass) {
-                return VisitResult::CONTINUE;
-            }
-            auto newExpr = TryPatchFieldByName(*fieldByName, *mirrorClass);
-            if (newExpr) {
-                fieldByName->ReplaceWith(*newExpr);
-            }
+        if (auto newExpr = TryPatchGlobalExpr(e)) {
+            e.ReplaceWith(*newExpr);
         }
         return VisitResult::CONTINUE;
     };

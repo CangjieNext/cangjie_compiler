@@ -26,12 +26,22 @@ private:
 
     void PatchFunction(Function& func);
     void PatchGlobalFunction(Function& func);
-    Expression* TryPatchLoad(Load& load, ClassDef& parentDef);
+
+    /** Rewrites a name-based member access (`Load(GetElementByName)`) to a getter call, or null. */
     Expression* TryPatchLoadByName(Load& load, ClassDef& parentDef);
-    Expression* TryPatchStoreElementRef(StoreElementRef& store, ClassDef& parentDef);
+
+    /** Rewrites a name-based member store (`StoreElementByName`) to a setter call, or null. */
     Expression* TryPatchStoreElementByName(StoreElementByName& store, ClassDef& parentDef);
-    Expression* TryPatchField(Field& fieldExpr, ClassDef& parentDef);
+
+    /** Rewrites a value-type member access (`FieldByName`) to a getter call, or null. */
     Expression* TryPatchFieldByName(FieldByName& fieldExpr, ClassDef& parentDef);
+
+    /** Dispatches a single expression in a global function to the matching patch helper; null if unpatched. */
+    Expression* TryPatchGlobalExpr(Expression& e);
+
+    Expression* TryPatchLoad(Load& load, ClassDef& parentDef);
+    Expression* TryPatchStoreElementRef(StoreElementRef& store, ClassDef& parentDef);
+    Expression* TryPatchField(Field& fieldExpr, ClassDef& parentDef);
     Expression* TryPatchLoadGlobalVar(Load& load);
     Expression* TryPatchStoreGlobalVar(Store& store);
     Expression* TryPatchFieldGlobal(Field& fieldExpr);
