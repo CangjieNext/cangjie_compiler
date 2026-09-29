@@ -18,11 +18,12 @@ bool TypeChecker::TypeCheckerImpl::SynthesizeAndReplaceIdealTy(const CheckerCont
     // Therefore, we need to know if there are any errors during the inference process.
     auto ds = DiagSuppressor(diag);
     auto synTy = Synthesize(ctx, &node);
-    // For expressions, HasError() can be true from call-site trial matching
-    // (MatchFunctionForCall) even when the synthesized type is correct. Ignore
-    // HasError for expressions whose type is correct, so the body is not marked
-    // invalid by spurious trial errors.
-    bool valid = synTy.IsCorrect() && (!ds.HasError() || (node.IsExpr() && synTy.IsCorrect()));
+    // While type variables are still unsolved (trial matching during inference), a correct
+    // expression can carry errors from call-site trial matching (MatchFunctionForCall); ignore
+    // HasError for such expressions so the body is not marked invalid by spurious trial errors.
+    // Outside inference the strict check is kept, so genuine errors still invalidate the body.
+    bool valid = synTy.IsCorrect() &&
+        (!ds.HasError() || (node.IsExpr() && !typeManager.GetUnsolvedTyVars().empty()));
     // Keep ideal literal types pending for the implicit-return expression of a lambda that is a
     // direct argument of a generic call, so generic type argument inference can unify it against
     // the expected contextual type (e.g. `TypeTest({=> 0})` where the expected type is

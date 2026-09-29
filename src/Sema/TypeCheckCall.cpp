@@ -960,6 +960,7 @@ bool TypeChecker::TypeCheckerImpl::CompareFuncCandidates(
         CompareThisParamTy(typeManager, i.fd, j.fd, ce, target) != OverloadCmp::WORSE;
 }
 
+namespace {
 /// Receiver modal is IDEAL (pending, e.g. an unannotated lambda parameter kept as a placeholder):
 /// every this-mode unifies, so all modal overloads stay legal and resolution becomes ambiguous.
 /// Prefer the @~local (NOT) this-param candidate, mirroring the "prefer @~local for compatibility"
@@ -1032,6 +1033,7 @@ void FilterNonMatchingThisParamCandidates(TypeManager& typeManager, const ModalI
         }
     }
 }
+} // namespace
 
 /// For non-ctor call, do these in such order.
 /// 1) keep only exact this arg mode to this param.
@@ -3610,14 +3612,20 @@ bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, ModalTy target, 
     PData::Reset(typeManager.constraints);
     // If candidates may be enum constructor or operator(), clear baseFunc's ty when constructor mismatched.
     ce.baseFunc->SetTy(maybeEnumOrVariadic ? ModalTy{TypeManager::GetInvalidTy()} : ce.baseFunc->GetTy());
+    bool variadicFallback = maybeVariadicFunction && result.empty();
     auto ret = (maybeEnumOverloadOP && ChkFunctionCallExpr(ctx, target, ce)) ||
-        (maybeVariadicFunction && result.empty() && ChkVariadicCallExpr(ctx, target, ce, candidates, diagnostics));
+        (variadicFallback && ChkVariadicCallExpr(ctx, target, ce, candidates, diagnostics));
     if (ret) {
         return true;
     }
     // If no matching or having multiple matching candidates, generate diagnosis.
     if (diagnostics.empty()) {
         DiagnoseForCall(candidates, result, ce, *decl);
+    } else if (!variadicFallback) {
+        // The match ran under suppression (tentative matching while type variables are still
+        // unsolved). Nothing re-reported these diagnostics on this path, so report them here
+        // rather than letting a genuine call error be swallowed.
+        std::for_each(diagnostics.cbegin(), diagnostics.cend(), [this](auto info) { diag.Diagnose(info); });
     }
     // Recover arguments' types if current check failed but previous check passed.
     RecoverCallArgs(ctx, ce, argsTys);
