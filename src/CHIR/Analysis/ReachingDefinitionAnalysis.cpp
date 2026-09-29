@@ -186,14 +186,14 @@ void ReachingDefinitionAnalysis::HandleStoreExpr(ReachingDefinitionDomain& state
 
 void ReachingDefinitionAnalysis::HandleGetElemRefExpr(ReachingDefinitionDomain& state, const GetElementRef* getElemRef)
 {
-    // If it's a non-readonly GetElementRef to a tracked struct.
+    // Taking a field ref of a tracked struct may later be used for StoreElementRef.
+    // Do not trust READONLY on the GetElementRef result: it often only means the binding
+    // (e.g. mut `this` / let) cannot be rebound, not that var members are immutable.
     auto target = getElemRef->GetLocation();
     if (auto it = allocateIdxMap.find(target); it != allocateIdxMap.end()) {
         if (StaticCast<RefType*>(target->GetType())->GetBaseType()->IsStruct()) {
-            if (!getElemRef->GetResult()->TestAttr(Attribute::READONLY)) {
-                state.reachingDefs[it->second].SetToBound(/* isTop = */ true);
-                state.reachingLoadDefs[it->second].SetToBound(/* isTop = */ true);
-            }
+            state.reachingDefs[it->second].SetToBound(/* isTop = */ true);
+            state.reachingLoadDefs[it->second].SetToBound(/* isTop = */ true);
         }
     }
 }
