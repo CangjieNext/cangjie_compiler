@@ -19,8 +19,9 @@ namespace Cangjie::CHIR {
  * matching accessor (`$nameget`/`$nameset`) is marked INITIALIZED so
  * VarInitCheck does not report it as uninitialized even though its stores were
  * rewritten to setter calls. Compiler-added fields (javaref/reg/hasInited) are
- * left untouched. Collapsing the storage type to Unit is a separate follow-up
- * (PatchFieldToUnit); it is intentionally not enabled here.
+ * left untouched. For mirrors, the field's storage is additionally collapsed to
+ * Unit because all its accesses go through the accessors; for @JavaImpl only the
+ * marker is set.
  */
 class CHIRFieldPatcher {
 public:
@@ -30,9 +31,9 @@ public:
     /**
      * For each non-compiler-added direct instance field of @p classDef
      * (@JavaMirror/@ObjCMirror) with a matching `$nameget` accessor, marks the
-     * field INITIALIZED, then writes the updated field list back onto the
-     * ClassDef. Asserts when a genuine direct mirror field has no accessor.
-     * Null @p classDef is a no-op.
+     * field INITIALIZED and collapses its storage type to Unit, then writes the
+     * updated field list back onto the ClassDef. Asserts when a genuine direct
+     * mirror field has no accessor. Null @p classDef is a no-op.
      */
     void PatchCommonFieldsForMirror(ClassDef* classDef, Attribute mirrorAttr);
 
@@ -54,7 +55,7 @@ private:
     /** Marks @p var INITIALIZED. */
     void MarkFieldInitialized(MemberVarInfo& var);
 
-    /** Collapses @p var's storage type to Unit (Step 2 follow-up; currently unused). */
+    /** Collapses @p var's storage type to Unit (its accesses go through accessors). */
     void PatchFieldToUnit(MemberVarInfo& var);
 
     CHIRBuilder& builder;
