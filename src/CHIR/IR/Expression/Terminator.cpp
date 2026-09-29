@@ -366,7 +366,15 @@ std::vector<VTableSearchRes> DynamicDispatchWithException::GetVirtualMethodInfo(
     FuncCallType funcCallType{virMethodCtx.funcName, instFuncType, instantiatedTypeArgs};
     auto res = GetFuncIndexInVTable(*thisTypeDeref, funcCallType, builder);
     CJC_ASSERT(!res.empty());
-    return res;
+    // Arg-based search may return multiple different virtual methods. Prefer the one
+    // matching the Sema-resolved method type carried by this Invoke.
+    std::vector<VTableSearchRes> matched;
+    for (auto& r : res) {
+        if (r.originalFuncType != nullptr && VirMethodTypeIsMatched(*r.originalFuncType, *GetMethodType())) {
+            matched.emplace_back(r);
+        }
+    }
+    return matched.empty() ? res : matched;
 }
 
 size_t DynamicDispatchWithException::GetVirtualMethodOffset(CHIRBuilder* builder) const

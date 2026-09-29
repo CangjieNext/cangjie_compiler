@@ -55,6 +55,15 @@ std::vector<VTableSearchRes> GetWellMatchingResults(const std::vector<VTableSear
             if (!targetMark[j]) {
                 continue;
             }
+            // Specificity filtering only applies among the same virtual method instance.
+            // Different methods can both match a call by argument types, e.g.
+            //   open class A { open func test<T>(x: Int64): Int64 }
+            //   open class B <: A { open func test<Y>(x: Y): Y }
+            //   B().test(0)  // both A.test and B.test match Int64 arg; Sema picks B.test
+            // Discarding B here would leave only A and later abort in Invoke offset lookup.
+            if (candidateRes[i].instance != candidateRes[j].instance) {
+                continue;
+            }
             auto iToJ = candidateTypes[i]->IsEqualOrInstantiatedTypeOf(*candidateTypes[j], builder);
             auto jToI = candidateTypes[j]->IsEqualOrInstantiatedTypeOf(*candidateTypes[i], builder);
             // according to spec, the more specific type is expected
@@ -78,7 +87,8 @@ std::vector<VTableSearchRes> GetWellMatchingResults(const std::vector<VTableSear
         }
     }
     CJC_ASSERT(!result.empty());
-    CJC_ASSERT(instances.size() == 1);
+    // Multiple different virtual methods may remain; callers that need a unique
+    // target (e.g. Invoke) must disambiguate via the Sema-resolved method type.
     return result;
 }
 }
