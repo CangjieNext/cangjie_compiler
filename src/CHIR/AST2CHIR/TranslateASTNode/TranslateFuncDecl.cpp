@@ -434,8 +434,18 @@ Ptr<Value> Translator::TranslateConstructorFuncInline(const AST::Decl& parent, c
     // insert member decl initializer if this constructor does not have delegate this call
     if (!HasDelegatedThisCall(funcBody)) {
         auto fieldOffset = GetSuperInstanceVarSize(*thisVar->GetType());
+        auto pureCurObjType = StaticCast<RefType*>(thisVar->GetType())->GetBaseType();
+        CJC_ASSERT(!pureCurObjType->IsRef() && pureCurObjType->IsNominal());
+        auto pureCurObjCustomType = StaticCast<CustomType*>(pureCurObjType);
+        auto curDef = pureCurObjCustomType->GetCustomTypeDef();
         for (auto member : parent.GetMemberDeclPtrs()) {
             if (member->astKind != AST::ASTKind::VAR_DECL || member->TestAttr(AST::Attribute::STATIC)) {
+                continue;
+            }
+            // Mirror AddMemberVarDecl: a SPECIFIC instance var is not stored in CHIR, so it must
+            // neither be initialized here nor advance the CHIR instance-var index; otherwise the
+            // index would run past the def's instance vars (out-of-bounds access).
+            if (member->TestAttr(AST::Attribute::SPECIFIC) && !curDef->TestAttr(Attribute::GENERIC_INSTANTIATED)) {
                 continue;
             }
             if (auto& init = StaticCast<AST::VarDecl>(member)->initializer) {
@@ -446,9 +456,6 @@ Ptr<Value> Translator::TranslateConstructorFuncInline(const AST::Decl& parent, c
                 }
                 auto loc = TranslateLocation(*member);
                 std::vector<uint64_t> path = {fieldOffset};
-                auto pureCurObjType = StaticCast<RefType*>(thisVar->GetType())->GetBaseType();
-                CJC_ASSERT(!pureCurObjType->IsRef() && pureCurObjType->IsNominal());
-                auto pureCurObjCustomType = StaticCast<CustomType*>(pureCurObjType);
                 auto memberType = pureCurObjCustomType->GetInstMemberTypeByPath(path, builder);
                 if (value->GetType() == memberType) {
                     CreateAndAppendExpression<StoreElementRef>(

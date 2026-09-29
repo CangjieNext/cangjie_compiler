@@ -98,7 +98,18 @@ void Translator::AddMemberVarDecl(CustomTypeDef& def, const AST::VarDecl& decl)
     // Member variables of generic instantiated classes or structs need to be regenerated because the common side
     // doesn't have instantiated versions.
     if (decl.TestAttr(AST::Attribute::SPECIFIC) && !def.TestAttr(Attribute::GENERIC_INSTANTIATED)) {
-        return;
+        // A SPECIFIC instance var is normally already represented by its deserialized/merged common
+        // counterpart in the CHIR def, so it must not be added again. Only skip when that counterpart
+        // exists; otherwise (e.g. a generated JavaImpl registry companion holding a relocated specific
+        // field) the var would have no CHIR storage and later accesses/initializations would crash.
+        if (decl.TestAttr(AST::Attribute::STATIC)) {
+            return;
+        }
+        for (const auto& existing : def.GetDirectInstanceVars()) {
+            if (existing.name == decl.identifier.Val()) {
+                return;
+            }
+        }
     }
     if (decl.TestAttr(AST::Attribute::STATIC)) {
         auto staticVar = StaticCast<GlobalVar*>(GetSymbolTable(decl));
