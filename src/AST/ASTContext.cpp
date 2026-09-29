@@ -25,7 +25,7 @@ ASTContext::ASTContext(DiagnosticEngine& diag, AST::Package& pkg)
 {
     Reset();
 }
-
+//todo
 void ASTContext::DeleteDesugarExpr(OwnedPtr<Expr>& desugar)
 {
     DeleteInvertedIndexes(desugar.get());
