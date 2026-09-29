@@ -449,10 +449,10 @@ bool LocalTypeArgumentSynthesis::UnifyTyVarCollectConstraints(
         }
     }
     // with known sum, but the sum doesn't include eq.
-    // Skip when tyVarsToSolve is empty (IsPlaceholderSubtype's Unify uses a dummy pack):
-    // the eq-set is populated by IsGreedySolution but the sum-set is not synchronized,
-    // causing a spurious false that blocks placeholder <: concrete subtype inference.
-    if (deterministic && !tyMgr.TyVarHasNoSum(tyVar) && !argPack.tyVarsToSolve.empty()) {
+    // Skip only on the IsPlaceholderSubtype entry (see skipSumEqCheck): its constraints carry a
+    // dummy pack with an empty tyVarsToSolve and no synchronized sum-set, which would otherwise
+    // produce a spurious false that blocks placeholder <: concrete subtype inference.
+    if (deterministic && !tyMgr.TyVarHasNoSum(tyVar) && !skipSumEqCheck) {
         auto& sum = c[&tyVar].sum;
         auto& eq = c[&tyVar].eq;
         if (!eq.empty() && !eq.begin()->Ty()->IsNothing() && sum.count(*eq.begin()) == 0) {
@@ -1226,13 +1226,15 @@ std::optional<TypeSubst> TypeChecker::TypeCheckerImpl::SolveConstraints(const Co
     return LocalTypeArgumentSynthesis::SolveConstraints(typeManager, cst);
 }
 
-bool LocalTypeArgumentSynthesis::Unify(TypeManager& tyMgr, Constraint& cst, ModalTy argTy, ModalTy paramTy)
+bool LocalTypeArgumentSynthesis::Unify(TypeManager& tyMgr, Constraint& cst, ModalTy argTy, ModalTy paramTy,
+    bool fromPlaceholderSubtype)
 {
     LocTyArgSynArgPack dummyArgPack = {
         {}, {}, {}, {}, ModalTy{TypeManager::GetInvalidTy()}, {TypeManager::GetInvalidTy()}, Blame()};
     auto synIns = LocalTypeArgumentSynthesis(tyMgr, dummyArgPack, {}, false);
     synIns.cms = {{cst}};
     synIns.deterministic = true;
+    synIns.skipSumEqCheck = fromPlaceholderSubtype;
     if (synIns.UnifyOne({argTy, {}}, {paramTy, {}})) {
         CJC_ASSERT(synIns.cms.size() > 0);
         cst = synIns.cms[0].constraint;

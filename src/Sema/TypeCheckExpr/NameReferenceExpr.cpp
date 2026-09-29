@@ -180,10 +180,10 @@ bool IsCloserToImpl(const Decl& src, const Decl& target)
     return updateAbstract || updateNonInterface;
 }
 
-FuncSig2Decl::const_iterator FoundSameSignatureMember(
-    TypeManager& tyMgr, const Decl& decl, std::optional<ModalInfo> thisMode, FuncTy& funcTy, FuncSig2Decl& methodSigs)
+FuncSig2Decl::const_iterator FoundSameSignatureMember(TypeManager& tyMgr, const Decl& decl,
+    std::optional<ModalInfo> thisMode, FuncTy& funcTy, FuncSig2Decl& methodSigs, bool distinctByRetTy)
 {
-    FuncSig keyPair{decl.identifier, thisMode, funcTy.paramTys, funcTy.retTy};
+    FuncSig keyPair{decl.identifier, thisMode, funcTy.paramTys, funcTy.retTy, distinctByRetTy};
     auto found = methodSigs.find(keyPair);
     if (found != methodSigs.cend()) {
         return found;
@@ -206,7 +206,7 @@ FuncSig2Decl::const_iterator FoundSameSignatureMember(
         if (auto fd = DynamicCast<FuncDecl>(it); fd && tyMgr.HasThisParam(*fd)) {
             declThisMode = GetThisParamModal(*fd);
         }
-        keyPair = {decl.identifier, declThisMode, instTy->paramTys, instTy->retTy};
+        keyPair = {decl.identifier, declThisMode, instTy->paramTys, instTy->retTy, distinctByRetTy};
         found = methodSigs.find(keyPair);
         if (found != methodSigs.cend()) {
             return found;
@@ -217,8 +217,10 @@ FuncSig2Decl::const_iterator FoundSameSignatureMember(
 
 /// Populate methodSigs: for each instantiated FuncTy of the decl, insert or replace
 /// the matching FuncSig entry. Returns false when the decl is not a FuncDecl.
-bool CollectFuncDeclForSignature(TypeManager& tyMgr, const MemberAccess& ma, Decl& decl,
-    FuncSig2Decl& methodSigs)
+/// @param distinctByRetTy keep members with the same parameter signature but different return
+///        types distinct (sum member lookup); upper bound lookup passes false.
+bool CollectFuncDeclForSignature(
+    TypeManager& tyMgr, const MemberAccess& ma, Decl& decl, FuncSig2Decl& methodSigs, bool distinctByRetTy)
 {
     if (decl.astKind != ASTKind::FUNC_DECL) {
         return false;
@@ -235,15 +237,15 @@ bool CollectFuncDeclForSignature(TypeManager& tyMgr, const MemberAccess& ma, Dec
         if (!Ty::IsTyCorrect(funcTy)) {
             continue;
         }
-        auto found = FoundSameSignatureMember(tyMgr, decl, thisMode, *funcTy, methodSigs);
+        auto found = FoundSameSignatureMember(tyMgr, decl, thisMode, *funcTy, methodSigs, distinctByRetTy);
         if (found == methodSigs.cend()) {
-            FuncSig sig{decl.identifier, thisMode, funcTy->paramTys, funcTy->retTy};
+            FuncSig sig{decl.identifier, thisMode, funcTy->paramTys, funcTy->retTy, distinctByRetTy};
             methodSigs.emplace(sig, StaticCast<FuncDecl>(&decl));
         } else if (IsCloserToImpl(*found->second, decl)) {
             // If the decl is generic, the paramsTys in the map key should also be updated,
             // so, just erase found result and emplace new result here.
             methodSigs.erase(found);
-            FuncSig sig{decl.identifier, thisMode, funcTy->paramTys, funcTy->retTy};
+            FuncSig sig{decl.identifier, thisMode, funcTy->paramTys, funcTy->retTy, distinctByRetTy};
             methodSigs.emplace(sig, StaticCast<FuncDecl>(&decl));
         }
     }
@@ -263,7 +265,7 @@ std::vector<Ptr<Decl>> MergeFuncTargetsInUpperBounds(TypeManager& tyMgr, const M
     FuncSig2Decl methodSigs;
     for (auto decl : upperDecls) {
         CJC_NULLPTR_CHECK(decl);
-        CollectFuncDeclForSignature(tyMgr, ma, *decl, methodSigs);
+        CollectFuncDeclForSignature(tyMgr, ma, *decl, methodSigs, false);
     }
     for (auto method : std::as_const(methodSigs)) {
         targets.emplace(method.second);
@@ -284,7 +286,7 @@ std::vector<Ptr<Decl>> MergeFuncTargetsInSum(TypeManager& tyMgr, const MemberAcc
     FuncSig2Decl methodSigs;
     for (auto decl : upperDecls) {
         CJC_NULLPTR_CHECK(decl);
-        CollectFuncDeclForSignature(tyMgr, ma, *decl, methodSigs);
+        CollectFuncDeclForSignature(tyMgr, ma, *decl, methodSigs, true);
     }
     for (auto method : std::as_const(methodSigs)) {
         targets.emplace(method.second);

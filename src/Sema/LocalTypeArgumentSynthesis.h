@@ -67,7 +67,10 @@ public:
     SolvingErrInfo GetErrInfo();
 
     // there's also a wrapper in TypeCheckerImpl. that one is recommended
-    static bool Unify(TypeManager& tyMgr, Constraint& cst, AST::ModalTy argTy, AST::ModalTy paramTy);
+    /// @param fromPlaceholderSubtype true only when called from IsPlaceholderSubtype: that path
+    ///        has no tyVarsToSolve and no synchronized sum-set, so the eq-in-sum check is skipped.
+    static bool Unify(TypeManager& tyMgr, Constraint& cst, AST::ModalTy argTy, AST::ModalTy paramTy,
+        bool fromPlaceholderSubtype = false);
     static std::optional<TypeSubst> SolveConstraints(TypeManager& tyMgr, const Constraint& cst);
 
 private:
@@ -81,6 +84,9 @@ private:
     SolvingErrInfo errMsg; // final error message
     bool needDiagMsg;
     bool deterministic = false;
+    // Set only by the static Unify entry used by IsPlaceholderSubtype, whose constraints have no
+    // tyVarsToSolve and no synchronized sum-set: see the eq-in-sum check in UnifyTyVarCollectConstraints.
+    bool skipSumEqCheck = false;
 
     Constraint InitConstraints(const TyVars& tyVarsToSolve);
     void InsertConstraint(Constraint& c, TyVar& tyVar, TyVarBounds& tvb) const;

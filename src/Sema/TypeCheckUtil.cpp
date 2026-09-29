@@ -52,6 +52,9 @@ bool FuncSigCmp::operator()(const FuncSig& lhs, const FuncSig& rhs) const
     if (lhs.thisMode != rhs.thisMode) {
         return lhs.thisMode < rhs.thisMode;
     }
+    if (lhs.distinctByRetTy != rhs.distinctByRetTy) {
+        return lhs.distinctByRetTy < rhs.distinctByRetTy;
+    }
     if (lhs.paramTys.size() != rhs.paramTys.size()) {
         return lhs.paramTys.size() < rhs.paramTys.size();
     }
@@ -65,9 +68,9 @@ bool FuncSigCmp::operator()(const FuncSig& lhs, const FuncSig& rhs) const
             return false;
         }
     }
-    // Same name/this-mode/params: distinguish by return type, so members with the same
-    // parameter signature but different results both stay in the sum candidates.
-    if (lhs.retTy && rhs.retTy) {
+    // Same name/this-mode/params: distinguish by return type only for sum member lookup, so
+    // members with the same parameter signature but different results both stay candidates.
+    if (lhs.distinctByRetTy && lhs.retTy && rhs.retTy) {
         if (CompTyByNamesModal(lhs.retTy, rhs.retTy)) {
             return true;
         }

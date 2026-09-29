@@ -756,9 +756,9 @@ bool TypeManager::IsPlaceholderSubtype(
         if ((leafModal && leafModal->local == Mode::IDEAL) || (rootModal && rootModal->local == Mode::IDEAL)) {
             auto lv = ModalTy{&leaf, leafModal.value_or(ModalInfo{})};
             auto rv = ModalTy{&root, rootModal.value_or(ModalInfo{})};
-            return LocalTypeArgumentSynthesis::Unify(*this, constraints, lv, rv);
+            return LocalTypeArgumentSynthesis::Unify(*this, constraints, lv, rv, true);
         }
-        return LocalTypeArgumentSynthesis::Unify(*this, constraints, {&leaf}, {&root});
+        return LocalTypeArgumentSynthesis::Unify(*this, constraints, {&leaf}, {&root}, true);
     }
     return false;
 }
