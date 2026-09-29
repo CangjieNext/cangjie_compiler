@@ -49,6 +49,11 @@ struct FuncSig {
     std::optional<ModalInfo> thisMode;
     std::vector<AST::ModalTy> paramTys;
     AST::ModalTy retTy;
+    // Whether retTy participates in the signature key. Needed only for sum member lookup, where
+    // members with the same parameter signature but different results must stay distinct. Upper
+    // bound lookup keeps the legacy param-only key, so a covariant override pair (interface
+    // returns Base, impl returns Sub) is not kept as two competing candidates.
+    bool distinctByRetTy = false;
 };
 struct FuncSigCmp {
     bool operator()(const FuncSig& lhs, const FuncSig& rhs) const;
