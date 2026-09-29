@@ -1662,9 +1662,14 @@ void InitializationChecker::CheckInitInConstructors(FuncDecl& fd, const std::vec
         return;
     }
     auto definitelyUninitVars = ctorUninitVarsMap[&fd];
+    // @JavaImpl instance fields (including common-part ones) are relocated to the registry
+    // companion and accessed through accessors; they are zero-initialized by the interop desugar
+    // and must not require Cangjie constructor initialization.
+    bool isJavaImpl = fd.funcBody->parentClassLike && fd.funcBody->parentClassLike->IsJavaImpl();
     for (auto decl : unInitNonFuncDecls) {
         // Skip report error when the decl is common member for CJMP.
-        if (decl->TestAnyAttr(Attribute::INITIALIZED, Attribute::COMMON) && definitelyUninitVars.count(decl) == 0) {
+        if ((decl->TestAnyAttr(Attribute::INITIALIZED, Attribute::COMMON) || isJavaImpl) &&
+            definitelyUninitVars.count(decl) == 0) {
             continue;
         }
         if (fd.TestAttr(Attribute::COMPILER_ADD, Attribute::PRIMARY_CONSTRUCTOR)) {

@@ -9,6 +9,7 @@
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/CHIR/IR/Expression/Expression.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
+#include "cangjie/Utils/CheckUtils.h"
 
 namespace Cangjie::CHIR {
 
@@ -42,8 +43,16 @@ void CHIRFieldReferencePatcher::PatchFunction(Function& func)
     auto preVisit = [this, classDef](Expression& e) {
         if (auto load = DynamicCast<Load*>(&e)) {
             auto newExpr = TryPatchLoad(*load, *classDef);
+            if (!newExpr) {
+                newExpr = TryPatchLoadByName(*load, *classDef);
+            }
             if (newExpr) {
                 load->ReplaceWith(*newExpr);
+            }
+        } else if (auto storeByName = DynamicCast<StoreElementByName*>(&e)) {
+            auto newExpr = TryPatchStoreElementByName(*storeByName, *classDef);
+            if (newExpr) {
+                storeByName->ReplaceWith(*newExpr);
             }
         } else if (auto store = DynamicCast<StoreElementRef*>(&e)) {
             auto newExpr = TryPatchStoreElementRef(*store, *classDef);
@@ -54,6 +63,11 @@ void CHIRFieldReferencePatcher::PatchFunction(Function& func)
             auto newExpr = TryPatchField(*fieldExpr, *classDef);
             if (newExpr) {
                 fieldExpr->ReplaceWith(*newExpr);
+            }
+        } else if (auto fieldByName = DynamicCast<FieldByName*>(&e)) {
+            auto newExpr = TryPatchFieldByName(*fieldByName, *classDef);
+            if (newExpr) {
+                fieldByName->ReplaceWith(*newExpr);
             }
         }
         return VisitResult::CONTINUE;
@@ -90,6 +104,26 @@ void CHIRFieldReferencePatcher::PatchGlobalFunction(Function& func)
             auto newExpr = TryPatchStoreElementRef(*storeElementRef, *mirrorClass);
             if (newExpr) {
                 storeElementRef->ReplaceWith(*newExpr);
+            }
+        } else if (auto storeByName = DynamicCast<StoreElementByName*>(&e)) {
+            auto location = storeByName->GetLocation();
+            auto mirrorClass = location ? GetMirrorClassDefFromType(location->GetType()) : nullptr;
+            if (!mirrorClass) {
+                return VisitResult::CONTINUE;
+            }
+            auto newExpr = TryPatchStoreElementByName(*storeByName, *mirrorClass);
+            if (newExpr) {
+                storeByName->ReplaceWith(*newExpr);
+            }
+        } else if (auto fieldByName = DynamicCast<FieldByName*>(&e)) {
+            auto baseValue = fieldByName->GetBase();
+            auto mirrorClass = baseValue ? GetMirrorClassDefFromType(baseValue->GetType()) : nullptr;
+            if (!mirrorClass) {
+                return VisitResult::CONTINUE;
+            }
+            auto newExpr = TryPatchFieldByName(*fieldByName, *mirrorClass);
+            if (newExpr) {
+                fieldByName->ReplaceWith(*newExpr);
             }
         }
         return VisitResult::CONTINUE;
@@ -139,6 +173,7 @@ Expression* CHIRFieldReferencePatcher::TryPatchLoadGlobalVar(Load& load)
     if (!mirrorClassDef) return nullptr;
 
     auto getter = FindStaticGetterForGlobalVar(*mirrorClassDef, *globalVar);
+    CJC_ASSERT_WITH_MSG(getter != nullptr, "CJMP mirror static field has no matching getter");
     if (!getter) return nullptr;
 
     auto loc = load.GetDebugLocation();
@@ -155,6 +190,7 @@ Expression* CHIRFieldReferencePatcher::TryPatchStoreGlobalVar(Store& store)
     if (!mirrorClassDef) return nullptr;
 
     auto setter = FindStaticSetterForGlobalVar(*mirrorClassDef, *globalVar);
+    CJC_ASSERT_WITH_MSG(setter != nullptr, "CJMP mirror static field has no matching setter");
     if (!setter) return nullptr;
 
     auto loc = store.GetDebugLocation();
@@ -226,9 +262,11 @@ Expression* CHIRFieldReferencePatcher::TryPatchLoadGlobal(Load& load)
         if (!mirrorClassDef) return nullptr;
 
         auto names = getByName->GetNames();
-        if (names.empty()) return nullptr;
+        if (names.size() != 1) return nullptr;
 
         auto getter = FindInstanceGetterByName(*mirrorClassDef, names[0]);
+        CJC_ASSERT_WITH_MSG(getter != nullptr || !IsDirectPatchableMirrorField(*mirrorClassDef, names[0]),
+            "CJMP mirror direct field has no matching getter");
         if (!getter) return nullptr;
 
         auto loc = load.GetDebugLocation();
@@ -263,6 +301,59 @@ Expression* CHIRFieldReferencePatcher::TryPatchLoad(Load& load, ClassDef& parent
     auto baseValue = getRef->GetBase();
     auto loc = load.GetDebugLocation();
     return CreateGetterCall(loc, baseValue, getter, load.GetParentBlock());
+}
+
+Expression* CHIRFieldReferencePatcher::TryPatchLoadByName(Load& load, ClassDef& parentDef)
+{
+    auto location = load.GetLocation();
+    auto localVar = DynamicCast<LocalVar*>(location);
+    if (!localVar) return nullptr;
+
+    auto getByName = DynamicCast<GetElementByName*>(localVar->GetExpr());
+    if (!getByName) return nullptr;
+
+    auto names = getByName->GetNames();
+    if (names.size() != 1) return nullptr;
+
+    auto getter = FindInstanceGetterByName(parentDef, names[0]);
+    CJC_ASSERT_WITH_MSG(getter != nullptr || !IsDirectPatchableMirrorField(parentDef, names[0]),
+        "CJMP mirror direct field has no matching getter");
+    if (!getter) return nullptr;
+
+    auto baseValue = getByName->GetLocation();
+    auto loc = load.GetDebugLocation();
+    return CreateGetterCall(loc, baseValue, getter, load.GetParentBlock());
+}
+
+Expression* CHIRFieldReferencePatcher::TryPatchStoreElementByName(StoreElementByName& store, ClassDef& parentDef)
+{
+    auto names = store.GetNames();
+    if (names.size() != 1) return nullptr;
+
+    auto setter = FindInstanceSetterByName(parentDef, names[0]);
+    CJC_ASSERT_WITH_MSG(setter != nullptr || !IsDirectPatchableMirrorField(parentDef, names[0]),
+        "CJMP mirror direct field has no matching setter");
+    if (!setter) return nullptr;
+
+    auto baseValue = store.GetLocation();
+    auto valueToStore = store.GetValue();
+    auto loc = store.GetDebugLocation();
+    return CreateSetterCall(loc, baseValue, valueToStore, setter, store.GetParentBlock());
+}
+
+Expression* CHIRFieldReferencePatcher::TryPatchFieldByName(FieldByName& fieldExpr, ClassDef& parentDef)
+{
+    auto names = fieldExpr.GetNames();
+    if (names.size() != 1) return nullptr;
+
+    auto getter = FindInstanceGetterByName(parentDef, names[0]);
+    CJC_ASSERT_WITH_MSG(getter != nullptr || !IsDirectPatchableMirrorField(parentDef, names[0]),
+        "CJMP mirror direct field has no matching getter");
+    if (!getter) return nullptr;
+
+    auto baseValue = fieldExpr.GetBase();
+    auto loc = fieldExpr.GetDebugLocation();
+    return CreateGetterCall(loc, baseValue, getter, fieldExpr.GetParentBlock());
 }
 
 Expression* CHIRFieldReferencePatcher::TryPatchStoreElementRef(StoreElementRef& store, ClassDef& parentDef)

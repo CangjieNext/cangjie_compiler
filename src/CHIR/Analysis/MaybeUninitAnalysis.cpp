@@ -121,6 +121,18 @@ void MaybeUninitAnalysis::InitializeFuncEntryState(MaybeUninitDomain& state)
     // set all bits to 1 (uninitialised)
     state.kind = ReachableKind::REACHABLE;
     state.GenAll();
+
+    // CJMP FFI-rewritten fields are treated as initialized: their stores were
+    // rewritten to accessor calls, so the field bit would otherwise never be
+    // killed. Local direct-var index j maps to domain bit j.
+    if (ctorInitInfo && ctorInitInfo->thisCustomDef) {
+        auto directVars = ctorInitInfo->thisCustomDef->GetDirectInstanceVars();
+        for (size_t i = 0; i < directVars.size() && i < ctorInitInfo->localMemberNums; ++i) {
+            if (directVars[i].TestAttr(Attribute::INITIALIZED)) {
+                state.Kill(i);
+            }
+        }
+    }
 }
 
 void MaybeUninitAnalysis::PropagateExpressionEffect(MaybeUninitDomain& state, const Expression* expression)

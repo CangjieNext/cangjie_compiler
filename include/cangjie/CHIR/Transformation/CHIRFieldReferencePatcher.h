@@ -27,8 +27,11 @@ private:
     void PatchFunction(Function& func);
     void PatchGlobalFunction(Function& func);
     Expression* TryPatchLoad(Load& load, ClassDef& parentDef);
+    Expression* TryPatchLoadByName(Load& load, ClassDef& parentDef);
     Expression* TryPatchStoreElementRef(StoreElementRef& store, ClassDef& parentDef);
+    Expression* TryPatchStoreElementByName(StoreElementByName& store, ClassDef& parentDef);
     Expression* TryPatchField(Field& fieldExpr, ClassDef& parentDef);
+    Expression* TryPatchFieldByName(FieldByName& fieldExpr, ClassDef& parentDef);
     Expression* TryPatchLoadGlobalVar(Load& load);
     Expression* TryPatchStoreGlobalVar(Store& store);
     Expression* TryPatchFieldGlobal(Field& fieldExpr);
