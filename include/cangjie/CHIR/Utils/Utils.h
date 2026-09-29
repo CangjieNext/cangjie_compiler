@@ -766,6 +766,23 @@ Type* GetInstSubType(Type& genericSubType, const ClassType& instParentType, CHIR
 
 bool VirMethodTypeIsMatched(const FuncType& type1, const FuncType& type2);
 
+/**
+ * Stricter than VirMethodTypeIsMatched for non-receiver params and return type:
+ * generic only matches generic, and CustomType identity is compared. The receiver
+ * uses VirMethodParamTypeIsMatched so parent/child interface this-types
+ * (e.g. NotEqual& vs Equatable&) can match.
+ */
+bool VirMethodTypeIsStrictlyMatched(const FuncType& type1, const FuncType& type2);
+
+/**
+ * Arg-based vtable search may return multiple different virtual methods.
+ * When there is already a single candidate, return it as-is. Otherwise keep only
+ * entries whose originalFuncType strictly matches the Sema-resolved method type
+ * (receiver compared loosely). Never returns an ambiguous unfiltered list.
+ */
+std::vector<VTableSearchRes> PreferVTableResMatchingMethodType(
+    const std::vector<VTableSearchRes>& res, const FuncType& methodType);
+
 bool VirMethodParamTypeIsMatched(const Type& type1, const Type& type2);
 
 bool VirMethodReturnTypeIsMatched(const Type& type1, const Type& type2);

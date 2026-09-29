@@ -15,7 +15,6 @@
 #include <iostream>
 #include <optional>
 #include <sstream>
-#include <unordered_set>
 #include <utility>
 
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
@@ -31,12 +30,13 @@ using namespace Cangjie::CHIR;
 
 namespace {
 /**
- *  we choose the well matching but there may be many results, if there are many results, their `instance` must be same
- *  so we need to define what function is NOT well matching, of course, the rule is from spec:
- *  1. you can review how the `candidateTypes` are calculated
- *  2. we assume that i and j are from `candidateTypes`, we define function `i` is NOT well matching if all parameters
- *     in function `j` can be forwarded to function `i`, but not all parameters in function `i` can be forwarded to
- *     function `j`
+ * Choose well-matching candidates by specificity. Spec says function `i` is NOT
+ * well matching if all parameters of `j` can be forwarded to `i`, but not vice versa.
+ * Specificity filtering only runs among the same virtual method `instance`;
+ * different instances that both match by argument types are all kept. Callers that
+ * need a unique target must disambiguate by the Sema-resolved method type
+ * (see PreferVTableResMatchingMethodType).
+ * Review candidateTypes to see how the compared signatures are built.
  */
 std::vector<VTableSearchRes> GetWellMatchingResults(const std::vector<VTableSearchRes>& candidateRes,
     const std::vector<FuncType*>& candidateTypes, CHIRBuilder& builder)
@@ -55,6 +55,15 @@ std::vector<VTableSearchRes> GetWellMatchingResults(const std::vector<VTableSear
             if (!targetMark[j]) {
                 continue;
             }
+            // Specificity filtering only applies among the same virtual method instance.
+            // Different methods can both match a call by argument types, e.g.
+            //   open class A { open func test<T>(x: Int64): Int64 }
+            //   open class B <: A { open func test<Y>(x: Y): Y }
+            //   B().test(0)  // both A.test and B.test match Int64 arg; Sema picks B.test
+            // Discarding B here would leave only A and later abort in Invoke offset lookup.
+            if (candidateRes[i].instance != candidateRes[j].instance) {
+                continue;
+            }
             auto iToJ = candidateTypes[i]->IsEqualOrInstantiatedTypeOf(*candidateTypes[j], builder);
             auto jToI = candidateTypes[j]->IsEqualOrInstantiatedTypeOf(*candidateTypes[i], builder);
             // according to spec, the more specific type is expected
@@ -70,15 +79,12 @@ std::vector<VTableSearchRes> GetWellMatchingResults(const std::vector<VTableSear
         }
     }
     std::vector<VTableSearchRes> result;
-    std::unordered_set<Function*> instances;
     for (size_t i = 0; i < candidateNum; ++i) {
         if (targetMark[i]) {
             result.emplace_back(candidateRes[i]);
-            instances.emplace(candidateRes[i].instance);
         }
     }
     CJC_ASSERT(!result.empty());
-    CJC_ASSERT(instances.size() == 1);
     return result;
 }
 }

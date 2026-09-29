@@ -1493,6 +1493,40 @@ bool TypeIsMatched(const Type& type1, const Type& type2)
     return true;
 }
 
+namespace {
+bool TypeIsStrictlyMatched(const Type& type1, const Type& type2)
+{
+    if (&type1 == &type2) {
+        return true;
+    }
+    if (type1.GetTypeKind() != type2.GetTypeKind()) {
+        return false;
+    }
+    // Generic params from different decls are not pointer-equal; treat them as
+    // matching each other, but never match a generic against a concrete/ref type.
+    if (type1.IsGeneric()) {
+        return true;
+    }
+    if (auto custom1 = DynamicCast<const CustomType*>(&type1)) {
+        auto custom2 = StaticCast<const CustomType*>(&type2);
+        if (custom1->GetCustomTypeDef() != custom2->GetCustomTypeDef()) {
+            return false;
+        }
+    }
+    auto typeArgs1 = type1.GetTypeArgs();
+    auto typeArgs2 = type2.GetTypeArgs();
+    if (typeArgs1.size() != typeArgs2.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < typeArgs1.size(); ++i) {
+        if (!TypeIsStrictlyMatched(*typeArgs1[i], *typeArgs2[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+} // namespace
+
 bool VirMethodTypeIsMatched(const FuncType& type1, const FuncType& type2)
 {
     auto type1ParamTypes = type1.GetParamTypes();
@@ -1506,6 +1540,57 @@ bool VirMethodTypeIsMatched(const FuncType& type1, const FuncType& type2)
         }
     }
     return VirMethodReturnTypeIsMatched(*type1.GetReturnType(), *type2.GetReturnType());
+}
+
+bool VirMethodTypeIsStrictlyMatched(const FuncType& type1, const FuncType& type2)
+{
+    auto type1ParamTypes = type1.GetParamTypes();
+    auto type2ParamTypes = type2.GetParamTypes();
+    if (type1ParamTypes.size() != type2ParamTypes.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < type1ParamTypes.size(); ++i) {
+        // Receiver this-type may be a derived interface in Sema (e.g. NotEqual&)
+        // while the vtable entry still carries the declaring parent (Equatable&).
+        // Keep that comparison loose; remaining params stay structural so that
+        // e.g. Foo& does not match a free generic parameter.
+        if (i == 0) {
+            if (!VirMethodParamTypeIsMatched(*type1ParamTypes[i], *type2ParamTypes[i])) {
+                return false;
+            }
+        } else if (!TypeIsStrictlyMatched(*type1ParamTypes[i], *type2ParamTypes[i])) {
+            return false;
+        }
+    }
+    return TypeIsStrictlyMatched(*type1.GetReturnType(), *type2.GetReturnType());
+}
+
+std::vector<VTableSearchRes> PreferVTableResMatchingMethodType(
+    const std::vector<VTableSearchRes>& res, const FuncType& methodType)
+{
+    // Arg-based search already unique: nothing to disambiguate. This also covers
+    // boxed/instantiated vtable entries whose originalFuncType no longer matches
+    // the Sema generic signature (e.g. Any&/Box<T>& vs interface&/T).
+    if (res.size() <= 1) {
+        return res;
+    }
+    std::vector<VTableSearchRes> matched;
+    for (auto& r : res) {
+        if (r.originalFuncType != nullptr &&
+            VirMethodTypeIsStrictlyMatched(*r.originalFuncType, methodType)) {
+            matched.emplace_back(r);
+        }
+    }
+    // Never fall back to the unfiltered multi-candidate list.
+    if (matched.empty()) {
+        return {};
+    }
+    for (size_t i = 1; i < matched.size(); ++i) {
+        CJC_ASSERT(matched[i].instance == matched[0].instance &&
+            matched[i].instSrcParentType == matched[0].instSrcParentType &&
+            matched[i].offset == matched[0].offset);
+    }
+    return {matched[0]};
 }
 
 bool VirMethodParamTypeIsMatched(const Type& type1, const Type& type2)
