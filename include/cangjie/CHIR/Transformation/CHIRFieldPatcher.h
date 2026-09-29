@@ -14,42 +14,47 @@
 namespace Cangjie::CHIR {
 
 /**
- * Helper that rewrites the CHIR instance-field representation of CJMP FFI
- * classes whose field access is redirected through JNI/ObjC getter/setter
- * calls. For fields that have a matching mirror/impl getter, the field's
- * storage type is collapsed to Unit so the CHIR field no longer carries a
- * stale type; the real type is carried by the getter/setter Apply calls that
- * CHIRFieldReferencePatcher patches separately. Compiler-added fields
- * (javaref, hasInited) are left untouched.
+ * Helper that marks the CHIR instance fields of CJMP FFI classes whose field
+ * access is redirected through JNI/ObjC getter/setter calls. A field with a
+ * matching accessor (`$nameget`/`$nameset`) is marked INITIALIZED so
+ * VarInitCheck does not report it as uninitialized even though its stores were
+ * rewritten to setter calls. Compiler-added fields (javaref/reg/hasInited) are
+ * left untouched. Collapsing the storage type to Unit is a separate follow-up
+ * (PatchFieldToUnit); it is intentionally not enabled here.
  */
 class CHIRFieldPatcher {
 public:
-    /** Constructs a patcher bound to @p builder, used for creating the Unit type. */
+    /** Constructs a patcher bound to @p builder. */
     explicit CHIRFieldPatcher(CHIRBuilder& builder);
 
     /**
-     * For each non-compiler-added instance field of @p classDef carrying
-     * @p mirrorAttr (@JavaMirror/@ObjCMirror), collapses the field's type to
-     * Unit when a matching mirror getter exists, then writes the updated field
-     * list back onto the ClassDef. Null @p classDef is a no-op.
+     * For each non-compiler-added direct instance field of @p classDef
+     * (@JavaMirror/@ObjCMirror) with a matching `$nameget` accessor, marks the
+     * field INITIALIZED, then writes the updated field list back onto the
+     * ClassDef. Asserts when a genuine direct mirror field has no accessor.
+     * Null @p classDef is a no-op.
      */
     void PatchCommonFieldsForMirror(ClassDef* classDef, Attribute mirrorAttr);
 
     /**
-     * Same field-to-Unit collapse as PatchCommonFieldsForMirror, but for
-     * @JavaImpl classes, matching the getter on the JAVA_IMPL attribute. Null
-     * @p classDef is a no-op.
+     * Same INITIALIZED marking as PatchCommonFieldsForMirror, but for @JavaImpl
+     * wrapper classes. Mark-only: no assert (non-relocated
+     * FROM_COMMON_PART/specific fields may legitimately lack an accessor) and no
+     * Unit collapse. Null @p classDef is a no-op.
      */
     void PatchCommonFieldsForJavaImpl(ClassDef* classDef);
 
 private:
-    /** Returns the getter carrying @p mirrorAttr whose return type equals @p field's type, or null. */
+    /** Returns the getter carrying @p mirrorAttr whose return type equals @p field's type, or null (Step 2). */
     Function* FindGetterForField(ClassDef* classDef, const MemberVarInfo& field, Attribute mirrorAttr);
 
-    /** Returns true for compiler-added fields (javaref/hasInited) that must be left untouched. */
+    /** Returns true for fields that must be left untouched (compiler-added/internal). */
     bool IsFFIAddedField(const MemberVarInfo& var);
 
-    /** Collapses @p var's storage type to Unit. */
+    /** Marks @p var INITIALIZED. */
+    void MarkFieldInitialized(MemberVarInfo& var);
+
+    /** Collapses @p var's storage type to Unit (Step 2 follow-up; currently unused). */
     void PatchFieldToUnit(MemberVarInfo& var);
 
     CHIRBuilder& builder;

@@ -15,6 +15,21 @@ namespace Cangjie::CHIR {
 
 bool IsJavaMirrorField(const MemberVarInfo& field, Attribute mirrorAttr);
 
+/**
+ * True for a user-declared instance field whose accesses must be redirected to
+ * an FFI accessor: excludes compiler-added fields (javaref/reg/hasInited) and
+ * internal `$`-prefixed names. Used to decide whether a missing accessor is an
+ * error (assert) and whether a field should be marked INITIALIZED.
+ */
+bool IsPatchableMirrorField(const MemberVarInfo& field);
+
+/**
+ * True when @p def declares a direct instance field named @p name that is
+ * eligible for accessor rewriting (see IsPatchableMirrorField). Inherited
+ * fields return false.
+ */
+bool IsDirectPatchableMirrorField(const ClassDef& def, const std::string& name);
+
 Function* FindGetterForField(const ClassDef& def, const MemberVarInfo& field, Attribute mirrorAttr);
 
 Function* FindSetterForField(const ClassDef& def, const MemberVarInfo& field, Attribute mirrorAttr);

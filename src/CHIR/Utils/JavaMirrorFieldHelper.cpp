@@ -17,6 +17,30 @@ bool IsJavaMirrorField(const MemberVarInfo& field, Attribute mirrorAttr)
     return field.TestAttr(mirrorAttr);
 }
 
+bool IsPatchableMirrorField(const MemberVarInfo& field)
+{
+    if (field.TestAttr(Attribute::COMPILER_ADD)) {
+        return false;
+    }
+    if (field.TestAttr(Attribute::HAS_INITED_FIELD)) {
+        return false;
+    }
+    if (field.name.empty() || field.name.front() == '$') {
+        return false;
+    }
+    return true;
+}
+
+bool IsDirectPatchableMirrorField(const ClassDef& def, const std::string& name)
+{
+    for (const auto& var : def.GetDirectInstanceVars()) {
+        if (var.name == name && IsPatchableMirrorField(var)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 Function* FindGetterForField(const ClassDef& def, const MemberVarInfo& field, Attribute mirrorAttr)
 {
     if (!IsJavaMirrorField(field, mirrorAttr)) {
@@ -66,7 +90,7 @@ Function* FindSetterForField(const ClassDef& def, const MemberVarInfo& field, At
 
 Function* FindStaticGetterForGlobalVar(const ClassDef& def, const GlobalVar& globalVar)
 {
-    auto varSrcCodeId = globalVar.GetSrcCodeIdentifier();
+    const auto expected = "$" + globalVar.GetSrcCodeIdentifier() + "get";
 
     for (auto method : def.GetMethods()) {
         if (method->GetFuncKind() != FuncKind::GETTER) {
@@ -75,20 +99,16 @@ Function* FindStaticGetterForGlobalVar(const ClassDef& def, const GlobalVar& glo
         if (method->GetParams().size() != 0) {
             continue;
         }
-        auto methodRawMangled = method->GetRawMangledName();
-        auto methodSrcCodeId = method->GetSrcCodeIdentifier();
-        if (methodRawMangled.find(varSrcCodeId) == std::string::npos &&
-            methodSrcCodeId.find(varSrcCodeId) == std::string::npos) {
-            continue;
+        if (method->GetSrcCodeIdentifier() == expected) {
+            return method;
         }
-        return method;
     }
     return nullptr;
 }
 
 Function* FindStaticSetterForGlobalVar(const ClassDef& def, const GlobalVar& globalVar)
 {
-    auto varSrcCodeId = globalVar.GetSrcCodeIdentifier();
+    const auto expected = "$" + globalVar.GetSrcCodeIdentifier() + "set";
 
     for (auto method : def.GetMethods()) {
         if (method->GetFuncKind() != FuncKind::SETTER) {
@@ -98,62 +118,58 @@ Function* FindStaticSetterForGlobalVar(const ClassDef& def, const GlobalVar& glo
         if (params.size() != 1) {
             continue;
         }
-        auto methodRawMangled = method->GetRawMangledName();
-        auto methodSrcCodeId = method->GetSrcCodeIdentifier();
-        if (methodRawMangled.find(varSrcCodeId) == std::string::npos &&
-            methodSrcCodeId.find(varSrcCodeId) == std::string::npos) {
-            continue;
+        if (method->GetSrcCodeIdentifier() == expected) {
+            return method;
         }
-        return method;
     }
     return nullptr;
 }
 
 Function* FindInstanceGetterByName(const ClassDef& def, const std::string& fieldName)
 {
-    for (auto method : def.GetMethods()) {
-        if (method->GetFuncKind() != FuncKind::GETTER) {
-            continue;
+    const auto expected = "$" + fieldName + "get";
+
+    for (auto cur = &def; cur != nullptr; cur = cur->GetSuperClassDef()) {
+        for (auto method : cur->GetMethods()) {
+            if (method->GetFuncKind() != FuncKind::GETTER) {
+                continue;
+            }
+            if (!method->IsMemberFunc()) {
+                continue;
+            }
+            auto methodParams = method->GetParams();
+            if (methodParams.size() < 1) {
+                continue;
+            }
+            if (method->GetSrcCodeIdentifier() == expected) {
+                return method;
+            }
         }
-        if (!method->IsMemberFunc()) {
-            continue;
-        }
-        auto methodParams = method->GetParams();
-        if (methodParams.size() < 1) {
-            continue;
-        }
-        auto methodSrcCodeId = method->GetSrcCodeIdentifier();
-        auto methodRawMangled = method->GetRawMangledName();
-        if (methodSrcCodeId.find(fieldName) == std::string::npos &&
-            methodRawMangled.find(fieldName) == std::string::npos) {
-            continue;
-        }
-        return method;
     }
     return nullptr;
 }
 
 Function* FindInstanceSetterByName(const ClassDef& def, const std::string& fieldName)
 {
-    for (auto method : def.GetMethods()) {
-        if (method->GetFuncKind() != FuncKind::SETTER) {
-            continue;
+    const auto expected = "$" + fieldName + "set";
+
+    for (auto cur = &def; cur != nullptr; cur = cur->GetSuperClassDef()) {
+        for (auto method : cur->GetMethods()) {
+            if (method->GetFuncKind() != FuncKind::SETTER) {
+                continue;
+            }
+            if (!method->IsMemberFunc()) {
+                continue;
+            }
+            auto methodParams = method->GetParams();
+            constexpr size_t minParams = 2;
+            if (methodParams.size() < minParams) {
+                continue;
+            }
+            if (method->GetSrcCodeIdentifier() == expected) {
+                return method;
+            }
         }
-        if (!method->IsMemberFunc()) {
-            continue;
-        }
-        auto methodParams = method->GetParams();
-        constexpr size_t minParams = 2;
-        if (methodParams.size() < minParams) {
-            continue;
-        }
-        auto methodSrcCodeId = method->GetSrcCodeIdentifier();
-        auto methodRawMangled = method->GetRawMangledName();
-        if (methodSrcCodeId.find(fieldName) == std::string::npos &&
-            methodRawMangled.find(fieldName) == std::string::npos) {
-            continue;
-        }
-        return method;
     }
     return nullptr;
 }
