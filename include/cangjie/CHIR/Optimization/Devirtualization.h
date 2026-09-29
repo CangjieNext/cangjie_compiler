@@ -84,8 +84,8 @@ private:
 
     void InstantiateFuncIfPossible(CHIRBuilder& builder, std::vector<RewriteInfo>& rewriteInfoList);
 
-    void CollectCandidates(
-        CHIRBuilder& builder, ClassType* specific, std::pair<Function*, Type*>& res, const FuncSig& method) const;
+    void CollectCandidates(CHIRBuilder& builder, ClassType* specific,
+        std::pair<Function*, Type*>& res, const FuncSig& method, bool& resBeenCleared) const;
 
     Function* GetCandidateFromSpecificType(
         CHIRBuilder& builder, ClassType& specific, const FuncSig& method) const;

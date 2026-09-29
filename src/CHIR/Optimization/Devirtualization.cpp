@@ -526,7 +526,11 @@ std::pair<Function*, Type*> Devirtualization::FindRealCallee(
         // The specific type is an interface or a class, and the state kind is SUBCLASS_OF.
         ClassType* specificType1 = StaticCast<ClassType*>(typeState->GetSpecificType());
         std::pair<Function*, Type*> res{nullptr, nullptr};
-        CollectCandidates(builder, specificType1, res, method);
+        bool resBeenCleared = false;
+        CollectCandidates(builder, specificType1, res, method, resBeenCleared);
+        if (resBeenCleared) {
+            return {nullptr, nullptr};
+        }
         return res;
     }
 }
@@ -551,8 +555,8 @@ Function* Devirtualization::GetCandidateFromSpecificType(
     return nullptr;
 }
 
-void Devirtualization::CollectCandidates(
-    CHIRBuilder& builder, ClassType* specific, std::pair<Function*, Type*>& res, const FuncSig& method) const
+void Devirtualization::CollectCandidates(CHIRBuilder& builder, ClassType* specific,
+    std::pair<Function*, Type*>& res, const FuncSig& method, bool& resBeenCleared) const
 {
     auto specificDef = specific->GetClassDef();
     if (specificDef->CanBeInherited() && !devirtFuncInfo.CheckCustomTypeInternal(*specificDef)) {
@@ -565,6 +569,7 @@ void Devirtualization::CollectCandidates(
         if (res.first == nullptr) {
             res = {targetFromSpecificType, specific};
         } else if (res.first != targetFromSpecificType) {
+            resBeenCleared = true;
             res = {nullptr, nullptr};
             return;
         }
@@ -603,6 +608,7 @@ void Devirtualization::CollectCandidates(
                         if (res.first == nullptr) {
                             res = {target, subtypeCustom};
                         } else if (res.first != target) {
+                            resBeenCleared = true;
                             res = {nullptr, nullptr};
                             return;
                         }
@@ -611,7 +617,7 @@ void Devirtualization::CollectCandidates(
             }
         }
         if (subtypeCustom && subtypeCustom->IsClass()) {
-            CollectCandidates(builder, StaticCast<ClassType*>(subtypeCustom), res, method);
+            CollectCandidates(builder, StaticCast<ClassType*>(subtypeCustom), res, method, resBeenCleared);
         }
     }
 }
