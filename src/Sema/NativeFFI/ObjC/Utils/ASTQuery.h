@@ -19,7 +19,9 @@
 
 namespace Cangjie::Interop::ObjC {
 
-bool IsObjCCompatible(const AST::Ty& ty) noexcept;
+enum class TypePosition { IN, OUT, BOTH };
+
+bool IsObjCCompatible(const AST::Ty& ty, TypePosition pos = TypePosition::BOTH) noexcept;
 bool IsObjCObjectType(const AST::Ty& ty) noexcept;
 bool IsObjCMirror(const AST::Decl& decl) noexcept;
 /**

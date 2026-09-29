@@ -26,11 +26,11 @@ Ptr<Type> FindIncompatibleTypeNode(Ptr<Type> tyArg)
     CJC_NULLPTR_CHECK(tyArg);
     Ptr<Type> errorRef = tyArg;
     if (auto fTy = As<ASTKind::FUNC_TYPE>(tyArg)) {
-        if (!IsObjCCompatible(*fTy->retType->GetTy())) {
+        if (!IsObjCCompatible(*fTy->retType->GetTy(), TypePosition::OUT)) {
             errorRef = fTy->retType;
         }
         for (Ptr<Type> arg : fTy->paramTypes) {
-            if (!IsObjCCompatible(*arg->GetTy())) {
+            if (!IsObjCCompatible(*arg->GetTy(), TypePosition::IN)) {
                 errorRef = arg;
                 break;
             }
