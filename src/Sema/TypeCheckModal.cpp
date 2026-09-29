@@ -664,13 +664,16 @@ private:
             return;
         }
         auto funcSym = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, scopeName);
-        // Use refFuncBody (the actual enclosing func body) instead of funcSym->node (which
-        // may be an outer function when the lambda is not registered as a FUNC_LIKE symbol).
-        auto allowsExclave = funcSym && funcSym->node ? FuncLikeSignatureAllowsExclave(*funcSym->node) : false;
-        if (!allowsExclave && refFuncBody) {
-            allowsExclave = FuncLikeSignatureAllowsExclave(*refFuncBody);
+        // Only the signature of the function body actually enclosing the exclave (refFuncBody)
+        // decides. funcSym->node may resolve to an outer function when the enclosing lambda is
+        // not registered as a FUNC_LIKE symbol; its signature must not be consulted then, or an
+        // outer function that allows exclave would mask a lambda that does not. Consult it only
+        // when it really is that same function body, so its `this`-parameter check is kept.
+        Ptr<Node> enclosing = refFuncBody;
+        if (funcSym && funcSym->node && TypeCheckUtil::GetFuncBody(*funcSym->node) == refFuncBody) {
+            enclosing = funcSym->node;
         }
-        if (!allowsExclave) {
+        if (!FuncLikeSignatureAllowsExclave(*enclosing)) {
             DiagExclaveInvalidFuncSignature(expr);
         }
     }
