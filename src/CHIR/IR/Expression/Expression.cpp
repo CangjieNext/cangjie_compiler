@@ -923,7 +923,11 @@ std::vector<VTableSearchRes> DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& 
     FuncCallType funcCallType{virMethodCtx.funcName, instFuncType, instantiatedTypeArgs};
     auto res = GetFuncIndexInVTable(*thisTypeDeref, funcCallType, builder);
     CJC_ASSERT(!res.empty());
-    return res;
+    // Arg-based search may return multiple different virtual methods. Prefer the one
+    // matching the Sema-resolved method type carried by this Invoke.
+    auto matched = PreferVTableResMatchingMethodType(res, *GetMethodType());
+    CJC_ASSERT(!matched.empty());
+    return matched;
 }
 
 size_t DynamicDispatch::GetVirtualMethodOffset(CHIRBuilder* builder) const
@@ -939,19 +943,14 @@ size_t DynamicDispatch::GetVirtualMethodOffset(CHIRBuilder* builder) const
 
 ClassType* DynamicDispatch::GetInstSrcParentCustomTypeOfMethod(CHIRBuilder& builder) const
 {
-    for (auto& r : GetVirtualMethodInfo(builder)) {
-        if (r.offset == GetVirtualMethodOffset()) {
-            auto def = r.instSrcParentType->GetClassDef();
-            const auto& parentFuncInfo = def->GetDefVTable().GetExpectedTypeVTable(*def->GetType());
-            auto originalType = parentFuncInfo.GetVirtualMethods()[r.offset].GetOriginalFuncType();
-            if (VirMethodTypeIsMatched(*originalType, *GetMethodType())) {
-                CJC_NULLPTR_CHECK(r.instSrcParentType);
-                return r.instSrcParentType;
-            }
-        }
+    // GetVirtualMethodInfo already disambiguates by Sema method type to a unique entry.
+    auto infos = GetVirtualMethodInfo(builder);
+    CJC_ASSERT(infos.size() == 1);
+    if (auto offset = Get<VirMethodOffset>(); offset.has_value()) {
+        CJC_ASSERT(infos[0].offset == offset.value());
     }
-    CJC_ABORT();
-    return nullptr;
+    CJC_NULLPTR_CHECK(infos[0].instSrcParentType);
+    return infos[0].instSrcParentType;
 }
 
 AttributeInfo DynamicDispatch::GetVirtualMethodAttr(CHIRBuilder& builder) const

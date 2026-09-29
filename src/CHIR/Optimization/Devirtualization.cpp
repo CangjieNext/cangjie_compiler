@@ -15,6 +15,7 @@
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/Optimization/BlockGroupCopyHelper.h"
 #include "cangjie/Mangle/CHIRManglingUtils.h"
+#include <unordered_set>
 namespace Cangjie::CHIR {
 Block* GetEntryBlock(const BlockGroup& oldBG, std::vector<Block*>& blocks)
 {
@@ -75,7 +76,8 @@ void Devirtualization::RunOnFunc(const Function* func, CHIRBuilder& builder)
         }
         // Grab the function from the classMap.
         auto [realCallee, thisType] = FindRealCallee(builder, resVal,
-            {invoke->GetMethodName(), std::move(paramTys), invoke->GetInstantiatedTypeArgs()});
+            {invoke->GetMethodName(), std::move(paramTys), invoke->GetInstantiatedTypeArgs(),
+                invoke->GetMethodType()});
         if (!realCallee) {
             return;
         }
@@ -515,12 +517,18 @@ std::pair<Function*, Type*> Devirtualization::FindRealCallee(
             auto funcType = builder.GetType<FuncType>(paramTypes, builder.GetUnitTy());
             FuncCallType funcCallType{method.name, funcType, method.typeArgs};
             auto res = def->GetFuncIndexInVTable(funcCallType, replaceTable, builder);
+            if (method.methodType != nullptr) {
+                res = PreferVTableResMatchingMethodType(res, *method.methodType);
+            }
             if (!res.empty() && !res[0].instance->IsPureAbstract()) {
                 target = res[0].instance;
                 break;
             }
         }
-        CJC_NULLPTR_CHECK(target);
+        // Ambiguous or unmatched Sema method type: skip de-virtualization.
+        if (target == nullptr) {
+            return {nullptr, nullptr};
+        }
         return {target, specificType};
     } else {
         // The specific type is an interface or a class, and the state kind is SUBCLASS_OF.

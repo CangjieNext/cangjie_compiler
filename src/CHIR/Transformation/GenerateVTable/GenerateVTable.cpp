@@ -150,9 +150,19 @@ Function* GenerateVTable::GetMutFuncWrapper(const Type& thisType, const std::vec
         .genericTypeArgs = instTypeArgs
     };
     auto vtableRes = GetFuncIndexInVTable(*thisType.StripAllRefs(), funcCallType, builder);
-    CJC_ASSERT(vtableRes.size() == 1);
+    // Callee is already known; pick the vtable entry for this function instance.
+    std::vector<VTableSearchRes> matched;
+    for (auto& r : vtableRes) {
+        if (r.instance == &callee) {
+            matched.emplace_back(r);
+        }
+    }
+    if (matched.empty()) {
+        matched = PreferVTableResMatchingMethodType(vtableRes, *callee.GetFuncType());
+    }
+    CJC_ASSERT(matched.size() == 1);
     auto wrapperName = CHIRMangling::GenerateVirtualFuncMangleName(
-        &callee, *vtableRes[0].originalDef, vtableRes[0].halfInstSrcParentType, false);
+        &callee, *matched[0].originalDef, matched[0].halfInstSrcParentType, false);
     auto it = mutFuncWrappers.find(wrapperName);
     CJC_ASSERT(it != mutFuncWrappers.end());
     return it->second;

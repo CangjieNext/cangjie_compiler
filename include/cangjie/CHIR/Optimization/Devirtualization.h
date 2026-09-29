@@ -69,6 +69,9 @@ public:
         std::string name;
         std::vector<Type*> types;
         std::vector<Type*> typeArgs;
+        /// Sema-resolved method type from Invoke; used to disambiguate when
+        /// GetFuncIndexInVTable returns multiple different virtual methods.
+        FuncType* methodType{nullptr};
     };
 
 private:
