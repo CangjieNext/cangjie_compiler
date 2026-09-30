@@ -716,6 +716,7 @@ bool ToCHIR::RunIRChecker(const Phase& phase)
         rules.emplace(CHIRChecker::Rule::RETURN_TYPE_NEED_BE_VOID);
     } else {
         rules.emplace(CHIRChecker::Rule::IMPORTED_CONST_VAR_SHOULD_HAVE_INITIALIZER);
+        rules.emplace(CHIRChecker::Rule::CHECK_REGION_EXPR_IN_EXCLAVE);
     }
     // there may be something wrong, we will check this rule after CJMP's scheme done
     if (opts.commonPartCjos.size() <= 0) {

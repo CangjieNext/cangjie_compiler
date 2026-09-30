@@ -24,7 +24,8 @@ public:
         GET_INSTANTIATE_VALUE_SHOULD_GONE,  // `GetInstantiateValue` shouldn't be in IR
         CHIR_GET_RTTI_STATIC_TYPE,          // type in GetRTTIStatic should be This or Generic type
         RETURN_TYPE_NEED_BE_VOID,           // global func's return type need to be `Void`
-        IMPORTED_CONST_VAR_SHOULD_HAVE_INITIALIZER // imported const var should have initializer
+        IMPORTED_CONST_VAR_SHOULD_HAVE_INITIALIZER, // imported const var should have initializer
+        CHECK_REGION_EXPR_IN_EXCLAVE        // check region expr in exclave
     };
     CHIRChecker(const Package& package, const Cangjie::GlobalOptions& opts, CHIRBuilder& builder);
 

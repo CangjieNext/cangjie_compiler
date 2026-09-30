@@ -1683,6 +1683,9 @@ void CHIRChecker::CheckBlockGroup(const BlockGroup& blockGroup, const Function& 
 
 void CHIRChecker::CheckShouldNotHaveRegionExpr(const BlockGroup& blockGroup, const Function& topLevelFunc)
 {
+    if (optionalRules.find(Rule::CHECK_REGION_EXPR_IN_EXCLAVE) == optionalRules.end()) {
+        return;
+    }
     // An exclave function body and an Exclave expression body are one block group each. They must
     // not contain StartRegion or EndRegion. A lambda nested inside them is another block group and
     // is not part of this check.
