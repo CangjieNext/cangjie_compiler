@@ -43,17 +43,14 @@ install(
         ${CMAKE_CURRENT_SOURCE_DIR}/StdAstFormat.fbs
     DESTINATION schema)
 
-# Rewrite package std.ast -> package flatbuffers and expose API as public for std.ast consumers.
-# Glob *.cj at install time (ExternalProject sources are guaranteed present then).
-set(FLATBUFFERS_CANGJIE_SRC_DIR "${FLATBUFFERS_SOURCE_DIR}/cangjie")
-install(CODE "
-    execute_process(
-        COMMAND \"${CMAKE_COMMAND}\"
-            \"-DSRC_DIR=${FLATBUFFERS_CANGJIE_SRC_DIR}\"
-            \"-DDST_DIR=\${CMAKE_INSTALL_PREFIX}/third_party/flatbuffers/cangjie\"
-            -P \"${CMAKE_CURRENT_SOURCE_DIR}/install_flatbuffers_cangjie.cmake\"
-        RESULT_VARIABLE _fb_cj_install_result)
-    if(NOT _fb_cj_install_result EQUAL 0)
-        message(FATAL_ERROR \"Failed to install flatbuffers cangjie runtime\")
-    endif()
-")
+# Install the Cangjie flatbuffers runtime. The sources are a cjpm package rooted at
+# ${FLATBUFFERS_SOURCE_DIR}/cangjie (name = "flatbuffers", sources under src/) and already
+# declare `package flatbuffers` with a public API, so they are installed verbatim.
+# Flattened into third_party/flatbuffers/cangjie for the cjc-based consumers
+# (AddCJNATIVELibrary.cmake, cangjie_stdx/build.cj).
+install(DIRECTORY ${FLATBUFFERS_SOURCE_DIR}/cangjie/src/
+    DESTINATION third_party/flatbuffers/cangjie
+    FILES_MATCHING
+    PATTERN "*.cj"
+    PATTERN "test_*" EXCLUDE
+    PATTERN "*_test.cj" EXCLUDE)
