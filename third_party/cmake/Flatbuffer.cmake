@@ -17,11 +17,11 @@ if(EXISTS ${FLATBUFFERS_SRC}/CMakeLists.txt)
     set(FLATBUFFERS_DOWNLOAD_ARGS
         SOURCE_DIR ${FLATBUFFERS_SRC})
 else()
-    set(REPOSITORY_PATH https://gitcode.com/openharmony/third_party_flatbuffers.git)
+    set(REPOSITORY_PATH https://gitcode.com/xiaxue0215/third_party_flatbuffers.git)
     message(STATUS "Set flatbuffers REPOSITORY_PATH: ${REPOSITORY_PATH}")
     set(FLATBUFFERS_DOWNLOAD_ARGS
         GIT_REPOSITORY ${REPOSITORY_PATH}
-        GIT_TAG c3e4d69cbd5950e43f775ba76eadb30750d6e0b7
+        GIT_TAG be221f3132021acad479875880094bf3f40f2c8e
         GIT_PROGRESS ON
         GIT_CONFIG ${GIT_ARGS}
         GIT_SHALLOW OFF)
@@ -30,9 +30,6 @@ endif()
 ExternalProject_Add(
     flatbuffers
     ${FLATBUFFERS_DOWNLOAD_ARGS}
-    PATCH_COMMAND ${CMAKE_COMMAND}
-        -DFLATBUFFERS_SRC=<SOURCE_DIR>
-        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApplyCangjieIdlPackagePatch.cmake
     CMAKE_ARGS
         # no need to Build tests and install.
         -DFLATBUFFERS_BUILD_TESTS=OFF
