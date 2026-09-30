@@ -61,6 +61,41 @@ bool AllReturnValuesInExclave(const LocalVar& result)
     }
     return true;
 }
+
+FuncType* GetCalleeFuncType(const Expression& expr)
+{
+    Function* callee = nullptr;
+    if (auto apply = DynamicCast<const ApplyBase*>(&expr)) {
+        auto f = apply->GetCallee();
+        if (!Is<Function>(f)) {
+            return StaticCast<FuncType*>(f->GetType());
+        }
+        callee = StaticCast<Function*>(f);
+    } else if (auto invoke = DynamicCast<const DynamicDispatch*>(&expr)) {
+        callee = StaticCast<Function*>(invoke->GetCallee());
+    }
+    if (callee == nullptr) {
+        return nullptr;
+    }
+    if (auto generic = callee->GetGenericDecl()) {
+        callee = generic;
+    }
+    return callee->GetFuncType();
+}
+
+bool CalleeParamTypeHasNonCopyable(const Expression& expr)
+{
+    auto funcType = GetCalleeFuncType(expr);
+    if (funcType == nullptr) {
+        return false;
+    }
+    for (auto param : funcType->GetParams()) {
+        if (param->GetType()->StripAllRefs()->IsLocalRegion()) {
+            return true;
+        }
+    }
+    return false;
+}
 } // namespace
 
 SetMemRegion::SetMemRegion(CHIRBuilder& builder)
@@ -92,18 +127,12 @@ std::unordered_set<BlockGroup*> SetMemRegion::CollectFunctionRegionBlockGroup(co
                 auto body = expr.GetFuncOrLambdaBody();
                 CJC_NULLPTR_CHECK(body);
                 scopeNeedsRegion.emplace(body);
-            } else if (auto apply = DynamicCast<ApplyBase*>(&expr)) {
-                // 2. constructor call where the `this` argument type does not implement `Copyable` and
-                // has mode `local!` or `local?` (covers both `Apply` and its `TryApply` form)
-                if (auto func = DynamicCast<Function*>(apply->GetCallee());
-                    func && func->IsConstructor() && func->GetParentCustomTypeDef() != nullptr) {
-                    auto thisType = func->GetParam(0)->GetType()->StripAllRefs();
-                    if (thisType->IsLocalRegion()) {
-                        auto body = expr.GetFuncOrLambdaBody();
-                        CJC_NULLPTR_CHECK(body);
-                        scopeNeedsRegion.emplace(body);
-                    }
-                }
+            } else if (CalleeParamTypeHasNonCopyable(expr)) {
+                // 2. function call where some callee parameter type does not implement `Copyable` and
+                // has mode `local!` or `local?`
+                auto body = expr.GetFuncOrLambdaBody();
+                CJC_NULLPTR_CHECK(body);
+                scopeNeedsRegion.emplace(body);
             }
         } else if (auto lambda = DynamicCast<Lambda*>(&expr)) {
             // 3. lambda where the captured variables are not `Copyable` and have mode `local!` or `local?`
