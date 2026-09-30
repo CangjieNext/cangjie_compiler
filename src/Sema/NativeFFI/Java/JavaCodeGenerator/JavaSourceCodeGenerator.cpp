@@ -76,7 +76,10 @@ std::string GetExportedMemberModifier(const Decl& member)
 
 std::string FuncParamToString(const OwnedPtr<FuncParam>& p)
 {
-    CJC_ASSERT(p && p->type && p->type->GetTy());
+    // Only the identifier is used here; a deserialized common param may have a null AST
+    // `type` node (ReferenceLoader only rebuilds it for alias/func types), so rely on
+    // `GetTy()` if a type is needed elsewhere.
+    CJC_ASSERT(p && p->GetTy());
     std::string res = p->identifier.Val();
     return res;
 }
@@ -223,8 +226,10 @@ std::string JavaSourceCodeGenerator::MapCJTypeToJavaType(const OwnedPtr<Type>& t
 std::string JavaSourceCodeGenerator::MapCJTypeToJavaType(const OwnedPtr<FuncParam>& param,
     std::set<std::string>* javaImports, const std::string* curPackageName, bool isNativeMethod)
 {
-    CJC_ASSERT(param && param->type && param->type->GetTy());
-    return MapCJTypeToJavaType(param->type->GetTy(), javaImports, curPackageName, isNativeMethod);
+    // Use the sema type: a deserialized common param may have a null AST `type` node
+    // (ReferenceLoader rebuilds it only for alias/func types), while `GetTy()` is always set.
+    CJC_ASSERT(param && param->GetTy());
+    return MapCJTypeToJavaType(param->GetTy(), javaImports, curPackageName, isNativeMethod);
 }
 
 void JavaSourceCodeGenerator::AddClassDeclaration()
@@ -388,7 +393,7 @@ std::string JavaSourceCodeGenerator::GenerateFuncParamLists(
     const std::string* curPackage = &decl->fullPackageName;
     std::function<std::string(const OwnedPtr<FuncParam>& ptr)> mapper = [this, imp, curPackage, isNativeMethod](
                                                                             const OwnedPtr<FuncParam>& cur) {
-        CJC_ASSERT(cur && cur->type && cur->type->GetTy());
+        CJC_ASSERT(cur && cur->GetTy());
         std::string res = MapCJTypeToJavaType(cur, imp, curPackage, isNativeMethod) + " " + cur->identifier.Val();
         return res;
     };
@@ -401,7 +406,7 @@ std::string JavaSourceCodeGenerator::GenerateFuncParamClasses(const std::vector<
     const std::string* curPackage = &decl->fullPackageName;
     std::function<std::string(const OwnedPtr<FuncParam>& ptr)> mapper = [this, imp, curPackage](
                                                                             const OwnedPtr<FuncParam>& cur) {
-        CJC_ASSERT(cur && cur->type && cur->type->GetTy());
+        CJC_ASSERT(cur && cur->GetTy());
         std::string res = MapCJTypeToJavaType(cur, imp, curPackage, false) + ".class";
         return res;
     };
