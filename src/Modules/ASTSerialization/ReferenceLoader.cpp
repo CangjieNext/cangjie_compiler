@@ -526,8 +526,12 @@ void ASTLoader::ASTLoaderImpl::LoadDeclDependencies(const PackageFormat::Decl& d
 
 void ASTLoader::ASTLoaderImpl::LoadDeclRefs(const PackageFormat::Decl& declObj, Decl& decl)
 {
+    auto ty = LoadType(declObj.type());
+    if (!ty) {
+        ty = TypeManager::GetInvalidTy(); // happens only in incremental compilation.
+    }
     // Load ty for all decls and try to load generic constraints.
-    decl.SetTy(LoadType(declObj.type()));
+    decl.SetTy(ty);
     if (!Ty::IsTyCorrect(decl.GetTy()) && isLoadCache) {
         return; // Skip following steps if ty is not correct during loading cache.
     }
