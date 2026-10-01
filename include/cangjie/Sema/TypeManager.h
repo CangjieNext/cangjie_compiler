@@ -199,7 +199,6 @@ public:
     TypeSubst GenerateGenericMappingFromGeneric(const AST::Decl& parentDecl, const AST::Decl& childDecl) const;
     MultiTypeSubst GenerateStructDeclTypeMapping(const AST::Decl& decl);
     Ptr<AST::Ty> ReplaceIdealTy(Ptr<AST::Ty> ty);
-    void RestoreJavaGenericsTy(AST::Decl& decl) const;
 
     /**
      * Get all extend interface types.

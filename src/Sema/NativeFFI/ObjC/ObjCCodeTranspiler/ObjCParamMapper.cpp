@@ -226,7 +226,7 @@ std::string ObjCParamMapper::GenerateArgumentCast(const Ty& paramTy, std::string
     // An @ObjCImpl hands over its reference exactly like an @ObjCMirror does: the Cangjie wrapper the entry
     // point builds around the handle owns it from here on, and releases it in its finalizer. Passing an impl
     // at +0 instead left that wrapper releasing a reference it never took.
-    if (IsObjCMirror(actualTy) || IsObjCImpl(actualTy) || IsObjCBlock(actualTy)) {
+    if (IsObjCForeign(actualTy) || IsObjCExport(actualTy) || IsObjCBlock(actualTy)) {
         return CAST_TO_VOID_PTR_RETAINED + std::move(value);
     }
     if (IsObjCPointer(actualTy)) {

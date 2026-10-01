@@ -941,9 +941,9 @@ static void SetCustomTypeDefAttr(CustomTypeDef& def, const AST::Decl& decl)
     }
 
     if (Interop::Java::IsImpl(decl)) {
-        def.EnableAttr(Attribute::JAVA_IMPL);
+        def.EnableAttr(Attribute::JAVA_EXPORT);
     } else if (Interop::Java::IsMirror(decl)) {
-        def.EnableAttr(Attribute::JAVA_MIRROR);
+        def.EnableAttr(Attribute::JAVA_FOREIGN);
     }
 }
 

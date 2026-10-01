@@ -42,7 +42,7 @@ std::vector<Ptr<AST::ClassDecl>> GetJavaImplRegistryCompanions(AST::File& file);
 
 std::vector<Ptr<AST::ClassDecl>> GetJavaImplRegistryCompanions(AST::Package& pkg);
 
-bool IsJavaImplRegistryCompanionReferenceField(const AST::Node& node);
+bool IsJavaExportRegistryCompanionReferenceField(const AST::Node& node);
 
 bool IsUserDefinedJavaImplConstructor(const AST::Decl& implMember);
 

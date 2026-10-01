@@ -538,14 +538,14 @@ std::vector<Ptr<InterfaceTy>> InheritableDecl::GetStableSuperInterfaceTys() cons
     return std::vector<Ptr<InterfaceTy>>(ret.begin(), ret.end());
 }
 
-void ClassLikeDecl::MarkAsJavaMirror()
+void ClassLikeDecl::MarkAsJavaForeign()
 {
-    EnableAttr(Attribute::JAVA_MIRROR);
+    EnableAttr(Attribute::JAVA_FOREIGN);
 }
 
-void ClassLikeDecl::MarkAsJavaImpl()
+void ClassLikeDecl::MarkAsJavaExport()
 {
-    EnableAttr(Attribute::JAVA_IMPL);
+    EnableAttr(Attribute::JAVA_EXPORT);
 }
 
 std::vector<Ptr<ClassLikeDecl>> InheritableDecl::GetAllSuperDecls(bool obtainSpecific)
