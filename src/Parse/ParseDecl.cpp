@@ -2076,7 +2076,7 @@ void ParserImpl::FFICheckClassLikeFuncBody(
         return;
     }
     if (!decl.funcBody->retType && !decl.funcBody->TestAttr(Attribute::HAS_BROKEN)) {
-        ParseDiagnoseRefactor(functionMustHaveReturnType, decl);
+        ParseDiagnoseRefactor(functionMustHaveReturnType, decl, decl.identifier);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
     if (decl.funcBody->body) {
