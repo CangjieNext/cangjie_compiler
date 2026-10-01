@@ -49,6 +49,7 @@ std::string ConvertToken(const Token& t);
 /// Record the correspondence between AnnotationKinds and identifiers.
 const std::unordered_map<std::string, AST::AnnotationKind> NAME_TO_ANNO_KIND = {
     {"JavaMirror", AST::AnnotationKind::JAVA_MIRROR}, {"JavaImpl", AST::AnnotationKind::JAVA_IMPL},
+    {"Java", AST::AnnotationKind::JAVA}, {"ObjC", AST::AnnotationKind::OBJ_C},
     {"JavaHasDefault", AST::AnnotationKind::JAVA_HAS_DEFAULT},
     {"ObjCMirror", AST::AnnotationKind::OBJ_C_MIRROR}, {"ObjCImpl", AST::AnnotationKind::OBJ_C_IMPL},
     {"ForeignGetterName", AST::AnnotationKind::FOREIGN_GETTER_NAME}, {"ForeignSetterName", AST::AnnotationKind::FOREIGN_SETTER_NAME},

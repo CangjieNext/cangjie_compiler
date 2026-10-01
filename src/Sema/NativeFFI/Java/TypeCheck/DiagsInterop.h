@@ -13,7 +13,6 @@ namespace Cangjie::Interop::Java {
 using namespace Cangjie;
 using namespace AST;
 
-void DiagJavaHasDefaultNoArgs(DiagnosticEngine& diag, const Node& node);
 void DiagJavaHasDefaultIncorrectScope(DiagnosticEngine& diag, const Node& node);
 void DiagJavaHasDefaultConflictWithStatic(DiagnosticEngine& diag, const Node& node);
 } // namespace Cangjie::Interop::Java

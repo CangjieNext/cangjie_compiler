@@ -36,15 +36,16 @@ void InsertSuperTypes(ClassDecl& wrapper, ClassLikeDecl& mirror)
     wrapper.inheritedTypes.emplace_back(CreateRefType(mirror));
 }
 
-void InsertJavaMirrorAnnotation(ClassDecl& wrapper, const std::string& javaName, const ImportManager& importManager)
+void MakeJavaForeign(ClassDecl& wrapper, const std::string& javaName, const ImportManager& importManager)
 {
     auto anno = MakeOwned<Annotation>();
     anno->EnableAttr(Attribute::COMPILER_ADD);
-    anno->kind = AnnotationKind::JAVA_MIRROR;
+    anno->kind = AnnotationKind::JAVA;
     anno->args.push_back(CreateFuncArg(
         CreateLitConstExpr(LitConstKind::STRING, javaName, GetStringDecl(importManager).GetTy())));
 
     wrapper.annotations.emplace_back(std::move(anno));
+    wrapper.modifiers.emplace(Modifier{TokenKind::FOREIGN, wrapper.begin});
 }
 } // namespace
 
@@ -58,13 +59,13 @@ OwnedPtr<ClassDecl> GenerateJavaMirrorReferenceWrapperClass::GenerateWrapperClas
 {
     CJC_ASSERT(ShouldHaveMirrorReferenceWrapper(mirror));
     auto wrapper = CloneClassSkeleton(mirror, GetMirrorReferenceWrapperNameFromClassLike(mirror));
-    wrapper->MarkAsJavaMirror();
+    wrapper->MarkAsJavaForeign();
     wrapper->EnableAttr(
-        Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER,
+        Attribute::JAVA_FOREIGN_SYNTHETIC_WRAPPER,
         Attribute::NO_REFLECT_INFO);
 
     InsertSuperTypes(*wrapper, mirror);
-    InsertJavaMirrorAnnotation(*wrapper, GetJavaFQName(mirror), importManager);
+    MakeJavaForeign(*wrapper, GetJavaFQName(mirror), importManager);
     return wrapper;
 }
 

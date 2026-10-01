@@ -32,7 +32,7 @@ void DesugarJavaImplSuperMethodCall::DesugarSuperMethodCall(
 
     // Only a class is expected to be a target of super call / to be a java impl
     auto& predecessor = StaticCast<ClassDecl&>(*superFunc.outerDecl);
-    CJC_ASSERT(predecessor.IsJavaMirror()); // since no Impl <: Impl relationship is allowed
+    CJC_ASSERT(predecessor.IsJavaForeign()); // since no Impl <: Impl relationship is allowed
 
     auto jobjectInstance = ilib.CreateAsJniJobjectCall(CreateJavaRefCall(impl, call.curFile));
     call.desugarExpr = factory.CreateNonvirtualJavaMethodCall(ctx, *call.curFile,

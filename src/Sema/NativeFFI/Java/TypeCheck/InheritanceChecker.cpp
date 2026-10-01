@@ -48,16 +48,16 @@ void DiagConflictingForeignName(
     auto otherAnno = GetForeignNameAnnotation(otherDecl);
     if (otherAnno && !otherAnno->TestAttr(Attribute::COMPILER_ADD)) {
         auto otherDeclRange = MakeRange(otherAnno->GetBegin(), otherDecl.identifier.End());
-        builder.AddNote(
-            otherDecl, otherDeclRange, "Other declaration '" + otherDecl.identifier + "' has a different @ForeignName");
+        builder.AddNote(otherDecl, otherDeclRange,
+            "Other declaration '" + otherDecl.identifier + "' has a different '@ForeignName'");
     } else if (otherAnno) {
         builder.AddNote(otherDecl, MakeRange(otherDecl.identifier),
-            "Other declaration '" + otherDecl.identifier + "' has a different derived @ForeignName '" +
+            "Other declaration '" + otherDecl.identifier + "' has a different derived '@ForeignName' '" +
                 GetAnnoValue(otherAnno) + "'");
     } else {
         auto otherDeclRange = MakeRange(otherDecl.identifier);
-        builder.AddNote(
-            otherDecl, otherDeclRange, "Other declaration '" + otherDecl.identifier + "' doesn't have a @ForeignName");
+        builder.AddNote(otherDecl, otherDeclRange,
+            "Other declaration '" + otherDecl.identifier + "' doesn't have a '@ForeignName'");
     }
 
     builder.AddNote(checkingDecl, MakeRange(checkingDecl.identifier),
@@ -74,10 +74,10 @@ bool NeedCheck(const MemberSignature& parent, const MemberSignature& child)
     }
     CJC_ASSERT(child.decl->IsFuncOrProp());
 
-    if (!parent.decl->outerDecl->IsJavaMirror() && !parent.decl->outerDecl->IsJavaImpl()) {
+    if (!parent.decl->outerDecl->IsJavaForeign() && !parent.decl->outerDecl->IsJavaExport()) {
         return false;
     }
-    if (!child.decl->outerDecl->IsJavaMirror() && !child.decl->outerDecl->IsJavaImpl()) {
+    if (!child.decl->outerDecl->IsJavaForeign() && !child.decl->outerDecl->IsJavaExport()) {
         // @JavaMirror annotation might be missing here, will report it later
         return false;
     }

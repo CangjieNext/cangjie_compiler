@@ -22,7 +22,7 @@ void ReplaceFieldsWithProps::HandleImpl(PrepareTypeCheckContext& ctx)
 {
     for (auto& mirror : ctx.mirrors) {
         if (auto mirrorCd = As<ASTKind::CLASS_DECL>(mirror)) {
-            InsertMirrorVarProp(*mirrorCd, Attribute::OBJ_C_MIRROR);
+            InsertMirrorVarProp(*mirrorCd, Attribute::OBJ_C_FOREIGN);
         }
     }
 }

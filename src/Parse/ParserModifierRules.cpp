@@ -97,7 +97,7 @@ const ConflictRule TOPLEVEL_STRUCT_MODIFIERS[] = {
 };
 
 const ConflictRule TOPLEVEL_CLASS_MODIFIERS[] = {
-    CR(TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::FOREIGN),
+    CR(TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED),
     CR(TokenKind::PRIVATE, TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::SEALED,
         TokenKind::COMMON, TokenKind::SPECIFIC),
     CR(TokenKind::INTERNAL, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::PROTECTED, TokenKind::SEALED),
@@ -105,20 +105,20 @@ const ConflictRule TOPLEVEL_CLASS_MODIFIERS[] = {
     CR_EMPTY(TokenKind::ABSTRACT),
     CR(TokenKind::SEALED, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED),
     CR_EMPTY(TokenKind::OPEN),
-    CR(TokenKind::FOREIGN, TokenKind::PUBLIC),
+    CR_EMPTY(TokenKind::FOREIGN),
     CR(TokenKind::COMMON, TokenKind::PRIVATE, TokenKind::SPECIFIC),
     CR(TokenKind::SPECIFIC, TokenKind::PRIVATE, TokenKind::COMMON),
 };
 
 const ConflictRule TOPLEVEL_INTERFACE_MODIFIERS[] = {
-    CR(TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::FOREIGN),
+    CR(TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED),
     CR(TokenKind::PRIVATE, TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::SEALED,
         TokenKind::COMMON, TokenKind::SPECIFIC),
     CR(TokenKind::INTERNAL, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::PROTECTED, TokenKind::SEALED),
     CR(TokenKind::PROTECTED, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::SEALED),
     CR(TokenKind::SEALED, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED),
     CR_EMPTY(TokenKind::OPEN),
-    CR(TokenKind::FOREIGN, TokenKind::PUBLIC),
+    CR_EMPTY(TokenKind::FOREIGN),
     CR(TokenKind::COMMON, TokenKind::PRIVATE, TokenKind::SPECIFIC),
     CR(TokenKind::SPECIFIC, TokenKind::PRIVATE, TokenKind::COMMON),
 };

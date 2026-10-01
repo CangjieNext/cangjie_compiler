@@ -20,14 +20,15 @@ using namespace Cangjie::Interop::ObjC;
 void CheckImplAttr::HandleImpl(TypeCheckContext& ctx)
 {
     auto& ty = *ctx.target.GetTy();
-    if (!IsObjCMirrorSubtype(ty)) {
+    if (!IsObjCForeignSubtype(ty)) {
         return;
     }
 
-    if (IsObjCMirror(ty) || IsObjCImpl(ty)) {
+    if (IsObjCForeign(ty) || IsObjCExport(ty)) {
         return;
     }
 
-    ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_mirror_subtype_must_be_annotated, ctx.target);
+    auto builder = ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_mirror_subtype_must_be_annotated, ctx.target);
+    builder.AddMainHintArguments(ctx.target.identifier);
     ctx.target.EnableAttr(Attribute::IS_BROKEN);
 }

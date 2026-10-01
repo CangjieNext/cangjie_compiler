@@ -26,12 +26,12 @@ inline std::map<Cangjie::AST::Attribute, Attribute> g_attrMap = {
     {Cangjie::AST::Attribute::GENERIC, Attribute::GENERIC}, {Cangjie::AST::Attribute::IMPORTED, Attribute::IMPORTED},
     {Cangjie::AST::Attribute::NO_REFLECT_INFO, Attribute::NO_REFLECT_INFO},
     {Cangjie::AST::Attribute::COMMON, Attribute::COMMON}, {Cangjie::AST::Attribute::SPECIFIC, Attribute::SPECIFIC},
-    {Cangjie::AST::Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR},
-    {Cangjie::AST::Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR},
+    {Cangjie::AST::Attribute::JAVA_FOREIGN, Attribute::JAVA_FOREIGN},
+    {Cangjie::AST::Attribute::OBJ_C_FOREIGN, Attribute::OBJ_C_FOREIGN},
     {Cangjie::AST::Attribute::HAS_INITED_FIELD, Attribute::HAS_INITED_FIELD},
     {Cangjie::AST::Attribute::UNSAFE, Attribute::UNSAFE},
     {Cangjie::AST::Attribute::DOES_NOT_THROW, Attribute::DOES_NOT_THROW},
-    {Cangjie::AST::Attribute::OBJ_C_IMPL, Attribute::OBJ_C_IMPL}};
+    {Cangjie::AST::Attribute::OBJ_C_EXPORT, Attribute::OBJ_C_EXPORT}};
 
 void TranslateFunctionGenericUpperBounds(CHIRType& chirTy, const AST::FuncDecl& func)
 {

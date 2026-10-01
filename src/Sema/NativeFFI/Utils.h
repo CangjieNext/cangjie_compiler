@@ -252,6 +252,11 @@ OwnedPtr<Expr> CreateOptionSomeCall(
 // `Option<ty>.Some`
 OwnedPtr<Expr> CreateOptionSomeRef(const ImportManager& importManager, TypeManager& typeManager, Ptr<Ty> ty);
 
+/**
+ * Returns string value of objective-c decl whether it is foreign or exported.
+ */
+std::string GetObjCDeclKindInfo(const Decl& decl);
+
 } // namespace Cangjie::Native::FFI
 
 #endif // CANGJIE_SEMA_NATIVE_FFI_UTILS

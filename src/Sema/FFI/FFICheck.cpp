@@ -10,11 +10,13 @@
  * This file implements FFI typecheck apis.
  */
 
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "TypeCheckerImpl.h"
 
 #include "cangjie/AST/ASTContext.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
+#include "cangjie/AST/Walker.h"
 
 using namespace Cangjie;
 using namespace Cangjie::AST;
@@ -27,6 +29,12 @@ void TypeChecker::TypeCheckerImpl::PreCheckAnnoForFFI(Node& root)
     Walker walker(&root, [this](const Ptr<Node> node) -> VisitAction {
         if (node && node->IsDecl()) {
             auto decl = StaticCast<Decl*>(node);
+            if (decl->IsJavaForeign() || decl->IsObjCForeign()) {
+                /**
+                 * Java and Objective-C declarations could be modifier as "foreign". C-FFI checks are not applicable.
+                 */
+                return VisitAction::WALK_CHILDREN;
+            }
             SetForeignABIAttr(*decl);
             PreCheckAnnoForCFFI(*decl);
         }

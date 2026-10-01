@@ -1024,9 +1024,6 @@ private:
     void DiagAnnotationMoreThanOneArgs(const AST::Annotation& node, const std::string& annotationName,
         const std::string& argInfo);
     void DiagAnnotationShouldNotHaveArgs(const Annotation& node, const std::string& annotationName);
-
-    // Cangjie Native & Java/ObjC FFI
-    void CheckObjCMirrorAnnotation(AST::Annotation& anno) const;
     // Check whether member decl can be abstract
     bool CanBeAbstract(const AST::Decl& decl, ScopeKind scopeKind) const;
     void CheckConstructorBody(AST::FuncDecl& ctor, ScopeKind scopeKind, bool inMacro = false);

@@ -134,7 +134,7 @@ void ClearInstTysIsNeeded(Node& node)
     if (auto ma = DynamicCast<MemberAccess*>(&node); ma && ma->target && !ma->target->GetTy()->HasGeneric() &&
         !ma->target->TestAnyAttr(Attribute::INTRINSIC, Attribute::GENERIC)) {
         ma->instTys.clear();
-        if (ma->target->astKind != ASTKind::TYPE_ALIAS_DECL && !HasJavaAttr(*ma->target)) {
+        if (ma->target->astKind != ASTKind::TYPE_ALIAS_DECL) {
             ma->SetTy(ma->target->GetTy());
         }
     }
@@ -1117,9 +1117,7 @@ void GIM::GenericInstantiationManagerImpl::RearrangeCallExprReference(CallExpr& 
     if (target->GetTy()->HasGeneric() || target->GetTy()->IsGeneric()) {
         return;
     }
-    if (!HasJavaAttr(*target)) {
-        ce.SetTy(StaticCast<FuncTy*>(target->GetTy())->retTy);
-    }
+    ce.SetTy(StaticCast<FuncTy*>(target->GetTy())->retTy);
     // Deal for dynamic 'This' binding call.
     // eg: tests/LLT/Sema/class/ThisType/class_generic_dynamic_binding_thistype_ok_2.cj
     if (auto thisTy = DynamicCast<ClassThisTy*>(ce.GetTy()); thisTy && ce.baseFunc->astKind == ASTKind::MEMBER_ACCESS) {

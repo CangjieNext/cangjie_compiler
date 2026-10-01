@@ -24,13 +24,13 @@ void FindMirrors::HandleImpl(InteropContext& ctx)
         for (auto& decl : file->decls) {
             // @ObjCMirror interface/class
             if (auto classLikeDecl = As<ASTKind::CLASS_LIKE_DECL>(decl);
-                classLikeDecl && IsObjCMirror(*classLikeDecl)) {
+                classLikeDecl && classLikeDecl->IsObjCForeign()) {
                 ctx.mirrors.push_back(classLikeDecl);
             }
 
             if (auto classDecl = As<ASTKind::CLASS_DECL>(decl); classDecl) {
                 // Mirror interface handle wrappers
-                if (IsObjCMirrorInterfaceHandleWrapper(*classDecl)) {
+                if (IsObjCForeignInterfaceHandleWrapper(*classDecl)) {
                     // The wrapper is generated whole by `InsertHandleWrapperDecl` and carries no user-written
                     // code, so nothing can mark it broken. The handlers below rely on that instead of each
                     // filtering the list on its own.
@@ -41,19 +41,19 @@ void FindMirrors::HandleImpl(InteropContext& ctx)
                 }
                 // Classes that inherit an @ObjCMirror decl without carrying any annotation are collected too,
                 // so that a proper diagnostic can be emitted for them.
-                if (IsObjCImpl(*classDecl) || (IsObjCMirrorSubtype(*classDecl) && !IsObjCMirror(*classDecl))) {
+                if (classDecl->IsObjCExport() || (IsObjCForeignSubtype(*classDecl) && !classDecl->IsObjCForeign())) {
                     ctx.impls.push_back(classDecl);
                     continue;
                 }
 
                 // @ObjCImpl registry companion class
-                if (IsObjCImplRegistryCompanion(*classDecl)) {
+                if (IsObjCExportRegistryCompanion(*classDecl)) {
                     ctx.regCompanions.push_back(classDecl);
                 }
             }
 
             // @ObjCMirror toplevel func
-            if (auto funcDecl = As<ASTKind::FUNC_DECL>(decl); funcDecl && IsObjCMirror(*funcDecl)) {
+            if (auto funcDecl = As<ASTKind::FUNC_DECL>(decl); funcDecl && funcDecl->IsObjCForeign()) {
                 ctx.mirrorTopLevelFuncs.push_back(funcDecl);
             }
         }
