@@ -779,9 +779,6 @@ std::vector<Ptr<Ty>> GetParamTysInArgsOrder(TypeManager& tyMgr, const CallExpr& 
             } else if (fd.TestAttr(Attribute::C)) {
                 // For C FFI variable-length arguments.
                 tyInArgOrder.emplace_back(tyMgr.GetCTypeTy());
-            } else if (HasJavaAttr(fd)) {
-                // For JavaScript or Java FFI variable-length arguments.
-                tyInArgOrder.emplace_back(tyMgr.GetAnyTy());
             } else {
                 // Cangjie's variable-length arguments are handled by `ChkVariadicCallExpr`.
                 // The number of arguments mismatches the number of parameters here.

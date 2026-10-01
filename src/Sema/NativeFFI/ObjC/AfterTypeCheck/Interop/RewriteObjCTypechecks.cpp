@@ -31,7 +31,7 @@ bool ShouldDesugarTypecheck(Ptr<Type> type, Ptr<Expr> expr)
     // then will be desugared as regular is/as
     auto castDecl = DynamicCast<ClassLikeDecl>(Ty::GetDeclOfTy(type->GetTy()));
     auto objDecl = DynamicCast<ClassLikeDecl>(Ty::GetDeclOfTy(expr->GetTy()));
-    if (!objDecl || !castDecl || !castDecl->TestAnyAttr(Attribute::OBJ_C_IMPL, Attribute::OBJ_C_MIRROR)) {
+    if (!objDecl || !castDecl || !castDecl->TestAnyAttr(Attribute::OBJ_C_EXPORT, Attribute::OBJ_C_FOREIGN)) {
         return false;
     }
 
@@ -205,7 +205,7 @@ std::vector<Ptr<TypePattern>> CollectTypePatternWithObjCClass(Ptr<Pattern> pat)
         if (auto tpat = As<ASTKind::TYPE_PATTERN>(node.get())) {
             auto decl = Ty::GetDeclOfTy(tpat->type->GetTy());
 
-            if (decl && decl->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_IMPL)) {
+            if (decl && decl->TestAnyAttr(Attribute::OBJ_C_FOREIGN, Attribute::OBJ_C_EXPORT)) {
                 if (!IsObjCId(*decl)) {
                     res.push_back(tpat);
                 }

@@ -99,12 +99,12 @@ const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::COMMON_NON_EXHAUSTIVE, "COMMON_NON_EXHAUSTIVE"},
     {AST::Attribute::SPECIFIC, "SPECIFIC"},
     {AST::Attribute::COMMON_WITH_DEFAULT, "COMMON_WITH_DEFAULT"},
-    {AST::Attribute::JAVA_MIRROR, "JAVA_MIRROR"},
-    {AST::Attribute::JAVA_IMPL, "JAVA_IMPL"},
+    {AST::Attribute::JAVA_FOREIGN, "JAVA_FOREIGN"},
+    {AST::Attribute::JAVA_EXPORT, "JAVA_EXPORT"},
     {AST::Attribute::JAVA_HAS_DEFAULT, "JAVA_HAS_DEFAULT"},
-    {AST::Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER, "JAVA_MIRROR_SYNTHETIC_WRAPPER"},
-    {AST::Attribute::OBJ_C_MIRROR, "OBJ_C_MIRROR"},
-    {AST::Attribute::OBJ_C_IMPL, "OBJ_C_IMPL"},
+    {AST::Attribute::JAVA_FOREIGN_SYNTHETIC_WRAPPER, "JAVA_FOREIGN_SYNTHETIC_WRAPPER"},
+    {AST::Attribute::OBJ_C_FOREIGN, "OBJ_C_FOREIGN"},
+    {AST::Attribute::OBJ_C_EXPORT, "OBJ_C_EXPORT"},
     {AST::Attribute::OBJ_C_INIT, "OBJ_C_INIT"},
     {AST::Attribute::OBJ_C_OPTIONAL, "OBJ_C_OPTIONAL"},
     /*
@@ -122,9 +122,9 @@ const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
      * This attribute exists for compatibility persistance only and could be considered for removal.
      */
     {AST::Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD, "CJ_MIRROR_JAVA_INTERFACE_FWD(deprecated)"},
-    {AST::Attribute::DESUGARED_MIRROR_FIELD, "DESUGARED_MIRROR_FIELD"},
+    {AST::Attribute::DESUGARED_FOREIGN_FIELD, "DESUGARED_FOREIGN_FIELD"},
     {AST::Attribute::HAS_INITED_FIELD, "HAS_INITED_FIELD"},
-    {AST::Attribute::OBJ_C_MIRROR_INTERFACE_HANDLE_WRAPPER, "OBJ_C_MIRROR_INTERFACE_HANDLE_WRAPPER"},
+    {AST::Attribute::OBJ_C_FOREIGN_INTERFACE_HANDLE_WRAPPER, "OBJ_C_FOREIGN_INTERFACE_HANDLE_WRAPPER"},
     /*
      * deprecated: reverse-direction interop has been removed.
      * This attribute exists for compatibility persistance only and could be considered for removal.
@@ -136,10 +136,10 @@ const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
      */
     {AST::Attribute::CJ_MIRROR_OBJC_INTERFACE_FWD, "CJ_MIRROR_OBJC_INTERFACE_FWD(deprecated)"},
     {AST::Attribute::ALREADY_LOADED, "ALREADY_LOADED"},
-    {AST::Attribute::JAVA_IMPL_REGISTRY_COMPANION, "JAVA_IMPL_REGISTRY_COMPANION"},
+    {AST::Attribute::JAVA_EXPORT_REGISTRY_COMPANION, "JAVA_EXPORT_REGISTRY_COMPANION"},
     {AST::Attribute::DOES_NOT_THROW, "DOES_NOT_THROW"},
-    {AST::Attribute::OBJ_C_IMPL_REGISTRY_COMPANION, "OBJ_C_IMPL_REGISTRY_COMPANION"},
-    {AST::Attribute::OBJ_C_IMPL_MOVED_MEMBER_PROXY, "OBJ_C_IMPL_MOVED_MEMBER_PROXY"},
+    {AST::Attribute::OBJ_C_EXPORT_REGISTRY_COMPANION, "OBJ_C_EXPORT_REGISTRY_COMPANION"},
+    {AST::Attribute::OBJ_C_EXPORT_MOVED_MEMBER_PROXY, "OBJ_C_EXPORT_MOVED_MEMBER_PROXY"},
     {AST::Attribute::AST_ATTR_END, "AST_ATTR_END"},
 };
 UNSUPPRESS_WARNING()
