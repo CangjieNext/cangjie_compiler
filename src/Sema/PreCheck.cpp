@@ -1172,7 +1172,7 @@ void TypeChecker::TypeCheckerImpl::AddSuperClassObjectForClassDecl(ASTContext& c
             continue;
         }
 
-        if (cd->IsJavaMirror() || cd->IsJavaImpl()) {
+        if (cd->IsJavaForeign() || cd->IsJavaExport()) {
             if (!AddJObjectSuperClassJavaInterop(ctx, *cd)) {
                 AddObjectSuperClass(ctx, *cd);
             }
@@ -1188,7 +1188,7 @@ void TypeChecker::TypeCheckerImpl::AddSuperInterfaceForClassLikeDecl(ASTContext&
     std::vector<Symbol*> syms = SearchSymbol::GetAllDecls(ctx);
     for (auto& sym : syms) {
         CJC_ASSERT(sym && sym->node);
-        if (!sym->node->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_IMPL)) {
+        if (!sym->node->TestAnyAttr(Attribute::OBJ_C_FOREIGN, Attribute::OBJ_C_EXPORT)) {
             continue;
         }
 

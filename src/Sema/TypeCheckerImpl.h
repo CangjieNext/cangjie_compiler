@@ -1320,7 +1320,6 @@ private:
     void CheckFinalizer(const AST::FuncDecl& fd);
     void CheckOperatorOverloadFunc(const AST::FuncDecl& fd);
     void HandIndexOperatorOverload(const AST::FuncDecl& fd, const AST::FuncTy& funcTy);
-    bool NeedCheckBodyReturn(const AST::FuncBody& fb) const;
     void CheckAnnotations(ASTContext& ctx, AST::Decl& decl);
     void CheckAnnotationDecl(ASTContext& ctx, AST::Annotation& ann);
     void CheckJavaHasDefaultAnnotation(AST::Annotation& ann, const AST::Decl& decl) const;

@@ -1942,10 +1942,10 @@ TEST(ToStringTest, ConstructedIsExportedDeclBranches)
 TEST(ToStringTest, ConstructedClassLikeJavaMirrors)
 {
     auto cd = MakeOwned<ClassDecl>();
-    cd->MarkAsJavaMirror();
-    EXPECT_TRUE(cd->TestAttr(Attribute::JAVA_MIRROR));
-    cd->MarkAsJavaImpl();
-    EXPECT_TRUE(cd->TestAttr(Attribute::JAVA_IMPL));
+    cd->MarkAsJavaForeign();
+    EXPECT_TRUE(cd->TestAttr(Attribute::JAVA_FOREIGN));
+    cd->MarkAsJavaExport();
+    EXPECT_TRUE(cd->TestAttr(Attribute::JAVA_EXPORT));
 }
 
 TEST(ToStringTest, ConstructedGetMemberDeclPtrs)

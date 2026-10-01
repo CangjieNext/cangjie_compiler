@@ -25,7 +25,7 @@ JavaMemberSignature JavaMemberSignature::FromMethod(const FuncDecl& method)
     CJC_ASSERT(method.outerDecl && method.outerDecl->IsClassLikeDecl());
     CJC_ASSERT(!method.TestAnyAttr(Attribute::CONSTRUCTOR, Attribute::FINALIZER));
     auto& outerDecl = *StaticAs<ASTKind::CLASS_LIKE_DECL>(method.outerDecl);
-    CJC_ASSERT(outerDecl.IsJavaMirror() || outerDecl.IsJavaImpl());
+    CJC_ASSERT(outerDecl.IsJavaForeign() || outerDecl.IsJavaExport());
 
     JavaMemberSignature signature(
         /* .classSignature = */ JavaClassSignature::FromDecl(outerDecl),
@@ -43,7 +43,7 @@ JavaMemberSignature JavaMemberSignature::FromConstructor(const FuncDecl& ctor, b
     CJC_ASSERT(ctor.outerDecl && ctor.outerDecl->IsClassLikeDecl());
     CJC_ASSERT(ctor.TestAttr(Attribute::CONSTRUCTOR));
     auto& outerDecl = *StaticAs<ASTKind::CLASS_LIKE_DECL>(ctor.outerDecl);
-    CJC_ASSERT(outerDecl.IsJavaMirror() || outerDecl.IsJavaImpl());
+    CJC_ASSERT(outerDecl.IsJavaForeign() || outerDecl.IsJavaExport());
 
     static auto& voidTy = *TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*ctor.funcBody->paramLists[0]);
@@ -61,7 +61,7 @@ JavaMemberSignature JavaMemberSignature::FromProperty(const PropDecl& member)
 {
     CJC_ASSERT(member.outerDecl && member.outerDecl->IsClassLikeDecl());
     auto& outerDecl = *StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl);
-    CJC_ASSERT(outerDecl.IsJavaMirror() || outerDecl.IsJavaImpl());
+    CJC_ASSERT(outerDecl.IsJavaForeign() || outerDecl.IsJavaExport());
 
     JavaMemberSignature signature(
         /* .classSignature = */ JavaClassSignature::FromDecl(outerDecl),

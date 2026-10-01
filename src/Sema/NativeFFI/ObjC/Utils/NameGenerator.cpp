@@ -140,9 +140,13 @@ std::string NameGenerator::GetFieldSetterWrapperName(const VarDeclAbstract& targ
 Ptr<std::string> NameGenerator::GetUserDefinedObjCName(const Decl& target)
 {
     for (auto& anno : target.annotations) {
-        if (anno->kind != AnnotationKind::OBJ_C_MIRROR && anno->kind != AnnotationKind::OBJ_C_IMPL &&
-            anno->kind != AnnotationKind::FOREIGN_NAME) {
-            continue;
+        switch (anno->kind) {
+            case AnnotationKind::OBJ_C_MIRROR:
+            case AnnotationKind::OBJ_C_IMPL:
+            case AnnotationKind::OBJ_C:
+            case AnnotationKind::FOREIGN_NAME:
+                break;
+            default: continue; // look for next annotation
         }
 
         // A broken annotation (e.g. more than one argument) has already been diagnosed by the parser,

@@ -60,7 +60,7 @@ bool IsObjCCompatible(const Ty& ty, TypePosition pos) noexcept
             return false;
         case TypeKind::TYPE_CLASS:
         case TypeKind::TYPE_INTERFACE:
-            if (IsObjCMirror(ty) || IsObjCImpl(ty)) {
+            if (IsObjCForeign(ty) || IsObjCExport(ty)) {
                 return true;
             }
             if (IsObjCBlock(ty)) {
@@ -74,7 +74,7 @@ bool IsObjCCompatible(const Ty& ty, TypePosition pos) noexcept
                 return false;
             };
             CJC_ASSERT(ty.typeArgs[0]);
-            if (IsObjCMirror(*ty.typeArgs[0]) || IsObjCImpl(*ty.typeArgs[0])) {
+            if (IsObjCForeign(*ty.typeArgs[0]) || IsObjCExport(*ty.typeArgs[0])) {
                 return true;
             }
             return false;
@@ -91,27 +91,22 @@ bool IsObjCObjectType(const Ty& ty) noexcept
         CJC_ASSERT_WITH_MSG(ty.typeArgs.size() == 1, "Option<T> has exactly one type arg");
         return IsObjCObjectType(*ty.typeArgs[0]);
     }
-    return IsObjCMirror(ty) || IsObjCImpl(ty) || IsObjCMirrorInterfaceHandleWrapper(ty);
+    return IsObjCForeign(ty) || IsObjCExport(ty) || IsObjCForeignInterfaceHandleWrapper(ty);
 }
 
-bool IsObjCMirror(const Decl& decl) noexcept
-{
-    return decl.TestAttr(Attribute::OBJ_C_MIRROR);
-}
-
-bool IsObjCMirror(const Ty& ty) noexcept
+bool IsObjCForeign(const Ty& ty) noexcept
 {
     const auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty);
-    return classLikeTy && classLikeTy->commonDecl && IsObjCMirror(*classLikeTy->commonDecl);
+    return classLikeTy && classLikeTy->commonDecl && classLikeTy->commonDecl->IsObjCForeign();
 }
 
-bool IsObjCMirrorSubtype(const Decl& decl) noexcept
+bool IsObjCForeignSubtype(const Decl& decl) noexcept
 {
     const auto ty = decl.GetTy();
-    return IsObjCMirrorSubtype(*ty);
+    return IsObjCForeignSubtype(*ty);
 }
 
-bool IsObjCMirrorSubtype(const Ty& ty) noexcept
+bool IsObjCForeignSubtype(const Ty& ty) noexcept
 {
     if (const auto interfaceTy = DynamicCast<InterfaceTy*>(&ty)) {
         return HasObjCMirrorSuperInterface(*interfaceTy->declPtr);
@@ -127,13 +122,13 @@ bool IsObjCMirrorSubtype(const Ty& ty) noexcept
         return hasMirrorSuperInterface;
     }
 
-    return IsObjCMirrorSubtype(*classTy->GetSuperClassTy()) || IsObjCMirror(*classTy->GetSuperClassTy());
+    return IsObjCForeignSubtype(*classTy->GetSuperClassTy()) || IsObjCForeign(*classTy->GetSuperClassTy());
 }
 
 bool IsValidObjCMirror(const Ty& ty) noexcept
 {
     const auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty);
-    if (!classLikeTy || !classLikeTy->commonDecl || !IsObjCMirror(*classLikeTy->commonDecl)) {
+    if (!classLikeTy || !classLikeTy->commonDecl || !classLikeTy->commonDecl->IsObjCForeign()) {
         return false;
     }
 
@@ -176,37 +171,37 @@ bool IsValidObjCMirrorSubtype(const Ty& ty) noexcept
     return IsValidObjCMirrorSubtype(*classTy->GetSuperClassTy()) || IsValidObjCMirror(*classTy->GetSuperClassTy());
 }
 
-bool IsObjCImpl(const ClassDecl& decl) noexcept
+bool IsObjCExport(const ClassDecl& decl) noexcept
 {
-    return decl.TestAttr(Attribute::OBJ_C_IMPL);
+    return decl.TestAttr(Attribute::OBJ_C_EXPORT);
 }
 
-bool IsObjCImpl(const Ty& ty) noexcept
+bool IsObjCExport(const Ty& ty) noexcept
 {
     const auto classTy = DynamicCast<ClassTy*>(&ty);
-    return classTy && classTy->declPtr && IsObjCImpl(*classTy->declPtr);
+    return classTy && classTy->declPtr && classTy->declPtr->IsObjCExport();
 }
 
-bool IsObjCMirrorInterfaceHandleWrapper(const ClassDecl& decl) noexcept
+bool IsObjCForeignInterfaceHandleWrapper(const ClassDecl& decl) noexcept
 {
-    return decl.TestAttr(Attribute::OBJ_C_MIRROR_INTERFACE_HANDLE_WRAPPER);
+    return decl.TestAttr(Attribute::OBJ_C_FOREIGN_INTERFACE_HANDLE_WRAPPER);
 }
 
-bool IsObjCMirrorInterfaceHandleWrapper(const Ty& ty) noexcept
-{
-    const auto classTy = DynamicCast<ClassTy*>(&ty);
-    return classTy && classTy->declPtr && IsObjCMirrorInterfaceHandleWrapper(*classTy->declPtr);
-}
-
-bool IsObjCImplRegistryCompanion(const Decl& decl) noexcept
-{
-    return decl.TestAttr(Attribute::OBJ_C_IMPL_REGISTRY_COMPANION);
-}
-
-bool IsObjCImplRegistryCompanion(const Ty& ty) noexcept
+bool IsObjCForeignInterfaceHandleWrapper(const Ty& ty) noexcept
 {
     const auto classTy = DynamicCast<ClassTy*>(&ty);
-    return classTy && classTy->declPtr && IsObjCImplRegistryCompanion(*classTy->declPtr);
+    return classTy && classTy->declPtr && IsObjCForeignInterfaceHandleWrapper(*classTy->declPtr);
+}
+
+bool IsObjCExportRegistryCompanion(const Decl& decl) noexcept
+{
+    return decl.TestAttr(Attribute::OBJ_C_EXPORT_REGISTRY_COMPANION);
+}
+
+bool IsObjCExportRegistryCompanion(const Ty& ty) noexcept
+{
+    const auto classTy = DynamicCast<ClassTy*>(&ty);
+    return classTy && classTy->declPtr && IsObjCExportRegistryCompanion(*classTy->declPtr);
 }
 
 namespace {
@@ -324,12 +319,12 @@ bool IsNSString(const ClassDecl& cd) noexcept
 
 Ptr<ClassDecl> GetObjCMirrorInterfaceHandleWrapper(ImportManager& importManager, const InterfaceDecl& decl) noexcept
 {
-    CJC_ASSERT(IsObjCMirror(*decl.GetTy()));
+    CJC_ASSERT(IsObjCForeign(*decl.GetTy()));
     auto handleWrapper =
         importManager.GetImportedDecl<ClassDecl>(decl.fullPackageName, NameGenerator::GenerateHandleWrapperName(decl));
 
     CJC_NULLPTR_CHECK(handleWrapper);
-    CJC_ASSERT(IsObjCMirrorInterfaceHandleWrapper(*handleWrapper));
+    CJC_ASSERT(IsObjCForeignInterfaceHandleWrapper(*handleWrapper));
 
     return Ptr(handleWrapper);
 }
@@ -337,7 +332,7 @@ Ptr<ClassDecl> GetObjCMirrorInterfaceHandleWrapper(ImportManager& importManager,
 bool HasObjCMirrorSuperInterface(const ClassLikeDecl& decl) noexcept
 {
     for (auto parentTy : decl.GetSuperInterfaceTys()) {
-        if (IsObjCMirror(*parentTy)) {
+        if (IsObjCForeign(*parentTy)) {
             return true;
         }
     }
@@ -348,11 +343,11 @@ bool HasObjCMirrorSuperInterface(const ClassLikeDecl& decl) noexcept
 Ptr<ClassDecl> GetObjCMirrorSuperClass(const ClassDecl& decl) noexcept
 {
     auto superClass = decl.GetSuperClassDecl();
-    if (superClass && IsObjCMirror(*superClass->GetTy())) {
+    if (superClass && IsObjCForeign(*superClass->GetTy())) {
         return superClass;
     }
 
-    if (superClass && IsObjCImpl(*superClass->GetTy())) {
+    if (superClass && IsObjCExport(*superClass->GetTy())) {
         return GetObjCMirrorSuperClass(*superClass);
     }
 
@@ -366,9 +361,9 @@ bool HasObjCMirrorSuperClass(const ClassDecl& decl) noexcept
 
 Ptr<ClassDecl> GetObjCImplSuperClass(const ClassDecl& decl) noexcept
 {
-    CJC_ASSERT_WITH_MSG(IsObjCImpl(decl), "only @ObjCImpl can inherit @ObjCImpl");
+    CJC_ASSERT_WITH_MSG(decl.IsObjCExport(), "only exported '@ObjC' can inherit exported '@ObjC'");
     auto superCd = decl.GetSuperClassDecl();
-    if (!superCd || !IsObjCImpl(*superCd)) {
+    if (!superCd || !superCd->IsObjCExport()) {
         return nullptr;
     }
     return superCd;
@@ -382,7 +377,7 @@ bool HasObjCImplSuperClass(const ClassDecl& decl) noexcept
 Ptr<ClassDecl> GetObjCImplRegistryCompanionSuperClass(const ClassDecl& decl) noexcept
 {
     auto superClass = decl.GetSuperClassDecl();
-    if (superClass && IsObjCImplRegistryCompanion(*superClass->GetTy())) {
+    if (superClass && IsObjCExportRegistryCompanion(*superClass->GetTy())) {
         return superClass;
     }
     return nullptr;
@@ -434,17 +429,17 @@ Ptr<VarDecl> GetNativeHandleField(const ClassDecl& decl) noexcept
 
 Ptr<VarDecl> GetObjCImplRegCompanionField(const ClassDecl& decl) noexcept
 {
-    return GetMemberDecl<ASTKind::VAR_DECL>(decl, IsObjCImplRegistryCompanionField);
+    return GetMemberDecl<ASTKind::VAR_DECL>(decl, IsObjCExportRegistryCompanionField);
 }
 
-bool IsObjCImplRegistryCompanionField(const Decl& decl) noexcept
+bool IsObjCExportRegistryCompanionField(const Decl& decl) noexcept
 {
     return decl.identifier == REGISTRY_COMPANION_FIELD_IDENT;
 }
 
-bool IsObjCImplMovedMemberProxy(const Decl& decl) noexcept
+bool IsObjCExportMovedMemberProxy(const Decl& decl) noexcept
 {
-    return decl.TestAttr(Attribute::OBJ_C_IMPL_MOVED_MEMBER_PROXY);
+    return decl.TestAttr(Attribute::OBJ_C_EXPORT_MOVED_MEMBER_PROXY);
 }
 
 Ptr<FuncDecl> GetFinalizer(const ClassDecl& decl) noexcept
@@ -548,38 +543,38 @@ Ptr<ClassDecl> GetOwnerClass(const Decl& decl) noexcept
     return As<ASTKind::CLASS_DECL>(decl.outerDecl);
 }
 
-bool IsObjCMirrorBaseCtor(const FuncDecl& fd) noexcept
+bool IsObjCForeignBaseCtor(const FuncDecl& fd) noexcept
 {
     auto owner = GetOwnerClass(fd);
-    if (!owner || !IsObjCMirror(*owner)) {
+    if (!owner || !owner->IsObjCForeign()) {
         return false;
     }
 
     return HasObjCMirrorBaseCtorSignature(fd) || (HasNativeHandleBaseCtorSignature(fd) && IsLegacyObjCMirror(*owner));
 }
 
-bool IsObjCMirrorInterfaceHandleWrapperBaseCtor(const FuncDecl& fd) noexcept
+bool IsObjCForeignInterfaceHandleWrapperBaseCtor(const FuncDecl& fd) noexcept
 {
     auto owner = GetOwnerClass(fd);
-    return owner && IsObjCMirrorInterfaceHandleWrapper(*owner) && HasNativeHandleBaseCtorSignature(fd);
+    return owner && IsObjCForeignInterfaceHandleWrapper(*owner) && HasNativeHandleBaseCtorSignature(fd);
 }
 
-bool IsObjCImplRegCompanionBaseCtor(const FuncDecl& fd) noexcept
+bool IsObjCExportRegCompanionBaseCtor(const FuncDecl& fd) noexcept
 {
     auto owner = GetOwnerClass(fd);
-    return owner && IsObjCImplRegistryCompanion(*owner) && HasNativeHandleBaseCtorSignature(fd);
+    return owner && IsObjCExportRegistryCompanion(*owner) && HasNativeHandleBaseCtorSignature(fd);
 }
 
-bool IsObjCImplBaseCtor(const FuncDecl& fd) noexcept
+bool IsObjCExportBaseCtor(const FuncDecl& fd) noexcept
 {
     auto owner = GetOwnerClass(fd);
-    return owner && IsObjCImpl(*owner) && HasObjCImplBaseCtorSignature(fd);
+    return owner && owner->IsObjCExport() && HasObjCImplBaseCtorSignature(fd);
 }
 
 bool IsBaseCtor(const FuncDecl& fd) noexcept
 {
-    return IsObjCImplBaseCtor(fd) || IsObjCMirrorBaseCtor(fd) || IsObjCMirrorInterfaceHandleWrapperBaseCtor(fd) ||
-        IsObjCImplRegCompanionBaseCtor(fd);
+    return IsObjCExportBaseCtor(fd) || IsObjCForeignBaseCtor(fd) || IsObjCForeignInterfaceHandleWrapperBaseCtor(fd) ||
+        IsObjCExportRegCompanionBaseCtor(fd);
 }
 
 Ptr<FuncDecl> GetBaseCtor(const ClassDecl& decl) noexcept
@@ -589,25 +584,25 @@ Ptr<FuncDecl> GetBaseCtor(const ClassDecl& decl) noexcept
 
 Ptr<FuncDecl> GetObjCMirrorInterfaceHandleWrapperBaseCtor(const ClassDecl& handleWrapper) noexcept
 {
-    return GetMemberDecl<ASTKind::FUNC_DECL>(handleWrapper, IsObjCMirrorInterfaceHandleWrapperBaseCtor);
+    return GetMemberDecl<ASTKind::FUNC_DECL>(handleWrapper, IsObjCForeignInterfaceHandleWrapperBaseCtor);
 }
 
 Ptr<FuncDecl> GetObjCMirrorBaseCtor(const ClassDecl& decl) noexcept
 {
-    return GetMemberDecl<ASTKind::FUNC_DECL>(decl, IsObjCMirrorBaseCtor);
+    return GetMemberDecl<ASTKind::FUNC_DECL>(decl, IsObjCForeignBaseCtor);
 }
 
 Ptr<FuncDecl> GetObjCImplBaseCtor(const ClassDecl& decl) noexcept
 {
-    return GetMemberDecl<ASTKind::FUNC_DECL>(decl, IsObjCImplBaseCtor);
+    return GetMemberDecl<ASTKind::FUNC_DECL>(decl, IsObjCExportBaseCtor);
 }
 
 Ptr<FuncDecl> GetObjCImplRegCompanionBaseCtor(const ClassDecl& decl) noexcept
 {
-    return GetMemberDecl<ASTKind::FUNC_DECL>(decl, IsObjCImplRegCompanionBaseCtor);
+    return GetMemberDecl<ASTKind::FUNC_DECL>(decl, IsObjCExportRegCompanionBaseCtor);
 }
 
-bool IsObjCImplRegDataCtor(const FuncDecl& fd) noexcept
+bool IsObjCExportRegDataCtor(const FuncDecl& fd) noexcept
 {
     constexpr size_t regDataElemCount = 2;
     auto params = GetCtorParams(fd);
@@ -619,7 +614,7 @@ bool IsObjCImplRegDataCtor(const FuncDecl& fd) noexcept
     // is what keeps the signature unwritable by a user and so tells this ctor apart from the one it clones.
     auto regDataTy = DynamicCast<TupleTy*>(params->front()->GetTy());
     return regDataTy && regDataTy->typeArgs.size() == regDataElemCount &&
-        IsObjCImplRegistryCompanion(*regDataTy->typeArgs[1]);
+        IsObjCExportRegistryCompanion(*regDataTy->typeArgs[1]);
 }
 
 Ptr<FuncDecl> GetObjCImplRegDataCtor(const ClassDecl& impl, const FuncDecl& origin) noexcept
@@ -629,7 +624,7 @@ Ptr<FuncDecl> GetObjCImplRegDataCtor(const ClassDecl& impl, const FuncDecl& orig
 
     for (auto& member : impl.GetMemberDeclPtrs()) {
         auto fd = As<ASTKind::FUNC_DECL>(member);
-        if (!fd || !IsObjCImplRegDataCtor(*fd)) {
+        if (!fd || !IsObjCExportRegDataCtor(*fd)) {
             continue;
         }
 
@@ -659,9 +654,9 @@ Ptr<FuncDecl> GetObjCImplRegDataCtor(const ClassDecl& impl, const FuncDecl& orig
     return nullptr;
 }
 
-bool IsObjCImplUserCtor(const FuncDecl& fd) noexcept
+bool IsObjCExportUserCtor(const FuncDecl& fd) noexcept
 {
-    return fd.TestAttr(Attribute::CONSTRUCTOR) && !IsObjCImplBaseCtor(fd) && !IsObjCImplRegDataCtor(fd);
+    return fd.TestAttr(Attribute::CONSTRUCTOR) && !IsObjCExportBaseCtor(fd) && !IsObjCExportRegDataCtor(fd);
 }
 
 bool IsGeneratedNSStringCtor(const FuncDecl& fd) noexcept
@@ -708,7 +703,7 @@ bool IsGeneratedMember(const Decl& decl) noexcept
         return true;
     }
 
-    if (IsNativeHandleGetter(decl) || IsObjCImplRegistryCompanionField(decl)) {
+    if (IsNativeHandleGetter(decl) || IsObjCExportRegistryCompanionField(decl)) {
         return true;
     }
 
@@ -717,7 +712,7 @@ bool IsGeneratedMember(const Decl& decl) noexcept
     }
 
     const auto fd = DynamicCast<FuncDecl*>(&decl);
-    return fd && (IsBaseCtor(*fd) || IsObjCImplRegDataCtor(*fd) || IsGeneratedStringConversion(*fd));
+    return fd && (IsBaseCtor(*fd) || IsObjCExportRegDataCtor(*fd) || IsGeneratedStringConversion(*fd));
 }
 
 bool IsObjCCompatibleFuncTy(const Ty& ty) noexcept

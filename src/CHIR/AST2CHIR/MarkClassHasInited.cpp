@@ -14,29 +14,29 @@
 using namespace Cangjie::CHIR;
 
 namespace {
-bool IsObjCMirror(const ClassDef& classDef)
+bool IsObjCForeign(const ClassDef& classDef)
 {
-    return classDef.TestAttr(Attribute::OBJ_C_MIRROR);
+    return classDef.TestAttr(Attribute::OBJ_C_FOREIGN);
 }
 
-bool IsJavaMirror(const ClassDef& classDef)
+bool IsJavaForeign(const ClassDef& classDef)
 {
-    return classDef.TestAttr(Attribute::JAVA_MIRROR);
+    return classDef.TestAttr(Attribute::JAVA_FOREIGN);
 }
 
-bool IsObjCImpl(const ClassDef& classDef)
+bool IsObjCExport(const ClassDef& classDef)
 {
-    return classDef.TestAttr(Attribute::OBJ_C_IMPL);
+    return classDef.TestAttr(Attribute::OBJ_C_EXPORT);
 }
 
 bool IsMirror(const ClassDef& classDef)
 {
-    return IsObjCMirror(classDef) || IsJavaMirror(classDef);
+    return IsObjCForeign(classDef) || IsJavaForeign(classDef);
 }
 
 bool HasInitedGeneratedFromAST(const ClassDef& classDef)
 {
-    return IsMirror(classDef) || IsObjCImpl(classDef);
+    return IsMirror(classDef) || IsObjCExport(classDef);
 }
 } // namespace
 

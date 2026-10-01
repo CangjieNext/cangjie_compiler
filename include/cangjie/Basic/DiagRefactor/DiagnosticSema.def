@@ -193,38 +193,7 @@ ERROR(sema_inout_modify_heap_variable,
 ERROR(sema_inout_can_only_used_in_cfunc_calling, "'inout' can only be used in a 'CFunc' calling")
 ERROR(sema_inout_mismatch, "mismatch 'inout' of function argument with type '%s'")
 
-// Java interoperation
 ERROR(sema_annotation_error_arg_num, "'%s' should have %s arg")
-ERROR(sema_annotation_error_arg_range, "'%s' only supports %s as arg")
-ERROR(sema_annotation_error_object, "'%s' can only modify %s")
-ERROR(sema_java_incorrect_use_between_types,
-    "type annotated with '@Java[\"ext\"]' can only be used within the declaration which has '@Java[\"ext\"]' "
-    "annotation")
-ERROR(sema_java_non_jtype, "%s type in %s '%s' with '@Java' must meet JType constraint")
-ERROR(sema_java_invalid_unit, "%s type in %s '%s' with '@Java' can not be 'Unit'")
-ERROR(sema_java_app_inherit_ext,
-    "only types annotated with '@Java[\"ext\"] can %s from a type annotated with '@Java[\"ext\"]'")
-ERROR(sema_java_unsupported_decl, "%s is not supported in %s '%s' annotated with '@Java'")
-ERROR(sema_missing_java_interop_annotation, "%s '%s' should have '@Java' annotation")
-ERROR(sema_generic_static_access, "cannot access static member with generic parameter in '@Java' types")
-ERROR(sema_primitive_type_as_generics_arg, "only reference types are available for '@Java' generics")
-ERROR(sema_meet_constraint_indirectly, "types that meet constraints by 'extend' cannot be used in '@Java' generics")
-ERROR(
-    sema_static_member_in_interface_must_has_body, "static functions in '@Java'-annotated interfaces must have a body")
-ERROR(sema_extend_a_java_type, "types annotated with '@Java' cannot be extended")
-ERROR(sema_generic_upper_bounds_must_be_java_in_java,
-    "generic type's upper bound in types annotated with '@Java' should be annotated with '@Java' too")
-ERROR(sema_define_java_annotation, "types annotated with '@Java' cannot be annotated with '@Annotation' together")
-ERROR(
-    sema_invalid_use_of_java_annotation, "imported Java annotations can only be used with types annotated with '@Java'")
-ERROR(
-    sema_invalid_use_of_annotation_jffi, "only imported Java annotations can be used with types annotated with '@Java'")
-ERROR(sema_annotation_not_applicable_jffi, "'@%s' not applicable to %s")
-ERROR(sema_cannot_use_annotation_jffi, "cannot use annotation here")
-ERROR(sema_shadow_cannot_in_type_args,
-    "'%s' is not allowd to be used here as type argument, because it shadows field '%s' with its super type '%s'")
-ERROR(sema_unsupported_type_argument_in_java_interop,
-    "type argument in java interoperation should meet 'JType' constraint")
 
 // VArray
 ERROR(sema_varray_size_match, "mismatch 'VArray' type's size", "expected size is %s, found %s")
@@ -320,63 +289,61 @@ ERROR(sema_common_generic_frozen_not_supported, "common/specific declaration %s 
 ERROR(sema_common_generic_rename_not_supported, "common/specific generic rename is not supported yet")
 ERROR(sema_common_specific_annotation_not_allowed, "annotation %s is not allowed on a common/specific declaration")
 
-// java mirror
-ERROR(sema_java_mirror_ctor_arg_must_be_java_mirror, "argument type of java-mirrored constructor must be of @JavaMirror type")
-ERROR(sema_java_mirror_method_arg_must_be_java_mirror, "argument type of java-mirrored function must be of @JavaMirror type")
-ERROR(sema_java_mirror_method_ret_unsupported, "return type '%s' of function inside %s class is not supported")
-ERROR(sema_java_mirror_prop_must_be_java_mirror, "property of java-mirrored declaration must be of @JavaMirror type")
-ERROR(sema_java_mirror_subtype_must_be_annotated, "super declaration '%s' is inheritable only for declaration annotated with @JavaMirror or @JavaImpl")
-ERROR(sema_java_mirror_cannot_inherit_pure_cangjie_type, "@JavaMirror-annotated declaration cannot inherit pure cangjie type")
-ERROR(sema_java_impl_cannot_inherit_pure_cangjie_type, "@JavaImpl-annotated declaration cannot inherit pure cangjie type")
-ERROR(sema_java_mirror_subtype_anno_must_inherit_mirror, "@JavaImpl-annotated declaration must inherit @JavaMirror-annotated declaration")
-ERROR(sema_java_mirror_cannot_be_extended_with_interface, "@JavaMirror class cannot be extended with interface")
-ERROR(sema_java_impl_cannot_be_extended_with_interface, "@JavaImpl class cannot be extended with interface")
+// Java interoperability
+ERROR(sema_java_mirror_ctor_arg_must_be_java_mirror, "parameter type of initializer in %s declaration must be java-compatible", "'%s' is not java-compatible type")
+ERROR(sema_java_mirror_method_arg_must_be_java_mirror, "parameter type of member function in %s declaration must be java-compatible", "'%s' is not java-compatible type")
+ERROR(sema_java_mirror_method_ret_unsupported, "return type of member function in %s declaration must be java-compatible", "'%s' is not java-compatible type")
+ERROR(sema_java_mirror_prop_must_be_java_mirror, "type of member variable in '@Java' foreign declaration must be java-compatible", "'%s' is not java-compatible type")
+ERROR(sema_java_impl_prop_must_be_java_compatible, "type of member property in exported '@Java' declaration must be java-compatible", "'%s' is not java-compatible type")
+ERROR(sema_java_mirror_subtype_must_be_annotated, "only foreign or exported '@Java' declaration can inherit super java declaration '%s'", "'%s' must be annotated with either '@Java' or '@Java foreign'")
+ERROR(sema_java_mirror_cannot_inherit_pure_cangjie_type, "'@Java' foreign declaration cannot inherit non-java type")
+ERROR(sema_java_impl_cannot_inherit_pure_cangjie_type, "exported '@Java' declaration cannot inherit non-java type")
+ERROR(sema_java_mirror_subtype_anno_must_inherit_mirror, "exported '@Java' declaration can only inherit '@Java' foreign type")
+ERROR(sema_java_mirror_cannot_be_extended_with_interface, "'@Java' foreign class cannot be extended with interface")
+ERROR(sema_java_impl_cannot_be_extended_with_interface, "exported '@Java' class cannot be extended with interface")
 ERROR(sema_java_impl_redefinition, "redefinition of java declaration '%s'")
-ERROR(sema_java_mirror_interoplib_must_be_imported, "java.lang must be imported to use java interoperability")
+ERROR(sema_java_mirror_interoplib_must_be_imported, "'java.lang' must be imported to use java interoperability")
 ERROR(sema_java_interop_not_supported, "Java interoperability feature '%s' is not yet supported")
-ERROR(sema_extend_ref_target_cannot_be_java_impl, "extend declaration ref target cannot be java impl")
-ERROR(sema_generic_parameter_of_java_type, "Can not instantiate generic '%s' with java interoperability type '%s'")
+ERROR(sema_generic_parameter_of_java_type, "'@Java %s' type cannot be used on generic declaration '%s'")
 WARNING(sema_java_interoplib_version_too_old, UNGROUPED,
-    "java.internal runtime version cannot be determined, compiler was built expecting version '%s'. "
+    "'java.internal' runtime version cannot be determined, compiler was built expecting version '%s'. "
     "Compatibility problems could happen. Use it at your own risk")
 WARNING(sema_java_interoplib_version_mismatch, UNGROUPED,
-    "java.internal runtime version is '%s', but compiler was built expecting version '%s'. "
+    "'java.internal' runtime version is '%s', but compiler was built expecting version '%s'. "
     "Compatibility problems could happen. Use it at your own risk")
 
-ERROR(sema_java_has_default_annotation_args, "'@JavaHasDefault' can't have arguments")
-ERROR(sema_java_has_default_annotation_is_in_wrong_place, "'@JavaHasDefault' can be used only on @JavaMirror interface methods.")
-ERROR(sema_java_has_default_conflict_with_static, "Illegal combination of '@JavaHasDefault' annotation and 'static' modifier.")
+ERROR(sema_java_has_default_annotation_is_in_wrong_place, "'@JavaHasDefault' can only be used on member functions in '@Java' foreign interface")
+ERROR(sema_java_has_default_conflict_with_static, "Illegal combination of '@JavaHasDefault' annotation and 'static' modifier")
 
-// Objective-C mirror
-ERROR(sema_objc_interop_ctor_param_must_be_objc_compatible, "param type of %s constructor must be Objective-C compatible")
-ERROR(sema_objc_interop_method_param_must_be_objc_compatible, "param type of %s method must be Objective-C compatible")
-ERROR(sema_objc_interop_method_ret_must_be_objc_compatible, "return type of %s method must be Objective-C compatible")
-ERROR(sema_objc_interop_prop_must_be_objc_compatible, "%s property type must be Objective-C compatible")
-ERROR(sema_objc_interop_field_must_be_objc_compatible, "%s field type must be Objective-C compatible")
-ERROR(sema_objc_mirror_decl_cannot_inherit, "Objective-C mirror cannot inherit other supertypes")
-ERROR(sema_objc_mirror_subtype_cannot_multiple_inherit, "Objective-C mirror subtype cannot inherit multiple types (only 1 interface or 1 class is allowed)")
-ERROR(sema_objc_mirror_subtype_must_be_annotated, "Objective-C mirror subtype must be annotated with @ObjCMirror or @ObjCImpl")
-ERROR(sema_objc_mirror_interface_subtype_must_be_annotated, "interface inheriting @ObjCMirror interface must be annotated with @ObjCMirror")
-ERROR(sema_objc_mirror_subtype_must_inherit_mirror, "@ObjCImpl declaration must inherit @ObjCMirror")
-ERROR(sema_objc_mirror_must_inherit_mirror, "@ObjCMirror declaration cannot inherit not @ObjCMirror declarations")
-ERROR(sema_objc_mirror_interoplib_must_be_imported, "objc.lang must be imported to use Objective-C interoperability")
+// Objective-C interoperability
+ERROR(sema_objc_interop_ctor_param_must_be_objc_compatible, "parameter type of initializer in %s declaration must be Objective-C compatible", "'%s' is not Objective-C compatible type")
+ERROR(sema_objc_interop_method_param_must_be_objc_compatible, "parameter type of member function in %s declaration must be Objective-C compatible", "'%s' is not Objective-C compatible type")
+ERROR(sema_objc_interop_method_ret_must_be_objc_compatible, "return type of member function in %s declaration must be Objective-C compatible", "'%s' is not Objective-C compatible type")
+ERROR(sema_objc_interop_prop_must_be_objc_compatible, "type of member property in %s declaration must be Objective-C compatible", "'%s' is not Objective-C compatible type")
+ERROR(sema_objc_interop_field_must_be_objc_compatible, "type of member variable in %s declaration must be Objective-C compatible", "'%s' is not Objective-C compatible type")
+ERROR(sema_objc_mirror_subtype_must_be_annotated, "only foreign or exported '@ObjC' declaration can inherit super Objective-C declaration", "'%s' must be annotated with either '@ObjC' or '@ObjC foreign'")
+ERROR(sema_objc_mirror_interface_subtype_must_be_annotated, "only '@ObjC' foreign interface can inherit super '@ObjC' foreign interface", "'%s' must be annotated with '@ObjC foreign'")
+ERROR(sema_objc_mirror_subtype_must_inherit_mirror, "exported '@ObjC' declaration must inherit either foreign or exported '@ObjC' type")
+ERROR(sema_objc_mirror_must_inherit_mirror, "'@ObjC' foreign declaration can only inherit other '@ObjC' foreign type")
+ERROR(sema_objc_mirror_interoplib_must_be_imported, "'objc.lang' must be imported to use Objective-C interoperability")
 ERROR(sema_objc_interop_not_supported, "Objective-C interoperability feature '%s' is not yet supported")
-ERROR(sema_objc_pointer_argument_must_be_objc_compatible, "ObjCPointer can only be used with Objective-C compatible types")
-ERROR(sema_objc_interop_toplevel_param_must_be_objc_compatible, "param type of Objective-C mirror top-level function '%s' must be Objective-C compatible")
-ERROR(sema_objc_interop_toplevel_ret_must_be_objc_compatible, "return type of Objective-C mirror top-level function '%s' must be Objective-C compatible")
+ERROR(sema_objc_pointer_argument_must_be_objc_compatible, "'ObjCPointer' can only be used with Objective-C compatible type")
+ERROR(sema_objc_interop_toplevel_param_must_be_objc_compatible, "parameter type of top-level '@ObjC' foreign function '%s' must be Objective-C compatible", "'%s' is not Objective-C compatible type")
+ERROR(sema_objc_interop_toplevel_ret_must_be_objc_compatible, "return type of top-level '@ObjC' foreign function '%s' must be Objective-C compatible", "'%s' is not Objective-C compatible type")
 ERROR(sema_objc_method_must_have_foreign_name,
-    "%s declaration method '%s' with more than one parameter must have @ForeignName annotation",
-    "%s declaration method with more than one parameter must have must have @ForeignName annotation")
+    "member function '%s' in %s declaration must be annotated with '@ForeignName'",
+    "member function with more than one parameter must be annotated with '@ForeignName'")
 ERROR(sema_objc_ctor_must_have_foreign_name,
-    "%s declaration constructor with more than one parameter must have @ForeignName annotation")
-ERROR(sema_objc_func_argument_must_be_objc_compatible, "%s can only be used with function type over Objective-C compatible types")
-ERROR(sema_objc_func_call_property_can_only_be_called, "%s property 'call' can only be called directly, no other operations are permitted")
-ERROR(sema_objc_impl_must_have_objc_mirror_super_class, "@ObjCImpl class must have @ObjCMirror super class")
-ERROR(sema_objc_setter_name_on_immutable_prop, "@ForeignSetterName cannot be specified on immutable property")
+    "initializer in %s declaration must be annotated with '@ForeignName'",
+    "initializer with more than one parameter must be annotated with '@ForeignName'")
+ERROR(sema_objc_func_argument_must_be_objc_compatible, "'%s' can only be used with function type over Objective-C compatible types")
+ERROR(sema_objc_func_call_property_can_only_be_called, "'%s' property 'call' can only be called directly, no other operations are permitted")
+ERROR(sema_objc_impl_must_have_objc_mirror_super_class, "exported '@ObjC' class can only inherit '@ObjC' foreign class")
+ERROR(sema_objc_setter_name_on_immutable_prop, "'@ForeignSetterName' cannot be specified on immutable property")
 
-ERROR(sema_foreign_name_appeared_in_child, "@%s could not appear on overridden declaration")
-ERROR(sema_foreign_name_conflicting_annotation, "Declaration '%s' has a conflicting @%s annotation")
-ERROR(sema_foreign_name_conflicting_derived_annotation, "Declaration '%s' has a conflicting derived @%s '%s'")
+ERROR(sema_foreign_name_appeared_in_child, "'@%s' cannot be specified on overridden declaration")
+ERROR(sema_foreign_name_conflicting_annotation, "declaration '%s' has a conflicting '@%s' annotation")
+ERROR(sema_foreign_name_conflicting_derived_annotation, "declaration '%s' has a conflicting derived '@%s' '%s'")
 
 // @IfAvailable
 ERROR(sema_ifavailable_arg_no_name, "the first argument of @IfAvailable expression must have a name")

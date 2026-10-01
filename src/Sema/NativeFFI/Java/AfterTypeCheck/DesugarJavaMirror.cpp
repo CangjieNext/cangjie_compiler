@@ -237,7 +237,7 @@ void JavaDesugarManager::GenerateInMirrors(AfterTypeCheckContext& ctx, File& fil
 
     for (auto& decl : file.decls) {
         if (auto cldecl = As<ASTKind::CLASS_LIKE_DECL>(decl.get())) {
-            if (!cldecl->IsJavaMirror()) {
+            if (!cldecl->IsJavaForeign()) {
                 continue;
             }
             if (cldecl->TestAttr(Attribute::IS_BROKEN)) {

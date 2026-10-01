@@ -359,13 +359,16 @@ enum class Attribute {
     SRC_IMPORTED,
 
     /**
-     * Mark whether a node is foreign call.
-     * W: Parser, AST2CHIR.
-     * R: Parser, ImportManager, Sema, AST2CHIR, HLIRCodeGen.
+     * Mark whether a node is foreign java call.
+     * Attribute is deprecated because it is not used anymore.
+     * Could be considered for removal with any other compatibility-breaking changes in the attributes structure.
+     * W: -
+     * R: - (before deprecation: Parser, ImportManager, Sema, AST2CHIR, HLIRCodeGen).
      */
-    JAVA_APP,
-    JAVA_EXT,
-
+    JAVA_APP [[deprecated("this attribute is not a part of cjnative"
+        "This attribute exists for compatibility persistance only and could be considered for removal")]],
+    JAVA_EXT [[deprecated("this attribute is not a part of cjnative"
+        "This attribute exists for compatibility persistance only and could be considered for removal")]],
     /**
      * Mark whether a node is std call.
      * W: Parser.
@@ -564,43 +567,43 @@ enum class Attribute {
     COMMON_WITH_DEFAULT,
 
     /**
-     * Mark whether a class is java mirror (binding for a java class).
+     * Mark whether a declaration is a foreign java type.
      * W: Parser.
      * R: Sema.
      */
-    JAVA_MIRROR,
+    JAVA_FOREIGN,
     /**
-     * Mark whether a class is java impl (successor of java mirror exported to java).
+     * Mark whether a class is a class exported to java.
      * W: Parser, Sema.
      * R: Sema.
      */
-    JAVA_IMPL,
+    JAVA_EXPORT,
 
     /**
-     * Mark whether a function of @JavaMirror interface has default implementation on java side.
+     * Mark whether a function of '@Java foreign' interface has default implementation on java side.
      * W: Parser.
      * R: Sema.
      */
     JAVA_HAS_DEFAULT,
 
     /**
-     * Mark whether a class is a synthetic wrapper class generated for every mirror interface and abstract class.
+     * Mark whether a class is a synthetic wrapper class generated for every foreign interface and abstract class.
      * W: Sema.
      * R: Sema.
      */
-    JAVA_MIRROR_SYNTHETIC_WRAPPER,
+    JAVA_FOREIGN_SYNTHETIC_WRAPPER,
     /**
-     * Mark whether a class is an Objective-C mirror (binding for a Objective-C class).
+     * Mark whether a declaration is a foreign Objective-C type.
      * W: Parser.
      * R: Sema.
      */
-    OBJ_C_MIRROR,
+    OBJ_C_FOREIGN,
     /**
-     * Mark whether a Cangjie class is exported to Objective-C (successor of an Objective-C mirror).
+     * Mark whether a class is a class exported to Objective-C.
      * W: Parser.
      * R: Sema.
      */
-    OBJ_C_IMPL,
+    OBJ_C_EXPORT,
     /**
      * Marks whether a cangjie method is an Objective-C init.
      * W: Parser.
@@ -647,12 +650,12 @@ enum class Attribute {
         "This attribute exists for compatibility persistance only and could be considered for removal")]],
 
     /**
-     * Mark whether a node is a desugared mirror field decl.
+     * Mark whether a node is a desugared field of foreign `@Java` or `@ObjC` declaration.
      * Usually the node is a prop decl.
      * W: Parser.
      * R: Sema.
      */
-    DESUGARED_MIRROR_FIELD,
+    DESUGARED_FOREIGN_FIELD,
 
     /**
      * Mark whether a node is a special flag, which marks the class instance as initialized.
@@ -663,11 +666,11 @@ enum class Attribute {
     HAS_INITED_FIELD,
 
     /**
-     * Mark whether a class is a handle wrapper class generated for each mirror interface.
+     * Mark whether a class is a handle wrapper class generated for each foreign Objective-C interface.
      * W: Sema.
      * R: Sema.
      */
-    OBJ_C_MIRROR_INTERFACE_HANDLE_WRAPPER,
+    OBJ_C_FOREIGN_INTERFACE_HANDLE_WRAPPER,
 
     /**
      * Mark whether a function in interface-forward class is a default implementation of cj-mapping interface.
@@ -699,11 +702,11 @@ enum class Attribute {
     ALREADY_LOADED,
 
     /**
-     * Mark whether a class is a registry companion class generated for every impl class.
+     * Mark whether a class is a registry companion class generated for every exported Java declaration.
      * W: Sema.
      * R: Sema.
      */
-    JAVA_IMPL_REGISTRY_COMPANION,
+    JAVA_EXPORT_REGISTRY_COMPANION,
 
     /**
      * Mark that the function does not throw any exceptions.
@@ -714,21 +717,21 @@ enum class Attribute {
     DOES_NOT_THROW,
 
     /**
-     * Mark whether a class is a registry companion class generated for each @ObjCImpl declaration.
+     * Mark whether a class is a registry companion class generated for every exported Objective-C declaration.
      * W: Sema.
      * R: Sema.
      */
-    OBJ_C_IMPL_REGISTRY_COMPANION,
+    OBJ_C_EXPORT_REGISTRY_COMPANION,
 
     /**
-     * Mark a member of an @ObjCImpl that stands in for one moved to the registry companion: the property a
+     * Mark a member of an exported '@ObjC' that stands in for one moved to the registry companion: the property a
      * moved field is now read through, its accessors, and the forwarder left behind by a moved static
      * function. Such a member is a desugaring of what the user wrote, so the rules that tell a property from
      * a field must keep seeing the field.
      * W: Sema.
      * R: Sema.
      */
-    OBJ_C_IMPL_MOVED_MEMBER_PROXY,
+    OBJ_C_EXPORT_MOVED_MEMBER_PROXY,
 
     AST_ATTR_END,
 };

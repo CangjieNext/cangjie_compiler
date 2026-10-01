@@ -271,29 +271,11 @@ void TypeChecker::TypeCheckerImpl::CheckCFuncType(ASTContext& ctx, const RefType
     CheckCFuncReturnType(*arg->retType);
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckRefExprCheckTyArgs(const RefType& rt, const Decl& target)
+bool TypeChecker::TypeCheckerImpl::CheckRefExprCheckTyArgs(const RefType& rt, [[maybe_unused]] const Decl& target)
 {
     bool skipFurther = false;
     if (rt.typeArguments.empty()) {
         skipFurther = true;
-    }
-    for (auto& type : rt.typeArguments) {
-        if (!HasJavaAttr(target)) {
-            continue;
-        }
-        if (auto prt = DynamicCast<RefType*>(type.get()); prt && prt->ref.target) {
-            auto tg = TypeCheckUtil::GetRealTarget(prt->ref.target);
-            if (tg && (HasJavaAttr(*tg) || tg->astKind == ASTKind::GENERIC_PARAM_DECL)) {
-                continue;
-            }
-        } else if (auto qt = DynamicCast<QualifiedType*>(type.get()); qt && qt->target) {
-            auto tgt = TypeCheckUtil::GetRealTarget(qt->target);
-            if (tgt && HasJavaAttr(*tgt)) {
-                continue;
-            }
-        }
-        skipFurther = true;
-        break;
     }
     return skipFurther;
 }

@@ -23,30 +23,29 @@ enum class TypePosition { IN, OUT, BOTH };
 
 bool IsObjCCompatible(const AST::Ty& ty, TypePosition pos = TypePosition::BOTH) noexcept;
 bool IsObjCObjectType(const AST::Ty& ty) noexcept;
-bool IsObjCMirror(const AST::Decl& decl) noexcept;
 /**
  * @note returns false for non ClassLike tys, e.g. for @ObjCMirror func.
  * Use AST::Decl overload instead.
  */
-bool IsObjCMirror(const AST::Ty& ty) noexcept;
-bool IsObjCMirrorSubtype(const AST::Decl& decl) noexcept;
-bool IsObjCMirrorSubtype(const AST::Ty& ty) noexcept;
+bool IsObjCForeign(const AST::Ty& ty) noexcept;
+bool IsObjCForeignSubtype(const AST::Decl& decl) noexcept;
+bool IsObjCForeignSubtype(const AST::Ty& ty) noexcept;
 /**
  * @returns true if @p ty is an @ObjCMirror whose whole super-type hierarchy consists of @ObjCMirror types.
  */
 bool IsValidObjCMirror(const AST::Ty& ty) noexcept;
 /**
  * @returns true if @p ty is a class whose super interfaces are all valid @ObjCMirror types and whose super class is
- * either a valid @ObjCMirror or such a class itself. Unlike `IsObjCMirrorSubtype`, a single non-mirror super type
+ * either a valid @ObjCMirror or such a class itself. Unlike `IsObjCForeignSubtype`, a single non-mirror super type
  * makes it false.
  */
 bool IsValidObjCMirrorSubtype(const AST::Ty& ty) noexcept;
-bool IsObjCImpl(const AST::ClassDecl& decl) noexcept;
-bool IsObjCImpl(const AST::Ty& ty) noexcept;
-bool IsObjCMirrorInterfaceHandleWrapper(const AST::ClassDecl& decl) noexcept;
-bool IsObjCMirrorInterfaceHandleWrapper(const AST::Ty& ty) noexcept;
-bool IsObjCImplRegistryCompanion(const AST::Decl& decl) noexcept;
-bool IsObjCImplRegistryCompanion(const AST::Ty& ty) noexcept;
+bool IsObjCExport(const AST::ClassDecl& decl) noexcept;
+bool IsObjCExport(const AST::Ty& ty) noexcept;
+bool IsObjCForeignInterfaceHandleWrapper(const AST::ClassDecl& decl) noexcept;
+bool IsObjCForeignInterfaceHandleWrapper(const AST::Ty& ty) noexcept;
+bool IsObjCExportRegistryCompanion(const AST::Decl& decl) noexcept;
+bool IsObjCExportRegistryCompanion(const AST::Ty& ty) noexcept;
 bool IsObjCPointer(const AST::Decl& decl) noexcept;
 bool IsObjCPointer(const AST::Ty& ty) noexcept;
 bool IsObjCFunc(const AST::Decl& decl) noexcept;
@@ -85,14 +84,14 @@ Ptr<AST::VarDecl> GetNativeHandleField(const AST::ClassDecl& decl) noexcept;
 Ptr<AST::ClassDecl> GetOwnerClass(const AST::Decl& decl) noexcept;
 
 Ptr<AST::VarDecl> GetObjCImplRegCompanionField(const AST::ClassDecl& decl) noexcept;
-bool IsObjCImplRegistryCompanionField(const AST::Decl& decl) noexcept;
+bool IsObjCExportRegistryCompanionField(const AST::Decl& decl) noexcept;
 
 /**
  * @returns true for a member left behind in an @ObjCImpl to stand in for one moved to its registry
  *          companion: the property a moved field is read through, either of its accessors, and the forwarder
  *          of a moved static function.
  */
-bool IsObjCImplMovedMemberProxy(const AST::Decl& decl) noexcept;
+bool IsObjCExportMovedMemberProxy(const AST::Decl& decl) noexcept;
 
 /**
  * @returns the first member of @p decl of AST kind @p K satisfying @p pred, or nullptr if there is none.
@@ -150,7 +149,7 @@ Ptr<AST::FuncDecl> GetBaseCtor(const AST::ClassDecl& decl) noexcept;
 /**
  * @note @ObjCMirror class base ctor signature -> init(NativeObjCId, NativeObjCIdMarker)
  */
-bool IsObjCMirrorBaseCtor(const AST::FuncDecl& fd) noexcept;
+bool IsObjCForeignBaseCtor(const AST::FuncDecl& fd) noexcept;
 /**
  * @note @ObjCMirror class base ctor signature -> init(NativeObjCId, NativeObjCIdMarker)
  */
@@ -159,7 +158,7 @@ Ptr<AST::FuncDecl> GetObjCMirrorBaseCtor(const AST::ClassDecl& decl) noexcept;
 /**
  * @note @ObjCMirror interface handle wrapper base ctor signature -> init(NativeObjCId)
  */
-bool IsObjCMirrorInterfaceHandleWrapperBaseCtor(const AST::FuncDecl& fd) noexcept;
+bool IsObjCForeignInterfaceHandleWrapperBaseCtor(const AST::FuncDecl& fd) noexcept;
 /**
  * @note @ObjCMirror interface handle wrapper base ctor signature -> init(NativeObjCId)
  */
@@ -168,7 +167,7 @@ Ptr<AST::FuncDecl> GetObjCMirrorInterfaceHandleWrapperBaseCtor(const AST::ClassD
 /**
  * @note @ObjCImpl class base ctor signature -> init(NativeObjCId, RegistryId, NativeObjCIdMarker)
  */
-bool IsObjCImplBaseCtor(const AST::FuncDecl& fd) noexcept;
+bool IsObjCExportBaseCtor(const AST::FuncDecl& fd) noexcept;
 /**
  * @note @ObjCImpl class base ctor signature -> init(NativeObjCId, RegistryId, NativeObjCIdMarker)
  */
@@ -177,7 +176,7 @@ Ptr<AST::FuncDecl> GetObjCImplBaseCtor(const AST::ClassDecl& decl) noexcept;
 /**
  * @note @ObjCImpl reg companion class base ctor signature -> init(NativeObjCId)
  */
-bool IsObjCImplRegCompanionBaseCtor(const AST::FuncDecl& fd) noexcept;
+bool IsObjCExportRegCompanionBaseCtor(const AST::FuncDecl& fd) noexcept;
 /**
  * @note @ObjCImpl reg companion class base ctor signature -> init(NativeObjCId)
  */
@@ -186,13 +185,13 @@ Ptr<AST::FuncDecl> GetObjCImplRegCompanionBaseCtor(const AST::ClassDecl& decl) n
 /**
  * @note @ObjCImpl class regData ctor signature -> init((NativeObjCId, Impl$reg), ...args)
  */
-bool IsObjCImplRegDataCtor(const AST::FuncDecl& fd) noexcept;
+bool IsObjCExportRegDataCtor(const AST::FuncDecl& fd) noexcept;
 /**
  * @note @ObjCImpl class regData ctor signature -> init((NativeObjCId, Impl$reg), ...args)
  */
 Ptr<AST::FuncDecl> GetObjCImplRegDataCtor(const AST::ClassDecl& impl, const AST::FuncDecl& origin) noexcept;
 
-bool IsObjCImplUserCtor(const AST::FuncDecl& fd) noexcept;
+bool IsObjCExportUserCtor(const AST::FuncDecl& fd) noexcept;
 
 bool IsGeneratedNSStringCtor(const AST::FuncDecl& fd) noexcept;
 bool IsGeneratedNSObjectToString(const AST::FuncDecl& fd) noexcept;

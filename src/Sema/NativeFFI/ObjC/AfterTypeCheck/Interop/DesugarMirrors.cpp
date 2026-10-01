@@ -55,7 +55,7 @@ void DesugarMirrors::HandleImpl(InteropContext& ctx)
                 }
                 case ASTKind::PROP_DECL: {
                     auto& pd = *StaticAs<ASTKind::PROP_DECL>(memberDecl);
-                    if (memberDecl->TestAttr(Attribute::DESUGARED_MIRROR_FIELD)) {
+                    if (memberDecl->TestAttr(Attribute::DESUGARED_FOREIGN_FIELD)) {
                         DesugarField(ctx, decl, pd);
                     } else {
                         DesugarProp(ctx, decl, pd);
