@@ -742,9 +742,10 @@ void StructInheritanceChecker::DiagnoseForInheritedMember(
         CheckInheritanceAttributes(parent, *child.decl);
         CheckPropertyInheritance(parent, *child.decl);
     } else if (parent.decl->IsFunc()) {
-        if (CheckImplementationRelation(parent, child)) {
-            CheckInheritanceAttributes(parent, *child.decl);
+        if (!CheckImplementationRelation(parent, child)) {
+            return;
         }
+        CheckInheritanceAttributes(parent, *child.decl);
     }
     CheckNativeFFI(parent, child);
 }
@@ -903,13 +904,14 @@ void StructInheritanceChecker::DiagnoseForInheritedInterfaces(
             CheckInheritanceForInterface(interface, child);
             CheckPropertyInheritance(interface, *child.decl);
         } else if (interface.decl->IsFunc()) {
-            if (CheckImplementationRelation(interface, child)) {
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-                CheckIncompleteOverrideOrImplOfExtend(interface, child);
-#endif
-                CheckInheritanceForInterface(interface, child);
-                CheckMutModifierCompatible(interface, *child.decl);
+            if (!CheckImplementationRelation(interface, child)) {
+                continue;
             }
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+            CheckIncompleteOverrideOrImplOfExtend(interface, child);
+#endif
+            CheckInheritanceForInterface(interface, child);
+            CheckMutModifierCompatible(interface, *child.decl);
         }
         CheckNativeFFI(interface, child);
     }

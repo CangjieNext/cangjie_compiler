@@ -138,6 +138,8 @@ MemberSignature StructInheritanceChecker::UpdateInheritedMemberIfNeeded(
             continue;
         }
         bool shouldUpdate = true;
+        bool sameStatus = parent.decl->TestAttr(Attribute::STATIC) == child.decl->TestAttr(Attribute::STATIC) &&
+                child.decl->TestAttr(Attribute::GENERIC) == parent.decl->TestAttr(Attribute::GENERIC);
         bool inconsistentType = needImplement && parent.ty != child.ty;
         if (parent.decl->IsFunc()) {
             if (child.decl->TestAttr(Attribute::GENERIC) && parent.decl->TestAttr(Attribute::GENERIC)) {
@@ -147,8 +149,6 @@ MemberSignature StructInheritanceChecker::UpdateInheritedMemberIfNeeded(
             }
             auto parentFuncTy = DynamicCast<FuncTy*>(parent.ty);
             auto childFuncTy = DynamicCast<FuncTy*>(child.ty);
-            bool sameStatus = parent.decl->TestAttr(Attribute::STATIC) == child.decl->TestAttr(Attribute::STATIC) &&
-                child.decl->TestAttr(Attribute::GENERIC) == parent.decl->TestAttr(Attribute::GENERIC);
             shouldUpdate = sameStatus && parentFuncTy && childFuncTy &&
                 typeManager.IsFuncParameterTypesIdentical(*parentFuncTy, *childFuncTy);
             auto consistent = ComputeInconsistentTypes(
@@ -158,8 +158,9 @@ MemberSignature StructInheritanceChecker::UpdateInheritedMemberIfNeeded(
             SetPossibleInconsistentType(parent, child, inconsistentTypes);
         }
 
-        CheckNativeFFI(parent, child);
-
+        if (sameStatus && shouldUpdate) {
+            CheckNativeFFI(parent, child);
+        }
         if (shouldUpdate) {
             if (parent.decl->TestAttr(Attribute::ABSTRACT) || !child.decl->TestAttr(Attribute::ABSTRACT)) {
                 it->second = updated; // Override stored value to child.
