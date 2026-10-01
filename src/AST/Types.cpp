@@ -43,18 +43,6 @@ template <typename TypeDeclT> size_t HashNominalTy(const TypeDeclT& ty)
     ret = hash_combine<Ptr<const Decl>>(ret, ty.declPtr);
     return ret;
 }
-
-bool IsJavaGeneric(const GenericParamDecl& gpd)
-{
-    if (gpd.outerDecl && HasJavaAttr(*gpd.outerDecl)) {
-        return true;
-    }
-    if (auto funcDecl = DynamicCast<FuncDecl*>(gpd.outerDecl); funcDecl && funcDecl->funcBody &&
-        funcDecl->funcBody->parentClassLike && HasJavaAttr(*funcDecl->funcBody->parentClassLike)) {
-        return true;
-    }
-    return false;
-}
 } // namespace
 
 size_t Ty::Hash() const
@@ -415,15 +403,6 @@ bool Ty::IsCString() const
 bool Ty::IsStruct() const
 {
     return kind == TypeKind::TYPE_STRUCT;
-}
-
-bool Ty::IsEraseGeneric() const
-{
-    if (IsGeneric()) {
-        auto ty = RawStaticCast<const GenericsTy*>(this);
-        return ty->isEraseMode;
-    }
-    return false;
 }
 
 bool Ty::IsClassLike() const
@@ -789,7 +768,7 @@ std::string UnionTy::String() const
 }
 
 GenericsTy::GenericsTy(const std::string& name, GenericParamDecl& gpd)
-    : Ty(TypeKind::TYPE_GENERICS), decl(&gpd), isEraseMode(IsJavaGeneric(gpd))
+    : Ty(TypeKind::TYPE_GENERICS), decl(&gpd)
 {
     this->name = name;
     this->generic = true;

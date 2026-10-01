@@ -516,13 +516,13 @@ OwnedPtr<Expr> InteropLibBridge::CreateJavaEntityCall(OwnedPtr<Expr> arg)
     }
 
     if (auto classLTy = DynamicCast<ClassLikeTy*>(arg->GetTy())) {
-        if (auto decl = classLTy->commonDecl; decl && (decl->IsJavaMirror() || decl->IsJavaImpl())) {
+        if (auto decl = classLTy->commonDecl; decl && (decl->IsJavaForeign() || decl->IsJavaExport())) {
             return CreateJavaRefCall(std::move(arg));
         }
     } else if (arg->GetTy()->IsCoreOptionType()) {
         CJC_ASSERT_WITH_MSG(!arg->GetTy()->typeArgs.empty(), "Option type must be generic");
         if (auto classALTy = DynamicCast<ClassLikeTy*>(arg->GetTy()->typeArgs[0])) {
-            if (auto decl = classALTy->commonDecl; decl && (decl->IsJavaMirror() || decl->IsJavaImpl())) {
+            if (auto decl = classALTy->commonDecl; decl && (decl->IsJavaForeign() || decl->IsJavaExport())) {
                 return CreateJavaEntityFromOptionMirror(std::move(arg), *decl);
             }
         }
@@ -1137,7 +1137,7 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaMirrorOption(
     CJC_ASSERT_WITH_MSG(!ty->typeArgs.empty(), "Option type must be generic");
     auto declTy = ty->typeArgs[0];
     auto decl = Ty::GetDeclOfTy(declTy);
-    CJC_ASSERT(decl->IsJavaMirror() || declTy->IsString() || (toRaw && decl->IsJavaImpl()));
+    CJC_ASSERT(decl->IsJavaForeign() || declTy->IsString() || (toRaw && decl->IsJavaExport()));
 
     auto actualTy = toRaw ? Ptr(&GetJniJobjectTy()) : ty;
 
@@ -1288,7 +1288,7 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty>
         CJC_ASSERT_WITH_MSG(!ty->typeArgs.empty(), "Option type must be generic");
         auto actualTy = ty->typeArgs[0];
         auto actualDecl = Ty::GetDeclOfTy(actualTy);
-        if (actualDecl->IsJavaMirror() || actualTy->IsString()) {
+        if (actualDecl->IsJavaForeign() || actualTy->IsString()) {
             return UnwrapJavaMirrorOption(std::move(entity), ty, scope, toRaw);
         }
 
@@ -1312,7 +1312,7 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty>
         return nullptr;
     }
 
-    if (decl->IsJavaMirror()) {
+    if (decl->IsJavaForeign()) {
         return CreateMirrorConstructorCall(importManager, std::move(entity), ty);
     } else {
         CJC_ASSERT(IsImpl(*decl));

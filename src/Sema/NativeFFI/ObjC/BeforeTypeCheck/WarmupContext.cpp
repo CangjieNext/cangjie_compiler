@@ -26,12 +26,12 @@ void WarmupContext::HandleImpl(PrepareTypeCheckContext& ctx)
             }
 
             if (auto classLikeDecl = As<ASTKind::CLASS_LIKE_DECL>(decl);
-                classLikeDecl && classLikeDecl->TestAttr(Attribute::OBJ_C_MIRROR)) {
+                classLikeDecl && classLikeDecl->TestAttr(Attribute::OBJ_C_FOREIGN)) {
                 ctx.mirrors.push_back(classLikeDecl);
             }
 
             if (auto classDecl = As<ASTKind::CLASS_DECL>(decl);
-                classDecl && classDecl->TestAttr(Attribute::OBJ_C_IMPL)) {
+                classDecl && classDecl->TestAttr(Attribute::OBJ_C_EXPORT)) {
                 ctx.impls.push_back(classDecl);
             }
         }

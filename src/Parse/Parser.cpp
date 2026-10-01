@@ -448,11 +448,11 @@ OwnedPtr<Decl> ParserImpl::ParsePropDecl(
 void ParserImpl::CheckClassLikePropAbstractness(AST::PropDecl& prop)
 {
     CJC_NULLPTR_CHECK(prop.outerDecl);
-    if (prop.outerDecl->IsJavaMirror()) {
+    if (prop.outerDecl->IsJavaForeign()) {
         prop.DisableAttr(Attribute::ABSTRACT);
         return;
     }
-    bool isJavaMirrorOrJavaImpl = prop.outerDecl->IsJavaMirror() || prop.outerDecl->IsJavaImpl();
+    bool isJavaMirrorOrJavaImpl = prop.outerDecl->IsJavaForeign() || prop.outerDecl->IsJavaExport();
     bool isCommon = prop.TestAttr(Attribute::COMMON);
     auto outerModifiers = prop.outerDecl->modifiers;
     bool inAbstract = HasModifier(outerModifiers, TokenKind::ABSTRACT);
@@ -460,7 +460,7 @@ void ParserImpl::CheckClassLikePropAbstractness(AST::PropDecl& prop)
     bool inAbstractCJMP = inAbstract && inCJMP;
     bool inClass = prop.outerDecl->astKind == ASTKind::CLASS_DECL;
     bool inAbstractCJMPClass = inAbstractCJMP && inClass;
-    bool inObjCMirror = prop.outerDecl->TestAttr(Attribute::OBJ_C_MIRROR);
+    bool inObjCMirror = prop.outerDecl->TestAttr(Attribute::OBJ_C_FOREIGN);
 
     if (HasModifier(prop.modifiers, TokenKind::ABSTRACT) && !isCommon && !inAbstractCJMP &&
         !isJavaMirrorOrJavaImpl) {

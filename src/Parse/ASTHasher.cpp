@@ -274,8 +274,8 @@ struct ASTHasherImpl {
         auto nonSemaAttr = {Attribute::ABSTRACT, Attribute::CONSTRUCTOR, Attribute::DEFAULT,
             Attribute::ENUM_CONSTRUCTOR, Attribute::INTERNAL, Attribute::FOREIGN, Attribute::COMMON,
             Attribute::SPECIFIC, Attribute::GENERIC, Attribute::GLOBAL,
-            Attribute::INTRINSIC, Attribute::JAVA_APP, Attribute::JAVA_MIRROR, Attribute::OBJ_C_MIRROR,
-            Attribute::OBJ_C_IMPL, Attribute::MACRO_FUNC,
+            Attribute::INTRINSIC, Attribute::JAVA_FOREIGN, Attribute::OBJ_C_FOREIGN,
+            Attribute::OBJ_C_EXPORT, Attribute::MACRO_FUNC,
             Attribute::MUT, Attribute::NUMERIC_OVERFLOW, Attribute::OPERATOR, Attribute::PRIVATE, Attribute::PUBLIC,
             Attribute::PROTECTED, Attribute::STATIC, Attribute::TOOL_ADD, Attribute::UNSAFE};
 
@@ -807,6 +807,7 @@ struct ASTHasherImpl {
             case AnnotationKind::JAVA:
             case AnnotationKind::JAVA_MIRROR:
             case AnnotationKind::JAVA_IMPL:
+            case AnnotationKind::OBJ_C:
             case AnnotationKind::OBJ_C_MIRROR:
             case AnnotationKind::OBJ_C_IMPL:
             case AnnotationKind::FOREIGN_NAME:
@@ -843,6 +844,7 @@ struct ASTHasherImpl {
             case AnnotationKind::JAVA:
             case AnnotationKind::JAVA_MIRROR:
             case AnnotationKind::JAVA_IMPL:
+            case AnnotationKind::OBJ_C:
             case AnnotationKind::OBJ_C_MIRROR:
             case AnnotationKind::OBJ_C_IMPL:
             case AnnotationKind::FOREIGN_NAME:

@@ -341,7 +341,7 @@ void DeclAttributeChecker::CheckAttributesForPropAndFuncDeclInClass(const ClassD
     bool invalidAbstract = member.TestAttr(Attribute::ABSTRACT) &&
         ((member.TestAttr(Attribute::STATIC) && !member.TestAttr(Attribute::FOREIGN)) ||
             (!cd.TestAttr(Attribute::ABSTRACT) && !cd.TestAttr(Attribute::FOREIGN)))
-            && !cd.TestAttr(Attribute::OBJ_C_MIRROR);
+            && !cd.TestAttr(Attribute::OBJ_C_FOREIGN);
     if (invalidAbstract && !member.TestAttr(Attribute::COMMON_WITH_DEFAULT)) {
         diag.Diagnose(member, DiagKind::sema_missing_func_body, type, member.identifier.Val());
     }
@@ -379,10 +379,10 @@ void DeclAttributeChecker::CheckAttributesForPropAndFuncDeclInClass(const ClassD
 
 void DeclAttributeChecker::CheckPropDeclAttributes(const PropDecl& pd) const
 {
-    if (pd.outerDecl && pd.outerDecl->TestAttr(Attribute::OBJ_C_MIRROR)) {
+    if (pd.outerDecl && pd.outerDecl->TestAttr(Attribute::OBJ_C_FOREIGN)) {
         return;
     }
-    if (pd.outerDecl && pd.outerDecl->IsJavaMirror()) {
+    if (pd.outerDecl && pd.outerDecl->IsJavaForeign()) {
         // property in java mirror does not have user-specified getters/setter.
         return;
     }

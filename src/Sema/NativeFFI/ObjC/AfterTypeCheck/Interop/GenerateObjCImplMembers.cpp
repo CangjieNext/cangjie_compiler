@@ -40,7 +40,7 @@ void GenerateObjCImplMembers::HandleImpl(InteropContext& ctx)
             if (!fd || !fd->TestAttr(Attribute::CONSTRUCTOR)) {
                 continue;
             }
-            if (IsObjCImplBaseCtor(*fd)) {
+            if (IsObjCExportBaseCtor(*fd)) {
                 continue;
             }
             userCtors.push_back(fd);
