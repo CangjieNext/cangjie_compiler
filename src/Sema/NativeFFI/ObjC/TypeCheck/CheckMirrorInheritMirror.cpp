@@ -26,7 +26,7 @@ namespace {
 bool IsValidObjCMirror(const Ty& ty) noexcept
 {
     const auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty);
-    if (!classLikeTy || !classLikeTy->commonDecl || !IsObjCMirror(*classLikeTy->commonDecl)) {
+    if (!classLikeTy || !classLikeTy->commonDecl || !classLikeTy->commonDecl->IsObjCForeign()) {
         return false;
     }
 

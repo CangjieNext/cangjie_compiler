@@ -19,14 +19,14 @@ using namespace Cangjie::Interop::ObjC;
 
 void CheckImplInheritMirror::HandleImpl(TypeCheckContext& ctx)
 {
-    if (!IsObjCImpl(*ctx.target.GetTy())) {
+    if (!IsObjCExport(*ctx.target.GetTy())) {
         return;
     }
 
     if (auto classTy = DynamicCast<ClassTy*>(ctx.target.GetTy()); classTy) {
         auto hasOnlyMirrorSuperInterfaces = classTy->GetSuperInterfaceTys().size() > 0;
         for (auto superInterfaceTy : classTy->GetSuperInterfaceTys()) {
-            if (!IsObjCMirror(*superInterfaceTy)) {
+            if (!IsObjCForeign(*superInterfaceTy)) {
                 hasOnlyMirrorSuperInterfaces = false;
                 break;
             }
@@ -38,7 +38,7 @@ void CheckImplInheritMirror::HandleImpl(TypeCheckContext& ctx)
         }
     }
 
-    if (IsObjCMirrorSubtype(*ctx.target.GetTy())) {
+    if (IsObjCForeignSubtype(*ctx.target.GetTy())) {
         return;
     }
 

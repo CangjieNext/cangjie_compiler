@@ -25,7 +25,7 @@ OwnedPtr<AST::ClassDecl> GenerateJavaImplRegistryCompanion::GenerateRegistryComp
 {
     CJC_ASSERT(IsImpl(impl));
     auto regCompanion = CloneClassSkeleton(impl, GetImplRegistryCompanionClassName(impl));
-    regCompanion->EnableAttr(Attribute::JAVA_IMPL_REGISTRY_COMPANION, Attribute::NO_REFLECT_INFO);
+    regCompanion->EnableAttr(Attribute::JAVA_EXPORT_REGISTRY_COMPANION, Attribute::NO_REFLECT_INFO);
 
     return regCompanion;
 }

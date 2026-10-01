@@ -536,14 +536,27 @@ struct Modifier : Node {
 };
 
 enum class AnnotationKind {
+    /**
+     * Indicate a declaration as Java declaration (CJMP/Interop).
+     * It is used either:
+     * - on foreign Java declarations in combination with 'foreign' modifier.
+     * - on exported Java declarations without 'foreign' modifier.
+     */
     JAVA,
+    /**
+     * Indicate a declaration as Objective-C declaration (CJMP/Interop).
+     * It is used either:
+     * - on foreign Objective-C declarations in combination with 'foreign' modifier.
+     * - on exported Objective-C declarations without 'foreign' modifier.
+     */
+    OBJ_C,
     CALLING_CONV,
     C,
-    JAVA_MIRROR,
-    JAVA_IMPL,
+    JAVA_MIRROR, // This annotation is deprecated. Consider migrating to `JAVA` + foreign.
+    JAVA_IMPL, // This annotation is deprecated. Consider migrating to `JAVA`.
     JAVA_HAS_DEFAULT,
-    OBJ_C_MIRROR,
-    OBJ_C_IMPL,
+    OBJ_C_MIRROR, // This annotation is deprecated. Consider migrating to `OBJ_C` + foreign.
+    OBJ_C_IMPL, // This annotation is deprecated. Consider migrating to `OBJ_C`.
     OBJ_C_INIT, // Indicate a method as Objective-C init.
     OBJ_C_OPTIONAL,
     FOREIGN_NAME,
@@ -1074,19 +1087,35 @@ struct Decl : Node {
     size_t GetGenericsCount() const;
 
     /**
-     * @return `true` if declaration is a java mirror (foreign java declaration).
+     * @return `true` if declaration is a foreign java declaration.
      */
-    bool IsJavaMirror() const
+    bool IsJavaForeign() const noexcept
     {
-        return TestAttr(Attribute::JAVA_MIRROR);
+        return TestAttr(Attribute::JAVA_FOREIGN);
     }
 
     /**
-     * @return `true` if declaration is a java impl (cangjie declaration exported to java).
+     * @return `true` if declaration is a declaration exported to java.
      */
-    bool IsJavaImpl() const
+    bool IsJavaExport() const noexcept
     {
-        return TestAttr(Attribute::JAVA_IMPL);
+        return TestAttr(Attribute::JAVA_EXPORT);
+    }
+
+    /**
+     * @return `true` if declaration is a foreign Objective-C declaration.
+     */
+    bool IsObjCForeign() const noexcept
+    {
+        return TestAttr(Attribute::OBJ_C_FOREIGN);
+    }
+    
+    /**
+     * @return `true` if declaration is a declaration exported to Objective-C.
+     */
+    bool IsObjCExport() const noexcept
+    {
+        return TestAttr(Attribute::OBJ_C_EXPORT);
     }
 
 protected:
@@ -1488,8 +1517,8 @@ struct InterfaceBody : Node {
  */
 struct ClassLikeDecl : InheritableDecl {
     std::set<Ptr<Decl>> subDecls; /**< A <: B ==>  B.subDecls = {A}. */
-    void MarkAsJavaMirror();
-    void MarkAsJavaImpl();
+    void MarkAsJavaForeign();
+    void MarkAsJavaExport();
 protected:
     ClassLikeDecl(ASTKind kind) : InheritableDecl(kind)
     {

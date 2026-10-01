@@ -61,7 +61,7 @@ void AfterTypeCheckASTTransformer::TransformToObjCImplStaticProxyFunc(
     CJC_ASSERT_WITH_MSG(origin.TestAttr(Attribute::STATIC), "expected static function to be proxied");
     CJC_ASSERT_WITH_MSG(!origin.funcBody->paramLists.empty(), "expected at least one param list");
 
-    proxy.EnableAttr(Attribute::OBJ_C_IMPL_MOVED_MEMBER_PROXY);
+    proxy.EnableAttr(Attribute::OBJ_C_EXPORT_MOVED_MEMBER_PROXY);
 
     auto& params = proxy.funcBody->paramLists[0]->params;
     std::vector<OwnedPtr<FuncArg>> originCallArgs;
@@ -86,7 +86,7 @@ void AfterTypeCheckASTTransformer::TransformToObjCImplProxyProp(
     pd.CloneAttrs(vd);
     pd.EnableAttr(Attribute::COMPILER_ADD);
     // Set before the accessors are filled in below, which clone the property's attributes.
-    pd.EnableAttr(Attribute::OBJ_C_IMPL_MOVED_MEMBER_PROXY);
+    pd.EnableAttr(Attribute::OBJ_C_EXPORT_MOVED_MEMBER_PROXY);
     pd.isVar = vd.isVar;
     pd.modifiers.insert(vd.modifiers.begin(), vd.modifiers.end());
     for (auto& anno : vd.annotations) {
@@ -215,9 +215,9 @@ void AfterTypeCheckASTTransformer::TransformToObjCImplBaseCtorBody(
     auto regIdParamRef = CreateRefExpr(*params[1]);
     auto superClass = impl.GetSuperClassDecl();
     ctorBody.body->body.clear();
-    if (IsObjCImpl(*superClass)) {
+    if (superClass->IsObjCExport()) {
         auto superCtor = GetObjCImplBaseCtor(*superClass);
-        CJC_ASSERT_WITH_MSG(superCtor, "expected base ctor in the @ObjCImpl class");
+        CJC_ASSERT_WITH_MSG(superCtor, "expected base ctor in the exported '@ObjC' class");
         auto superCtorCall = CreateSuperCall(*superClass, *superCtor, superCtor->GetTy());
         superCtorCall->args.push_back(CreateFuncArg(std::move(handleParamRef)));
         superCtorCall->args.push_back(CreateFuncArg(ASTCloner::Clone(regIdParamRef.get())));
@@ -225,7 +225,7 @@ void AfterTypeCheckASTTransformer::TransformToObjCImplBaseCtorBody(
         AppendNativeObjCIdMarkerIfNeeded(*superCtorCall, curFile);
         ctorBody.body->body.push_back(std::move(superCtorCall));
     } else {
-        CJC_ASSERT_WITH_MSG(IsObjCMirror(*superClass), "expected super class to be @ObjCMirror");
+        CJC_ASSERT_WITH_MSG(superClass->IsObjCForeign(), "expected super class to be @ObjCMirror");
         auto superCtor = GetObjCMirrorBaseCtor(*superClass);
         CJC_ASSERT_WITH_MSG(superCtor, "expected base ctor in the @ObjCMirror decl");
         auto superCtorCall = CreateSuperCall(*superClass, *superCtor, superCtor->GetTy());

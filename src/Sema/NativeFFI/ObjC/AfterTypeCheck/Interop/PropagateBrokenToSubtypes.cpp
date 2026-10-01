@@ -22,7 +22,7 @@ namespace {
 
 bool IsObjCClass(const ClassDecl& decl) noexcept
 {
-    return IsObjCImpl(decl) || IsObjCMirror(decl);
+    return decl.IsObjCExport() || decl.IsObjCForeign();
 }
 
 /**

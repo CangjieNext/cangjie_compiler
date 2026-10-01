@@ -220,10 +220,6 @@ struct Ty {
      * U: Sema, CodeGen, AST, CHIR
      */
     bool IsCString() const;
-    /** Return whether a ty is erase generic.
-     * U: Sema.
-     */
-    bool IsEraseGeneric() const;
     /** Return whether a ty is class like.
      * U: Sema, AST2CHIR, HLIRCodeGen, LLVMCodeGen.
      */
@@ -979,12 +975,6 @@ struct GenericsTy : public Ty {
      * U: Sema.
      */
     GenericsTy(const std::string& name, GenericParamDecl& gpd);
-    /**
-     * Mark whether decl is erased.
-     * W: Sema, AST2CHIR.
-     * R: Sema.
-     */
-    const bool isEraseMode;
     /**
      * The upperBounds of generic ty. After collecting assumptions, it will contain all direct
      * upper bounds and non-GenericsTy transitive upper bounds.

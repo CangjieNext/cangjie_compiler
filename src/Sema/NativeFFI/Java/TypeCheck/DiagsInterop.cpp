@@ -8,11 +8,6 @@
 
 namespace Cangjie::Interop::Java {
 
-void DiagJavaHasDefaultNoArgs(DiagnosticEngine& diag, const Node& node)
-{
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_java_has_default_annotation_args, node);
-}
-
 void DiagJavaHasDefaultIncorrectScope(DiagnosticEngine& diag, const Node& node)
 {
     diag.DiagnoseRefactor(DiagKindRefactor::sema_java_has_default_annotation_is_in_wrong_place, node);

@@ -1621,9 +1621,7 @@ void InitializationChecker::CheckInitInConstructors(FuncDecl& fd, const std::vec
         return; // If the function is broken, we can quit now.
     }
     if (fd.constructorCall == ConstructorCall::OTHER_INIT ||
-        (fd.funcBody->parentClassLike &&
-            (fd.funcBody->parentClassLike->TestAttr(Attribute::FOREIGN) ||
-                HasJavaAttr(*fd.funcBody->parentClassLike)))) {
+        (fd.funcBody->parentClassLike && fd.funcBody->parentClassLike->TestAttr(Attribute::FOREIGN))) {
         for (auto decl : unInitNonFuncDecls) {
             decl->EnableAttr(Attribute::INITIALIZED);
         }

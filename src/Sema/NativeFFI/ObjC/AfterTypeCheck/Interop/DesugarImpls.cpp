@@ -56,7 +56,7 @@ namespace {
 void DesugarSuperCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
 {
     // only super(...) in reg data ctor needs to be desugared
-    if (!IsObjCImplRegDataCtor(ctor)) {
+    if (!IsObjCExportRegDataCtor(ctor)) {
         return;
     }
     auto& ctorBody = ctor.funcBody->body->body;
@@ -84,7 +84,7 @@ void DesugarSuperCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
     auto regDataParamRef = CreateRefExpr(*ctorParams[0]);
     auto targetFd = ce->resolvedFunction;
     auto superClass = impl.GetSuperClassDecl();
-    if (IsObjCImpl(*superClass)) {
+    if (superClass->IsObjCExport()) {
         std::vector<OwnedPtr<FuncArg>> args;
         args.push_back(CreateFuncArg(ASTCloner::Clone(regDataParamRef.get())));
         args.insert(args.end(), std::make_move_iterator(ce->args.begin()), std::make_move_iterator(ce->args.end()));
@@ -96,7 +96,7 @@ void DesugarSuperCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
         superCall->sourceExpr = ce;
         ce->desugarExpr = std::move(superCall);
     } else {
-        CJC_ASSERT_WITH_MSG(IsObjCMirror(*superClass), "expected @ObjCMirror decl");
+        CJC_ASSERT_WITH_MSG(superClass->IsObjCForeign(), "expected @ObjCMirror decl");
         auto objCSelf = CreateTupleAccess(
             ASTCloner::Clone(regDataParamRef.get()), 0, TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64));
         objCSelf->curFile = curFile;
@@ -140,7 +140,7 @@ void DesugarSuperCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
 void DesugarThisCtorCall(ClassDecl& impl, FuncDecl& ctor)
 {
     // only this(...) in reg data ctor needs to be desugared
-    if (!IsObjCImplRegDataCtor(ctor)) {
+    if (!IsObjCExportRegDataCtor(ctor)) {
         return;
     }
     auto& ctorBody = ctor.funcBody->body->body;
@@ -225,11 +225,11 @@ void DesugarImpls::DesugarCallExpr(InteropContext& ctx, ClassDecl& impl, CallExp
     }
 
     auto targetFd = ce.resolvedFunction;
-    if (targetFd->propDecl && targetFd->propDecl->TestAttr(Attribute::DESUGARED_MIRROR_FIELD)) {
+    if (targetFd->propDecl && targetFd->propDecl->TestAttr(Attribute::DESUGARED_FOREIGN_FIELD)) {
         return;
     }
 
-    if (IsObjCMirrorBaseCtor(*targetFd)) {
+    if (IsObjCForeignBaseCtor(*targetFd)) {
         return;
     }
 
@@ -237,7 +237,7 @@ void DesugarImpls::DesugarCallExpr(InteropContext& ctx, ClassDecl& impl, CallExp
     auto curFile = ce.curFile;
 
     // method/prop branch
-    if (!IsObjCMirror(*targetFd->outerDecl->GetTy())) {
+    if (!IsObjCForeign(*targetFd->outerDecl->GetTy())) {
         // no need to desugar expr, if the target is not in the @ObjCMirror declaration
         return;
     }
@@ -291,7 +291,7 @@ void DesugarImpls::DesugarGetForPropDecl(InteropContext& ctx, ClassDecl& impl, M
     }
 
     auto target = ma.GetTarget();
-    if (!target || target->astKind != ASTKind::PROP_DECL || target->TestAttr(Attribute::DESUGARED_MIRROR_FIELD)) {
+    if (!target || target->astKind != ASTKind::PROP_DECL || target->TestAttr(Attribute::DESUGARED_FOREIGN_FIELD)) {
         return;
     }
 
@@ -305,7 +305,7 @@ void DesugarImpls::DesugarGetForPropDecl(InteropContext& ctx, ClassDecl& impl, M
     }
 
     auto pd = StaticAs<ASTKind::PROP_DECL>(target);
-    if (!IsObjCMirror(*pd->outerDecl->GetTy())) {
+    if (!IsObjCForeign(*pd->outerDecl->GetTy())) {
         return;
     }
     auto nativeHandle = ctx.factory.CreateNativeHandleExpr(impl, false, ma.curFile);
