@@ -180,7 +180,8 @@ void DesugarJArray::InsertConstructorBody(AfterTypeCheckContext& ctx, FuncDecl& 
     // Java_CFFI_JavaEntity($newObjectCall)
     auto javaref = ilib.CreateJavaEntityJobjectCall(std::move(newObjectCall));
     auto scopeBody = CreateBlock(Nodes(std::move(jniEnvVar), std::move(javaref)), ilib.GetJavaEntityTy());
-    auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, ilib, std::move(scopeBody), ilib.GetJavaEntityTy());
+    scopeBody->curFile = constr.curFile;
+    auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, std::move(scopeBody), ilib.GetJavaEntityTy());
 
     constr.constructorCall = ConstructorCall::OTHER_INIT;
 
