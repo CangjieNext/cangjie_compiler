@@ -10,12 +10,13 @@
 #include "cangjie/AST/Utils.h"
 #include "TypeCheckUtil.h"
 #include "NativeFFI/Utils.h"
-#include "InteropLibBridge.h"
+#include "Desugar/AfterTypeCheck.h"
 
 namespace Cangjie::Native::FFI::Java {
 
 using namespace AST;
-using InteropLibBridge = Cangjie::Interop::Java::InteropLibBridge;
+
+namespace {
 
 OwnedPtr<Expr> WrapWithExclusiveScopeBody(AfterTypeCheckContext& ctx, OwnedPtr<Block> body, Ptr<Ty> retTy)
 {
@@ -42,37 +43,226 @@ OwnedPtr<Expr> WrapWithExclusiveScopeBody(AfterTypeCheckContext& ctx, OwnedPtr<B
     auto args = Nodes<FuncArg>(CreateFuncArg(std::move(lambda)));
     auto realRetTy = StaticCast<FuncTy>(exclusiveRef->GetTy())->retTy;
 
-    return CreateCallExpr(std::move(exclusiveRef), std::move(args), exclusiveDecl,
+    auto call = CreateCallExpr(std::move(exclusiveRef), std::move(args), exclusiveDecl,
         realRetTy, CallKind::CALL_DECLARED_FUNCTION);
+    call->curFile = curFile;
+    return call;
 }
 
-OwnedPtr<Expr> WrapWithExclusiveScopeExceptionHandling(AfterTypeCheckContext& ctx, InteropLibBridge& lib,
+OwnedPtr<Expr> CreateCausedByGetterCall(AfterTypeCheckContext& ctx, VarDecl& scopeExDecl, File& curFile)
+{
+    auto causedByProp = CreateMemberAccess(WithinFile(CreateRefExpr(scopeExDecl), &curFile), "causedBy");
+    CJC_NULLPTR_CHECK(causedByProp);
+    CJC_NULLPTR_CHECK(causedByProp->GetTarget());
+
+    auto propDecl = StaticAs<ASTKind::PROP_DECL>(causedByProp->GetTarget());
+    CJC_NULLPTR_CHECK(propDecl);
+
+    auto getter = TypeCheckUtil::GetUsedMemberDecl(*propDecl, true);
+    CJC_NULLPTR_CHECK(getter);
+    CJC_ASSERT(getter->astKind == ASTKind::FUNC_DECL);
+
+    auto causedByBase = CreateMemberAccess(WithinFile(CreateRefExpr(scopeExDecl), &curFile), *getter);
+    CJC_NULLPTR_CHECK(causedByBase);
+
+    causedByBase->SetTy(ctx.typeManager.GetFunctionTy({}, causedByProp->GetTy()));
+
+    auto causedBy = CreateCallExpr(std::move(causedByBase), {});
+    CJC_NULLPTR_CHECK(causedBy);
+
+    causedBy->callKind = CallKind::CALL_DECLARED_FUNCTION;
+    causedBy->resolvedFunction = StaticCast<FuncDecl*>(getter);
+    causedBy->SetTy(causedByProp->GetTy());
+    causedBy->curFile = &curFile;
+
+    return causedBy;
+}
+
+OwnedPtr<Expr> CreateCausedByMatch(AfterTypeCheckContext& ctx, OwnedPtr<Expr> causedBy,
+    VarDecl& exDecl, Ptr<Ty> exceptionTy, File& curFile)
+{
+    CJC_NULLPTR_CHECK(causedBy);
+    CJC_ASSERT(causedBy->GetTy()->IsCoreOptionType());
+    auto optionTy = StaticCast<EnumTy*>(causedBy->GetTy());
+    auto someDecl = StaticCast<FuncDecl*>(Sema::Desugar::AfterTypeCheck::LookupEnumMember(
+        optionTy->declPtr, OPTION_VALUE_CTOR));
+    CJC_NULLPTR_CHECK(someDecl);
+    auto noneDecl = Sema::Desugar::AfterTypeCheck::LookupEnumMember(
+        optionTy->declPtr, OPTION_NONE_CTOR);
+    CJC_NULLPTR_CHECK(noneDecl);
+
+    // Build the Some($cause) case.
+    auto causePattern = CreateVarPattern("$cause", exceptionTy);
+    CJC_NULLPTR_CHECK(causePattern);
+    CJC_NULLPTR_CHECK(causePattern->varDecl);
+    causePattern->curFile = &curFile;
+    causePattern->varDecl->curFile = &curFile;
+    auto& causeDecl = *causePattern->varDecl;
+
+    auto someTy = ctx.typeManager.GetFunctionTy({exceptionTy}, optionTy);
+    CJC_NULLPTR_CHECK(someTy);
+
+    auto someRef = WithinFile(CreateRefExpr(*someDecl), &curFile);
+    someRef->SetTy(someTy);
+    someRef->instTys = optionTy->typeArgs;
+    someRef->ref.targets.emplace_back(someDecl);
+
+    auto somePattern = MakeOwned<EnumPattern>();
+    CJC_NULLPTR_CHECK(somePattern);
+    somePattern->constructor = std::move(someRef);
+    somePattern->patterns.emplace_back(std::move(causePattern));
+    somePattern->SetTy(optionTy);
+    somePattern->curFile = &curFile;
+
+    auto throwCause = MakeOwned<ThrowExpr>();
+    CJC_NULLPTR_CHECK(throwCause);
+    throwCause->expr = WithinFile(CreateRefExpr(causeDecl), &curFile);
+    throwCause->SetTy(TypeManager::GetNothingTy());
+    throwCause->curFile = &curFile;
+
+    // Build the None case.
+    auto noneRef = WithinFile(CreateRefExpr(*noneDecl), &curFile);
+    noneRef->SetTy(optionTy);
+    noneRef->instTys = optionTy->typeArgs;
+
+    auto nonePattern = MakeOwned<EnumPattern>();
+    CJC_NULLPTR_CHECK(nonePattern);
+    nonePattern->constructor = std::move(noneRef);
+    nonePattern->SetTy(optionTy);
+    nonePattern->curFile = &curFile;
+
+    auto throwEx = MakeOwned<ThrowExpr>();
+    CJC_NULLPTR_CHECK(throwEx);
+    throwEx->expr = WithinFile(CreateRefExpr(exDecl), &curFile);
+    throwEx->SetTy(TypeManager::GetNothingTy());
+    throwEx->curFile = &curFile;
+
+    std::vector<OwnedPtr<MatchCase>> cases;
+    cases.emplace_back(CreateMatchCase(std::move(somePattern), std::move(throwCause)));
+    cases.emplace_back(CreateMatchCase(std::move(nonePattern), std::move(throwEx)));
+
+    for (auto& matchCase : cases) {
+        CJC_NULLPTR_CHECK(matchCase);
+        matchCase->SetCtxExprForPatterns(causedBy.get());
+        matchCase->curFile = &curFile;
+    }
+
+    auto result = CreateMatchExpr(std::move(causedBy), std::move(cases), TypeManager::GetNothingTy());
+    return WithinFile(std::move(result), &curFile);
+}
+
+OwnedPtr<Expr> CreateExceptionDispatch(AfterTypeCheckContext& ctx, VarDecl& exDecl,
+    Ptr<Ty> exceptionTy, Ptr<Ty> scopeExceptionTy, File& curFile)
+{
+    auto exRef = WithinFile(CreateRefExpr(exDecl), &curFile);
+    exRef->SetTy(exceptionTy);
+
+    auto scopeExPattern = CreateVarPattern("$scopeEx", scopeExceptionTy);
+    CJC_NULLPTR_CHECK(scopeExPattern);
+    CJC_NULLPTR_CHECK(scopeExPattern->varDecl);
+    scopeExPattern->curFile = &curFile;
+    scopeExPattern->varDecl->curFile = &curFile;
+    auto& scopeExDecl = *scopeExPattern->varDecl;
+
+    auto scopeType = CreateType(scopeExceptionTy);
+    CJC_NULLPTR_CHECK(scopeType);
+    scopeType->curFile = &curFile;
+
+    auto scopeTypePattern = CreateTypePattern(std::move(scopeExPattern), std::move(scopeType), *exRef);
+    CJC_NULLPTR_CHECK(scopeTypePattern);
+
+    scopeTypePattern->matchBeforeRuntime = false;
+    scopeTypePattern->curFile = &curFile;
+
+    auto causedBy = CreateCausedByGetterCall(ctx, scopeExDecl, curFile);
+    CJC_NULLPTR_CHECK(causedBy);
+
+    auto unwrapScopeException = CreateCausedByMatch(ctx, std::move(causedBy), exDecl,
+        exceptionTy, curFile);
+    CJC_NULLPTR_CHECK(unwrapScopeException);
+
+    // _ => throw $ex
+    auto throwEx = MakeOwned<ThrowExpr>();
+    CJC_NULLPTR_CHECK(throwEx);
+    throwEx->expr = WithinFile(CreateRefExpr(exDecl), &curFile);
+    throwEx->SetTy(TypeManager::GetNothingTy());
+    throwEx->curFile = &curFile;
+
+    std::vector<OwnedPtr<MatchCase>> cases;
+    cases.emplace_back(CreateMatchCase(std::move(scopeTypePattern), std::move(unwrapScopeException)));
+    cases.emplace_back(CreateMatchCase(MakeOwned<WildcardPattern>(), std::move(throwEx)));
+
+    for (auto& matchCase : cases) {
+        CJC_NULLPTR_CHECK(matchCase);
+        matchCase->SetCtxExprForPatterns(exRef.get());
+        matchCase->curFile = &curFile;
+    }
+
+    auto result = CreateMatchExpr(std::move(exRef), std::move(cases), TypeManager::GetNothingTy());
+    return WithinFile(std::move(result), &curFile);
+}
+
+OwnedPtr<Expr> WrapWithExclusiveScopeExceptionHandling(AfterTypeCheckContext& ctx,
     OwnedPtr<Expr> exclusiveCall, Ptr<Ty> retTy)
 {
     CJC_NULLPTR_CHECK(exclusiveCall);
-    auto exceptionHandlingDecl = lib.GetWithExclusiveScopeExceptionHandlingDecl();
-    CJC_NULLPTR_CHECK(exceptionHandlingDecl);
-    auto exceptionHandlingRef = CreateRefExpr(*exceptionHandlingDecl);
-    exceptionHandlingRef->instTys.emplace_back(retTy);
-    auto exceptionHandlingMapping = TypeCheckUtil::GenerateTypeMapping(*exceptionHandlingDecl,
-        exceptionHandlingRef->instTys);
-    exceptionHandlingRef->SetTy(ctx.typeManager.GetInstantiatedTy(exceptionHandlingDecl->GetTy(),
-        exceptionHandlingMapping));
-    exceptionHandlingRef->typeArguments.emplace_back(CreateType(retTy));
     auto curFile = exclusiveCall->curFile;
-    auto handlingLambda = WrapReturningLambdaExpr(ctx.typeManager, Nodes(std::move(exclusiveCall)));
-    handlingLambda->curFile = curFile;
-    auto handlingArgs = Nodes<FuncArg>(CreateFuncArg(std::move(handlingLambda)));
-    auto handlingRetTy = StaticCast<FuncTy>(exceptionHandlingRef->GetTy())->retTy;
-    return CreateCallExpr(std::move(exceptionHandlingRef), std::move(handlingArgs),
-        exceptionHandlingDecl, handlingRetTy, CallKind::CALL_DECLARED_FUNCTION);
-}
+    CJC_NULLPTR_CHECK(curFile);
+    auto exceptionDecl = ctx.importManager.GetCoreDecl<ClassDecl>("Exception");
+    auto scopeExceptionDecl = ctx.importManager.GetCoreDecl<ClassDecl>("ExclusiveScopeException");
+    CJC_NULLPTR_CHECK(exceptionDecl);
+    CJC_NULLPTR_CHECK(scopeExceptionDecl);
+    auto exceptionTy = ctx.typeManager.GetClassTy(*exceptionDecl, {});
+    auto scopeExceptionTy = ctx.typeManager.GetClassTy(*scopeExceptionDecl, {});
+    CJC_NULLPTR_CHECK(exceptionTy);
+    CJC_NULLPTR_CHECK(scopeExceptionTy);
 
-OwnedPtr<Expr> WrapWithExclusiveScope(AfterTypeCheckContext& ctx, InteropLibBridge& lib,
-    OwnedPtr<Block> body, Ptr<Ty> retTy)
+    // Build the try block.
+    auto tryBlock = CreateBlock(Nodes(std::move(exclusiveCall)), retTy);
+    CJC_NULLPTR_CHECK(tryBlock);
+    tryBlock->curFile = curFile;
+
+    // Build the Exception catch pattern.
+    auto exPattern = CreateVarPattern("$ex", exceptionTy);
+    CJC_NULLPTR_CHECK(exPattern);
+    CJC_NULLPTR_CHECK(exPattern->varDecl);
+    exPattern->curFile = curFile;
+    exPattern->varDecl->curFile = curFile;
+    auto& exDecl = *exPattern->varDecl;
+
+    auto catchPattern = MakeOwned<ExceptTypePattern>();
+    CJC_NULLPTR_CHECK(catchPattern);
+    catchPattern->pattern = std::move(exPattern);
+    catchPattern->types.emplace_back(CreateRefType(*exceptionDecl));
+    catchPattern->SetTy(exceptionTy);
+    catchPattern->curFile = curFile;
+
+    // Build exception dispatch for ExclusiveScopeException:
+    // - ExclusiveScopeException: unwrap causedBy and rethrow the cause when present;
+    //   otherwise rethrow the original exception.
+    // - Other exceptions: rethrow the original exception.
+    auto exceptionDispatch = CreateExceptionDispatch(ctx, exDecl, exceptionTy, scopeExceptionTy, *curFile);
+    CJC_NULLPTR_CHECK(exceptionDispatch);
+
+    auto catchBlock = CreateBlock(Nodes(std::move(exceptionDispatch)), TypeManager::GetNothingTy());
+    CJC_NULLPTR_CHECK(catchBlock);
+    catchBlock->curFile = curFile;
+
+    auto tryExpr = MakeOwned<TryExpr>();
+    CJC_NULLPTR_CHECK(tryExpr);
+    tryExpr->tryBlock = std::move(tryBlock);
+    tryExpr->catchPatterns.emplace_back(std::move(catchPattern));
+    tryExpr->catchBlocks.emplace_back(std::move(catchBlock));
+    tryExpr->SetTy(retTy);
+    tryExpr->curFile = curFile;
+    return tryExpr;
+}
+} // namespace
+
+OwnedPtr<Expr> WrapWithExclusiveScope(AfterTypeCheckContext& ctx, OwnedPtr<Block> body, Ptr<Ty> retTy)
 {
     auto exclusiveCall = WrapWithExclusiveScopeBody(ctx, std::move(body), retTy);
-    return WrapWithExclusiveScopeExceptionHandling(ctx, lib, std::move(exclusiveCall), retTy);
+    return WrapWithExclusiveScopeExceptionHandling(ctx, std::move(exclusiveCall), retTy);
 }
 
 } // namespace Cangjie::Native::FFI::Java
