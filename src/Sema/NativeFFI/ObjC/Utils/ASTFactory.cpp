@@ -1864,7 +1864,8 @@ OwnedPtr<Expr> ASTFactory::CreateConvertToNSStringCall(
 OwnedPtr<Expr> ASTFactory::CreateDescriptionAsStringCall(OwnedPtr<Expr> id)
 {
     auto convertDecl = bridge.GetDescriptionAsStringDecl();
-    return CreateCall(std::move(convertDecl), convertDecl->curFile, std::move(id));
+    auto curFile = convertDecl->curFile;
+    return CreateCall(std::move(convertDecl), curFile, std::move(id));
 }
 
 OwnedPtr<Expr> ASTFactory::CreateObjCRetainCall(OwnedPtr<Expr> id)
