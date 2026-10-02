@@ -776,7 +776,7 @@ void ASTWriter::ASTWriterImpl::AST2FB(std::vector<uint8_t>& data, const PackageD
     auto vimports = builder.CreateVector<TStringOffset>(allPackages);
     auto vfiles = builder.CreateVector<TStringOffset>(allFiles);
     auto vfileImports = builder.CreateVector<TImportsOffset>(allFileImports);
-    // Only for common part of CJMP
+    // Only for CJMP: '--output-type=chir' or a package with 'common' decls.
     flatbuffers::Offset<flatbuffers::Vector<TFileInfoOffset>> vfileInfo;
     if (serializingCommon) {
         vfileInfo = builder.CreateVector<TFileInfoOffset>(allFileInfo);
@@ -805,7 +805,7 @@ void ASTWriter::ASTWriterImpl::AST2FB(std::vector<uint8_t>& data, const PackageD
     PackageFormat::CjoVersion cjoVersion(CJO_MAJOR_VERSION, CJO_MINOR_VERSION, CJO_PATCH_VERSION);
     auto root = PackageFormat::CreatePackage(builder, cjcVersion, &cjoVersion, packageName, dependencyInfo, vimports,
         vfiles, vfileImports, vtypes, vdecls, vexprs, INVALID_FORMAT_INDEX, kind, access, moduleName, vfileInfo,
-        vdependentStdPkgs, options.has_value() ? options.value() : INVALID_FORMAT_INDEX);
+        vdependentStdPkgs, options.has_value() ? options.value() : INVALID_FORMAT_INDEX, config.exportCommonPart);
     FinishPackageBuffer(builder, root);
     auto size = static_cast<size_t>(builder.GetSize());
     data.resize(size);

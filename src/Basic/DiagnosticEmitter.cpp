@@ -556,7 +556,7 @@ void DiagnosticEmitterImpl::ConvertHangingContentsHelper(
         }
         k++;
     }
-    
+
     k = begin + 1;
     while (k < end) {
         CJC_ASSERT(k < hanging[i].size() && "begin is bigger than hanging size");
@@ -642,7 +642,7 @@ void DiagnosticEmitterImpl::EmitSingleNoteWithSource(SubDiagnostic& note)
     if (note.mainHint.range.begin != DEFAULT_POSITION) {
         EmitErrorLocation(note.mainHint.range.begin);
     }
-    
+
     ConstructAndEmitSourceCode(errorInfo);
 
     std::vector<DiagHelp> hs{note.help};
@@ -746,7 +746,7 @@ void DiagnosticEmitterImpl::EmitSingleHelpWithSource(DiagHelp& help)
     }
 
     HandleUnprintableChar(source);
-    
+
     if (!noColor) {
         ColorizeCombinedVec(source);
     }
@@ -804,6 +804,21 @@ void DiagnosticEmitterImpl::EmitHelp(std::vector<DiagHelp>& helps)
         help.IsShowSource() ? EmitSingleHelpWithSource(help) :
                               EmitSingleMessageWithoutSource(help.helpMes, "help");
     });
+}
+
+// Diagnostics without a position have no source to anchor to, so only text notes and helps can be shown.
+void DiagnosticEmitterImpl::EmitTextOnlyNotesAndHelps()
+{
+    for (auto& subDiag : diag.subDiags) {
+        if (!subDiag.IsShowSource()) {
+            EmitSingleMessageWithoutSource(subDiag.subDiagMessage, "note");
+        }
+    }
+    for (auto& help : diag.helps) {
+        if (!help.IsShowSource()) {
+            EmitSingleMessageWithoutSource(help.helpMes, "help");
+        }
+    }
 }
 
 void DiagnosticEmitterImpl::ColorizeCombinedVec(SourceCombinedVec& combinedVec) const
@@ -874,7 +889,7 @@ void DiagnosticEmitterImpl::ConstructAndEmitSourceCode(std::vector<CollectedInfo
     }
 
     HandleUnprintableChar(combinedVec);
-    
+
     if (!noColor) {
         ColorizeCombinedVec(combinedVec);
     }
@@ -971,6 +986,9 @@ bool DiagnosticEmitterImpl::Emit(bool enableOnlyHint)
         EmitNote();
     }
     if (diag.mainHint.range.begin == DEFAULT_POSITION) {
+        if (!IsTextOnlyWarning(diag.warnGroup)) {
+            EmitTextOnlyNotesAndHelps();
+        }
         return !rangeCheckError;
     }
     std::vector<CollectedInfo> errorInfo;

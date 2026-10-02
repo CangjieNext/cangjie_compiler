@@ -18,6 +18,8 @@ ERROR(module_same_name_with_indirect_dependent_pkg, "failed to load dependent pa
 WARNING(module_common_cjo_no_options, DEPRECATED, "common part cjo is missing serialized options, possibly compiled by an old cjc")
 ERROR(module_common_cjo_debug_mismatch, "common part is compiled with different debug mode: %s in common and %s in current")
 ERROR(module_common_cjo_opt_mismatch, "common part is compiled with different optimization level: %s in common and %s in the current compilation")
+ERROR(module_common_cjo_not_common_part,
+    "cjo file '%s' passed as the common part of package '%s' was not produced by a common part compilation")
 
 // Used by lsp
 ERROR(module_unsupport_circular_dependencies, "packages %s are in circular dependencies.")

@@ -708,6 +708,10 @@ table Package {
   // record all std full package name dependencies.
   allDependentStdPkgs:[string];
   options: CompilationOptions;
+  // Whether this cjo is a common part of CJMP, i.e. it was produced by a compilation with
+  // '--output-type=chir' together with the '.chir' of the same package. Only such a cjo may be
+  // passed to '--common-part-cjo'. A cjo without this field is not accepted as a common part.
+  isCommonPart: bool = false;
 }
 
 root_type Package;

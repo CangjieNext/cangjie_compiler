@@ -124,6 +124,7 @@ private:
     std::vector<CollectedInfo> HelpSubstituteConvert(DiagHelp& help, SourceCombinedVec& combinedVec) const;
     void EmitSingleHelpWithSource(DiagHelp& help);
     void EmitHelp(std::vector<DiagHelp>& helps);
+    void EmitTextOnlyNotesAndHelps();
 };
 } // namespace Cangjie
 #endif

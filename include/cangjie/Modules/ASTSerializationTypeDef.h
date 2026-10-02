@@ -29,6 +29,11 @@ struct ExportConfig {
     // Used when compiled with the `--coverage` option.
     bool needAbsPath{false};
     bool compileCjd{false};
+    // Whether the cjo is exported as a common part of CJMP, i.e. together with its '.chir' by a
+    // compilation with '--output-type=chir'. It is saved in the cjo and checked when the cjo is
+    // loaded with '--common-part-cjo'. Unlike 'hasCommon' of a package, it depends only on the output
+    // mode, so a specific part with 'common' decls does not produce a common part cjo.
+    bool exportCommonPart{false};
 };
 } // namespace Cangjie
 
