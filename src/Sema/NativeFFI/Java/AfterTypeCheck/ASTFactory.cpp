@@ -52,6 +52,7 @@ OwnedPtr<Block> ASTFactory::CreateNewJavaObjectCall(AfterTypeCheckContext& ctx, 
     auto curFile = jniEnvPtr->curFile;
 
     auto block = CreateBlock({}, ilib.GetJavaEntityTy());
+    block->curFile = curFile;
 
     auto jclass = jclassCache.CreateJClassAccess(ctx, constructor.GetClassSignature(), jniEnvPtr);
     auto jmethod = jmethodIdCache.CreateJMethodIdAccess(ctx, constructor, ASTCloner::Clone(jclass.get()), jniEnvPtr);
@@ -165,6 +166,7 @@ OwnedPtr<Block> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx, Ptr
     CJC_ASSERT(method.IsStatic() || jobjectInstance); // instance cannot be null if method is non-static.
 
     auto block = CreateBlock({}, &retTy);
+    block->curFile = curFile;
 
     static auto convertJniValueToJavaCompatible = [this](OwnedPtr<Expr> jniValue,
         Ty& expectedTy, Ptr<Expr> jniEnvPtr, Block& block) {
@@ -270,6 +272,7 @@ OwnedPtr<AST::Block> ASTFactory::CreateJavaFieldGetCall(AfterTypeCheckContext& c
     CJC_ASSERT(field.IsField());
     CJC_ASSERT(field.IsStatic() || jobjectInstance); // instance cannot be null if field is non-static.
     auto block = CreateBlock({}, &ty);
+    block->curFile = curFile;
 
     static auto convertJniValueToJavaCompatible = [this](OwnedPtr<Expr> jniValue,
         Ty& expectedTy, Ptr<Expr> jniEnvPtr, Block& block) {
@@ -327,7 +330,9 @@ OwnedPtr<AST::Block> ASTFactory::CreateJavaFieldSetCall(AfterTypeCheckContext& c
 {
     CJC_ASSERT(field.IsField());
     CJC_ASSERT(field.IsStatic() || jobjectInstance); // instance cannot be null if field is non-static.
+    auto curFile = jniEnvPtr->curFile;
     auto block = CreateBlock({}, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+    block->curFile = curFile;
 
     auto jclass = jclassCache.CreateJClassAccess(ctx, field.GetClassSignature(), jniEnvPtr);
     auto jfield = jfieldIdCache.CreateJFieldIdAccess(ctx, field, ASTCloner::Clone(jclass.get()), jniEnvPtr);
