@@ -27,7 +27,7 @@ namespace Cangjie::Native::FFI::Java {
     *         // body
     *     }
     */
-    OwnedPtr<Expr> WrapWithExclusiveScope(AfterTypeCheckContext& ctx, InteropLibBridge& lib,
+    OwnedPtr<Expr> WrapWithExclusiveScope(AfterTypeCheckContext& ctx,
         OwnedPtr<Block> body, Ptr<Ty> retTy);
 
 }

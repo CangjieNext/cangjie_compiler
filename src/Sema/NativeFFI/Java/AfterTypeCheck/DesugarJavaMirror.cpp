@@ -182,6 +182,7 @@ void JavaDesugarManager::InsertJavaRefGetterWithBody(ClassDecl& decl)
     nodes.emplace_back(std::move(ret));
 
     auto block = CreateBlock(std::move(nodes), javaEntityDecl->GetTy());
+    block->curFile = decl.curFile;
 
     auto funcBody = CreateFuncBody(
         std::move(paramLists),
@@ -289,6 +290,7 @@ void JavaDesugarManager::InsertJStringOfStringCtorBody(AfterTypeCheckContext& ct
             ASTCloner::Clone(jniEnvPtr), WithinFile(CreateRefExpr(*param), curFile)));
 
         auto block = CreateBlock({}, lib.GetJavaEntityTy());
+        block->curFile = curFile;
         // Java_CFFI_JavaEntity($convertCall)
         auto javaEntity = lib.CreateJavaEntityJobjectCall(lib.CreateSwapLocalWithGlobalRefCall(
             ASTCloner::Clone(jniEnvPtr),
@@ -297,7 +299,7 @@ void JavaDesugarManager::InsertJStringOfStringCtorBody(AfterTypeCheckContext& ct
         return block;
    });
 
-    auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, lib, std::move(block), lib.GetJavaEntityTy());
+    auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, std::move(block), lib.GetJavaEntityTy());
     auto superCall = CreateSuperCall(decl, *jObjectCtor, jObjectCtor->GetTy());
     superCall->args.emplace_back(CreateFuncArg(std::move(exclusiveScopeCall)));
     generatedCtor.funcBody->body->body.emplace_back(std::move(superCall));
