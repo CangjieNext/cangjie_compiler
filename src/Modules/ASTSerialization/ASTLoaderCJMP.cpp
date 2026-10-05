@@ -63,6 +63,35 @@ std::set<std::string> CollectFeaturesFromPackage(AST::Package& pkg)
     return (*pkg.files.begin())->GetFeatures();
 }
 
+bool IsCommonPartCjo(const PackageFormat::Package& package)
+{
+    // The marker is written from the output mode of the producing compilation only, see
+    // 'ExportConfig::exportCommonPart'. A cjo of an older cjc has no marker and is rejected as well:
+    // it can not be told apart from a specific part cjo which has 'common' decls.
+    if (!package.isCommonPart()) {
+        return false;
+    }
+    // Every common file is preloaded from its CJMP file info, so it must be present for each file.
+    auto files = package.allFiles();
+    auto fileImports = package.allFileImports();
+    auto fileInfo = package.allFileInfo();
+    if (files == nullptr || fileImports == nullptr || fileInfo == nullptr) {
+        return false;
+    }
+    return fileImports->size() == files->size() && fileInfo->size() == files->size();
+}
+
+void ReportNotCommonPartCjo(DiagnosticEngine& diag, const std::string& cjoPath, const std::string& packageName)
+{
+    auto builder = diag.DiagnoseRefactor(
+        DiagKindRefactor::module_common_cjo_not_common_part, DEFAULT_POSITION, cjoPath, packageName);
+    builder.AddNote("only a cjo produced with '--output-type=chir' by this or a newer cjc is a common part; a "
+                    "specific part compilation writes '" + packageName + ".cjo' to its output directory and may "
+                    "overwrite the common part cjo placed there");
+    builder.AddHelp(DiagHelp("recompile the common part with '--output-type=chir' and keep its '.cjo' and '.chir' "
+                             "in a separate directory, e.g. with '--output-dir'"));
+}
+
 void ValidateCommonSpecificFeatureSetsRelations(
     const AST::File& commonFile,
     const std::set<std::string>& specificFeatures,
@@ -200,6 +229,12 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
     auto deserializedPackageName = package->fullPkgName()->str();
     if (pkg.fullPackageName != deserializedPackageName) {
         ASTLoaderCJMP::ReportPackageMismatch(diag, pkg, pkg.fullPackageName, deserializedPackageName);
+        return false;
+    }
+    // Reject a cjo which is not a common part before using it, e.g. a specific part cjo which has
+    // overwritten the common part one in the same output directory: it does not match the common part chir.
+    if (!ASTLoaderCJMP::IsCommonPartCjo(*package)) {
+        ASTLoaderCJMP::ReportNotCommonPartCjo(diag, cjoPath, deserializedPackageName);
         return false;
     }
     auto specificFeatures = ASTLoaderCJMP::CollectFeaturesFromPackage(pkg);

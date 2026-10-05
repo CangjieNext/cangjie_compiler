@@ -31,6 +31,13 @@ void ReportPackageMismatch(
 
 std::set<std::string> CollectFeaturesFromPackage(AST::Package& pkg);
 
+/**
+ * @brief Check that the cjo is marked as a common part and has imports and CJMP file info for every file.
+ */
+bool IsCommonPartCjo(const PackageFormat::Package& package);
+
+void ReportNotCommonPartCjo(DiagnosticEngine& diag, const std::string& cjoPath, const std::string& packageName);
+
 void ValidateCommonSpecificFeatureSetsRelations(
     const AST::File& commonFile,
     const std::set<std::string>& specificFeatures,
