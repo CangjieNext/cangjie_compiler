@@ -844,10 +844,32 @@ void InsertMirrorVarProp(ClassDecl& decl, Attribute attrToBeSet)
             continue;
         }
         auto field = StaticAs<ASTKind::VAR_DECL>(member.get());
-        // fields without syntactic type specified are invalid and should be skipped here
-        // (unless they carry @common/@specific attributes for CJMP matching)
-        if (!field->type && !field->TestAttr(Attribute::COMMON) && !field->TestAttr(Attribute::SPECIFIC)) {
+        // A CJMP field merged from the common part carries FROM_COMMON_PART either on
+        // the declaration (ASTWriter stamps it when serializing the common part) or on
+        // its file.
+        bool fromCommonPart = field->TestAttr(Attribute::FROM_COMMON_PART) ||
+            (field->curFile && field->curFile->TestAttr(Attribute::FROM_COMMON_PART));
+        // A mirror keeps no Cangjie-side state, so every field has to become an FFI
+        // property. Fields without a syntactic type are normally invalid and skipped,
+        // but a CJMP field (matched by its marker attrs, or a deserialized merged
+        // common field) has a resolved semantic type, so it must be converted as well
+        // (otherwise PatchCommonFieldsForMirror finds a field with no accessor).
+        bool isConvertibleField = field->TestAttr(Attribute::COMMON) ||
+            field->TestAttr(Attribute::SPECIFIC) || fromCommonPart;
+        if (!field->type && !isConvertibleField) {
             continue;
+        }
+
+        // A field merged from the common part without a specific counterpart is a
+        // generated specific-side member, but it kept the common file. Re-home it (and
+        // the accessors synthesized from it) to the specific class's file, so
+        // ShouldTranslateMember keeps the property and the FFI cache globals its glue
+        // generates land in the specific file (otherwise the per-file static init is
+        // emitted twice and collides by mangled name). A matched common field is not
+        // re-homed: its accessor comes from the specific counterpart, and this common
+        // duplicate is skipped by ShouldTranslateMember.
+        if (fromCommonPart && field->specificImplementation == nullptr && decl.curFile != nullptr) {
+            field->curFile = decl.curFile;
         }
 
         auto& prop = InsertPropConvertedByField(decl, *field, attrToBeSet);

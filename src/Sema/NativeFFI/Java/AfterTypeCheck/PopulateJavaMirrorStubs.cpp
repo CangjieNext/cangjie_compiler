@@ -219,9 +219,18 @@ bool PopulateJavaMirrorStubs::ShouldSkipMirrorMember(const AST::Decl& member) co
         return true;
     }
     // Common members matched with a specific counterpart are desugared on the specific side.
-    // Plain common members (not marked `common`) are part of the common implementation
-    // and must not receive FFI glue nor be reported as errors.
-    return FromCommonPart(member) && (member.specificImplementation != nullptr || !member.TestAttr(Attribute::COMMON));
+    if (FromCommonPart(member) && member.specificImplementation != nullptr) {
+        return true;
+    }
+    // A mirror keeps no Cangjie-side state: a field merged from the common part
+    // (ordinary, i.e. not marked `common`) is converted to a DESUGARED_MIRROR_FIELD
+    // property and MUST receive JNI glue, exactly like a marked one.
+    if (member.TestAttr(Attribute::DESUGARED_MIRROR_FIELD)) {
+        return false;
+    }
+    // Other plain common members (ordinary methods/props with a Cangjie body) are
+    // part of the common implementation and must not receive FFI glue.
+    return FromCommonPart(member) && !member.TestAttr(Attribute::COMMON);
 }
 
 bool PopulateJavaMirrorStubs::RejectUnmatchedCommon(AST::Decl& member, DiagKindRefactor kind) const
