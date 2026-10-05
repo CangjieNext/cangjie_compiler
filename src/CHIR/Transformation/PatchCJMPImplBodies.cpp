@@ -326,9 +326,12 @@ void PatchCJMPImplBodies::InsertFieldInitializations(const std::vector<MemberVar
     if (!terminator) { return; }
 
     for (auto& field : allFields) {
+        // No mutability filter here: CHIR marks an immutable member field with
+        // READONLY and never marks a mutable one with MUT (MUT is function-level).
+        // Both `let` and `var` common fields need their initializer replayed,
+        // since the specific class-level $varInit is rebuilt empty.
         if (field.TestAttr(Attribute::COMPILER_ADD)) continue;
         if (!field.initializerFunc) continue;
-        if (field.TestAttr(Attribute::MUT)) continue;
 
         auto initApply = builder.CreateExpression<Apply>(
             loc,

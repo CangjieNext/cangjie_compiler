@@ -21,8 +21,9 @@ namespace Cangjie::CHIR {
 /// fields to a registry companion object, these deserialized bodies still
 /// reference fields directly (via GetElementRef/GetElementByName). This class
 /// rewrites those references to use getter/setter calls on the companion object,
-/// and inserts field-initialization calls for non-MUT fields that have an
-/// initializerFunc.
+/// and inserts field-initialization calls for fields that have an initializerFunc
+/// (both `let` and `var`; CHIR marks immutable fields with READONLY and never
+/// marks member fields MUT, so there is no mutability filter).
 class PatchCJMPImplBodies {
 public:
     PatchCJMPImplBodies(Package& pkg, CHIRBuilder& builder);
@@ -32,8 +33,8 @@ public:
     /// calls on the companion object.
     void Run();
 
-    /// Inserts field-initialization code for non-MUT fields with
-    /// \c initializerFunc in @JavaImpl + FROM_COMMON_PART constructors.
+    /// Inserts field-initialization code for fields with \c initializerFunc
+    /// (both `let` and `var`) in @JavaImpl + FROM_COMMON_PART constructors.
     /// Called after all declarations are translated (step 5 in AST2CHIR).
     void RunCtorFieldInitOnly();
 
@@ -98,8 +99,8 @@ private:
     RegStoreInfo FindRegStore(Function& ctor, size_t regIdx) const;
 
     /// Creates initializerFunc calls and stores for eligible fields into the
-    /// companion object. Processes non-COMPILER_ADD, non-MUT fields that have
-    /// an \c initializerFunc.
+    /// companion object. Processes non-COMPILER_ADD fields that have an
+    /// \c initializerFunc (both `let` and `var`).
     /// \param allFields All instance variables of the class def.
     /// \param cregRef The companion object reference value.
     /// \param targetBlock The block where init code should be inserted.
