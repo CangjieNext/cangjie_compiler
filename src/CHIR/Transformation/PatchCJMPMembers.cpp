@@ -49,9 +49,10 @@ void PatchCJMPMembers::PatchCommonFieldsForMirror()
 
 /**
  * Patches common-part instance fields of @JavaImpl classes during CJMP specific
- * compilation. Same field-to-Unit collapse as PatchCommonFieldsForMirror, but
- * matching on the JAVA_IMPL getter. No-op unless compiling the CJMP specific
- * part.
+ * compilation. Unlike the mirror path, this is mark-only: matched direct wrapper
+ * fields are marked INITIALIZED but not collapsed to Unit and no accessor is
+ * asserted, because a non-relocated FROM_COMMON_PART specific field may
+ * legitimately lack an accessor. No-op unless compiling the CJMP specific part.
  */
 void PatchCJMPMembers::PatchCommonFieldsForJavaImpl()
 {

@@ -113,8 +113,8 @@ public:
     /** @name Phase 3 — after all decls translated */
     ///@{
     /**
-     * @brief Inserts field-initialization calls for non-MUT fields with
-     *        initializerFunc in @JavaImpl FROM_COMMON_PART constructors. Must
+     * @brief Inserts field-initialization calls for fields with initializerFunc
+     *        (both `let` and `var`) in @JavaImpl FROM_COMMON_PART constructors. Must
      *        run after constructor bodies are translated. Delegates to
      *        PatchCJMPImplBodies::RunCtorFieldInitOnly. No-op unless compiling
      *        the CJMP specific part.

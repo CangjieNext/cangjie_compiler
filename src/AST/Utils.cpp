@@ -844,13 +844,30 @@ void InsertMirrorVarProp(ClassDecl& decl, Attribute attrToBeSet)
             continue;
         }
         auto field = StaticAs<ASTKind::VAR_DECL>(member.get());
-        // fields without syntactic type specified are invalid and should be skipped here
-        // (unless they carry @common/@specific attributes for CJMP matching)
-        if (!field->type && !field->TestAttr(Attribute::COMMON) && !field->TestAttr(Attribute::SPECIFIC)) {
+        // A mirror keeps no Cangjie-side state, so every field has to become an FFI
+        // property. Fields without a syntactic type are normally invalid and skipped,
+        // but a CJMP field merged from the common part has a resolved semantic type
+        // and carries at least FROM_COMMON_PART, so it must be converted as well
+        // (otherwise PatchCommonFieldsForMirror finds a field with no accessor).
+        bool isCjmpField = field->TestAttr(Attribute::COMMON) ||
+            field->TestAttr(Attribute::SPECIFIC) ||
+            field->TestAttr(Attribute::FROM_COMMON_PART) ||
+            (field->curFile && field->curFile->TestAttr(Attribute::FROM_COMMON_PART));
+        if (!field->type && !isCjmpField) {
             continue;
         }
 
         auto& prop = InsertPropConvertedByField(decl, *field, attrToBeSet);
+        // A field merged from the common part without a specific counterpart is
+        // converted here (it is part of the specific class body) but keeps the common
+        // file. Home the generated accessor to the specific class's file so it is
+        // translated as a member of the specific class and the FFI cache globals its
+        // glue generates belong to the specific file (otherwise the per-file static
+        // init is emitted twice and collides by mangled name).
+        if (field->TestAttr(Attribute::FROM_COMMON_PART) && field->specificImplementation == nullptr &&
+            decl.curFile != nullptr) {
+            prop.curFile = decl.curFile;
+        }
         varToPropMap[field] = &prop;
     }
 
