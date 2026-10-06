@@ -207,8 +207,12 @@ std::string GetJavaFQNameFromExtendDecl(const ExtendDecl& extendDecl)
 Ptr<std::string> GetJavaAnnotationForeignName(const Decl& decl)
 {
     for (auto& anno : decl.annotations) {
-        if (anno->kind != AnnotationKind::JAVA_MIRROR && anno->kind != AnnotationKind::JAVA_IMPL) {
-            continue;
+        switch (anno->kind) {
+            case AnnotationKind::JAVA_MIRROR:
+            case AnnotationKind::JAVA_IMPL:
+            case AnnotationKind::JAVA:
+                break; // extract name out of 'switch'
+            default: continue; // look for next annotation
         }
         if (anno->TestAttr(Attribute::IS_BROKEN)) {
             return nullptr;

@@ -365,6 +365,7 @@ ERROR(parse_objc_mirror_field_cannot_have_initializer, "member variable initiali
 ERROR(parse_objc_mirror_field_cannot_be_static, "'static' member variable is not allowed within '@ObjC' foreign declaration")
 ERROR(parse_objc_mirror_prop_cannot_have_getter, "property '%s' cannot have getter within '@ObjC' foreign declaration")
 ERROR(parse_objc_mirror_prop_cannot_have_setter, "property '%s' cannot have setter within '@ObjC' foreign declaration")
+ERROR(parse_objc_func_must_be_foreign, "top-level '@ObjC' function '%s' must be 'foreign'", "top-level '@ObjC' function cannot be exported")
 ERROR(parse_objc_mirror_func_cannot_be_c, "top-level '@ObjC' foreign function '%s' cannot be '@C'")
 ERROR(parse_objc_mirror_func_cannot_be_generic, "top-level '@ObjC' foreign function '%s' cannot be generic")
 ERROR(parse_objc_mirror_func_cannot_have_body, "top-level '@ObjC' foreign function '%s' cannot have body")

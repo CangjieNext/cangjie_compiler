@@ -359,13 +359,16 @@ enum class Attribute {
     SRC_IMPORTED,
 
     /**
-     * Mark whether a node is foreign call.
-     * W: Parser, AST2CHIR.
-     * R: Parser, ImportManager, Sema, AST2CHIR, HLIRCodeGen.
+     * Mark whether a node is foreign java call.
+     * Attribute is deprecated because it is not used anymore.
+     * Could be considered for removal with any other compatibility-breaking changes in the attributes structure.
+     * W: -
+     * R: - (before deprecation: Parser, ImportManager, Sema, AST2CHIR, HLIRCodeGen).
      */
-    JAVA_APP,
-    JAVA_EXT,
-
+    JAVA_APP [[deprecated("this attribute is not a part of cjnative"
+        "This attribute exists for compatibility persistance only and could be considered for removal")]],
+    JAVA_EXT [[deprecated("this attribute is not a part of cjnative"
+        "This attribute exists for compatibility persistance only and could be considered for removal")]],
     /**
      * Mark whether a node is std call.
      * W: Parser.
@@ -577,7 +580,7 @@ enum class Attribute {
     JAVA_IMPL,
 
     /**
-     * Mark whether a function of @JavaMirror interface has default implementation on java side.
+     * Mark whether a function of '@Java foreign' interface has default implementation on java side.
      * W: Parser.
      * R: Sema.
      */

@@ -54,7 +54,7 @@ private:
 
     void CheckPropTypes(AST::PropDecl& pd, TypeCheckContext& ctx);
     void CheckVarTypes(AST::VarDecl& vd, TypeCheckContext& ctx);
-    std::string GetDeclInteropName();
+    std::string GetDeclInteropName(const AST::Decl&) const;
 };
 
 class CheckTopLevelFuncTypes : public Handler<CheckTopLevelFuncTypes, TypeCheckContext> {

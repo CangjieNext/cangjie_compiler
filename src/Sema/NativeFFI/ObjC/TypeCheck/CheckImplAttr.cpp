@@ -28,6 +28,7 @@ void CheckImplAttr::HandleImpl(TypeCheckContext& ctx)
         return;
     }
 
-    ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_mirror_subtype_must_be_annotated, ctx.target);
+    auto builder = ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_mirror_subtype_must_be_annotated, ctx.target);
+    builder.AddMainHintArguments(ctx.target.identifier);
     ctx.target.EnableAttr(Attribute::IS_BROKEN);
 }

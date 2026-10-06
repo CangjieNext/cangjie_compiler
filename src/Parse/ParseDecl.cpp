@@ -837,11 +837,6 @@ void ParserImpl::ParseFuncDeclAnnos(std::vector<OwnedPtr<AST::Annotation>>& anno
 {
     funcDecl.annotations = std::move(annos);
     for (auto& it : funcDecl.annotations) {
-        if (it->kind == AnnotationKind::JAVA) {
-            // We enable attribute JAVA_APP by default here to facilitate subsequent processing.
-            // It will be checked and reset to the final correct attribute in the Sema phase.
-            funcDecl.EnableAttr(Attribute::JAVA_APP);
-        }
         if (it->kind == AnnotationKind::INTRINSIC) {
             CheckIntrinsicFunc(funcDecl);
             funcDecl.EnableAttr(Attribute::INTRINSIC);
@@ -1383,14 +1378,14 @@ OwnedPtr<ClassDecl> ParserImpl::ParseClassDecl(
     for (auto& it : attrs) {
         ret->EnableAttr(it);
     }
-    ffiParser->CheckClassLikeSignature(*ret, annos);
     ret->modifiers.insert(modifiers.begin(), modifiers.end());
+    ret->annotations = std::move(annos);
+    ffiParser->CheckClassLikeSignature(*ret, ret->annotations);
     // Used to parse nested classDecl or primary ctor decl.
     SetPrimaryDecl(ret->identifier, ret->identifier.IsRaw());
     ret->body = ParseClassBody(*ret);
     RevertPrimaryDecl();
     ret->end = lastToken.End();
-    ret->annotations = std::move(annos);
 
     return ret;
 }
@@ -1410,11 +1405,11 @@ OwnedPtr<InterfaceDecl> ParserImpl::ParseInterfaceDecl(
     for (auto& it : attrs) {
         ret->EnableAttr(it);
     }
-    ffiParser->CheckClassLikeSignature(*ret, annos);
     ret->modifiers.insert(modifiers.begin(), modifiers.end());
+    ret->annotations = std::move(annos);
+    ffiParser->CheckClassLikeSignature(*ret, ret->annotations);
     ret->body = ParseInterfaceBody(*ret);
     ret->end = lastToken.End();
-    ret->annotations = std::move(annos);
 
     return ret;
 }
@@ -1987,7 +1982,9 @@ OwnedPtr<FuncDecl> ParserImpl::ParseFuncDecl(
     if (ret->TestAttr(Attribute::SPECIFIC) && hasNoReturnType && hasNoBody) {
         ParseDiagnoseRefactor(DiagKindRefactor::parse_specific_function_must_have_return_type, *ret);
     }
-    if (HasModifier(modifiers, TokenKind::UNSAFE) || HasModifier(modifiers, TokenKind::FOREIGN)) {
+    if (HasModifier(modifiers, TokenKind::UNSAFE) ||
+        (HasModifier(modifiers, TokenKind::FOREIGN) && !HasAnnotation(annos, AnnotationKind::OBJ_C))) {
+        // No need to skip Java foreign explicitly because it cannot be a function (only classes/interfaces)
         SetUnsafe(ret.get(), modifiers);
     }
     ffiParser->CheckFuncSignature(*ret, annos);

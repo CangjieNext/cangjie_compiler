@@ -46,9 +46,11 @@ public:
 private:
     void CheckMirrorAnnoArgs(Annotation& anno) const;
     void CheckImplAnnoArgs(Annotation& anno) const;
+    void CheckJavaAnnoArgs(Annotation& anno) const;
 
     void CheckMirrorAnnoTarget(Annotation& anno) const;
     void CheckImplAnnoTarget(Annotation& anno) const;
+    void CheckJavaAnnoTarget(Annotation& anno) const;
 
     // Diag report
     void DiagOuterDeclMissMatch(const Node& node,

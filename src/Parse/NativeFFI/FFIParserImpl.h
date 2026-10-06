@@ -13,6 +13,7 @@
 #ifndef CANGJIE_PARSE_NATIVEFFIPARSERIMPL_H
 #define CANGJIE_PARSE_NATIVEFFIPARSERIMPL_H
 
+#include "cangjie/AST/Node.h"
 #include "cangjie/Parse/Parser.h"
 #include "Java/JFFIParserImpl.h"
 #include "ObjC/OCFFIParserImpl.h"
@@ -47,6 +48,8 @@ private:
     void CheckForeignGetterSetterNameAnnoArgs(const Annotation& anno) const;
     void CheckForeignGetterSetterNameAnnoTarget(const Annotation& anno) const;
 
+    void DiagDeprecatedAnnotation(const Annotation& anno) const;
+
     ParserImpl& p;
     JFFIParserImpl jp;
     OCFFIParserImpl op;
@@ -57,7 +60,7 @@ void DiagConflictingAnnos(DiagnosticEngine& diag, Annotation& first, Annotation&
 const std::unordered_set<AnnotationKind> CONFLICTED_FFI_ANNOS {
     AnnotationKind::JAVA_MIRROR, AnnotationKind::JAVA_IMPL,
     AnnotationKind::OBJ_C_IMPL, AnnotationKind::OBJ_C_MIRROR,
-    AnnotationKind::C, AnnotationKind::JAVA
+    AnnotationKind::C, AnnotationKind::JAVA, AnnotationKind::OBJ_C
 };
 
 namespace Native::FFI {

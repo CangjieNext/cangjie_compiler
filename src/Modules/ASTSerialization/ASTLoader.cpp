@@ -914,6 +914,12 @@ OwnedPtr<Annotation> ASTLoader::ASTLoaderImpl::LoadAnnotation(const PackageForma
         case PackageFormat::AnnoKind_Annotation:
             annotation->kind = AnnotationKind::ANNOTATION;
             break;
+        case PackageFormat::AnnoKind_Java:
+            annotation->kind = AnnotationKind::JAVA;
+            break;
+        case PackageFormat::AnnoKind_ObjC:
+            annotation->kind = AnnotationKind::OBJ_C;
+            break;
         default:
             InternalError("Unhandled annotation kind.");
     }

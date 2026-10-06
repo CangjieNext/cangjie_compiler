@@ -12,6 +12,7 @@
 
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/Utils.h"
 
@@ -64,9 +65,9 @@ struct JavaInteropTypeChecker {
     auto GetJavaClassKind() const
     {
         if (isImpl) {
-            return "@JavaImpl";
+            return "exported '@Java'";
         } else {
-            return "@JavaMirror";
+            return "'@Java' foreign";
         }
     }
 
@@ -74,7 +75,7 @@ struct JavaInteropTypeChecker {
      * Checks if [ty] is supported in signature.
      * - @JavaMirror class types
      * - Some built-in supported types
-     * - String type in return position in Mirror class
+     * - String type
      */
     bool IsSupported(const Ty& ty, Position pos)
     {
@@ -153,7 +154,9 @@ struct JavaInteropTypeChecker {
         for (auto& paramList : fdecl.funcBody->paramLists) {
             for (auto& param : paramList->params) {
                 if (!IsJavaCompatible(*param->GetTy(), Position::IN) && !isJavaArray) {
-                    diag.DiagnoseRefactor(errkind, *param);
+                    auto builder = diag.DiagnoseRefactor(errkind, *param, GetJavaClassKind());
+                    builder.AddMainHintArguments(Ty::ToString(param->GetTy()));
+ 
                     fdecl.EnableAttr(Attribute::IS_BROKEN);
                     fdecl.outerDecl->EnableAttr(Attribute::HAS_BROKEN);
                     fdecl.outerDecl->EnableAttr(Attribute::IS_BROKEN);
@@ -173,8 +176,9 @@ struct JavaInteropTypeChecker {
                 // Type wasn't explicitly written, so report on whole declaration
                 node = &fd;
             }
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_method_ret_unsupported, *node,
-                Ty::ToString(fd.funcBody->retType->GetTy()), GetJavaClassKind());
+            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_method_ret_unsupported, *node,
+                GetJavaClassKind());
+            builder.AddMainHintArguments(Ty::ToString(fd.funcBody->retType->GetTy()));
             fd.EnableAttr(Attribute::IS_BROKEN);
         }
 
@@ -189,7 +193,11 @@ struct JavaInteropTypeChecker {
     void CheckJavaMirrorPropType(PropDecl& prop)
     {
         if (!IsJavaCompatible(*prop.GetTy())) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_prop_must_be_java_mirror, *prop.type);
+            auto kind = isImpl
+                ? DiagKindRefactor::sema_java_impl_prop_must_be_java_compatible
+                : DiagKindRefactor::sema_java_mirror_prop_must_be_java_mirror;
+            auto builder = diag.DiagnoseRefactor(kind, *prop.type);
+            builder.AddMainHintArguments(Ty::ToString(prop.GetTy()));
             prop.EnableAttr(Attribute::IS_BROKEN);
         }
     }
@@ -197,14 +205,14 @@ struct JavaInteropTypeChecker {
     void CheckJavaCompatibleDeclSignature(ClassLikeDecl& decl)
     {
         for (auto& member : decl.GetMemberDecls()) {
+            if (isImpl && member->TestAttr(Attribute::PRIVATE)) {
+                continue;
+            }
             switch (member->astKind) {
                 case ASTKind::FUNC_DECL:
                     if (member->TestAttr(Attribute::CONSTRUCTOR)) {
                         CheckJavaMirrorConstructorTypes(*StaticAs<ASTKind::FUNC_DECL>(member.get()));
                     } else {
-                        if (isImpl && member->TestAttr(Attribute::PRIVATE)) {
-                            continue;
-                        }
                         CheckJavaMirrorMethodTypes(*StaticAs<ASTKind::FUNC_DECL>(member.get()));
                     }
                     break;

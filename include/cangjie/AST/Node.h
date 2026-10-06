@@ -536,14 +536,35 @@ struct Modifier : Node {
 };
 
 enum class AnnotationKind {
+    /**
+     * Indicate a declaration as Java declaration (CJMP/Interop).
+     * It is used either:
+     * - on foreign Java declarations in combination with 'foreign' modifier.
+     * - on exported Java declarations without 'foreign' modifier.
+     */
     JAVA,
+    /**
+     * Indicate a declaration as Objective-C declaration (CJMP/Interop).
+     * It is used either:
+     * - on foreign Objective-C declarations in combination with 'foreign' modifier.
+     * - on exported Objective-C declarations without 'foreign' modifier.
+     */
+    OBJ_C,
     CALLING_CONV,
     C,
-    JAVA_MIRROR,
-    JAVA_IMPL,
+    JAVA_MIRROR // This annotation is deprecated. Consider migrating to `JAVA` + foreign.
+    /*[[deprecated("Use `@Java` annotation in combination with `foreign` modifier. "
+            "This attribute exists for compatibility persistance only and could be considered for removal")]]*/,
+    JAVA_IMPL // This annotation is deprecated. Consider migrating to `JAVA`.
+    /*[[deprecated("Use `@Java` annotation. "
+                "This attribute exists for compatibility persistance only and could be considered for removal")]]*/,
     JAVA_HAS_DEFAULT,
-    OBJ_C_MIRROR,
-    OBJ_C_IMPL,
+    OBJ_C_MIRROR // This annotation is deprecated. Consider migrating to `OBJ_C` + foreign.
+    /*[[deprecated("Use `@ObjC` annotation in combination with `foreign` modifier. "
+                "This attribute exists for compatibility persistance only and could be considered for removal")]]*/,
+    OBJ_C_IMPL // This annotation is deprecated. Consider migrating to `OBJ_C`.
+    /*[[deprecated("Use `@ObjC` annotation. "
+                "This attribute exists for compatibility persistance only and could be considered for removal")]]*/,
     OBJ_C_INIT, // Indicate a method as Objective-C init.
     OBJ_C_OPTIONAL,
     FOREIGN_NAME,

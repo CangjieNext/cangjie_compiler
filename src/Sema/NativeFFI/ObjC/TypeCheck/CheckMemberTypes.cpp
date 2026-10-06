@@ -15,6 +15,7 @@
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
 #include "NativeFFI/ObjC/Utils/ASTQuery.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
@@ -51,8 +52,12 @@ void CheckMemberTypes::CheckPropTypes(PropDecl& pd, TypeCheckContext& ctx)
         return;
     }
 
-    ctx.diag.DiagnoseRefactor(
-        DiagKindRefactor::sema_objc_interop_prop_must_be_objc_compatible, *pd.type, GetDeclInteropName());
+    auto kind = IsObjCImpl(*pd.outerDecl->GetTy())
+        ? DiagKindRefactor::sema_objc_impl_prop_must_be_objc_compatible
+        : DiagKindRefactor::sema_objc_mirror_prop_must_be_objc_compatible;
+
+    auto builder = ctx.diag.DiagnoseRefactor(kind, *pd.type);
+    builder.AddMainHintArguments(Ty::ToString(pd.GetTy()));
     pd.EnableAttr(Attribute::IS_BROKEN);
     pd.outerDecl->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
 }
@@ -63,8 +68,9 @@ void CheckMemberTypes::CheckVarTypes(VarDecl& vd, TypeCheckContext& ctx)
         return;
     }
 
-    ctx.diag.DiagnoseRefactor(
-        DiagKindRefactor::sema_objc_interop_field_must_be_objc_compatible, *vd.type, GetDeclInteropName());
+    auto builder = ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_interop_field_must_be_objc_compatible,
+        *vd.type, GetDeclInteropName(*vd.outerDecl));
+    builder.AddMainHintArguments(Ty::ToString(vd.GetTy()));
     vd.EnableAttr(Attribute::IS_BROKEN);
     vd.outerDecl->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
 }
@@ -86,7 +92,7 @@ void CheckMemberTypes::CheckFuncRetType(FuncDecl& fd, TypeCheckContext& ctx)
 {
     if (fd.funcBody->retType && !IsObjCCompatible(*fd.funcBody->retType->GetTy())) {
         ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_interop_method_ret_must_be_objc_compatible,
-            *fd.funcBody->retType, GetDeclInteropName());
+            *fd.funcBody->retType, GetDeclInteropName(*fd.outerDecl));
 
         fd.EnableAttr(Attribute::IS_BROKEN);
         fd.outerDecl->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
@@ -108,12 +114,16 @@ void CheckMemberTypes::CheckFuncParamTypes(FuncDecl& fd, TypeCheckContext& ctx)
             fd.EnableAttr(Attribute::IS_BROKEN);
             fd.outerDecl->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
 
-            ctx.diag.DiagnoseRefactor(errKind, *param, GetDeclInteropName());
+            auto builder = ctx.diag.DiagnoseRefactor(errKind, *param, GetDeclInteropName(*fd.outerDecl));
+            builder.AddMainHintArguments(Ty::ToString(param->GetTy()));
         }
     }
 }
 
-std::string CheckMemberTypes::GetDeclInteropName()
+std::string CheckMemberTypes::GetDeclInteropName(const Decl& decl) const
 {
-    return "Objective-C mirror";
+    if (IsObjCImpl(*decl.GetTy())) {
+        return "exported '@ObjC'";
+    }
+    return "'@ObjC' foreign";
 }
