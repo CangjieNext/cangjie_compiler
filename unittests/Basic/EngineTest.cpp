@@ -362,3 +362,95 @@ TEST(EngineTest, OldDiagKindDefGuard)
     ASSERT_FALSE(oldDiagKindBeModified)
         << "Old diag kind be modified, please adpate case or def according the above hints.";
 }
+
+namespace {
+size_t CountOccurrences(const std::string& str, const std::string& sub)
+{
+    size_t count = 0;
+    for (auto pos = str.find(sub); pos != std::string::npos; pos = str.find(sub, pos + sub.size())) {
+        ++count;
+    }
+    return count;
+}
+} // namespace
+
+// A diagnostic without position shows its text notes and helps, and the notes with their own position with
+// their source, in the same way as a diagnostic with position.
+TEST(EngineTest, PositionlessDiagnosticNotesAndHelps)
+{
+    DiagnosticEngine diag;
+    SourceManager sm;
+    sm.AddSource(std::string{"test.cj"} | FileUtil::IdenticalFunc, "\nmain() {}\n");
+    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_debug_mismatch, DEFAULT_POSITION,
+        std::string{"enabled"}, std::string{"disabled"});
+    builder.AddNote("text note");
+    builder.AddNote(SubDiagnostic{MakeRange(Position{1, 2, 1}, Position{1, 2, 5}), std::string{"source note"}});
+    builder.AddHelp(DiagHelp{std::string{"text help"}});
+
+    std::ostringstream sOut;
+    DiagnosticEmitter(builder.diagnostic, true, true, sOut, sm).Emit();
+    auto out = sOut.str();
+    auto errorPos =
+        out.find("error: common part is compiled with different debug mode: enabled in common and disabled in current");
+    auto textNotePos = out.find("note: text note");
+    auto sourceNotePos = out.find("note: source note");
+    auto helpPos = out.find("help: text help");
+    ASSERT_NE(errorPos, std::string::npos) << out;
+    ASSERT_NE(textNotePos, std::string::npos) << out;
+    ASSERT_NE(sourceNotePos, std::string::npos) << out;
+    ASSERT_NE(helpPos, std::string::npos) << out;
+    EXPECT_LT(errorPos, textNotePos);
+    EXPECT_LT(textNotePos, sourceNotePos);
+    EXPECT_LT(sourceNotePos, helpPos);
+    EXPECT_NE(out.find("test.cj:2:1"), std::string::npos) << out;
+    EXPECT_EQ(CountOccurrences(out, "note: text note"), 1u);
+
+    // In hint mode the main message is not shown, but the notes and helps are.
+    std::ostringstream hintOut;
+    DiagnosticEmitter(builder.diagnostic, true, true, hintOut, sm).Emit(true);
+    auto hint = hintOut.str();
+    EXPECT_EQ(hint.find("error:"), std::string::npos) << hint;
+    EXPECT_NE(hint.find("note: text note"), std::string::npos) << hint;
+    EXPECT_NE(hint.find("help: text help"), std::string::npos) << hint;
+}
+
+// Text-only warnings follow the same rule: their notes are shown once and their helps are not lost.
+TEST(EngineTest, PositionlessTextOnlyWarningNotesAndHelps)
+{
+    DiagnosticEngine diag;
+    SourceManager sm;
+    auto builder = diag.DiagnoseRefactor(
+        DiagKindRefactor::driver_warning_argument_unused, DEFAULT_POSITION, std::string{"--foo"});
+    builder.AddNote("text note");
+    builder.AddHelp(DiagHelp{std::string{"text help"}});
+
+    std::ostringstream sOut;
+    DiagnosticEmitter(builder.diagnostic, true, true, sOut, sm).Emit();
+    auto out = sOut.str();
+    EXPECT_NE(out.find("warning: the arg '--foo' may be unused"), std::string::npos) << out;
+    EXPECT_EQ(CountOccurrences(out, "note: text note"), 1u) << out;
+    EXPECT_EQ(CountOccurrences(out, "help: text help"), 1u) << out;
+}
+
+// The code expanded by a macro is shown once per macro call, also by diagnostics without position.
+TEST(EngineTest, PositionlessDiagnosticMacroCodeNoteShownOnce)
+{
+    DiagnosticEngine diag;
+    SourceManager sm;
+    MacroCallDiagInfo macroInfo;
+    macroInfo.hasShownCode = true;
+    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_debug_mismatch, DEFAULT_POSITION,
+        std::string{"enabled"}, std::string{"disabled"});
+    builder.AddNote(MACROCALL_CODE);
+    builder.AddNote(MACROCALL_CODE);
+    builder.diagnostic.macroDiagInfo = &macroInfo;
+
+    std::ostringstream sOut;
+    DiagnosticEmitter(builder.diagnostic, true, true, sOut, sm).Emit();
+    EXPECT_EQ(CountOccurrences(sOut.str(), MACROCALL_CODE), 0u) << sOut.str();
+
+    macroInfo.hasShownCode = false;
+    std::ostringstream firstOut;
+    DiagnosticEmitter(builder.diagnostic, true, true, firstOut, sm).Emit();
+    EXPECT_EQ(CountOccurrences(firstOut.str(), MACROCALL_CODE), 1u) << firstOut.str();
+}

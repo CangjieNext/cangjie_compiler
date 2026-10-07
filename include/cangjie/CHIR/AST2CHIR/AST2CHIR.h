@@ -343,6 +343,11 @@ private:
             auto it = deserializedVals.find(key);
             res = it == deserializedVals.end() ? nullptr : dynamic_cast<T*>(it->second);
         }
+        if (!res && IsCommonPartDeclExpectedInCHIR(decl)) {
+            // Such a decl has its CHIR in the common part '.chir' and its body can't be translated from the common
+            // part cjo, so a missing one means the '.chir' does not match the cjo.
+            missingCommonPartDecls.emplace(&decl);
+        }
         // When common part chir is deserialized, the list of members of imported nominal declarations
         // might be lacking new declarations, which were added when compiling specific part of multiplatform dependency
         if (res &&
@@ -352,6 +357,16 @@ private:
             noNeedToTranslateDecls.insert(&decl);
         }
         return res;
+    }
+    // Whether the decl is declared in the common part itself, so it must be found in the common part chir.
+    // Instantiations of common generic decls may be created by the current compilation only.
+    static bool IsCommonPartDeclExpectedInCHIR(const AST::Decl& decl)
+    {
+        if (!decl.TestAttr(AST::Attribute::FROM_COMMON_PART) ||
+            decl.TestAnyAttr(AST::Attribute::GENERIC_INSTANTIATED, AST::Attribute::IMPORTED)) {
+            return false;
+        }
+        return !decl.outerDecl || !decl.outerDecl->TestAttr(AST::Attribute::GENERIC_INSTANTIATED);
     }
     // build symbol table for deserialized decls from common part.
     void BuildDeserializedTable();
@@ -365,6 +380,8 @@ private:
     }
     void ProcessCommonAndSpecificExtends();
     void ProcessClassStructVarInits(Translator& trans);
+    // Report decls of the common part which are missing in the common part chir. Return false if there are any.
+    bool CheckCommonPartDeclsDeserialized();
     const GlobalOptions& opts;
     const GenericInstantiationManager* gim;
     ImportManager& importManager;
@@ -448,6 +465,8 @@ private:
     bool outputCHIR{false}; // Output type is CHIR
     bool mergingSpecific{false}; // Merging specific part over already compiled chir
     std::unordered_set<Ptr<const AST::Decl>> noNeedToTranslateDecls;
+    // Decls of the common part which have no deserialized CHIR node, see 'TryGetDeserialized'.
+    std::unordered_set<Ptr<const AST::Decl>> missingCommonPartDecls;
     // Deserialized node cache table, key is identifier.
     std::unordered_map<std::string, CustomTypeDef*> deserializedDefs;
     std::unordered_map<std::string, Value*> deserializedVals;
