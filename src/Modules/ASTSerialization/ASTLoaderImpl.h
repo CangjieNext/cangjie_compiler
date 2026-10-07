@@ -92,6 +92,16 @@ private:
     Ptr<AST::Package> curPackage{nullptr};
     bool importSrcCode{false};
     bool deserializingCommon{false};
+    // State of preloading the cjo as a common part of CJMP, so that a rejected common part is distinguished
+    // from the one which is not preloaded yet, and is never used afterwards.
+    enum class CommonPartState : uint8_t { NOT_PRELOADED, PRELOADED, REJECTED };
+    CommonPartState commonPartState{CommonPartState::NOT_PRELOADED};
+    bool PreloadCommonPartFiles(AST::Package& pkg);
+    // Whether decls of this loader can be loaded: a common part cjo must be preloaded successfully first.
+    bool CanLoadDecls() const
+    {
+        return !deserializingCommon || commonPartState == CommonPartState::PRELOADED;
+    }
 
     // Define the context status for loading type cache of incremental compilation.
     bool isLoadCache{false};

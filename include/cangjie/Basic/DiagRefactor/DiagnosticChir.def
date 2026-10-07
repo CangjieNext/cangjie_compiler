@@ -47,4 +47,7 @@ WARNING(chir_unreachable_pattern, UNUSED, "unreachable pattern")
 ERROR(chir_eval_support, "const evaluation has been disabled by compiler option `--no-interp-const-eval`")
 ERROR(chir_annotation_not_applicable, "'@%s' not applicable to %s")
 
+// CJMP check
+ERROR(chir_common_part_decl_missing, "declaration '%s' of the common part is missing in the common part chir")
+
 ERROR(chir_diag_end, "chir_diag_end")
