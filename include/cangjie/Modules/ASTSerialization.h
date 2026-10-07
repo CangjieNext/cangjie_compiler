@@ -122,6 +122,11 @@ public:
     bool IsCjoVersionExactly(uint8_t requiredMajor, uint8_t requiredMinor) const;
     // Add for cjmp
     bool PreloadCommonPartOfPackage(AST::Package& pkg) const;
+    /**
+     * Whether the files of the common part were preloaded successfully. Decls of a common part cjo can be loaded
+     * only after that: a rejected common part cjo has no valid file mapping and must not be used any more.
+     */
+    bool IsCommonPartPreloaded() const;
     std::vector<std::string> ReadFileNames() const;
 
     Ptr<AST::Ty> LoadType(FormattedIndex type) const;

@@ -311,7 +311,8 @@ bool CjoManager::LoadFilesOfCommonPart(Ptr<Package> pkg)
     // Remove existing isCommon files from pkg before loading new common part for lsp incremental compilation.
     Utils::EraseIf(pkg->files, [](const auto& file) { return file->TestAttr(Attribute::FROM_COMMON_PART); });
     for (Ptr<ASTLoader> commonLoader : GetCommonPartCjos(pkg->fullPackageName)) {
-        if (!commonLoader->PreloadCommonPartOfPackage(*pkg)) {
+        // The loader is null if the cjo can not be read, which has been reported.
+        if (commonLoader == nullptr || !commonLoader->PreloadCommonPartOfPackage(*pkg)) {
             return false;
         }
     }
@@ -344,6 +345,10 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
         if (impl->GetGlobalOptions().IsCompilingCJMPSpecific() || !impl->GetGlobalOptions().commonPartCjos.empty()) {
             std::string expectedPackageName = pkg->fullPackageName;
             for (Ptr<ASTLoader> commonLoader : GetCommonPartCjos(expectedPackageName)) {
+                // A common part whose files were not preloaded (e.g. it was rejected) must not be used.
+                if (commonLoader == nullptr || !commonLoader->IsCommonPartPreloaded()) {
+                    continue;
+                }
                 commonLoader->LoadPackageDecls();
                 loaders.emplace_back(commonLoader);
             }
