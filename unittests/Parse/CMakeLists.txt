@@ -13,6 +13,10 @@ target_link_libraries(
     GTest::gtest_main)
 add_test(NAME ParserTest COMMAND ParserTest)
 
+add_executable(ArkTSAnnotationTest ArkTSAnnotationTest.cpp)
+target_link_libraries(ArkTSAnnotationTest cangjie-lsp ${CMAKE_DL_LIBS} GTest::gtest GTest::gtest_main)
+add_test(NAME ArkTSAnnotationTest COMMAND ArkTSAnnotationTest)
+
 add_executable(ParseTypeTest ParseTypeTest.cpp)
 target_link_libraries(
     ParseTypeTest

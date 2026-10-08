@@ -323,6 +323,14 @@ ERROR(parse_annotation_no_arguments, "%s accepts no arguments", "unexpected argu
 ERROR(parse_foreign_name_on_ffi_decl_member, "'@ForeignName' can only be used on '@Java' or '@ObjC' declaration member")
 WARNING(parse_deprecated_interop_annotation, DEPRECATED, "'%s' annotation is deprecated; use '%s' instead")
 
+// @ArkTS annotation
+ERROR(parse_arkts_argument_not_named, "argument of @ArkTS must be a named argument", "expected 'module', 'foreignName' or 'namespace' here")
+ERROR(parse_arkts_wrong_argument, "argument '%s' of @ArkTS should be %s")
+ERROR(parse_arkts_argument_duplication, "argument '%s' of @ArkTS can not be duplicated")
+ERROR(parse_arkts_unknown_argument, "unknown argument '%s' in @ArkTS", "expected 'module', 'foreignName' or 'namespace' here")
+ERROR(parse_arkts_rest_deferred, "ArkTS foreign signature is not supported in phase 1: rest parameter")
+ERROR(parse_arkts_mixed_interop, "ArkTS entry cannot be combined with Interop on the same declaration")
+
 // Java interoperability
 ERROR(parse_java_mirror_function_cannot_have_body, "member function '%s' of '@Java' foreign declaration cannot have body")
 ERROR(parse_java_mirror_function_must_have_return_type, "member function '%s' of '@Java' foreign declaration must have return type explicitly specified")
@@ -380,6 +388,8 @@ ERROR(parse_objc_interop_not_supported, "Objective-C interoperability feature '%
 
 ERROR(parse_diag_error, "%s", "%s")
 WARNING(parse_diag_warning, PARSER, "%s", "%s")
+
+ERROR(parse_arkts_constructor_body, "ArkTS foreign class constructor cannot have a body")
 
 // Don't add any diag after this kind.
 ERROR(parse_diag_end, "")

@@ -16,6 +16,9 @@
 
 #include "PrintSymbolTable.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
+#include "cangjie/AST/Create.h"
+#include "cangjie/AST/ArkTS.h"
+#include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Basic/Print.h"
 #include "cangjie/Basic/Version.h"
@@ -33,6 +36,7 @@
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Modules/PackageManager.h"
 #include "cangjie/Parse/ASTHasher.h"
+#include "cangjie/Parse/Parser.h"
 #include "cangjie/Sema/GenericInstantiationManager.h"
 #include "cangjie/Sema/TestManager.h"
 #include "cangjie/Sema/TypeChecker.h"
@@ -681,6 +685,135 @@ bool CompilerInstance::PerformIncrementalScopeAnalysis()
 
 bool CompilerInstance::PerformImportPackage()
 {
+    // Generate entries before import/collection so normal semantic analysis
+    // handles their SDK signatures, registration and finally blocks.
+    for (auto pkg : GetSourcePackages()) {
+        std::unordered_map<std::string, size_t> entryNames;
+        for (auto& file : pkg->files) {
+            for (auto& decl : file->decls) {
+                auto fd = DynamicCast<FuncDecl*>(decl.get());
+                if (fd && IsMinimalArkTSEntry(*fd)) {
+                    ++entryNames[fd->identifier.Val()];
+                }
+            }
+        }
+        bool hasArkTS = false;
+        bool hasEntry = false;
+        size_t entryIndex = 0;
+        for (auto& file : pkg->files) {
+            std::vector<OwnedPtr<Decl>> entries;
+            for (auto& decl : file->decls) {
+                auto fd = DynamicCast<FuncDecl*>(decl.get());
+                hasArkTS = hasArkTS || (fd && fd->HasAnno(AnnotationKind::ARKTS) &&
+                    fd->TestAttr(Attribute::FOREIGN) && !fd->TestAttr(Attribute::PRIVATE) &&
+                    fd->funcBody && !fd->funcBody->body && !fd->GetGeneric());
+                // Leave duplicate source declarations to normal conflict
+                // diagnostics; generated calls would add ambiguous-call errors.
+                if (!fd || !IsMinimalArkTSEntry(*fd) || entryNames[fd->identifier.Val()] != 1) {
+                    continue;
+                }
+                hasEntry = true;
+                auto suffix = std::to_string(entryIndex++);
+                auto wrapperName = "__cj_arkts_entry_" + suffix;
+                std::string code = "func " + wrapperName +
+                    "(ctx: __cj_arkts_JSContext, info: __cj_arkts_JSCallInfo): __cj_arkts_JSValue {\n"
+                    "let previous = __cj_arkts_enter_scope(ctx)\n"
+                    "try { __cj_arkts_original()\nreturn ctx.undefined().toJSValue() }\n"
+                    "finally { __cj_arkts_restore_scope(previous) }\n}\n"
+                    "let __cj_arkts_registration_" + suffix +
+                    " = __cj_arkts_JSModule.registerFunc(\"__entry_name__\", " + wrapperName + ")\n";
+                Parser parser(code, diag, GetSourceManager(), fd->begin);
+                parser.SetCurFile(file.get());
+                auto generated = parser.ParseTopLevel();
+                if (!generated) {
+                    continue;
+                }
+                for (auto& entry : generated->decls) {
+                    Walker(entry.get(), [&](Ptr<Node> node) {
+                        // ParseTopLevel owns a temporary File. AddCurFile only
+                        // fills null pointers, so replace these before it dies.
+                        node->curFile = file.get();
+                        node->begin = fd->begin;
+                        node->end = fd->end;
+                        if (auto literal = DynamicCast<LitConstExpr*>(node);
+                            literal && literal->stringValue == "__entry_name__") {
+                            literal->stringValue = fd->identifier.Val();
+                        }
+                        if (auto ref = DynamicCast<RefExpr*>(node);
+                            ref && ref->ref.identifier == "__cj_arkts_original") {
+                            ref->ref.identifier = fd->identifier;
+                        }
+                        return VisitAction::WALK_CHILDREN;
+                    }).Walk();
+                    AddCurFile(*entry, file.get());
+                    entries.emplace_back(std::move(entry));
+                }
+            }
+            for (auto& entry : entries) {
+                file->decls.emplace_back(std::move(entry));
+            }
+        }
+        if (hasArkTS || hasEntry) {
+            if (hasArkTS) {
+                // Preserve the conversion payload contract in the declaration
+                // package. No exception/conversion implementation goes into
+                // the application context provider.
+                auto file = pkg->files.front().get();
+                const std::string exception =
+                    "public class ArkTSConversionException <: Exception {\n"
+                    "public let reason: String\npublic let target: String\n"
+                    "public init(reason: String, target: String) {\n"
+                    "super(\"ArkTS conversion: \" + reason + \" (\" + target + \")\")\n"
+                    "this.reason = reason\nthis.target = target\n}\n}\n";
+                Parser parser(exception, diag, GetSourceManager(), file->begin);
+                parser.SetCurFile(file);
+                auto generated = parser.ParseDecl(ScopeKind::TOPLEVEL);
+                if (generated) {
+                    AddCurFile(*generated, file);
+                    file->decls.emplace_back(std::move(generated));
+                }
+            }
+            for (auto& file : pkg->files) {
+                for (auto& package : {"cj_arkts_context_v1", "ohos.ark_interop"}) {
+                    auto imported = CreateImportSpec(package);
+                    imported->curFile = file.get();
+                    file->imports.emplace_back(std::move(imported));
+                }
+                if (hasEntry) {
+                    const std::string imports =
+                        "import ohos.ark_interop.JSContext as __cj_arkts_JSContext\n"
+                        "import ohos.ark_interop.JSCallInfo as __cj_arkts_JSCallInfo\n"
+                        "import ohos.ark_interop.JSValue as __cj_arkts_JSValue\n"
+                        "import ohos.ark_interop.JSModule as __cj_arkts_JSModule\n"
+                        "import cj_arkts_context_v1.__cj_arkts_enter as __cj_arkts_enter_scope\n"
+                        "import cj_arkts_context_v1.__cj_arkts_restore as __cj_arkts_restore_scope\n";
+                    Parser parser(imports, diag, GetSourceManager(), file->begin);
+                    auto generated = parser.ParseTopLevel();
+                    if (generated) {
+                        for (auto& imported : generated->imports) {
+                            imported->EnableAttr(Attribute::COMPILER_ADD);
+                            imported->curFile = file.get();
+                            file->imports.emplace_back(std::move(imported));
+                        }
+                    }
+                }
+                if (hasArkTS) {
+                    const std::string imports =
+                        "import std.math.numeric.BigInt as __cj_arkts_BigInt\n"
+                        "import std.convert.Parsable\n";
+                    Parser parser(imports, diag, GetSourceManager(), file->begin);
+                    auto generated = parser.ParseTopLevel();
+                    if (generated) {
+                        for (auto& imported : generated->imports) {
+                            imported->EnableAttr(Attribute::COMPILER_ADD);
+                            imported->curFile = file.get();
+                            file->imports.emplace_back(std::move(imported));
+                        }
+                    }
+                }
+            }
+        }
+    }
     auto ret = compileStrategy->ImportPackages();
     if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
         DumpAST(GetSourcePackages(), invocation.globalOptions.output, "import");
@@ -691,6 +824,28 @@ bool CompilerInstance::PerformImportPackage()
 bool CompilerInstance::PerformSema()
 {
     auto ret = compileStrategy->Sema();
+    if (ret && diag.GetErrorCount() == 0) {
+        for (auto pkg : GetSourcePackages()) {
+            std::string declarations;
+            for (auto& file : pkg->files) {
+                for (auto& decl : file->decls) {
+                    auto fd = DynamicCast<FuncDecl*>(decl.get());
+                    if (fd && IsMinimalArkTSEntry(*fd)) {
+                        declarations += "export declare function " + fd->identifier.Val() + "(): void;\n";
+                    }
+                }
+            }
+            if (!declarations.empty()) {
+                const auto& options = invocation.globalOptions;
+                auto directory = options.outputDir.value_or(FileUtil::IsDir(options.output)
+                    ? options.output : FileUtil::GetDirPath(options.output));
+                auto path = FileUtil::JoinPath(directory, pkg->fullPackageName + ".arkts.d.ts");
+                if (!FileUtil::WriteToFile(path, declarations)) {
+                    return false;
+                }
+            }
+        }
+    }
     if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
         DumpAST(GetSourcePackages(), invocation.globalOptions.output, "sema");
     }

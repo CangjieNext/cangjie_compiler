@@ -7,9 +7,12 @@
 #include "../../src/Sema/NativeFFI/ArkTS/ArkTSInterop.h"
 #include "../../src/Sema/NativeFFI/ArkTS/FunctionSource.h"
 #include "../../src/Sema/NativeFFI/ArkTS/Utils/EntrySelection.h"
+#include "cangjie/AST/ArkTS.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/Node.h"
 #include "cangjie/AST/Walker.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Mangle/ASTMangler.h"
 #include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/CjoManager.h"
@@ -1159,4 +1162,360 @@ public func __cj_arkts_enter(): Unit {}
     }).Walk();
     EXPECT_EQ(sourceCalls, 1);
     EXPECT_EQ(supportCalls, 1);
+}
+
+TEST(ArkTSAnnotationTest, NamedStringArgumentsPreserveOrderAndValues)
+{
+    SourceManager sm;
+    DiagnosticEngine diag;
+    diag.SetSourceManager(&sm);
+    std::string code = R"(@ArkTS[module: "entry/api", namespace: "math", foreignName: "echo"]
+foreign func renamed(value: Int32): Int32)";
+    Parser parser(code, diag, sm);
+    auto file = parser.ParseTopLevel();
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    ASSERT_EQ(file->decls.size(), 1);
+    const auto& decl = *file->decls[0];
+    EXPECT_TRUE(decl.TestAttr(Attribute::FOREIGN));
+    ASSERT_EQ(decl.annotations.size(), 1);
+    const auto& anno = *decl.annotations[0];
+    EXPECT_EQ(anno.kind, AnnotationKind::ARKTS);
+    ASSERT_EQ(anno.args.size(), 3);
+    const std::vector<std::string> names{"module", "namespace", "foreignName"};
+    const std::vector<std::string> values{"entry/api", "math", "echo"};
+    for (size_t i = 0; i < names.size(); ++i) {
+        EXPECT_EQ(anno.args[i]->name.Val(), names[i]);
+        ASSERT_EQ(anno.args[i]->expr->astKind, ASTKind::LIT_CONST_EXPR);
+        auto& literal = *StaticCast<LitConstExpr>(anno.args[i]->expr.get());
+        EXPECT_EQ(literal.kind, LitConstKind::STRING);
+        EXPECT_EQ(literal.stringValue, values[i]);
+    }
+}
+
+TEST(ArkTSAnnotationTest, PublicForeignAllowsBothModifierOrders)
+{
+    for (const auto& modifiers : {"public foreign", "foreign public"}) {
+        SCOPED_TRACE(modifiers);
+        SourceManager sm;
+        DiagnosticEngine diag;
+        diag.SetSourceManager(&sm);
+        std::string code = std::string("@ArkTS[module: \"entry/api\"]\n") + modifiers +
+            " func echo(value: Int32): Int32";
+        Parser parser(code, diag, sm);
+        auto file = parser.ParseTopLevel();
+        ASSERT_EQ(diag.GetErrorCount(), 0);
+        ASSERT_EQ(file->decls.size(), 1);
+        EXPECT_TRUE(file->decls[0]->TestAttr(Attribute::FOREIGN));
+        EXPECT_TRUE(file->decls[0]->TestAttr(Attribute::PUBLIC));
+    }
+}
+
+TEST(ArkTSAnnotationTest, OmittedOptionsAreAccepted)
+{
+    SourceManager sm;
+    DiagnosticEngine diag;
+    diag.SetSourceManager(&sm);
+    std::string code = "@ArkTS\nforeign func echo(value: Int32): Int32";
+    Parser parser(code, diag, sm);
+    auto file = parser.ParseTopLevel();
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    ASSERT_EQ(file->decls.size(), 1);
+    ASSERT_EQ(file->decls[0]->annotations.size(), 1);
+    EXPECT_EQ(file->decls[0]->annotations[0]->kind, AnnotationKind::ARKTS);
+    EXPECT_TRUE(file->decls[0]->annotations[0]->args.empty());
+}
+
+TEST(ArkTSAnnotationTest, InvalidArgumentsProduceSpecificDiagnostics)
+{
+    struct Case {
+        std::string arguments;
+        DiagKindRefactor kind;
+        std::string message;
+    };
+    const std::vector<Case> cases{
+        {"module: \"a\", module: \"b\"", DiagKindRefactor::parse_arkts_argument_duplication, "module"},
+        {"module: 42", DiagKindRefactor::parse_arkts_wrong_argument, "module"},
+        {"foreignName: name", DiagKindRefactor::parse_arkts_wrong_argument, "foreignName"},
+        {"namespace: true", DiagKindRefactor::parse_arkts_wrong_argument, "namespace"},
+        {"unknown: \"a\"", DiagKindRefactor::parse_arkts_unknown_argument, "unknown"},
+        {"\"entry/api\"", DiagKindRefactor::parse_arkts_argument_not_named, "named"}};
+    for (const auto& test : cases) {
+        SCOPED_TRACE(test.arguments);
+        SourceManager sm;
+        DiagnosticEngine diag;
+        diag.SetSourceManager(&sm);
+        std::string code = "@ArkTS[" + test.arguments + "]\nforeign func echo(): Unit";
+        Parser parser(code, diag, sm);
+        auto file = parser.ParseTopLevel();
+        ASSERT_NE(file, nullptr);
+        EXPECT_EQ(diag.GetErrorCount(), 1);
+        auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::PARSE);
+        ASSERT_EQ(diagnostics.size(), 1);
+        EXPECT_EQ(diagnostics[0].rKind, test.kind);
+        EXPECT_EQ(diagnostics[0].mainHint.range.begin.line, 1);
+        EXPECT_NE(diagnostics[0].GetErrorMessage().find(test.message), std::string::npos);
+    }
+}
+
+TEST(ArkTSAnnotationTest, OrdinaryPublicForeignStillConflicts)
+{
+    SourceManager sm;
+    DiagnosticEngine diag;
+    diag.SetSourceManager(&sm);
+    std::string code = "public foreign func ordinary(): Unit";
+    Parser parser(code, diag, sm);
+    auto file = parser.ParseTopLevel();
+    ASSERT_NE(file, nullptr);
+    EXPECT_GT(diag.GetErrorCount(), 0);
+}
+
+TEST(ArkTSAnnotationTest, RestParameterIsRejectedInBothParserRepresentations)
+{
+    for (bool custom : {false, true}) {
+        for (const auto& type : {"Array<Float64>", "Float64"}) {
+            SCOPED_TRACE(custom);
+            SCOPED_TRACE(type);
+            SourceManager sm;
+            DiagnosticEngine diag;
+            diag.SetSourceManager(&sm);
+            std::string code = std::string("@ArkTS\nforeign func n(@RestParam v: ") + type + "): String";
+            Parser parser(code, diag, sm);
+            if (custom) {
+                parser.EnableCustomAnno();
+            }
+            auto file = parser.ParseTopLevel();
+            ASSERT_NE(file, nullptr);
+            ASSERT_EQ(diag.GetErrorCount(), 1);
+            auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::PARSE);
+            ASSERT_EQ(diagnostics.size(), 1);
+            EXPECT_EQ(diagnostics[0].rKind, DiagKindRefactor::parse_arkts_rest_deferred);
+            EXPECT_EQ(diagnostics[0].GetErrorMessage(),
+                "ArkTS foreign signature is not supported in phase 1: rest parameter");
+            EXPECT_EQ(diagnostics[0].mainHint.range.begin.line, 2);
+            EXPECT_EQ(diagnostics[0].mainHint.range.begin.column, 17);
+        }
+    }
+}
+
+TEST(ArkTSAnnotationTest, RestGuardIsLimitedToArkTSForeignDeclarations)
+{
+    for (const auto& code : {"foreign func n(@RestParam v: Float64): String",
+             "@ArkTS foreign func n(@OtherParam v: Float64): String",
+             "@ArkTS foreign func n(@user.RestParam v: Float64): String",
+             "@ArkTS public func run(): Unit {}"}) {
+        SourceManager sm;
+        DiagnosticEngine diag;
+        diag.SetSourceManager(&sm);
+        Parser parser(code, diag, sm);
+        ASSERT_NE(parser.ParseTopLevel(), nullptr);
+        EXPECT_EQ(diag.GetErrorCount(), 0);
+    }
+}
+
+TEST(ArkTSAnnotationTest, MixedInteropUsesResolvedSDKIdentity)
+{
+    const std::vector<std::string> sources{"@ArkTS @Interop[ArkTS] public func run(): Unit {}",
+             "@Interop[ArkTS] @ArkTS public func run(): Unit {}",
+             "@ArkTS @Bridge[ArkTS] public func run(): Unit {}",
+        "@ArkTS @m.Interop[ArkTS] public func run(): Unit {}"};
+    for (const auto& code : sources) {
+        SourceManager sm;
+        DiagnosticEngine diag;
+        diag.SetSourceManager(&sm);
+        Parser parser(code, diag, sm);
+        auto file = parser.ParseTopLevel();
+        ASSERT_NE(file, nullptr);
+        ASSERT_EQ(diag.GetErrorCount(), 0);
+        ASSERT_EQ(file->decls.size(), 1);
+        auto macro = DynamicCast<MacroExpandDecl*>(file->decls[0].get());
+        ASSERT_NE(macro, nullptr);
+        FuncDecl definition;
+        definition.fullPackageName = "ohos.ark_interop_macro";
+        definition.identifier = "Interop";
+        EXPECT_TRUE(IsMixedArkTSInterop(*macro, definition));
+        definition.fullPackageName = "user";
+        EXPECT_FALSE(IsMixedArkTSInterop(*macro, definition));
+        definition.fullPackageName = "ohos.ark_interop_macro";
+        definition.identifier = "OtherMacro";
+        EXPECT_FALSE(IsMixedArkTSInterop(*macro, definition));
+    }
+}
+
+TEST(ArkTSAnnotationTest, OrdinaryInteropRemainsOutsideTheMixedGuard)
+{
+    SourceManager sm;
+    DiagnosticEngine diag;
+    diag.SetSourceManager(&sm);
+    const std::string code = "@Interop[ArkTS] public func run(): Unit {}";
+    Parser parser(code, diag, sm);
+    auto file = parser.ParseTopLevel();
+    ASSERT_NE(file, nullptr);
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    auto macro = DynamicCast<MacroExpandDecl*>(file->decls[0].get());
+    ASSERT_NE(macro, nullptr);
+    FuncDecl definition;
+    definition.fullPackageName = "ohos.ark_interop_macro";
+    definition.identifier = "Interop";
+    EXPECT_FALSE(IsMixedArkTSInterop(*macro, definition));
+}
+
+TEST(ArkTSAnnotationTest, MinimalEntryAcceptsOnlyTheDeclaredEntryContract)
+{
+    struct Case {
+        std::string source;
+        bool accepted;
+        bool parseRejected{false};
+    };
+    const std::vector<Case> cases{
+        {"@ArkTS public func run(): Unit {}", true},
+        {"@ArkTS public func run() {}", false},
+        {"@ArkTS func run(): Unit {}", false},
+        {"@ArkTS public func run(value: String): Unit {}", false},
+        {"@ArkTS public func run(): String { \"hello\" }", false},
+        {"@ArkTS public func run<T>(): Unit {}", false},
+        {"@ArkTS[module: \"entry/api\"] public func run(): Unit {}", false},
+        {"@ArkTS[foreignName: \"renamed\"] public func run(): Unit {}", false},
+        {"@ArkTS[namespace: \"test\"] public func run(): Unit {}", false},
+        {"@ArkTS @C public func run(): Unit {}", false, true},
+        {"@ArkTS public foreign func run(): Unit", false}};
+    for (auto& test : cases) {
+        SCOPED_TRACE(test.source);
+        SourceManager sm;
+        DiagnosticEngine diag;
+        diag.SetSourceManager(&sm);
+        Parser parser(test.source, diag, sm);
+        auto file = parser.ParseTopLevel();
+        ASSERT_NE(file, nullptr);
+        if (test.parseRejected) {
+            EXPECT_EQ(diag.GetErrorCount(), 1);
+            continue;
+        }
+        ASSERT_EQ(diag.GetErrorCount(), 0);
+        ASSERT_EQ(file->decls.size(), 1);
+        auto fd = DynamicCast<FuncDecl*>(file->decls[0].get());
+        ASSERT_NE(fd, nullptr);
+        EXPECT_EQ(IsMinimalArkTSEntry(*fd), test.accepted);
+    }
+}
+
+TEST(ArkTSAnnotationTest, ForeignClassConstructorDeclarationHasNoBody)
+{
+    SourceManager sm;
+    DiagnosticEngine diag;
+    diag.SetSourceManager(&sm);
+    const std::string code = "@ArkTS[module: \"entry/api\"]\npublic foreign class Counter { public init(value: Float64) }";
+    Parser parser(code, diag, sm);
+    auto file = parser.ParseTopLevel();
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    ASSERT_EQ(file->decls.size(), 1);
+    auto cd = DynamicCast<ClassDecl*>(file->decls[0].get());
+    ASSERT_NE(cd, nullptr);
+    EXPECT_TRUE(cd->HasAnno(AnnotationKind::ARKTS));
+    ASSERT_EQ(cd->body->decls.size(), 1);
+    auto ctor = DynamicCast<FuncDecl*>(cd->body->decls[0].get());
+    ASSERT_NE(ctor, nullptr);
+    EXPECT_TRUE(ctor->TestAttr(Attribute::CONSTRUCTOR));
+    EXPECT_FALSE(ctor->funcBody->body);
+    EXPECT_TRUE(IsArkTSForeignMember(*ctor));
+}
+
+TEST(ArkTSAnnotationTest, ForeignClassConstructorBodyHasSpecificDiagnostic)
+{
+    SourceManager sm;
+    DiagnosticEngine diag;
+    diag.SetSourceManager(&sm);
+    const std::string code = "@ArkTS\nforeign class Counter { public init(value: Float64) {} }";
+    Parser parser(code, diag, sm);
+    auto file = parser.ParseTopLevel();
+    EXPECT_EQ(diag.GetErrorCount(), 1);
+    auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::PARSE);
+    ASSERT_EQ(diagnostics.size(), 1);
+    EXPECT_EQ(diagnostics[0].rKind, DiagKindRefactor::parse_arkts_constructor_body);
+    EXPECT_EQ(diagnostics[0].GetErrorMessage(), "ArkTS foreign class constructor cannot have a body");
+    ASSERT_EQ(file->decls.size(), 1);
+    auto cd = DynamicCast<ClassDecl*>(file->decls[0].get());
+    ASSERT_NE(cd, nullptr);
+    EXPECT_TRUE(cd->body->decls[0]->TestAttr(Attribute::HAS_BROKEN));
+}
+
+TEST(ArkTSAnnotationTest, OrdinaryClassStillRequiresConstructorBody)
+{
+    for (const auto& prefix : {"", "@ArkTS\n"}) {
+        SCOPED_TRACE(prefix);
+        SourceManager sm;
+        DiagnosticEngine diag;
+        diag.SetSourceManager(&sm);
+        const std::string code = std::string(prefix) + "class Counter { public init(value: Float64) }";
+        Parser parser(code, diag, sm);
+        auto file = parser.ParseTopLevel();
+        EXPECT_GT(diag.GetErrorCount(), 0);
+        ASSERT_EQ(file->decls.size(), 1);
+        auto cd = DynamicCast<ClassDecl*>(file->decls[0].get());
+        ASSERT_NE(cd, nullptr);
+        EXPECT_FALSE(IsArkTSForeignMember(*cd->body->decls[0]));
+    }
+}
+
+TEST(ArkTSAnnotationTest, OrdinaryNestedClassDoesNotInheritOuterArkTSABI)
+{
+    SourceManager sm;
+    DiagnosticEngine diag;
+    diag.SetSourceManager(&sm);
+    const std::string code = "@ArkTS\nforeign class Outer {}";
+    Parser parser(code, diag, sm);
+    auto file = parser.ParseTopLevel();
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    ASSERT_EQ(file->decls.size(), 1);
+    ClassDecl inner;
+    inner.outerDecl = file->decls[0].get();
+    FuncDecl member;
+    member.outerDecl = &inner;
+    EXPECT_FALSE(IsArkTSForeignMember(member));
+}
+
+TEST(ArkTSAnnotationTest, OrdinaryNestedTypeBoundariesDoNotInheritOuterArkTSABI)
+{
+    SourceManager sm;
+    DiagnosticEngine diag;
+    diag.SetSourceManager(&sm);
+    const std::string code = "@ArkTS\nforeign class Outer {}";
+    Parser parser(code, diag, sm);
+    auto file = parser.ParseTopLevel();
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    ASSERT_EQ(file->decls.size(), 1);
+    StructDecl structure;
+    EnumDecl enumeration;
+    ExtendDecl extension;
+    for (auto boundary : std::vector<Decl*>{&structure, &enumeration, &extension}) {
+        boundary->outerDecl = file->decls[0].get();
+        FuncDecl member;
+        member.outerDecl = boundary;
+        member.EnableAttr(Attribute::FOREIGN);
+        EXPECT_FALSE(IsArkTSForeignMember(member));
+    }
+}
+
+TEST(ArkTSAnnotationTest, PublicForeignClassLikeRequiresArkTSInBothOrders)
+{
+    for (const auto& type : {"class", "interface"}) {
+        for (const auto& modifiers : {"public foreign", "foreign public"}) {
+            for (const auto& annotation : {"", "@ArkTS\n"}) {
+                const std::string code = std::string(annotation) + modifiers + " " + type + " Counter {}";
+                SCOPED_TRACE(code);
+                SourceManager sm;
+                DiagnosticEngine diag;
+                diag.SetSourceManager(&sm);
+                Parser parser(code, diag, sm);
+                auto file = parser.ParseTopLevel();
+                ASSERT_EQ(file->decls.size(), 1);
+                if (std::string(annotation).empty()) {
+                    EXPECT_EQ(diag.GetErrorCount(), 1);
+                } else {
+                    EXPECT_EQ(diag.GetErrorCount(), 0);
+                    EXPECT_TRUE(file->decls[0]->TestAttr(Attribute::PUBLIC, Attribute::FOREIGN));
+                    EXPECT_TRUE(file->decls[0]->HasAnno(AnnotationKind::ARKTS));
+                }
+            }
+        }
+    }
 }

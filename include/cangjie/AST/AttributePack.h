@@ -744,6 +744,8 @@ enum class Attribute {
     // Ordinary CJ wrapper generated from an ArkTS foreign function.
     ARKTS_FUNCTION_WRAPPER,
 
+    // ArkTS foreign functions lowered to ordinary CJ bodies; never C ABI.
+    ARKTS_LOWERED,
     AST_ATTR_END,
 };
 

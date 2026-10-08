@@ -7,6 +7,9 @@
 ERROR(sema_diag_begin, "")
 
 // General
+ERROR(sema_arkts_bridge_pending, "ArkTS foreign bridge lowering is not implemented in this compiler build")
+ERROR(sema_arkts_unsupported_signature, "ArkTS foreign signature is not supported in phase 1: %s")
+ERROR(sema_arkts_invalid_entry, "ArkTS entry must be a public top-level non-generic function with no parameters, an explicit Unit return type, a body and no annotation options or other annotations")
 ERROR(sema_invalid_node_after_check, "semantic error")
 ERROR(sema_unable_to_infer_decl, "unable to infer declaration type, please add type annotation")
 ERROR(sema_mismatched_types, "mismatched types", "expected '%s', found '%s'")

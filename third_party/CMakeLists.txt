@@ -151,6 +151,13 @@ string(TOLOWER ${TARGET_TRIPLE_DIRECTORY_PREFIX}_${CJNATIVE_BACKEND} output_lib_
 
 install(DIRECTORY DESTINATION modules/${output_lib_dir}${SANITIZER_SUBPATH})
 
+# A compiler-only rebuild may reuse separately built, target-matched LLVM
+# components. Backend executables and target runtime remain supplied by the SDK.
+if(CANGJIE_BUILD_CJC AND CANGJIE_PREBUILT_LLVM_BUILD_DIR)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/PrebuiltCompilerLLVM.cmake)
+    return()
+endif()
+
 # binary
 if(CANGJIE_CODEGEN_CJNATIVE_BACKEND) # i.e. "--compile-backend" option
     include(CompileRTLib)

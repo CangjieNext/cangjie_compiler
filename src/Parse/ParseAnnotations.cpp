@@ -356,6 +356,43 @@ void ParserImpl::CheckDeprecatedAnnotation(const Annotation& anno)
     }
 }
 
+void ParserImpl::CheckObjCMirrorAnnotation(Annotation& anno) const
+{
+    static const std::string OBJ_C_MIRROR_NAME = "@ObjCMirror";
+    static const std::string OBJ_C_IMPL_NAME = "@ObjCImpl";
+
+    const auto& annotationName =
+        anno.kind == AnnotationKind::OBJ_C_MIRROR ? OBJ_C_MIRROR_NAME : OBJ_C_IMPL_NAME;
+    ffiParser->CheckZeroOrSingleStringLitArgAnnotation(anno, annotationName);
+}
+
+void ParserImpl::CheckArkTSAnnotation(const Annotation& anno)
+{
+    std::unordered_set<std::string> found;
+
+    for (auto& arg : anno.args) {
+        CJC_NULLPTR_CHECK(arg);
+        if (arg->name.Empty()) {
+            ParseDiagnoseRefactor(DiagKindRefactor::parse_arkts_argument_not_named, *arg);
+            continue;
+        }
+        const auto& argName = arg->name.Val();
+        auto lce = (arg->expr != nullptr && arg->expr->astKind == ASTKind::LIT_CONST_EXPR)
+                       ? DynamicCast<LitConstExpr*>(arg->expr.get())
+                       : nullptr;
+        if (argName == "module" || argName == "foreignName" || argName == "namespace") {
+            if (!found.insert(argName).second) {
+                ParseDiagnoseRefactor(DiagKindRefactor::parse_arkts_argument_duplication, *arg, argName);
+            }
+            if (lce == nullptr || lce->kind != LitConstKind::STRING) {
+                ParseDiagnoseRefactor(DiagKindRefactor::parse_arkts_wrong_argument, *arg, argName, "'String' literal");
+            }
+        } else {
+            ParseDiagnoseRefactor(DiagKindRefactor::parse_arkts_unknown_argument, *arg, argName);
+        }
+    }
+}
+
 OwnedPtr<Annotation> ParserImpl::ParseAnnotation()
 {
     if (this->enableCustomAnno && SeeingMacroCallDecl()) {
@@ -407,6 +444,11 @@ OwnedPtr<Annotation> ParserImpl::ParseAnnotation()
         case AnnotationKind::OBJ_C_IMPL:
         case AnnotationKind::OBJ_C: {
             ParseAnnotationArguments(*annotation);
+            break;
+        }
+        case AnnotationKind::ARKTS: {
+            ParseAnnotationArguments(*annotation);
+            CheckArkTSAnnotation(*annotation);
             break;
         }
         default: {

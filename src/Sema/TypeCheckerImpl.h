@@ -1584,6 +1584,8 @@ private:
     // FFI Sema Prepare Check.
     void LowerArkTSFunctions(ASTContext& ctx);
     void PreCheckAnnoForFFI(AST::Node& root);
+    void PrepareArkTSFunctions(AST::Package& pkg);
+    void LowerArkTSFunctions(ASTContext& ctx);
     /**
      * Set the ABI information to Foreign Modifier. By default Foreign Modifier has Attribute::C.
      */

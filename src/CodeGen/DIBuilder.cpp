@@ -1549,6 +1549,9 @@ llvm::DIType* DIBuilder::CreateGenericType(const CHIR::GenericType& genericTy)
     auto genericSize = 64u;
     auto genericType = createStructType(diCompileUnit, name, defaultFile, 0u, genericSize, 0u, llvm::DINode::FlagZero,
         nullptr, getOrCreateArray({}), 0, nullptr, genericTy.GetIdentifier());
+    // Upper bounds can recursively refer to this generic type. Publish the
+    // forward declaration before resolving them, as for other recursive types.
+    typeCache[&genericTy] = llvm::TrackingMDRef(genericType);
     auto ti = CreateTypeInfoMember(genericType, defaultFile);
     CodeGenDIVector4 elements{ti};
     for (auto upperBound : genericTy.GetUpperBounds()) {
