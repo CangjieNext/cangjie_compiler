@@ -12,6 +12,7 @@
 
 #include "cangjie/Macro/MacroEvaluation.h"
 
+#include "cangjie/AST/ArkTS.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Basic/Print.h"
@@ -793,6 +794,15 @@ bool MacroEvaluation::NeedCreateMacroCallTreeForReEval(MacroCall& macCall, AST::
 bool MacroEvaluation::NeedCreateMacroCallTreeForFirstEval(MacroCall& macCall, AST::MacroInvocation* pInvocation)
 {
     if (macCall.ResolveMacroCall(ci)) {
+        auto definition = macCall.GetDefinition();
+        auto macro = DynamicCast<MacroExpandDecl*>(macCall.GetNode());
+        // Interop can consume source annotations while expanding. Check the
+        // resolved SDK identity and both annotation orders before evaluation.
+        if (macro && definition && IsMixedArkTSInterop(*macro, *definition)) {
+            ci->diag.DiagnoseRefactor(DiagKindRefactor::parse_arkts_mixed_interop, *macro);
+            macCall.status = MacroEvalStatus::FAIL;
+            return false;
+        }
         SaveUsedMacros(macCall);
         CheckDeprecatedMacrosUsage(macCall);
         // Find macrodef and check attr.

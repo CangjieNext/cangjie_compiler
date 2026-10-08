@@ -13,6 +13,7 @@
 
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/ArkTS.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Parse/ParseModifiersRules.h"
@@ -24,6 +25,31 @@ using namespace AST;
 
 namespace {
 constexpr std::string_view ELLIPSIS("...");
+
+std::optional<Position> FindArkTSRestParameter(const FuncDecl& decl)
+{
+    if (!decl.TestAttr(Attribute::FOREIGN) || !decl.HasAnno(AnnotationKind::ARKTS) || !decl.funcBody) {
+        return {};
+    }
+    for (auto& list : decl.funcBody->paramLists) {
+        for (auto& param : list->params) {
+            // Initial parsing represents an unresolved parameter annotation as a
+            // macro call; reparsing after macro expansion uses CUSTOM annotations.
+            if (auto macro = DynamicCast<MacroExpandParam*>(param.get())) {
+                const auto& info = macro->invocation.macroCallDiagInfo;
+                if (info.fullName == "RestParam") {
+                    return info.identifierPos;
+                }
+            }
+            for (auto& anno : param->annotations) {
+                if (anno->kind == AnnotationKind::CUSTOM && anno->identifier == "RestParam") {
+                    return anno->identifier.Begin();
+                }
+            }
+        }
+    }
+    return {};
+}
 } // namespace
 
 ParserImpl::DeclHandler ParserImpl::LookupDeclHandler(TokenKind kind)
@@ -1111,7 +1137,14 @@ OwnedPtr<ClassBody> ParserImpl::ParseClassBody(ClassDecl& cd)
             if (cd.TestAttr(Attribute::OBJ_C_MIRROR)) {
                 ctor->EnableAttr(Attribute::OBJ_C_MIRROR);
             }
-            CheckInitCtorDeclBody(*ctor);
+            if (cd.TestAttr(Attribute::FOREIGN) && cd.HasAnno(AnnotationKind::ARKTS)) {
+                if (ctor->funcBody && ctor->funcBody->body) {
+                    ParseDiagnoseRefactor(DiagKindRefactor::parse_arkts_constructor_body, *ctor->funcBody->body);
+                    ctor->EnableAttr(Attribute::HAS_BROKEN);
+                }
+            } else {
+                CheckInitCtorDeclBody(*ctor);
+            }
         }
 
 
@@ -1382,7 +1415,8 @@ OwnedPtr<ClassDecl> ParserImpl::ParseClassDecl(
     ret->identifier = ExpectIdentifierWithPos(*ret);
     ParseInterfaceDeclOrClassDeclGeneric(*ret);
     CheckDeclarationInScope(scopeKind, DefKind::CLASS);
-    auto attrs = CheckDeclModifiers(modifiers, scopeKind, DefKind::CLASS);
+    bool allowPublicForeign = scopeKind == ScopeKind::TOPLEVEL && HasAnnotation(annos, AnnotationKind::ARKTS);
+    auto attrs = CheckDeclModifiers(modifiers, scopeKind, DefKind::CLASS, allowPublicForeign);
     for (auto& it : attrs) {
         ret->EnableAttr(it);
     }
@@ -1390,10 +1424,19 @@ OwnedPtr<ClassDecl> ParserImpl::ParseClassDecl(
     ret->modifiers.insert(modifiers.begin(), modifiers.end());
     // Used to parse nested classDecl or primary ctor decl.
     SetPrimaryDecl(ret->identifier, ret->identifier.IsRaw());
+    // The constructor-body check runs while parsing members, before the
+    // ordinary class annotation assignment at the end of this function.
+    if (ret->TestAttr(Attribute::FOREIGN) && std::any_of(annos.begin(), annos.end(), [](const auto& anno) {
+            return anno->kind == AnnotationKind::ARKTS;
+        })) {
+        ret->annotations = std::move(annos);
+    }
     ret->body = ParseClassBody(*ret);
     RevertPrimaryDecl();
     ret->end = lastToken.End();
-    ret->annotations = std::move(annos);
+    if (!annos.empty()) {
+        ret->annotations = std::move(annos);
+    }
 
     return ret;
 }
@@ -1409,7 +1452,8 @@ OwnedPtr<InterfaceDecl> ParserImpl::ParseInterfaceDecl(
     ret->identifier = ExpectIdentifierWithPos(*ret);
     ParseInterfaceDeclOrClassDeclGeneric(*ret);
     CheckDeclarationInScope(scopeKind, DefKind::INTERFACE);
-    auto attrs = CheckDeclModifiers(modifiers, scopeKind, DefKind::INTERFACE);
+    bool allowPublicForeign = scopeKind == ScopeKind::TOPLEVEL && HasAnnotation(annos, AnnotationKind::ARKTS);
+    auto attrs = CheckDeclModifiers(modifiers, scopeKind, DefKind::INTERFACE, allowPublicForeign);
     for (auto& it : attrs) {
         ret->EnableAttr(it);
     }
@@ -2001,6 +2045,9 @@ OwnedPtr<FuncDecl> ParserImpl::ParseFuncDecl(
     }
     ffiParser->CheckFuncSignature(*ret, annos);
     ParseFuncDeclAnnos(annos, *ret);
+    if (auto rest = FindArkTSRestParameter(*ret)) {
+        ParseDiagnoseRefactor(DiagKindRefactor::parse_arkts_rest_deferred, *rest);
+    }
     CheckFuncBody(scopeKind, *ret);
     if (ret->funcBody) {
         ret->end = ret->funcBody->end;

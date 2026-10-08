@@ -143,8 +143,12 @@ target_include_directories(cjc PRIVATE ${BOUNDSCHECK}/include)
 target_link_libraries(cjc ${ffi})
 
 if(MINGW)
+    set(CRT_GLOB_COMPILER_OPTIONS)
+    if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_C_COMPILER_TARGET)
+        list(APPEND CRT_GLOB_COMPILER_OPTIONS "--target=${CMAKE_C_COMPILER_TARGET}" "--sysroot=${CMAKE_SYSROOT}")
+    endif()
     execute_process(
-        COMMAND ${CMAKE_C_COMPILER} -print-file-name=CRT_glob.o
+        COMMAND ${CMAKE_C_COMPILER} ${CRT_GLOB_COMPILER_OPTIONS} -print-file-name=CRT_glob.o
         OUTPUT_VARIABLE GET_CRT_GLOB_OUTPUT
         ERROR_VARIABLE GET_CRT_GLOB_ERROR
         RESULT_VARIABLE GET_CRT_GLOB_RESULT

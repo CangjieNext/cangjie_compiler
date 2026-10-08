@@ -142,6 +142,7 @@ const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::OBJ_C_IMPL_MOVED_MEMBER_PROXY, "OBJ_C_IMPL_MOVED_MEMBER_PROXY"},
     {AST::Attribute::ARKTS, "ARKTS"},
     {AST::Attribute::ARKTS_FUNCTION_WRAPPER, "ARKTS_FUNCTION_WRAPPER"},
+    {AST::Attribute::ARKTS_LOWERED, "ARKTS_LOWERED"},
     {AST::Attribute::AST_ATTR_END, "AST_ATTR_END"},
 };
 UNSUPPRESS_WARNING()

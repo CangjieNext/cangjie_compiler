@@ -2078,6 +2078,7 @@ void TypeChecker::TypeCheckerImpl::PostTypeCheck(std::vector<Ptr<ASTContext>>& c
 
 void TypeChecker::TypeCheckerImpl::PrepareTypeCheck(ASTContext& ctx, Package& pkg)
 {
+    PrepareArkTSFunctions(pkg);
     // Reset search's cache.
     ctx.searcher->InvalidateCache();
 

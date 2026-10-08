@@ -955,13 +955,62 @@ bool ImportManager::BuildIndex(
     }
     Utils::ProfileRecorder::Stop("BuildIndex", "AddImplicitImports");
     ResolveImportedPackages(packages);
-    ClearPackageCjoCache();
 
     Utils::ProfileRecorder::Start("BuildIndex", "AddDependencies");
     for (auto pkg : packages) {
         dependencyGraph->AddDependenciesForPackage(*pkg);
     }
     Utils::ProfileRecorder::Stop("BuildIndex", "AddDependencies");
+
+    // A CJO consumer can reach a lowered ArkTS function through an ordinary
+    // exported CJ wrapper. Its source has no local foreign declaration and the
+    // producer's private context provider import is not a public CJO dependency.
+    // Inspect this source package's dependencies, rather than adding the
+    // context provider to unrelated legacy interop packages in the same compilation.
+    const std::string arkTSContext = "cj_arkts_context_v1";
+    bool addedArkTSContext = false;
+    for (auto pkg : packages) {
+        if (CollectDirectDepPkg(*pkg).count(arkTSContext) != 0) {
+            continue;
+        }
+        bool needsContext = false;
+        for (auto dependency : GetAllDependentPackageDecls(pkg->fullPackageName)) {
+            for (auto& file : dependency->srcPackage->files) {
+                // Ordinary wrappers need not expose the producer in their CJO
+                // signature dependencies. Preserve the context requirement via
+                // the compiler-added private context provider import saved in the CJO.
+                for (auto& imported : file->imports) {
+                    needsContext = needsContext ||
+                        (imported->TestAttr(Attribute::COMPILER_ADD) &&
+                            imported->content.prefixPaths.size() == 1 &&
+                            imported->content.prefixPaths.front() == arkTSContext);
+                }
+                for (auto& decl : file->decls) {
+                    needsContext = needsContext || decl->TestAttr(Attribute::ARKTS_LOWERED);
+                }
+            }
+        }
+        if (!needsContext) {
+            continue;
+        }
+        for (auto& file : pkg->files) {
+            auto imported = CreateImportSpec(arkTSContext);
+            imported->curFile = file.get();
+            file->imports.emplace_back(std::move(imported));
+        }
+        addedArkTSContext = true;
+    }
+    if (addedArkTSContext) {
+        if (!ResolveImportedPackages(packages)) {
+            return false;
+        }
+        cjoManager->AddPackageDeclMap(arkTSContext);
+        dependencyGraph->Clear();
+        for (auto pkg : packages) {
+            dependencyGraph->AddDependenciesForPackage(*pkg);
+        }
+    }
+    ClearPackageCjoCache();
 
     Utils::ProfileRecorder::Start("BuildIndex", "AddImportedDeclsForSourcePackage");
     for (auto pkg : packages) {

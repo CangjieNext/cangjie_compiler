@@ -812,6 +812,7 @@ struct ASTHasherImpl {
             case AnnotationKind::FOREIGN_NAME:
             case AnnotationKind::WHEN:
             case AnnotationKind::DEPRECATED:
+            case AnnotationKind::ARKTS:
                 return true;
             case AnnotationKind::ATTRIBUTE:
             case AnnotationKind::NUMERIC_OVERFLOW:
@@ -849,6 +850,7 @@ struct ASTHasherImpl {
             case AnnotationKind::OBJ_C_MIRROR:
             case AnnotationKind::OBJ_C_IMPL:
             case AnnotationKind::FOREIGN_NAME:
+            case AnnotationKind::ARKTS:
                 // if anno.kind == WHEN, anno can only be in MacroDecl
             case AnnotationKind::WHEN:
                 // annotations combined in body hash are basically the complementary of that combined in mangle name,

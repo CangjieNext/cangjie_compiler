@@ -86,3 +86,54 @@ and restores its calling context; user code does not pass `JSContext`. Omitting
 The facade reexports the existing types; their defining packages and mangled
 identities remain unchanged. It does not define replacement `JSContext` or
 `BigInt` types. Full type/package separation follows in later requirements.
+
+## Application-generated ArkTS context provider
+
+This is the source generator and build driver for the application-owned state
+used by the minimal `@ArkTS` entry and foreign wrappers. It contains no type
+conversion helpers and does not install a runtime into the SDK.
+
+The application build coordinator must run this once before compiling consumers:
+
+```powershell
+python utils/arkts/build_context.py --app-id <application-id> `
+  --target x86_64-linux-ohos --sdk-root <cangjie-sdk> `
+  --native-root <openharmony-native-sdk> --cjc <windows-cjc.exe> `
+  --output-dir <fresh-application-build-directory>
+```
+
+Inputs are a Windows cjc, compatible SDK interop library, target native SDK,
+application ID and fresh output directory. The driver validates required inputs
+before generation and records source, generator, compiler, interop and product
+hashes, command, version, exit code and dynamic dependencies. Failed compiler
+output is retained. Existing output directories are rejected without mutation.
+No SDK files are changed.
+
+The ABI-v1 logical package is `cj_arkts_context_v1`. Application identity belongs
+in the application's output directory and manifest, not the package name: a CJO
+compiled independently must retain a symbolic dependency that another application
+can bind to its own provider. Its only public functions are:
+
+```text
+__cj_arkts_enter(JSContext) -> ?JSContext
+__cj_arkts_current() -> JSContext
+__cj_arkts_restore(?JSContext) -> Unit
+```
+
+Entry wrappers save the value returned by `enter` and restore it in `finally`.
+Foreign wrappers call `current`. Storage uses the existing CJThread-local
+`ThreadLocal` and validates `getNapiEnv` on enter and current; it does not use OS
+TLS or inherit an entry context into a spawned coroutine. Missing context throws
+`Exception("ARKTS_NO_CALLING_CONTEXT")`.
+
+All consumers must compile with the generated CJO directory and dynamically link
+against the same `libcj_arkts_context_v1.so`. The application packages exactly
+one provider, including multi-library applications. Static copies of the state
+in each consumer are forbidden. The build coordinator must validate application,
+target, ABI and source hashes before reusing products.
+
+Current validation proves generation, cjfmt conformance, compilation against the
+existing SDK and the interop dynamic dependency. Compiler imports and one-module normal hvigor/CJPM integration have been
+validated with the BF-01 native application. Reserved-package enforcement,
+general multi-module integration and the multi-so runtime proof remain pending. `runtime_verified` remains false in
+the build manifest; a successful build is not proof of shared state at runtime.

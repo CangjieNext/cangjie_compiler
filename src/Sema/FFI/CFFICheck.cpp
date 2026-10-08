@@ -13,6 +13,7 @@
 #include "TypeCheckerImpl.h"
 
 #include "TypeCheckUtil.h"
+#include "cangjie/AST/ArkTS.h"
 
 using namespace Cangjie;
 using namespace Cangjie::AST;
@@ -98,6 +99,28 @@ void CheckAnnoFrozen(const Decl& decl, const Annotation& anno, DiagnosticEngine&
 
 using AnnoCheckMap = std::unordered_map<AnnotationKind, std::function<void(Decl&, Annotation&, DiagnosticEngine&)>>;
 
+void CheckAnnoArkTS(Decl& decl, const Annotation& anno, DiagnosticEngine& diag)
+{
+    if (!decl.TestAttr(Attribute::FOREIGN) && !decl.TestAttr(Attribute::ARKTS_LOWERED)) {
+        auto fd = DynamicCast<FuncDecl*>(&decl);
+        if (fd && IsMinimalArkTSEntry(*fd) && decl.outerDecl == nullptr && decl.scopeLevel == 0) {
+            return;
+        }
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_arkts_invalid_entry, anno);
+        return;
+    }
+    if (decl.TestAttr(Attribute::ARKTS_LOWERED)) {
+        return;
+    }
+    if (!decl.TestAttr(Attribute::FOREIGN) || decl.outerDecl != nullptr || decl.scopeLevel > 0 ||
+        decl.TestAttr(Attribute::PRIVATE)) {
+        diag.Diagnose(anno, DiagKind::sema_illegal_use_of_annotation, DeclKindToString(decl), "@ArkTS");
+        return;
+    }
+    // Until ArkTS bridge lowering is installed, never fall through to the C ABI.
+    diag.DiagnoseRefactor(DiagKindRefactor::sema_arkts_bridge_pending, anno);
+}
+
 AnnoCheckMap& GetAnnoCheckMap()
 {
     static AnnoCheckMap annoCheckMap = {
@@ -105,6 +128,7 @@ AnnoCheckMap& GetAnnoCheckMap()
         {AnnotationKind::CALLING_CONV, CheckAnnoCallingConv},
         {AnnotationKind::FASTNATIVE, CheckAnnoFastNative},
         {AnnotationKind::FROZEN, CheckAnnoFrozen},
+        {AnnotationKind::ARKTS, CheckAnnoArkTS},
     };
     return annoCheckMap;
 }
@@ -167,6 +191,9 @@ Attribute TypeChecker::TypeCheckerImpl::GetDefaultABI()
 
 void TypeChecker::TypeCheckerImpl::SetForeignABIAttr(Decl& decl)
 {
+    if (decl.HasAnno(AnnotationKind::ARKTS) || IsArkTSForeignMember(decl)) {
+        return;
+    }
     // Will unify the judgment of foreign, foreign, C, and backend.
     // Update W/R in class Attribute.
     if (HasModifier(decl.modifiers, TokenKind::FOREIGN)) {
@@ -325,6 +352,14 @@ void TypeChecker::TypeCheckerImpl::CheckCFuncParamType(const AST::Type& type)
 
 void TypeChecker::TypeCheckerImpl::PreCheckAnnoForCFFI(Decl& decl)
 {
+    if (decl.HasAnno(AnnotationKind::ARKTS)) {
+        for (auto& anno : decl.annotations) {
+            if (anno->kind == AnnotationKind::ARKTS) {
+                CheckAnnoArkTS(decl, *anno, diag);
+            }
+        }
+        return;
+    }
     if (HasModifier(decl.modifiers, TokenKind::FOREIGN) && !decl.HasAnno(AnnotationKind::C)) {
         // Check node.
         auto modifier = decl.modifiers.crbegin();

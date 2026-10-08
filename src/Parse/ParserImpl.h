@@ -816,7 +816,8 @@ private:
     void CheckAnnotationAnno(PtrVector<AST::Annotation>& annos, std::set<AST::Modifier> modifiers);
     void CheckAnnotationAnno(PtrVector<AST::Annotation>& annos, const OwnedPtr<AST::Decl>& decl);
     std::set<AST::Attribute> CheckDeclModifiers(
-        const std::set<AST::Modifier>& modifiers, ScopeKind scopeKind, DefKind defKind);
+        const std::set<AST::Modifier>& modifiers, ScopeKind scopeKind, DefKind defKind,
+        bool allowPublicForeign = false);
     AST::Attribute GetModifierAttr(const OwnedPtr<AST::Modifier>& modifier, AST::ASTKind kind) const;
     void SetDeclBeginPos(AST::Decl& decl) const;
     void CheckFuncBody(ScopeKind scopeKind, AST::FuncDecl& decl);
@@ -988,7 +989,8 @@ private:
     OwnedPtr<AST::FuncArg> ParseFuncArg();
     OwnedPtr<AST::FuncArg> ParseAnnotationArgument();
     std::set<AST::Attribute> GetModifierAttrs(
-        DefKind defKind, ScopeKind scopeKind, const std::vector<Ptr<const AST::Modifier>>& modifiersVec);
+        DefKind defKind, ScopeKind scopeKind, const std::vector<Ptr<const AST::Modifier>>& modifiersVec,
+        bool allowPublicForeign);
     void ReportModifierWarning(
         DefKind defKind, ScopeKind scopeKind, const std::vector<Ptr<const AST::Modifier>>& modifiers);
     void ParseTypeAndExpr(Ptr<AST::VarDeclAbstract> const ret);
@@ -1030,6 +1032,8 @@ private:
 
     // Cangjie Native & Java/ObjC FFI
     void CheckObjCMirrorAnnotation(AST::Annotation& anno) const;
+    // Check @ArkTS module/foreignName/namespace options against the proposal grammar.
+    void CheckArkTSAnnotation(const AST::Annotation& anno);
     // Check whether member decl can be abstract
     bool CanBeAbstract(const AST::Decl& decl, ScopeKind scopeKind) const;
     void CheckConstructorBody(AST::FuncDecl& ctor, ScopeKind scopeKind, bool inMacro = false);
