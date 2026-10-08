@@ -890,6 +890,7 @@ private:
     void DiagRedundantArrowAfterFunc(const AST::Type& type);
     void DiagExpectedDeclaration(ScopeKind scopeKind);
     void DiagExpectedDeclaration(const Position& pos, const std::string& str);
+    void DiagNoteEarlyClosedBlockComment(DiagnosticBuilder& builder);
     /**
         * Suggest keywords for expected declaration.
         * @param keywords keywords to suggest

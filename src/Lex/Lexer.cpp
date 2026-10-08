@@ -1376,6 +1376,7 @@ std::pair<Token, bool> LexerImpl::ScanMultiLineRawString(const char* pStart)
 std::pair<Token, bool> LexerImpl::ScanMultiLineComment(const char* pStart, bool allowNewLine)
 {
     size_t level = 1;
+    bool hasNestedComment = false;
     while ((currentChar != -1) && (level > 0)) {
         ReadUTF8Char();
         if (IsCurrentCharLineTerminator()) {
@@ -1390,12 +1391,18 @@ std::pair<Token, bool> LexerImpl::ScanMultiLineComment(const char* pStart, bool 
             ReadUTF8Char();
         } else if (currentChar == '/' && GetNextChar(0) == '*') {
             level += 1;
+            hasNestedComment = true;
             ReadUTF8Char();
         }
     }
     if (level > 0 && success) {
-        diag.DiagnoseRefactor(
+        auto builder = diag.DiagnoseRefactor(
             DiagKindRefactor::lex_unterminated_block_comment, MakeRange(GetPos(pStart), GetPos(pCurrent)));
+        if (hasNestedComment) {
+            auto note = SubDiagnostic("block comments can be nested; a '/*' inside a comment opens a nested comment "
+                                      "which must also be closed with '*/'");
+            builder.AddNote(note);
+        }
         success = false;
         return {Token(TokenKind::COMMENT, std::string(pStart, pNext), pos, GetPos(pNext)), false};
     }
