@@ -563,6 +563,42 @@ TEST_F(LexerTest, CommentTokens)
     }
 }
 
+TEST_F(LexerTest, NestedUnterminatedBlockCommentDiagnose)
+{
+    std::string nestedComment = "/* outer\n   /* nested\n";
+    DiagnosticEngine diagNested;
+    SourceManager smNested;
+    diagNested.SetSourceManager(&smNested);
+    Lexer lexerNested(nestedComment, diagNested, smNested);
+    for (;;) {
+        Token tok = lexerNested.Next();
+        if (tok.kind == TokenKind::END) {
+            break;
+        }
+    }
+    auto diagnostics = diagNested.GetCategoryDiagnostic(DiagCategory::LEX);
+    ASSERT_EQ(diagnostics.size(), 1);
+    EXPECT_EQ(diagnostics[0].rKind, DiagKindRefactor::lex_unterminated_block_comment);
+    ASSERT_EQ(diagnostics[0].subDiags.size(), 1);
+    EXPECT_TRUE(diagnostics[0].subDiags[0].subDiagMessage.find("nested") != std::string::npos);
+
+    std::string plainComment = "/* plain unterminated\n";
+    DiagnosticEngine diagPlain;
+    SourceManager smPlain;
+    diagPlain.SetSourceManager(&smPlain);
+    Lexer lexerPlain(plainComment, diagPlain, smPlain);
+    for (;;) {
+        Token tok = lexerPlain.Next();
+        if (tok.kind == TokenKind::END) {
+            break;
+        }
+    }
+    auto plainDiagnostics = diagPlain.GetCategoryDiagnostic(DiagCategory::LEX);
+    ASSERT_EQ(plainDiagnostics.size(), 1);
+    EXPECT_EQ(plainDiagnostics[0].rKind, DiagKindRefactor::lex_unterminated_block_comment);
+    EXPECT_TRUE(plainDiagnostics[0].subDiags.empty());
+}
+
 TEST_F(LexerTest, LookAhead)
 {
     // shared test

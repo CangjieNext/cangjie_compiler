@@ -1137,6 +1137,31 @@ void ParserImpl::DiagExpectedDeclaration(ScopeKind scopeKind)
     if (scopeKind == ScopeKind::TOPLEVEL) {
         auto note = SubDiagnostic("only declarations or macro expressions can be used in the top-level");
         builder.AddNote(note);
+        DiagNoteEarlyClosedBlockComment(builder);
+    }
+}
+
+void ParserImpl::DiagNoteEarlyClosedBlockComment(DiagnosticBuilder& builder)
+{
+    if (lookahead.kind == TokenKind::SENTINEL) {
+        return;
+    }
+    const auto& comments = lexer->GetAllComments();
+    for (auto it = comments.rbegin(); it != comments.rend(); ++it) {
+        if (it->End() > lookahead.Begin()) {
+            continue;
+        }
+        // The comment closest before the current token immediately precedes it only when
+        // it also follows the last consumed token, that is, only blanks are between them.
+        bool followsLastToken = lastToken.kind == TokenKind::SENTINEL || lastToken.End() <= it->Begin();
+        bool isBlockComment = it->Value().size() >= 2 && it->Value()[0] == '/' && it->Value()[1] == '*';
+        bool isAdjacent = lookahead.Begin().line - it->End().line <= 1;
+        if (followsLastToken && isBlockComment && isAdjacent) {
+            builder.AddNote(MakeRange(it->End() - 2, it->End()),
+                "the block comment ends here and the text after it is parsed as code; if this text should be "
+                "commented out, use a line comment or split the '*/' sequence (for example '** / *')");
+        }
+        return;
     }
 }
 
@@ -1152,6 +1177,7 @@ void ParserImpl::DiagAndSuggestKeywordForExpectedDeclaration(
     if (scopeKind == ScopeKind::TOPLEVEL) {
         auto note = SubDiagnostic("only declarations or macro expressions can be used in the top-level");
         builder.AddNote(note);
+        DiagNoteEarlyClosedBlockComment(builder);
     }
     if (Seeing(TokenKind::IDENTIFIER)) {
         const std::string& ident = lookahead.Value();

@@ -809,3 +809,82 @@ TEST_F(ParseCommentTest, WhileExpr)
     ASSERT_EQ(whileExpr.condExpr->comments.trailingComments.size(), 1);
     EXPECT_EQ(whileExpr.condExpr->comments.trailingComments[0].cms[0].info.Value(), "/*comment to true*/");
 }
+
+TEST_F(ParseCommentTest, EarlyClosedBlockCommentNote)
+{
+    code = "/*\n * glob pattern: **/* matches any level\n */\nmain() {}\n";
+    diag.SetSourceManager(&sm);
+    Parser parser(code, diag, sm, {0, 1, 1}, true);
+    OwnedPtr<File> file = parser.ParseTopLevel();
+    ASSERT_NE(file, nullptr);
+    const auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::PARSE);
+    bool foundExpectedDecl = false;
+    bool foundNote = false;
+    for (const auto& diagnostic : diagnostics) {
+        if (diagnostic.rKind != DiagKindRefactor::parse_expected_decl) {
+            continue;
+        }
+        foundExpectedDecl = true;
+        for (const auto& sub : diagnostic.subDiags) {
+            if (sub.subDiagMessage.find("the block comment ends here") != std::string::npos) {
+                foundNote = true;
+                EXPECT_EQ(sub.mainHint.range.begin.line, 2);
+                EXPECT_EQ(sub.mainHint.range.begin.column, 19);
+                EXPECT_EQ(sub.mainHint.range.end.column, 21);
+            }
+        }
+    }
+    EXPECT_TRUE(foundExpectedDecl);
+    EXPECT_TRUE(foundNote);
+}
+
+TEST_F(ParseCommentTest, EarlyClosedBlockCommentNoteOnNextLine)
+{
+    code = "/* comment ends */\n1 + 1\nmain() {}\n";
+    diag.SetSourceManager(&sm);
+    Parser parser(code, diag, sm, {0, 1, 1}, true);
+    OwnedPtr<File> file = parser.ParseTopLevel();
+    ASSERT_NE(file, nullptr);
+    const auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::PARSE);
+    bool foundNote = false;
+    for (const auto& diagnostic : diagnostics) {
+        for (const auto& sub : diagnostic.subDiags) {
+            if (sub.subDiagMessage.find("the block comment ends here") != std::string::npos) {
+                foundNote = true;
+            }
+        }
+    }
+    EXPECT_TRUE(foundNote);
+}
+
+TEST_F(ParseCommentTest, NoEarlyClosedBlockCommentNoteWithoutComment)
+{
+    code = "1 + 1\n";
+    diag.SetSourceManager(&sm);
+    Parser parser(code, diag, sm, {0, 1, 1}, true);
+    OwnedPtr<File> file = parser.ParseTopLevel();
+    ASSERT_NE(file, nullptr);
+    const auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::PARSE);
+    ASSERT_FALSE(diagnostics.empty());
+    for (const auto& diagnostic : diagnostics) {
+        for (const auto& sub : diagnostic.subDiags) {
+            EXPECT_TRUE(sub.subDiagMessage.find("the block comment ends here") == std::string::npos);
+        }
+    }
+}
+
+TEST_F(ParseCommentTest, NoEarlyClosedBlockCommentNoteForDistantComment)
+{
+    code = "/* plain comment */\n\n\n1 + 1\n";
+    diag.SetSourceManager(&sm);
+    Parser parser(code, diag, sm, {0, 1, 1}, true);
+    OwnedPtr<File> file = parser.ParseTopLevel();
+    ASSERT_NE(file, nullptr);
+    const auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::PARSE);
+    ASSERT_FALSE(diagnostics.empty());
+    for (const auto& diagnostic : diagnostics) {
+        for (const auto& sub : diagnostic.subDiags) {
+            EXPECT_TRUE(sub.subDiagMessage.find("the block comment ends here") == std::string::npos);
+        }
+    }
+}

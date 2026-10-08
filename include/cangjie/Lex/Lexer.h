@@ -110,6 +110,8 @@ public:
     std::list<Token> LookAheadSkipNL(size_t num);
     /// Return all comments collected, and clear the comment cache
     std::vector<Token> GetComments();
+    /// Return all comments collected so far, without clearing the comment cache
+    const std::vector<Token>& GetAllComments() const;
     const std::set<Token>& GetTokenStream() const;
 
     /// interface between Lexer and Parser
