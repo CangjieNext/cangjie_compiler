@@ -28,6 +28,13 @@ void FindMirrors::HandleImpl(InteropContext& ctx)
                 ctx.mirrors.push_back(classLikeDecl);
             }
 
+            // Interfaces that inherit an @ObjCMirror interface without carrying the annotation are collected
+            // as well, so that a proper diagnostic can be emitted for them.
+            if (auto interfaceDecl = As<ASTKind::INTERFACE_DECL>(decl);
+                interfaceDecl && !IsObjCMirror(*interfaceDecl) && IsObjCMirrorSubtype(*interfaceDecl)) {
+                ctx.unannotatedMirrorSubtypeInterfaces.push_back(interfaceDecl);
+            }
+
             if (auto classDecl = As<ASTKind::CLASS_DECL>(decl); classDecl) {
                 // Mirror interface handle wrappers
                 if (IsObjCMirrorInterfaceHandleWrapper(*classDecl)) {
