@@ -233,8 +233,8 @@ public:
         if (std::is_signed<T>::value) {
             if (x == std::numeric_limits<T>::min() && y == -1) {
                 *res = 0;
-                // CJ decided that this does not cause overflow
-                return true;
+                // The spec specifies that `INT_MIN % -1` returns 0 under all three overflow strategies.
+                return false;
             }
         }
         CJC_ASSERT(y != 0);
