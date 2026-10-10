@@ -1106,7 +1106,7 @@ private:
             auto lext = IsExternalLocal(ctx, *left);
             auto rext = IsExternalLocal(ctx, *assign.rightExpr);
             if (lext != rext) {
-                DiagBadAssignment(assign, {Mode::FULL}, assign.rightExpr->GetTy(), lext, rext);
+                DiagBadAssignment(assign, left->GetTy(), assign.rightExpr->GetTy(), lext, rext);
             }
         } else {
             DiagBadAssignment(assign, {lLocal}, assign.rightExpr->GetTy());
@@ -1136,7 +1136,7 @@ private:
             auto lext = IsExternalLocal(ctx, *left);
             auto rext = IsExternalLocal(ctx, *assign.rightExpr);
             if (lext != rext) {
-                DiagBadAssignment(assign, {Mode::FULL}, assign.rightExpr->GetTy(), lext, rext);
+                DiagBadAssignment(assign, left->GetTy(), assign.rightExpr->GetTy(), lext, rext);
             }
         }
     }
@@ -1171,7 +1171,7 @@ private:
         auto lext = IsExternalLocal(ctx, *left);
         auto rext = IsExternalLocal(ctx, *assign.rightExpr);
         if (lext || rext) {
-            DiagBadAssignment(assign, {Mode::FULL}, assign.rightExpr->GetTy(), lext, rext);
+            DiagBadAssignment(assign, left->GetTy(), assign.rightExpr->GetTy(), lext, rext);
         }
     }
 
@@ -1228,12 +1228,12 @@ private:
     }
 
     DiagnosticBuilder DiagBadAssignment(
-        const Node& position, const ModalInfo& lModal, ModalTy rTy, bool lExternal, bool rExternal)
+        const Node& position, ModalTy lTy, ModalTy rTy, bool lExternal, bool rExternal)
     {
         // Template is "cannot assign%s to expression of '%s' type":
-        // arg1 needs a leading space; arg2 is inside quotes and must not.
-        std::string arg1 = (lExternal ? " external " : " internal ") + lModal.LocalString();
-        std::string arg2 = (rExternal ? "external " : "internal ") + rTy.String();
+        // arg1 describes the RHS value (leading space); arg2 is the LHS target type (no leading space).
+        std::string arg1 = (rExternal ? " external " : " internal ") + rTy.Mode().LocalString();
+        std::string arg2 = (lExternal ? "external " : "internal ") + lTy.String();
         return d.DiagnoseRefactor(DiagKindRefactor::sema_bad_local_assignment, position, arg1, arg2);
     }
 
