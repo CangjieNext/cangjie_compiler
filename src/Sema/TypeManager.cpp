@@ -1497,6 +1497,31 @@ Ptr<Ty> TypeManager::ReplaceIdealTy(Ptr<Ty> ty)
                 typeArg = ReplaceIdealTy(std::move(typeArg));
             }
             return ty;
+        case TypeKind::TYPE_FUNC: {
+            // A function type keeps its parameter and return types in 'typeArgs' as a copy only, and
+            // the type itself is immutable, so a function type holding a resolved type is rebuilt
+            // here rather than updated in place. A pending ideal state can sit in those types: the
+            // inferred type of a lambda whose body keeps its literal pending for generic type
+            // argument inference (IDEAL_INT / IDEAL_FLOAT for the literal type, IDEAL for the mode)
+            // carries it in its return type, and that type can be the solved type argument of the
+            // enclosing call. 'HasIdealTy' already reports such a state (it walks 'typeArgs'), so it
+            // must be resolvable here as well.
+            auto& funcTy = StaticCast<FuncTy&>(*ty);
+            std::vector<ModalTy> paramTys;
+            paramTys.reserve(funcTy.paramTys.size());
+            bool changed{false};
+            for (auto& paramTy : funcTy.paramTys) {
+                auto newParamTy = ReplaceIdealTy(paramTy);
+                changed = changed || newParamTy != paramTy;
+                paramTys.emplace_back(newParamTy);
+            }
+            auto retTy = ReplaceIdealTy(funcTy.retTy);
+            changed = changed || retTy != funcTy.retTy;
+            if (!changed) {
+                return ty;
+            }
+            return GetFunctionTy(paramTys, retTy, {funcTy.isC, funcTy.isClosureTy, funcTy.hasVariableLenArg});
+        }
         default:
             return ty;
     }
