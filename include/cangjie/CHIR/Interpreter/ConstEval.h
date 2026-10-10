@@ -75,11 +75,13 @@ public:
 
     // Evaluates constants (variables declared with `const`) and simplifies
     // their intializers.
-    void RunOnPackage(Package& package,
+    // The return value distinguishes successful evaluation from the ordinary
+    // optimizer's best-effort fallback. Metadata consumers must check it.
+    bool RunOnPackage(Package& package,
         const std::vector<CHIR::Function*>& initFuncsForConstVar, std::vector<Bchir>& bchirPackages);
 
 private:
-    void RunInterpreter(Package& package, std::vector<Bchir>& bchirPackages,
+    bool RunInterpreter(Package& package, std::vector<Bchir>& bchirPackages,
         const std::vector<CHIR::Function*>& initFuncsForConstVar,
         std::function<void(Package&, BCHIRInterpreter&, BCHIRLinker&)> onSuccess);
     void ReplaceGlobalConstantInitializers(Package& package, BCHIRInterpreter& interpreter, BCHIRLinker& linker);

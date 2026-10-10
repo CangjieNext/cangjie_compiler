@@ -36,7 +36,8 @@ public:
         const std::unordered_map<std::string, Value*>& deserializedVals,
         const TranslateASTNodeFunc& funcForTranlateASTNode, bool computeAnnotations,
         std::vector<CHIR::Function*>& initFuncsForAnnoFactory,
-        Cangjie::TypeManager& typeManager, std::vector<std::pair<const AST::Decl*, Function*>>& annoFactoryFuncs)
+        Cangjie::TypeManager& typeManager, std::vector<std::pair<const AST::Decl*, Function*>>& annoFactoryFuncs,
+        bool evaluateAllAnnotations = false)
     {
         size_t funcNum = decls.size();
         std::vector<std::unique_ptr<CHIR::CHIRBuilder>> builderList = ConstructSubBuilders(funcNum);
@@ -50,7 +51,7 @@ public:
             auto tran = std::make_unique<Translator>(
                 *builderList[idx], *subChirType, opts, gim, globalCache, localConstVars,
                 localConstFuncs, kind, deserializedVals, annoFactoryFuncs, computeAnnotations,
-                initFuncsForAnnoFactory, typeManager);
+                initFuncsForAnnoFactory, typeManager, evaluateAllAnnotations);
             tran->SetTopLevel(*decl);
             taskQueue.AddTask<void>(
                 [translator = tran.get(), decl, &funcForTranlateASTNode]() {

@@ -1400,6 +1400,16 @@ void GlobalValue::SetRawMangledName(const std::string& name)
     rawMangledName = name;
 }
 
+const std::string& GlobalValue::GetAspectSourceOrigin() const
+{
+    return aspectSourceOrigin;
+}
+
+void GlobalValue::SetAspectSourceOrigin(std::string origin)
+{
+    aspectSourceOrigin = std::move(origin);
+}
+
 const std::set<std::string>& GlobalValue::GetFeatures() const
 {
     return features;

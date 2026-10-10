@@ -985,12 +985,39 @@ bool CompilerInstance::GenerateCHIRForPkg(AST::Package& pkg)
 
     RegisterMacroCallDiagInfos(diag, pkg);
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    // use this result when APILevel check supports arbitrary const expressions
-    (void)CHIR::ComputeAnnotations(pkg, *this);
+    OwnedPtr<CHIR::ConstEvalResult> annotationMetadata;
+    if (!invocation.globalOptions.aspectImportSymbolsPath.empty() &&
+        !invocation.globalOptions.emitCHIRAnnotationMetadata) {
+        diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_metadata_unsupported_mode, DEFAULT_POSITION);
+        return false;
+    }
+    if (invocation.globalOptions.emitCHIRAnnotationMetadata) {
+        const auto& opts = invocation.globalOptions;
+        if (opts.enIncrementalCompilation || opts.IsCompilingCJMP() || !opts.IsConstEvalEnabled() ||
+            !opts.commonPartCjos.empty()) {
+            diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_metadata_unsupported_mode, DEFAULT_POSITION);
+            return false;
+        }
+        annotationMetadata = CHIR::ComputeAnnotations(pkg, *this, CHIR::AnnotationEvaluationPurpose::METADATA);
+        if (!annotationMetadata) {
+            diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_metadata_unavailable, DEFAULT_POSITION);
+            return false;
+        }
+    } else {
+        // Legacy annotation debugging and API-level compatibility path.
+        (void)CHIR::ComputeAnnotations(pkg, *this);
+    }
     auto& constAnalysisWrapper = chirData->GetConstAnalysisResultRef();
 #endif
     CHIR::CHIRBuilder builder1(GetCHIRContext(), invocation.globalOptions.GetJobs());
-    CHIR::ToCHIR convertor(*this, pkg, constAnalysisWrapper, builder1);
+    CHIR::ToCHIR convertor(*this, pkg, constAnalysisWrapper, builder1,
+        nullptr,
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+        annotationMetadata ? &annotationMetadata->metadata : nullptr
+#else
+        nullptr
+#endif
+    );
     bool success = convertor.Run();
     auto chirPkg = convertor.GetPackage();
     if (chirPkg && invocation.globalOptions.NeedDumpCHIRToScreen()) {

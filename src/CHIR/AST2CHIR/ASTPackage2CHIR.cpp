@@ -8,6 +8,9 @@
 #include "cangjie/CHIR/AST2CHIR/AST2CHIR.h"
 
 #include <fstream>
+#include <cstdlib>
+#include <filesystem>
+#include <set>
 
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
@@ -449,7 +452,7 @@ void AST2CHIR::CollectImportedPropDecl(AST::PropDecl& propDecl)
     }
 }
 
-void AST2CHIR::CollectImportedDeclUsedInCurPkg(AST::Decl& decl)
+void AST2CHIR::CollectImportedDeclUsedInCurPkg(AST::Decl& decl, bool forceAspectMembers)
 {
     // Don't need to collect intrinsic func decl, because in CHIR, if we visit an intrinsic call expr, we will create
     // an `intrinsic` expression of CHIR, and pass in intrinsic kind, then codegen will know which function need to be
@@ -459,7 +462,20 @@ void AST2CHIR::CollectImportedDeclUsedInCurPkg(AST::Decl& decl)
     }
     // Don't need to collect imported decl that is not used in current package.
     // The import package of cjdb mock might indeed have the "IMPORTED" attribute.
-    if (decl.TestAttr(AST::Attribute::IMPORTED) && !decl.isUsedImports) {
+    bool requestedByAspect = aspectExternalSymbols.count(decl.mangledName) != 0;
+    if (requestedByAspect && decl.IsFunc()) {
+        aspectExternalSymbols.erase(decl.mangledName);
+    }
+    if (!requestedByAspect && decl.IsNominalDecl()) {
+        for (const auto& member : decl.GetMemberDecls()) {
+            if (aspectExternalSymbols.count(member->mangledName) != 0) {
+                requestedByAspect = true;
+                break;
+            }
+        }
+    }
+    if (decl.TestAttr(AST::Attribute::IMPORTED) && !decl.isUsedImports && !requestedByAspect &&
+        !forceAspectMembers) {
         return;
     }
     // 1. imported generic decl
@@ -476,7 +492,10 @@ void AST2CHIR::CollectImportedDeclUsedInCurPkg(AST::Decl& decl)
     } else if (decl.IsNominalDecl()) {
         CollectDeclToList(decl, importedNominalDecls);
         for (auto& d : decl.GetMemberDecls()) {
-            CollectImportedDeclUsedInCurPkg(*d);
+            // Class translation registers every declared member method. Importing
+            // only the selected advice leaves its siblings without symbol-table
+            // entries and crashes when the nominal definition is translated.
+            CollectImportedDeclUsedInCurPkg(*d, forceAspectMembers || requestedByAspect);
         }
     } else if (decl.IsFunc()) {
         CollectImportedFuncDeclAndDesugarParams(StaticCast<AST::FuncDecl&>(decl));
@@ -490,6 +509,35 @@ void AST2CHIR::CollectImportedDeclUsedInCurPkg(AST::Decl& decl)
 
 void AST2CHIR::CollectImportedDecls(const AST::Package& node)
 {
+    aspectExternalSymbols.clear();
+    if (!isComputingAnnos && opts.emitCHIRAnnotationMetadata && !opts.aspectImportSymbolsPath.empty()) {
+        std::ifstream input(opts.aspectImportSymbolsPath);
+        if (!input) {
+            diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_input_mismatch,
+                DEFAULT_POSITION, "cannot read aspect symbol list: " + opts.aspectImportSymbolsPath);
+            failure = true;
+            return;
+        }
+        std::string symbol;
+        while (std::getline(input, symbol)) {
+            if (!symbol.empty() && symbol.back() == '\r') {
+                symbol.pop_back();
+            }
+            if (symbol.empty() || symbol.size() > 4096 || symbol.find_first_of(" \t\r\n") != std::string::npos ||
+                aspectExternalSymbols.size() >= 262144 || !aspectExternalSymbols.insert(symbol).second) {
+                diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_input_mismatch,
+                    DEFAULT_POSITION, "invalid aspect symbol list entry");
+                failure = true;
+                return;
+            }
+        }
+        if (!input.eof()) {
+            diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_input_mismatch,
+                DEFAULT_POSITION, "failed reading aspect symbol list");
+            failure = true;
+            return;
+        }
+    }
     usedSrcImportedNonGenericDecls = std::unordered_set<Ptr<const AST::Decl>>{
         node.srcImportedNonGenericDecls.begin(), node.srcImportedNonGenericDecls.end()};
     std::unordered_set<std::string> mangledNameSet;
@@ -510,6 +558,46 @@ void AST2CHIR::CollectImportedDecls(const AST::Package& node)
             }
             for (auto& decl : file->exportedInternalDecls) {
                 CollectImportedDeclUsedInCurPkg(*decl);
+            }
+        }
+    }
+    if (!aspectExternalSymbols.empty()) {
+        diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_input_mismatch,
+            DEFAULT_POSITION, "aspect symbol is absent from imported packages: " + *aspectExternalSymbols.begin());
+        failure = true;
+    }
+    if (!isComputingAnnos && opts.emitCHIRAnnotationMetadata) {
+        const char* reportPath = std::getenv("ASPECT_CJ_DEPENDENCY_REPORT");
+        if (reportPath != nullptr) {
+            const std::filesystem::path path(reportPath);
+            if (!path.is_absolute() || std::filesystem::exists(path)) {
+                diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_phase_invalid,
+                    DEFAULT_POSITION, "dependency report path");
+                failure = true;
+                return;
+            }
+            std::set<std::string> importedNames;
+            for (const auto& importPkg : importManager.GetAllImportedPackages()) {
+                if (importPkg->srcPackage != nullptr && importPkg->srcPackage != &node) {
+                    importedNames.insert(importPkg->srcPackage->fullPackageName);
+                }
+            }
+            std::ofstream out(path, std::ios::binary);
+            if (!out) {
+                diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_phase_invalid,
+                    DEFAULT_POSITION, "cannot write dependency report");
+                failure = true;
+                return;
+            }
+            out << "#aspect_cj_dependencies_v1\n" << node.fullPackageName << '\n';
+            for (const auto& name : importedNames) {
+                out << name << '\n';
+            }
+            out.close();
+            if (!out) {
+                diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_phase_invalid,
+                    DEFAULT_POSITION, "incomplete dependency report");
+                failure = true;
             }
         }
     }
@@ -656,6 +744,30 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
     }
     TranslateFuncParams(funcDecl, *fn);
     globalCache.Set(funcDecl, *fn);
+
+    // Concrete generic bodies are created here, but deliberately skip the
+    // annotation-factory path below. Preserve their source identity and the
+    // already evaluated annotation facts under the concrete CHIR identity.
+    if (funcDecl.TestAttr(AST::Attribute::GENERIC_INSTANTIATED) && funcDecl.genericDecl &&
+        funcDecl.genericDecl->astKind == AST::ASTKind::FUNC_DECL &&
+        funcDecl.genericDecl->fullPackageName == funcDecl.fullPackageName &&
+        !funcDecl.TestAttr(AST::Attribute::IMPORTED)) {
+        fn->SetAspectSourceOrigin(funcDecl.genericDecl->mangledName);
+        AnnoInfo info;
+        if (resolvedAnnotationMetadata) {
+            auto entry = resolvedAnnotationMetadata->find(funcDecl.genericDecl);
+            if (entry != resolvedAnnotationMetadata->end()) {
+                info.SetResolvedAnnotations(funcDecl.fullPackageName, funcDecl.mangledName, entry->second);
+            }
+        }
+        if (!info.HasCompleteSnapshot() && (!funcDecl.genericDecl->annotationsArray ||
+            funcDecl.genericDecl->annotationsArray->children.empty())) {
+            info.SetResolvedAnnotations(funcDecl.fullPackageName, funcDecl.mangledName, {});
+        }
+        if (info.HasCompleteSnapshot()) {
+            fn->SetAnnoInfo(std::move(info));
+        }
+    }
 
     // collect annotation info, and create anno factory func
     // do this here rather than in Function translation, because this function is run serialised but TranslateFuncDecl
@@ -923,7 +1035,7 @@ void AST2CHIR::CreateAnnoOnlyDeclSig(const AST::Decl& decl)
         tr.CreateAnnoFactoryFuncsForFuncDecl(*funcDecl, nullptr);
     } else {
         auto fn = tr.CreateAnnoFactoryFuncSig(decl, nullptr);
-        if (fn.IsAvailable()) {
+        if (fn.IsAvailable() || fn.HasCompleteSnapshot()) {
             if (auto var = DynamicCast<AST::VarDecl>(&decl)) {
                 StaticCast<GlobalVar*>(globalCache.Get(*var))->SetAnnoInfo(std::move(fn));
             }

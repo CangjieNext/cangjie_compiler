@@ -155,6 +155,36 @@ Package::AccessLevel Package::GetPackageAccessLevel() const
     return pkgAccessLevel;
 }
 
+uint8_t Package::GetAnnotationMetadataVersion() const
+{
+    return annotationMetadataVersion;
+}
+
+void Package::SetAnnotationMetadataVersion(uint8_t version)
+{
+    annotationMetadataVersion = version;
+}
+
+uint8_t Package::GetAspectWeaveState() const
+{
+    return aspectWeaveState;
+}
+
+void Package::SetAspectWeaveState(uint8_t state)
+{
+    aspectWeaveState = state;
+}
+
+const std::string& Package::GetAspectWeavePlanDigest() const
+{
+    return aspectWeavePlanDigest;
+}
+
+void Package::SetAspectWeavePlanDigest(std::string digest)
+{
+    aspectWeavePlanDigest = std::move(digest);
+}
+
 std::vector<ExtendDef*> Package::GetImportedExtends() const
 {
     return importedExtends;
@@ -375,12 +405,12 @@ std::vector<CustomTypeDef*> Package::GetAllImportedCustomTypeDef() const
 std::vector<CustomTypeDef*> Package::GetCurPkgCustomTypeDef() const
 {
     std::vector<CustomTypeDef*> all;
- 
+
     all.insert(all.end(), structs.begin(), structs.end());
     all.insert(all.end(), classes.begin(), classes.end());
     all.insert(all.end(), enums.begin(), enums.end());
     all.insert(all.end(), extends.begin(), extends.end());
- 
+
     return all;
 }
 

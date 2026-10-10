@@ -189,8 +189,34 @@ flatbuffers::Offset<CHIRFormat::AnnoInfo> CHIRSerializer::CHIRSerializerImpl::Se
         instances.push_back(CHIRFormat::CreateCustomAnnoInstanceDirect(builder,
             inst.GetAnnoClassName().data(), argStrs.empty() ? nullptr : &argStrs, locOff));
     }
+    std::vector<flatbuffers::Offset<CHIRFormat::ResolvedAnnotation>> resolved;
+    if (obj.HasCompleteSnapshot()) {
+        for (const auto& annotation : obj.GetResolvedAnnotations()) {
+            std::vector<flatbuffers::Offset<CHIRFormat::AnnotationScalarField>> fields;
+            if (annotation.scalarFields) {
+                for (const auto& field : *annotation.scalarFields) {
+                    const bool isBool = std::holds_alternative<bool>(field.value);
+                    const std::string* stringValue = isBool ? nullptr : &std::get<std::string>(field.value);
+                    fields.push_back(CHIRFormat::CreateAnnotationScalarFieldDirect(builder, field.name.c_str(),
+                        isBool ? CHIRFormat::AnnotationScalarKind_BOOL : CHIRFormat::AnnotationScalarKind_STRING,
+                        stringValue ? stringValue->c_str() : nullptr,
+                        isBool ? std::get<bool>(field.value) : false));
+                }
+            }
+            const auto beginPos = CHIRFormat::CreatePos(builder, annotation.beginLine, annotation.beginColumn);
+            const auto endPos = CHIRFormat::CreatePos(builder, annotation.endLine, annotation.endColumn);
+            const auto loc = CHIRFormat::CreateDebugLocationDirect(builder, annotation.sourceFile.c_str(),
+                annotation.fileId, beginPos, endPos);
+            resolved.push_back(CHIRFormat::CreateResolvedAnnotationDirect(builder,
+                annotation.qualifiedClassName.c_str(), annotation.declarationSymbol.c_str(), loc,
+                annotation.scalarFields.has_value(), fields.empty() ? nullptr : &fields));
+        }
+    }
     return CHIRFormat::CreateAnnoInfoDirect(builder, obj.GetAnnoFactoryFuncMangledName().data(),
-        instances.empty() ? nullptr : &instances);
+        instances.empty() ? nullptr : &instances, obj.HasCompleteSnapshot(),
+        obj.HasCompleteSnapshot() ? obj.GetSnapshotSourcePackage().c_str() : nullptr,
+        obj.HasCompleteSnapshot() ? obj.GetSnapshotSourceDeclId().c_str() : nullptr,
+        resolved.empty() ? nullptr : &resolved);
 }
 
 [[maybe_unused]] static void Empty(Annotation*)
@@ -487,7 +513,7 @@ flatbuffers::Offset<CHIRFormat::GlobalValue> CHIRSerializer::CHIRSerializerImpl:
     auto annoInfo = Serialize<CHIRFormat::AnnoInfo>(obj.GetAnnoInfo());
     return CHIRFormat::CreateGlobalValueDirect(builder, valueOffset,
         obj.GetSrcCodeIdentifier().data(), obj.GetRawMangledName().data(), obj.GetPackageName().data(),
-        declaredParent, features.empty() ? nullptr : &features, annoInfo);
+        declaredParent, features.empty() ? nullptr : &features, annoInfo, obj.GetAspectSourceOrigin().c_str());
 }
 
 template <>
@@ -1399,7 +1425,8 @@ void CHIRSerializer::CHIRSerializerImpl::Save(const std::string& filename, ToCHI
     auto serializedPackage = CHIRFormat::CreateCHIRPackageDirect(builder, packageName.c_str(), "",
         CHIRFormat::PackageAccessLevel(accesslevel), &typeKind, &allType, &valueKind, &allValue, &exprKind,
         &allExpression, &defKind, &allCustomTypeDef, packageInitFunc, CHIRFormat::Phase(phase),
-        packageLiteralInitFunc);
+        packageLiteralInitFunc, package.GetAnnotationMetadataVersion(), package.GetAspectWeaveState(),
+        package.GetAspectWeavePlanDigest().c_str());
 
     builder.Finish(serializedPackage);
     const uint8_t* buf = builder.GetBufferPointer();
@@ -1444,7 +1471,8 @@ flatbuffers::DetachedBuffer CHIRSerializer::CHIRSerializerImpl::ConvertToMemoryD
     auto serializedPackage = CHIRFormat::CreateCHIRPackageDirect(builder, packageName.c_str(), "",
         CHIRFormat::PackageAccessLevel(accesslevel), &typeKind, &allType, &valueKind, &allValue, &exprKind,
         &allExpression, &defKind, &allCustomTypeDef, packageInitFunc, CHIRFormat::Phase::Phase_RAW,
-        packageLiteralInitFunc);
+        packageLiteralInitFunc, package.GetAnnotationMetadataVersion(), package.GetAspectWeaveState(),
+        package.GetAspectWeavePlanDigest().c_str());
 
     builder.Finish(serializedPackage);
     return builder.Release();

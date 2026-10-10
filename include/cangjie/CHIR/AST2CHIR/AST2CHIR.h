@@ -34,6 +34,7 @@
 #include "cangjie/Utils/ProfileRecorder.h"
 
 #include "cangjie/AST/Types.h"
+#include "cangjie/CHIR/Checker/AnnotationMetadata.h"
 #include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie::CHIR {
@@ -54,6 +55,8 @@ public:
         CHIRType* chirType;
         std::string outputPath;
         bool isComputingAnnos{}; // is in computing annotations mode
+        bool evaluateAllAnnotations{};
+        const ResolvedAnnotationMap* resolvedAnnotationMetadata{};
 
         // Note: this variable is used only in sancov.
         /**
@@ -176,6 +179,16 @@ public:
             isComputingAnnos = value;
             return this;
         }
+        AST2CHIRBuilder* SetEvaluateAllAnnotations(bool value)
+        {
+            evaluateAllAnnotations = value;
+            return this;
+        }
+        AST2CHIRBuilder* SetResolvedAnnotationMetadata(const ResolvedAnnotationMap* value)
+        {
+            resolvedAnnotationMetadata = value;
+            return this;
+        }
     };
     ~AST2CHIR()
     {
@@ -235,7 +248,9 @@ private:
           builder(*builderToCHIR.builder),
           chirType(*builderToCHIR.chirType),
           outputPath(builderToCHIR.outputPath),
-          isComputingAnnos{builderToCHIR.isComputingAnnos}
+          isComputingAnnos{builderToCHIR.isComputingAnnos},
+          evaluateAllAnnotations{builderToCHIR.evaluateAllAnnotations},
+          resolvedAnnotationMetadata{builderToCHIR.resolvedAnnotationMetadata}
     {
     }
 
@@ -244,7 +259,7 @@ private:
     void CollectDeclsInCurPkg(AST::Package& node);
     void CollectImportedGenericInstantiatedDecl(
         const AST::Package& node, std::unordered_set<std::string>& mangledNameSet);
-    void CollectImportedDeclUsedInCurPkg(AST::Decl& decl);
+    void CollectImportedDeclUsedInCurPkg(AST::Decl& decl, bool forceAspectMembers = false);
     void CollectImportedPropDecl(AST::PropDecl& propDecl);
     void CollectImportedGenericDecl(AST::Decl& decl);
     void CollectDecls(AST::Decl& decl, bool instantiated);
@@ -388,7 +403,10 @@ private:
     std::vector<Function*> initFuncsForAnnoFactory;
     std::string outputPath;
     bool isComputingAnnos{};
+    bool evaluateAllAnnotations{};
+    const ResolvedAnnotationMap* resolvedAnnotationMetadata{};
     CHIR::Package* package{nullptr};
+    std::unordered_set<std::string> aspectExternalSymbols;
     bool failure{false};
 
     // ======================== Imported Pkg Top-Level Decl Part ======================== //

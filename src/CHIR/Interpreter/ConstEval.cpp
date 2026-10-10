@@ -328,16 +328,16 @@ Cangjie::CHIR::Value* IVal2CHIR::ConvertArrayToChir(
     return expr->GetResult();
 }
 
-void ConstEvalPass::RunOnPackage(Package& package,
+bool ConstEvalPass::RunOnPackage(Package& package,
     const std::vector<CHIR::Function*>& initFuncsForConstVar, std::vector<Bchir>& bchirPackages)
 {
-    RunInterpreter(package, bchirPackages, initFuncsForConstVar,
+    return RunInterpreter(package, bchirPackages, initFuncsForConstVar,
         [this](auto& package, auto& interpreter, auto& linker) {
         ReplaceGlobalConstantInitializers(package, interpreter, linker);
     });
 }
 
-void ConstEvalPass::RunInterpreter(Package& package, std::vector<Bchir>& bchirPackages,
+bool ConstEvalPass::RunInterpreter(Package& package, std::vector<Bchir>& bchirPackages,
     const std::vector<CHIR::Function*>& initFuncsForConstVar,
     std::function<void(Package&, BCHIRInterpreter&, BCHIRLinker&)> onSuccess)
 {
@@ -378,9 +378,11 @@ void ConstEvalPass::RunInterpreter(Package& package, std::vector<Bchir>& bchirPa
     Utils::ProfileRecorder::Stop("Constant Evaluation", "Evaluate global vars");
     if (std::holds_alternative<INotRun>(res)) {
         onSuccess(package, interpreter, linker);
-    } else if (std::holds_alternative<IException>(res)) {
-        // Suppress error, no way to know whether exception is legitimate
+        return true;
     }
+    // Ordinary optimization can keep the original initializer. Annotation
+    // metadata cannot mistake that fallback for an evaluated scalar value.
+    return false;
 }
 
 void ConstEvalPass::ReplaceGlobalConstantInitializers(

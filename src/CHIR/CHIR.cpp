@@ -11,6 +11,9 @@
 #include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
 #include "cangjie/CHIR/Analysis/DevirtualizationInfo.h"
 #include "cangjie/CHIR/Analysis/UnreachableBlockAnalysis.h"
+#include "cangjie/CHIR/IR/Expression/Expression.h"
+#include "cangjie/CHIR/IR/Type/CustomTypeDef.h"
+#include "cangjie/CHIR/IR/Value/LiteralValue.h"
 #include "cangjie/CHIR/Checker/CHIRChecker.h"
 #include "cangjie/CHIR/Checker/AnnotationChecker.h"
 #include "cangjie/CHIR/Checker/UnreachableBranchCheck.h"
@@ -45,6 +48,7 @@
 #include "cangjie/CHIR/Transformation/SanitizerCoverage.h"
 #include "cangjie/CHIR/Transformation/UpdateMemberVarPath.h"
 #include "cangjie/CHIR/Utils/CHIRPrinter.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/Driver/TempFileManager.h"
@@ -53,6 +57,80 @@
 #include "cangjie/Utils/ProfileRecorder.h"
 
 namespace Cangjie::CHIR {
+static const StringLiteral* AspectStringConstant(const Value* value)
+{
+    auto* local = DynamicCast<LocalVar>(value);
+    auto* constant = local ? DynamicCast<Constant>(local->GetExpr()) : nullptr;
+    return constant ? DynamicCast<StringLiteral>(constant->GetValue()) : nullptr;
+}
+
+// The normal const interpreter cannot execute std.core.String.+. Only fold a
+// call to that exact core method when both operands are already literals. This
+// operates on the disposable annotation-evaluation CHIR, never the final IR.
+static void FoldLiteralAnnotationStringConcat(Package& pkg, CHIRBuilder& builder)
+{
+    for (auto* func : pkg.GetGlobalFuncsWithBody()) {
+        for (auto* block : func->GetBody()->GetBlocks()) {
+            for (auto* expression : block->GetExpressions()) {
+                auto* apply = DynamicCast<Apply>(expression);
+                auto* callee = apply ? DynamicCast<Function>(apply->GetCallee()) : nullptr;
+                auto* parent = callee ? callee->GetParentCustomTypeDef() : nullptr;
+                if (!parent || callee->GetPackageName() != "std.core" ||
+                    parent->GetPackageName() != "std.core" || parent->GetSrcCodeIdentifier() != "String" ||
+                    callee->GetSrcCodeIdentifier() != "+") {
+                    continue;
+                }
+                const auto args = apply->GetArgs();
+                if (args.size() != 2) {
+                    continue;
+                }
+                auto* lhs = AspectStringConstant(args[0]);
+                auto* rhs = AspectStringConstant(args[1]);
+                if (!lhs || !rhs || lhs->GetVal().size() > 1048576 || rhs->GetVal().size() > 1048576 ||
+                    lhs->GetVal().size() + rhs->GetVal().size() > 1048576) {
+                    continue;
+                }
+                auto* replacement = builder.CreateConstantExpression<StringLiteral>(
+                    apply->GetDebugLocation(), apply->GetResult()->GetType(), block, lhs->GetVal() + rhs->GetVal());
+                replacement->MoveBefore(apply);
+                apply->GetResult()->ReplaceWith(*replacement->GetResult(), apply->GetParentBlockGroup());
+                apply->RemoveSelfFromBlock();
+            }
+        }
+    }
+}
+
+// The rule plugin freezes its candidate set before the ordinary CHIR passes.
+// A later source body would otherwise escape both preflight and weaving.
+static std::unordered_set<std::string> CollectAspectCandidates(const Package& pkg)
+{
+    std::unordered_set<std::string> candidates;
+    for (auto* func : pkg.GetGlobalFuncsWithBody(false)) {
+        if (func->GetPackageName() != pkg.GetName() || func->GetFuncKind() != FuncKind::DEFAULT ||
+            func->TestAttr(Attribute::GENERIC) || func->TestAttr(Attribute::FOREIGN) ||
+            func->TestAttr(Attribute::ABSTRACT) || func->GetSrcCodeIdentifier() == "main" ||
+            (func->GetParentCustomTypeDef() != nullptr && func->GetParentCustomTypeDef()->IsGenericDef()) ||
+            (func->TestAttr(Attribute::COMPILER_ADD) && func->GetAspectSourceOrigin().empty())) {
+            continue;
+        }
+        candidates.insert(func->GetIdentifier());
+    }
+    return candidates;
+}
+
+static bool CheckAspectCandidateSeal(
+    const Package& pkg, const std::unordered_set<std::string>& sealed, DiagnosticEngine& diag)
+{
+    for (const auto& identifier : CollectAspectCandidates(pkg)) {
+        if (sealed.count(identifier) == 0) {
+            diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_phase_invalid,
+                DEFAULT_POSITION, "late aspect candidate " + identifier);
+            return false;
+        }
+    }
+    return true;
+}
+
 static void FlattenEffectMap(OptEffectCHIRMap& effectMap)
 {
     auto mergeToEffectedNodes = [](std::unordered_set<Ptr<Value>>& src, std::unordered_set<Ptr<Value>>& patch) {
@@ -210,7 +288,8 @@ void ToCHIR::DumpCHIRToFile(const std::string& suffix, bool needCheckFlag)
     const std::string extension = CHIR_READABLE_FILE_EXTENSION.front() == '.' ? CHIR_READABLE_FILE_EXTENSION.substr(1)
                                                                               : CHIR_READABLE_FILE_EXTENSION;
     // do not dump when not debugging compute annotations
-    if (!opts.computeAnnotationsDebug && isComputingAnnos) {
+    if (isComputingAnnos && (!opts.computeAnnotationsDebug ||
+        annotationEvaluationPurpose == AnnotationEvaluationPurpose::METADATA)) {
         return;
     }
     std::string fileName = std::to_string(debugFileIndex++) + "_";
@@ -652,9 +731,11 @@ bool ToCHIR::RunConstantEvaluation()
     Utils::ProfileRecorder recorder("CHIR", "Constant Evaluation");
     auto ce = CHIR::Interpreter::ConstEvalPass(ci, builder, sourceManager, opts, diagEngine);
     std::vector<Cangjie::CHIR::Interpreter::Bchir> bchirPackages;
-    ce.RunOnPackage(*chirPkg, initFuncsForConstVar, bchirPackages);
+    const bool evaluated = ce.RunOnPackage(*chirPkg, initFuncsForConstVar, bchirPackages);
     DumpCHIRToFile("after_const_eval");
-    return true;
+    // Preserve best-effort optimization for ordinary compilation, but require
+    // actual successful evaluation before the metadata reader inspects CHIR.
+    return !isComputingAnnos || annotationEvaluationPurpose != AnnotationEvaluationPurpose::METADATA || evaluated;
 }
 
 bool ToCHIR::RunIRChecker(const Phase& phase)
@@ -1051,14 +1132,22 @@ void EmitCHIR(const std::string& outputPath, const CHIR::Package& package, ToCHI
 }
 } // namespace
 
-bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
+bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly, AnnotationEvaluationPurpose purpose)
 {
     isComputingAnnos = true;
+    annotationEvaluationPurpose = purpose;
+    annotationScalarsEvaluated = false;
+    // Restore state on ALL exits, including failed translation/evaluation.
+    struct EvaluationScope {
+        bool& active;
+        uint64_t& fileIndex;
+        ~EvaluationScope() { active = false; fileIndex = 0; }
+    } scope{isComputingAnnos, debugFileIndex};
     if (!TranslateToCHIR(std::move(annoOnly))) {
         return false;
     }
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
+    if (purpose != AnnotationEvaluationPurpose::METADATA && opts.outputMode == GlobalOptions::OutputMode::CHIR) {
         auto fileName =
             FileUtil::JoinPath(opts.output, chirPkg->GetName()) + std::string(CHIR_SERIALIZATION_FILE_EXTENSION);
         CHIRSerializer::Serialize(*chirPkg, fileName, CHIR::ToCHIR::RAW);
@@ -1071,7 +1160,7 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
     }
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     /// ===============   Meta Transformation for CHIR  ===============
-    if (!PerformPlugin()) {
+    if (purpose != AnnotationEvaluationPurpose::METADATA && !PerformPlugin()) {
         return false;
     }
 #endif
@@ -1079,11 +1168,17 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
     NothingTypeExprElimination();
     UnreachableBlockElimination();
     DoClosureConversion();
-    if (!RunConstantEvaluation()) {
+    if (purpose == AnnotationEvaluationPurpose::METADATA) {
+        FoldLiteralAnnotationStringConcat(*chirPkg, builder);
+    }
+    annotationScalarsEvaluated = RunConstantEvaluation();
+    if (!annotationScalarsEvaluated && purpose != AnnotationEvaluationPurpose::METADATA) {
         return false;
     }
-    isComputingAnnos = false;
-    debugFileIndex = 0;
+    // A best-effort interpreter failure does not erase resolved business
+    // annotation identities. The metadata reader receives an explicit false
+    // scalar-availability flag, and control-annotation validation must reject
+    // unavailable fields rather than inventing defaults.
     return true;
 }
 
@@ -1136,6 +1231,9 @@ bool ToCHIR::Run()
         CHIRSerializer::Serialize(*chirPkg, fileName, CHIR::ToCHIR::RAW);
         return true;
     }
+    const bool sealAspectCandidates = opts.emitCHIRAnnotationMetadata && !opts.pluginPaths.empty();
+    const auto aspectCandidates = sealAspectCandidates ? CollectAspectCandidates(*chirPkg) :
+        std::unordered_set<std::string>{};
     // 3. run plugin for CHIR
     if (!PerformPlugin()) {
         return false;
@@ -1147,7 +1245,7 @@ bool ToCHIR::Run()
     }
     if (opts.emitCHIRPhase == GlobalOptions::CandidateEmitCHIRPhase::RAW) {
         EmitCHIR(outputPath, *chirPkg, Phase::RAW, opts.NeedDumpCHIR());
-        return true;
+        return !sealAspectCandidates || CheckAspectCandidateSeal(*chirPkg, aspectCandidates, diag);
     }
     RecordCHIRExprNum("trans");
 
@@ -1197,7 +1295,7 @@ bool ToCHIR::Run()
             TempFileManager::Instance().CreateNewFileInfo({.fileName = chirPkg->GetName()}, TempFileKind::O_CHIR);
         CHIRSerializer::Serialize(*chirPkg, tempFileInfo.filePath, Phase::OPT);
     }
-    return true;
+    return !sealAspectCandidates || CheckAspectCandidateSeal(*chirPkg, aspectCandidates, diag);
 }
 
 bool ToCHIR::ExecuteCppPlugins()
@@ -1331,6 +1429,9 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
                         ->SetCHIRType(*chirType)
                         ->SetOutputPath(outputPath)
                         ->SetComputeAnnotations(isComputingAnnos)
+                        ->SetEvaluateAllAnnotations(isComputingAnnos &&
+                            annotationEvaluationPurpose == AnnotationEvaluationPurpose::METADATA)
+                        ->SetResolvedAnnotationMetadata(resolvedAnnotationMetadata)
                         ->Build();
     ast2CHIR.SetAnnoOnlyDecls(std::move(annoOnly));
     CJC_NULLPTR_CHECK(pkg);
@@ -1339,6 +1440,13 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
         return false;
     }
     chirPkg = ast2CHIR.GetPackage();
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    // The formal plugin runs inside ToCHIR::Run, before GenerateCHIRForPkg
+    // returns. Advertise the capability before that plugin can inspect CHIR.
+    if (!isComputingAnnos && opts.emitCHIRAnnotationMetadata && resolvedAnnotationMetadata) {
+        chirPkg->SetAnnotationMetadataVersion(1);
+    }
+#endif
     DumpCHIRToFile("AST_CHIR");
     FlatForInExpr();
 
@@ -1372,6 +1480,11 @@ VarInitDepMap ToCHIR::GetVarInitDepMap() const
 
 void ToCHIR::ClearASTResources()
 {
+    // This is only an auxiliary translation. Its reader and the subsequent
+    // formal translation both still need the source declarations/factory map.
+    if (isComputingAnnos) {
+        return;
+    }
     // in cjmp, `save cjo` is after CHIR stage, there is a bug if move `save cjo` before CHIR
     if (ci.invocation.globalOptions.outputMode == GlobalOptions::OutputMode::CHIR) {
         return;

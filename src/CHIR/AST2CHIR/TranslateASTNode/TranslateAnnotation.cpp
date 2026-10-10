@@ -71,7 +71,7 @@ std::vector<GlobalVar*> Translator::TranslateAnnotationsArraySig(const ArrayLit&
 {
     std::vector<GlobalVar*> res;
     for (size_t i{0}; i < annos.children.size(); ++i) {
-        if (isComputingAnnos && annos.children[i]->TestAttr(AST::Attribute::NO_REFLECT_INFO)) {
+        if (isComputingAnnos && !evaluateAllAnnotations && annos.children[i]->TestAttr(AST::Attribute::NO_REFLECT_INFO)) {
             continue;
         }
         res.push_back(TranslateCustomAnnoInstanceSig(*annos.children[i], func, i));
@@ -122,7 +122,7 @@ void Translator::TranslateAnnotationsArrayBody(const Decl& decl, Function& func)
     // no need to cache currentBlock here, because the current function has been completed
     size_t annoChildrenId{0};
     for (size_t i{0}; i < annoInsts.size(); ++i) {
-        while (isComputingAnnos &&
+        while (isComputingAnnos && !evaluateAllAnnotations &&
             decl.annotationsArray->children[annoChildrenId]->TestAttr(AST::Attribute::NO_REFLECT_INFO)) {
             ++annoChildrenId;
         }
@@ -135,7 +135,7 @@ void Translator::TranslateAnnotationsArrayBody(const Decl& decl, Function& func)
         blockGroupStack.pop_back();
     }
 #ifndef NDEBUG
-    while (isComputingAnnos && annoChildrenId < decl.annotationsArray->children.size() &&
+    while (isComputingAnnos && !evaluateAllAnnotations && annoChildrenId < decl.annotationsArray->children.size() &&
         decl.annotationsArray->children[annoChildrenId]->TestAttr(AST::Attribute::NO_REFLECT_INFO)) {
         ++annoChildrenId;
     }
@@ -162,12 +162,34 @@ void Translator::TranslateAnnoFactoryFuncBody([[maybe_unused]] const AST::Decl& 
 
 AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeDef* parent)
 {
+    auto attachResolvedSnapshot = [this, &decl](AnnoInfo& info) {
+        if (!resolvedAnnotationMetadata || decl.TestAttr(AST::Attribute::IMPORTED) ||
+            decl.TestAttr(AST::Attribute::SPECIFIC) || decl.fullPackageName.empty() || decl.mangledName.empty()) {
+            return;
+        }
+        auto entry = resolvedAnnotationMetadata->find(&decl);
+        // Generic instantiation copies the source declaration after metadata
+        // evaluation. Its concrete body inherits the source annotation facts,
+        // but must keep its own mangled identity in the CHIR snapshot.
+        if (entry == resolvedAnnotationMetadata->end() && decl.genericDecl &&
+            decl.genericDecl->fullPackageName == decl.fullPackageName) {
+            entry = resolvedAnnotationMetadata->find(decl.genericDecl);
+        }
+        if (entry != resolvedAnnotationMetadata->end()) {
+            info.SetResolvedAnnotations(decl.fullPackageName, decl.mangledName, entry->second);
+        } else if (!decl.annotationsArray || decl.annotationsArray->children.empty()) {
+            info.SetResolvedAnnotations(decl.fullPackageName, decl.mangledName, {});
+        }
+        // A declaration with annotations but no auxiliary result remains Unknown.
+    };
     // Since annotations must be consistent between common and specific sides,
     // the specific side can directly use the serialized annotations.
     auto annosArray = decl.annotationsArray.get();
     if (decl.TestAttr(AST::Attribute::IMPORTED) || !annosArray || annosArray->children.empty() ||
-        decl.TestAttr(AST::Attribute::SPECIFIC) || opts.disableReflection) {
-        return {};
+        decl.TestAttr(AST::Attribute::SPECIFIC) || (opts.disableReflection && !evaluateAllAnnotations)) {
+        AnnoInfo info;
+        attachResolvedSnapshot(info);
+        return info;
     }
 
     // In OHOS environment, disable annotations for enum types
@@ -229,6 +251,7 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
         annoInstances.emplace_back(annoClassDeclName, paramValues, annoLoc);
     }
     auto annoInfo = AnnoInfo(mangledName, std::move(annoInstances));
+    attachResolvedSnapshot(annoInfo);
     annotationFuncMap.emplace(&decl, annoInfo);
     return annoInfo;
 }
@@ -249,6 +272,11 @@ void Translator::CreateAnnoFactoryFuncsForFuncDecl(const AST::FuncDecl& funcDecl
     auto funcValue = GetSymbolTable(funcDecl);
     const AST::Decl& annotatedDecl = funcDecl.propDecl ? *funcDecl.propDecl : StaticCast<AST::Decl>(funcDecl);
     auto func = StaticCast<Function*>(funcValue);
+    if (funcDecl.genericDecl && funcDecl.genericDecl->astKind == AST::ASTKind::FUNC_DECL &&
+        funcDecl.genericDecl->fullPackageName == funcDecl.fullPackageName &&
+        !funcDecl.TestAttr(AST::Attribute::IMPORTED)) {
+        func->SetAspectSourceOrigin(funcDecl.genericDecl->mangledName);
+    }
     CreateAnnotationInfo<Function>(annotatedDecl, *func, parent);
     size_t offset = params.size() == func->GetNumOfParams() ? 0 : 1;
     for (size_t i = 0; i < params.size(); ++i) {

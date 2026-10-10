@@ -213,7 +213,7 @@ void AST2CHIR::CreateGlobalVarSignature(const std::vector<Ptr<const AST::Decl>>&
                 continue;
             }
             auto annoInfo = tr.CreateAnnoFactoryFuncSig(*decl, nullptr);
-            if (annoInfo.IsAvailable()) {
+            if (annoInfo.IsAvailable() || annoInfo.HasCompleteSnapshot()) {
                 gv->SetAnnoInfo(std::move(annoInfo));
             }
         } else if (decl->astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL) {
@@ -225,7 +225,7 @@ void AST2CHIR::CreateGlobalVarSignature(const std::vector<Ptr<const AST::Decl>>&
                 // we have to use VarWithPatternDecl, not VarDecl, because it's difficult for SEMA to pass
                 // the annotation info and initializer to the sub var decls，maybe we can improve SEMA later.
                 auto annoInfo = tr.CreateAnnoFactoryFuncSig(*decl, nullptr);
-                if (annoInfo.IsAvailable()) {
+                if (annoInfo.IsAvailable() || annoInfo.HasCompleteSnapshot()) {
                     CJC_ASSERT(!gv->TestAttr(Attribute::STATIC));
                     gv->SetAnnoInfo(std::move(annoInfo));
                 }
@@ -286,7 +286,8 @@ void AST2CHIR::SetInitFuncForStaticVar()
 Translator AST2CHIR::CreateTranslator()
 {
     return Translator{builder, chirType, opts, gim, globalCache, localConstVars, localConstFuncs, kind,
-        deserializedVals, annoFactoryFuncs, isComputingAnnos, initFuncsForAnnoFactory, types};
+        deserializedVals, annoFactoryFuncs, isComputingAnnos, initFuncsForAnnoFactory, types, evaluateAllAnnotations,
+        resolvedAnnotationMetadata};
 }
 
 void AST2CHIR::TranslateInitOfGlobalVars(const AST::Package& pkg, const InitOrder& initOrder)
@@ -450,7 +451,7 @@ void AST2CHIR::TranslateInParallel(const std::vector<Ptr<const AST::Decl>>& decl
     Utils::ParallelUtil allDeclsParallel(builder, opts.GetJobs());
     allDeclsParallel.RunAST2CHIRInParallel(decls, chirType, opts, gim, globalCache, localConstVars, localConstFuncs,
         kind, deserializedVals, Translator::TranslateASTNode, isComputingAnnos, initFuncsForAnnoFactory, types,
-        annoFactoryFuncs);
+        annoFactoryFuncs, evaluateAllAnnotations);
 }
 
 void AST2CHIR::TranslateTopLevelDeclsInParallel()

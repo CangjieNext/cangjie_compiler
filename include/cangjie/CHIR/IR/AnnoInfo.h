@@ -8,8 +8,10 @@
 #define CANGJIE_CHIR_ANNOINFO_H
 
 #include <string>
+#include <vector>
 
 #include "cangjie/CHIR/IR/DebugLocation.h"
+#include "cangjie/CHIR/IR/ResolvedAnnotationData.h"
 
 /** @Annotation
  *  class Anno1 {
@@ -53,12 +55,22 @@ public:
     void Dump() const;
     std::string GetAnnoFactoryFuncMangledName() const;
     const std::vector<CustomAnnoInstance>& GetCustomAnnoInstances() const;
+    bool HasCompleteSnapshot() const;
+    const std::string& GetSnapshotSourcePackage() const;
+    const std::string& GetSnapshotSourceDeclId() const;
+    const std::vector<ResolvedAnnotationData>& GetResolvedAnnotations() const;
+    void SetResolvedAnnotations(
+        std::string sourcePackage, std::string sourceDeclId, std::vector<ResolvedAnnotationData> annotations);
 
 private:
     // attention: we have a deal with llvm ir, we use "none" to stand there is no custom annotation
     // of course, we can use other word or just empty string, you just remember to modify it in llvm-project, too
     std::string mangledName{"none"};
     std::vector<CustomAnnoInstance> annoInstances;
+    bool snapshotComplete{false};
+    std::string sourcePackage;
+    std::string sourceDeclId;
+    std::vector<ResolvedAnnotationData> resolvedAnnotations;
 };
 } // namespace Cangjie::CHIR
 

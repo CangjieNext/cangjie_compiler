@@ -833,6 +833,8 @@ public:
     bool constEvalDebug = false;
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     bool computeAnnotationsDebug{false}; // --debug-annotations
+    bool emitCHIRAnnotationMetadata{false}; // --emit-chir-annotation-metadata
+    std::string aspectImportSymbolsPath; // --aspect-import-symbols; only valid with annotation metadata
 #endif
     bool disableCodeGen = false;
     bool disableDeserializer = false;

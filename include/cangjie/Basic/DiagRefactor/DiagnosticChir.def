@@ -46,5 +46,11 @@ WARNING(chir_unreachable_pattern, UNUSED, "unreachable pattern")
 // const eval check
 ERROR(chir_eval_support, "const evaluation has been disabled by compiler option `--no-interp-const-eval`")
 ERROR(chir_annotation_not_applicable, "'@%s' not applicable to %s")
+ERROR(chir_annotation_metadata_unsupported_mode,
+    "resolved CHIR annotation metadata requires full cjnative compilation with constant evaluation enabled")
+ERROR(chir_annotation_metadata_unavailable,
+    "could not evaluate and attach resolved CHIR annotation metadata")
+ERROR(chir_aspect_build_input_mismatch, "build-input-mismatch: %s")
+ERROR(chir_aspect_build_phase_invalid, "build-phase-invalid: %s")
 
 ERROR(chir_diag_end, "chir_diag_end")

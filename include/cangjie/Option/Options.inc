@@ -365,6 +365,12 @@ OPTION("--dump-to-screen", DUMP_TO_SCREEN, FLAG, { BACKEND(ALL) },
 OPTION("--debug-annotations", DUMP_ANNOTATIONS_DEBUG, FLAG, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Debug computing annotations stage")
+OPTION("--emit-chir-annotation-metadata", EMIT_CHIR_ANNOTATION_METADATA, FLAG, { BACKEND(CJNATIVE) },
+    { GROUP(GLOBAL) COMMA GROUP(VISIBLE) }, nullptr, {}, SINGLE_OCCURRENCE,
+    "Emit compiler-resolved annotation identities and scalar fields in CHIR")
+OPTION("--aspect-import-symbols", ASPECT_IMPORT_SYMBOLS, SEPARATED, { BACKEND(CJNATIVE) },
+    { GROUP(GLOBAL) COMMA GROUP(VISIBLE) }, nullptr, {}, SINGLE_OCCURRENCE,
+    "Import exact exported aspect symbols from a build-generated list")
 #endif
 OPTION("--deserialize-chir-and-dump", DESERIALIZE_CHIR_AND_DUMP, SEPARATED, { BACKEND(ALL) },
     { GROUP(FRONTEND) COMMA GROUP(STABLE) }, nullptr, {}, SINGLE_OCCURRENCE,

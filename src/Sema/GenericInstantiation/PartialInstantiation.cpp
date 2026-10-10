@@ -24,6 +24,9 @@ using namespace Cangjie::Meta;
 namespace {
 auto g_optLevel = GlobalOptions::OptimizationLevel::O0;
 auto g_outputMode = GlobalOptions::OutputMode::EXECUTABLE;
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+bool g_forceAspectCandidates = false;
+#endif
 
 inline bool IsCPointerFrozenMember(const Decl& decl)
 {
@@ -40,6 +43,11 @@ void SetOptLevel(const Cangjie::GlobalOptions& opts)
 {
     g_optLevel = opts.optimizationLevel;
     g_outputMode = opts.outputMode;
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    // Rule matching needs concrete signatures even when optimizations are off.
+    // Keep the ordinary compiler's instantiation policy unchanged.
+    g_forceAspectCandidates = opts.emitCHIRAnnotationMetadata;
+#endif
 }
 
 bool IsOpenDecl(const Decl& decl)
@@ -71,7 +79,11 @@ bool RequireInstantiation(const Decl& decl)
         return false;
     }
     if (decl.IsNominalDecl()) {
-        if (g_optLevel >= GlobalOptions::OptimizationLevel::O2 && !decl.TestAttr(Attribute::IMPORTED)) {
+        if ((g_optLevel >= GlobalOptions::OptimizationLevel::O2
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+            || g_forceAspectCandidates
+#endif
+            ) && !decl.TestAttr(Attribute::IMPORTED)) {
             return true;
         }
         if (decl.TestAttr(Attribute::GENERIC)) {
@@ -100,7 +112,11 @@ bool RequireInstantiation(const Decl& decl)
     if (decl.TestAttr(Attribute::CONTAINS_MOCK_CREATION_CALL) && decl.HasAnno(AnnotationKind::FROZEN)) {
         return true;
     }
-    if (g_optLevel < GlobalOptions::OptimizationLevel::O2) {
+    if (g_optLevel < GlobalOptions::OptimizationLevel::O2
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+        && !g_forceAspectCandidates
+#endif
+        ) {
         return false;
     }
     return !IsInDeclWithAttribute(decl, Attribute::IMPORTED) || decl.HasAnno(AnnotationKind::FROZEN);

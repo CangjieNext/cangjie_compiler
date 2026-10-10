@@ -333,6 +333,7 @@ table GlobalValue {
   declaredParent: uint32; // use defs id
   features: [string]; // features set to which declaration belongs
   annoInfo: AnnoInfo;
+  aspectSourceOrigin: string; // original mangled source declaration for a concrete generic body
 }
 
 table GlobalVar {
@@ -413,9 +414,33 @@ table CustomAnnoInstance {
   loc: DebugLocation;
 }
 
+enum AnnotationScalarKind: uint8 {
+  STRING,
+  BOOL,
+}
+
+table AnnotationScalarField {
+  name: string(shared);
+  kind: AnnotationScalarKind;
+  stringValue: string;
+  boolValue: bool;
+}
+
+table ResolvedAnnotation {
+  qualifiedClassName: string(shared);
+  declarationSymbol: string(shared);
+  loc: DebugLocation;
+  scalarFieldsComplete: bool;
+  scalarFields: [AnnotationScalarField];
+}
+
 table AnnoInfo {
   mangledName: string(shared);
   annoInstances: [CustomAnnoInstance];
+  snapshotComplete: bool;
+  sourcePackage: string(shared);
+  sourceDeclId: string(shared);
+  resolvedAnnotations: [ResolvedAnnotation];
 }
 
 table MemberVarInfo {
@@ -1252,6 +1277,9 @@ table CHIRPackage {
   packageInitFunc: uint32;  // use values id
   phase: Phase;
   packageLiteralInitFunc: uint32;  // use valueID (Function)
+  annotationMetadataVersion: uint8; // 0: unknown/legacy; 1: resolved annotation snapshots
+  aspectWeaveState: uint8; // 0: raw; 1: rule plan already applied
+  aspectWeavePlanDigest: string; // empty for raw, lowercase SHA-256 for applied
 }
 
 root_type CHIRPackage;

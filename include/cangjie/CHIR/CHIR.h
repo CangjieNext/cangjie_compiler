@@ -20,11 +20,14 @@
 #include "cangjie/Basic/DiagnosticEngine.h"
 
 namespace Cangjie::CHIR {
+enum class AnnotationEvaluationPurpose { DEBUG, METADATA };
+
 class ToCHIR {
 public:
-    ToCHIR(CompilerInstance& ci, AST::Package& pkg, ConstAnalysisWrapper& constAnalysisWrapper, CHIRBuilder& builder)
+    ToCHIR(CompilerInstance& ci, AST::Package& pkg, ConstAnalysisWrapper& constAnalysisWrapper, CHIRBuilder& builder,
+        const GlobalOptions* evaluationOptions = nullptr, const ResolvedAnnotationMap* resolvedMetadata = nullptr)
         : ci(ci),
-          opts(ci.invocation.globalOptions),
+          opts(evaluationOptions ? *evaluationOptions : ci.invocation.globalOptions),
           typeManager(ci.typeManager),
           sourceManager(ci.GetSourceManager()),
           importManager(*ci.importManager),
@@ -40,6 +43,7 @@ public:
           needToOptGenericDecl(ci.needToOptGenericDecl),
           builder(builder),
           constAnalysisWrapper(constAnalysisWrapper),
+          resolvedAnnotationMetadata(resolvedMetadata),
           diag(diagEngine)
     {
     }
@@ -49,7 +53,10 @@ public:
 
     /// Compute Annotation values, and save the results for AOP checkings.
     /// Only AST2CHIR and necessary CHIR opt's are executed.
-    bool ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly);
+    bool ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly,
+        AnnotationEvaluationPurpose purpose = AnnotationEvaluationPurpose::DEBUG);
+
+    bool AreAnnotationScalarsEvaluated() const { return annotationScalarsEvaluated; }
 
     CHIR::Package* GetPackage() const
     {
@@ -195,6 +202,7 @@ private:
     CHIRBuilder& builder;
     uint64_t debugFileIndex{0};
     ConstAnalysisWrapper& constAnalysisWrapper;
+    const ResolvedAnnotationMap* resolvedAnnotationMetadata{};
     OptEffectCHIRMap effectMap;
     OptEffectStrMap strEffectMap;
     VirtualWrapperDepMap curVirtFuncWrapDep;
@@ -210,6 +218,8 @@ private:
     std::vector<CHIR::Function*> initFuncsForConstVar;
     /// Whether this CHIR convertor is translating Annotations
     bool isComputingAnnos{false};
+    AnnotationEvaluationPurpose annotationEvaluationPurpose{AnnotationEvaluationPurpose::DEBUG};
+    bool annotationScalarsEvaluated{false};
     std::vector<std::pair<const AST::Decl*, Function*>> annoFactoryFuncs;
     AST2CHIRNodeMap<CustomTypeDef> globalNominalCache;
 };

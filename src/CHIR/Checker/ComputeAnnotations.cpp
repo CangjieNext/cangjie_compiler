@@ -15,205 +15,222 @@ namespace Cangjie::CHIR {
 using namespace AST;
 namespace {
 static_assert(sizeof(Number) == 8);
-std::unordered_map<const CustomTypeDef*, const InheritableDecl*> g_typeMap{};
-std::unordered_map<const Value*, AnnoInstanceValue> g_valueMap{};
-/// map annoFactoryFunc to original Decl, used to write back annotation info
-std::unordered_map<const Function*, const AST::Decl*> g_annoFactoryMap{};
+// Pointer-keyed caches belong to one temporary CHIR evaluation. In particular,
+// an early return or exception must not leave addresses from a destroyed
+// CHIRContext in process-global state (compiler library users compile repeatedly).
+class AnnotationValueReader {
+public:
+    AnnotationValueReader(ToCHIR& convertor, bool includeHidden) : includeHidden(includeHidden)
+    {
+        for (auto& entry : convertor.GetAnnoFactoryFuncs()) {
+            annoFactoryMap.emplace(entry.second, entry.first);
+        }
+        for (auto& entry : convertor.GetGlobalNominalCache().GetALL()) {
+            typeMap.emplace(entry.second, StaticCast<InheritableDecl>(entry.first));
+        }
+    }
 
-AnnoInstanceValue GetValue(const Value& v);
-AnnoInstanceValue CreateValue(const LiteralValue& v)
-{
-    if (auto lit = DynamicCast<CHIR::IntLiteral>(&v)) {
-        return {static_cast<Number>(lit->GetUnsignedVal())};
-    }
-    if (auto lit = DynamicCast<BoolLiteral>(&v)) {
-        return {static_cast<Number>(lit->GetVal())};
-    }
-    if (auto lit = DynamicCast<StringLiteral>(&v)) {
-        return {lit->GetVal()};
-    }
-    if (auto lit = DynamicCast<RuneLiteral>(&v)) {
-        return {static_cast<Number>(lit->GetVal())};
-    }
-    if (auto lit = DynamicCast<FloatLiteral>(&v)) {
-        return {lit->GetVal()};
-    }
-    // null or unit
-    return {std::monostate{}};
-}
+private:
+    std::unordered_map<const CustomTypeDef*, const InheritableDecl*> typeMap;
+    std::unordered_map<const Value*, AnnoInstanceValue> valueMap;
+    std::unordered_map<const Function*, const AST::Decl*> annoFactoryMap;
+    bool includeHidden;
 
-std::vector<std::pair<std::string, AnnoInstanceValue>> GetTupleArgs(const Tuple& tuple)
-{
-    std::vector<std::pair<std::string, AnnoInstanceValue>> args{};
-    for (auto v : tuple.GetElementValues()) {
-        args.emplace_back("", GetValue(*v));
+    AnnoInstanceValue CreateValue(const LiteralValue& v)
+    {
+        if (auto lit = DynamicCast<CHIR::IntLiteral>(&v)) {
+            return {static_cast<Number>(lit->GetUnsignedVal())};
+        }
+        if (auto lit = DynamicCast<BoolLiteral>(&v)) {
+            return {static_cast<Number>(lit->GetVal())};
+        }
+        if (auto lit = DynamicCast<StringLiteral>(&v)) {
+            return {lit->GetVal()};
+        }
+        if (auto lit = DynamicCast<RuneLiteral>(&v)) {
+            return {static_cast<Number>(lit->GetVal())};
+        }
+        if (auto lit = DynamicCast<FloatLiteral>(&v)) {
+            return {lit->GetVal()};
+        }
+        // null or unit
+        return {std::monostate{}};
     }
-    return args;
-}
 
-AnnoInstanceValue CreateEnumValue(const LocalVar& obj)
-{
-    if (auto tuple = DynamicCast<Tuple>(obj.GetExpr())) {
-        // enum with args
-        return {std::make_shared<AnnoInstanceClassInst>(AnnoInstanceClassInst{
-            g_typeMap.at(StaticCast<EnumType>(obj.GetType())->GetEnumDef()), GetTupleArgs(*tuple)})};
+    std::vector<std::pair<std::string, AnnoInstanceValue>> GetTupleArgs(const Tuple& tuple)
+    {
+        std::vector<std::pair<std::string, AnnoInstanceValue>> args{};
+        for (auto v : tuple.GetElementValues()) {
+            args.emplace_back("", GetValue(*v));
+        }
+        return args;
     }
-    // enum by integer
-    auto tc = StaticCast<TypeCast>(obj.GetExpr());
-    return GetValue(*tc->GetSourceValue());
-}
 
-/// create value of CustomTypeDef type, that is, struct/enum/class
-AnnoInstanceValue CreateValueOfCustomTypeDef(const Value& v)
-{
-    auto obj = StaticCast<LocalVar>(&v);
-    CustomTypeDef* def;
-    auto alloc = DynamicCast<Allocate>(obj->GetExpr());
-    if (alloc) {
-        // the value is an alloc, so it is a class type object
-        def = StaticCast<ClassType>(alloc->GetType()->StripAllRefs())->GetClassDef();
-    } else {
-        // the value is a load of an alloc, it is a struct type object
-        auto loadOfAlloc = StaticCast<Load>(obj->GetExpr());
-        alloc = StaticCast<Allocate>(StaticCast<LocalVar>(loadOfAlloc->GetLocation())->GetExpr());
-        def = StaticCast<StructType>(obj->GetType())->GetStructDef();
+    AnnoInstanceValue CreateEnumValue(const LocalVar& obj)
+    {
+        if (auto tuple = DynamicCast<Tuple>(obj.GetExpr())) {
+            // enum with args
+            return {std::make_shared<AnnoInstanceClassInst>(AnnoInstanceClassInst{
+                typeMap.at(StaticCast<EnumType>(obj.GetType())->GetEnumDef()), GetTupleArgs(*tuple)})};
+        }
+        // enum by integer
+        auto tc = StaticCast<TypeCast>(obj.GetExpr());
+        return GetValue(*tc->GetSourceValue());
     }
-    auto fields = def->GetAllInstanceVars();
-    std::vector<std::pair<std::string, AnnoInstanceValue>> ctorArgs{};
-    // store StorElementRef values to the result
-    for (auto user : alloc->GetResult()->GetUsers()) {
-        if (auto store = DynamicCast<StoreElementRef>(user); store && store->GetBase() == alloc->GetResult()) {
-            if (auto ty = store->GetValue()->GetType(); ty->IsUnit() || ty->IsNothing()) {
-                continue;
-            }
+
+    /// create value of CustomTypeDef type, that is, struct/enum/class
+    AnnoInstanceValue CreateValueOfCustomTypeDef(const Value& v)
+    {
+        auto obj = StaticCast<LocalVar>(&v);
+        CustomTypeDef* def;
+        auto alloc = DynamicCast<Allocate>(obj->GetExpr());
+        if (alloc) {
+            // the value is an alloc, so it is a class type object
+            def = StaticCast<ClassType>(alloc->GetType()->StripAllRefs())->GetClassDef();
+        } else {
+            // the value is a load of an alloc, it is a struct type object
+            auto loadOfAlloc = StaticCast<Load>(obj->GetExpr());
+            alloc = StaticCast<Allocate>(StaticCast<LocalVar>(loadOfAlloc->GetLocation())->GetExpr());
+            def = StaticCast<StructType>(obj->GetType())->GetStructDef();
+        }
+        auto fields = def->GetAllInstanceVars();
+        std::vector<std::pair<std::string, AnnoInstanceValue>> ctorArgs{};
+        // store StorElementRef values to the result
+        for (auto user : alloc->GetResult()->GetUsers()) {
+            if (auto store = DynamicCast<StoreElementRef>(user); store && store->GetBase() == alloc->GetResult()) {
+                if (auto ty = store->GetValue()->GetType(); ty->IsUnit() || ty->IsNothing()) {
+                    continue;
+                }
 #ifndef NDEBUG
-            auto nothingExprCheck = StaticCast<LocalVar>(store->GetValue())->GetExpr();
-            if (auto constant = DynamicCast<Constant>(nothingExprCheck)) {
-                if (constant->GetValue()->IsNullLiteral()) {
-                    std::cerr << nothingExprCheck->GetResult()->ToString(0) << '\n';
-                    CJC_ASSERT(false && "Invalid node from interpreter.");
+                auto nothingExprCheck = StaticCast<LocalVar>(store->GetValue())->GetExpr();
+                if (auto constant = DynamicCast<Constant>(nothingExprCheck)) {
+                    if (constant->GetValue()->IsNullLiteral()) {
+                        std::cerr << nothingExprCheck->GetResult()->ToString(0) << '\n';
+                        CJC_ASSERT(false && "Invalid node from interpreter.");
+                    }
+                }
+#endif
+                auto value = GetValue(*store->GetValue());
+                CJC_ASSERT(value);
+                ctorArgs.emplace_back(fields[store->GetPath()[0]].name, std::move(value));
+            }
+        }
+        AnnoInstanceValue res{
+            std::make_shared<AnnoInstanceClassInst>(AnnoInstanceClassInst{typeMap.at(def), std::move(ctorArgs)})};
+        valueMap[&v] = res;
+        return res;
+    }
+
+    AnnoInstanceValue GetValue(const GlobalVar& gv)
+    {
+        for (auto user : gv.GetUsers()) {
+            if (auto store = DynamicCast<Store>(user); store && store->GetLocation() == &gv) {
+                return GetValue(*store->GetValue());
+            }
+        }
+        CJC_ABORT();
+#ifdef NDEBUG
+        return {std::monostate{}};
+#endif
+    }
+
+    AnnoInstanceValue CreateValue(const Value& v)
+    {
+        if (auto lit = DynamicCast<LiteralValue>(&v)) {
+            return CreateValue(*lit);
+        }
+        if (auto obj = DynamicCast<LocalVar>(&v)) {
+            if (auto c = DynamicCast<Constant>(obj->GetExpr())) {
+                return GetValue(*c->GetValue());
+            }
+            if (obj->GetType()->IsEnum()) {
+                return CreateEnumValue(*obj);
+            }
+            if (obj->GetType()->StripAllRefs()->IsBox()) {
+                return GetValue(*StaticCast<Box>(obj->GetExpr())->GetSourceValue());
+            }
+            if (auto t = DynamicCast<Tuple>(obj->GetExpr())) {
+                return {std::make_shared<AnnoInstanceClassInst>(AnnoInstanceClassInst{nullptr, GetTupleArgs(*t)})};
+            }
+            if (auto c = DynamicCast<TypeCast>(obj->GetExpr())) {
+                if (c->GetSourceType()->IsClassRef() && c->GetTargetType()->IsClassRef()) {
+                    // cast between subtypes, we cannot test subtype relation without CHIRBuilder
+                    // so we skip this assertion
+                    return GetValue(*c->GetSourceValue());
                 }
             }
-#endif
-            auto value = GetValue(*store->GetValue());
-            CJC_ASSERT(value);
-            ctorArgs.emplace_back(fields[store->GetPath()[0]].name, std::move(value));
+            if (auto l = DynamicCast<Load>(obj->GetExpr())) {
+                if (l->GetLocation()->IsGlobalVarWithInitializer()) {
+                    // load of gv, valid iff the location is a const global variable lifted from annotationsArray.
+                    // Threotically we check it's of Annotation class type, but we do not have such utilities.
+                    auto gv = StaticCast<GlobalVar*>(l->GetLocation());
+                    CJC_ASSERT(gv->GetType()->StripAllRefs()->IsClass());
+                    auto ret = GetValue(*gv);
+                    CJC_ASSERT(ret.Object());
+                    return ret;
+                }
+            }
+            // not a constant, v must be of const class/struct/enum type
+            return CreateValueOfCustomTypeDef(v);
         }
-    }
-    AnnoInstanceValue res{
-        std::make_shared<AnnoInstanceClassInst>(AnnoInstanceClassInst{g_typeMap.at(def), std::move(ctorArgs)})};
-    g_valueMap[&v] = res;
-    return res;
-}
-
-AnnoInstanceValue GetValue(const GlobalVar& gv)
-{
-    for (auto user : gv.GetUsers()) {
-        if (auto store = DynamicCast<Store>(user); store && store->GetLocation() == &gv) {
-            return GetValue(*store->GetValue());
-        }
-    }
-    CJC_ABORT();
+        CJC_ABORT();
 #ifdef NDEBUG
-    return {std::monostate{}};
+        return {std::monostate{}};
 #endif
-}
+    }
+    AnnoInstanceValue GetValue(const Value& v)
+    {
+        if (auto it = valueMap.find(&v); it != valueMap.end()) {
+            return it->second;
+        }
+        return CreateValue(v);
+    }
 
-AnnoInstanceValue CreateValue(const Value& v)
-{
-    if (auto lit = DynamicCast<LiteralValue>(&v)) {
-        return CreateValue(*lit);
-    }
-    if (auto obj = DynamicCast<LocalVar>(&v)) {
-        if (auto c = DynamicCast<Constant>(obj->GetExpr())) {
-            return GetValue(*c->GetValue());
-        }
-        if (obj->GetType()->IsEnum()) {
-            return CreateEnumValue(*obj);
-        }
-        if (obj->GetType()->StripAllRefs()->IsBox()) {
-            return GetValue(*StaticCast<Box>(obj->GetExpr())->GetSourceValue());
-        }
-        if (auto t = DynamicCast<Tuple>(obj->GetExpr())) {
-            return {std::make_shared<AnnoInstanceClassInst>(AnnoInstanceClassInst{nullptr, GetTupleArgs(*t)})};
-        }
-        if (auto c = DynamicCast<TypeCast>(obj->GetExpr())) {
-            if (c->GetSourceType()->IsClassRef() && c->GetTargetType()->IsClassRef()) {
-                // cast between subtypes, we cannot test subtype relation without CHIRBuilder
-                // so we skip this assertion
-                return GetValue(*c->GetSourceValue());
-            }
-        }
-        if (auto l = DynamicCast<Load>(obj->GetExpr())) {
-            if (l->GetLocation()->IsGlobalVarWithInitializer()) {
-                // load of gv, valid iff the location is a const global variable lifted from annotationsArray.
-                // Threotically we check it's of Annotation class type, but we do not have such utilities.
-                auto gv = StaticCast<GlobalVar*>(l->GetLocation());
-                CJC_ASSERT(gv->GetType()->StripAllRefs()->IsClass());
-                auto ret = GetValue(*gv);
-                CJC_ASSERT(ret.Object());
-                return ret;
-            }
-        }
-        // not a constant, v must be of const class/struct/enum type
-        return CreateValueOfCustomTypeDef(v);
-    }
-    CJC_ABORT();
-#ifdef NDEBUG
-    return {std::monostate{}};
-#endif
-}
-AnnoInstanceValue GetValue(const Value& v)
-{
-    if (auto it = g_valueMap.find(&v); it != g_valueMap.end()) {
-        return it->second;
-    }
-    return CreateValue(v);
-}
+    std::vector<AnnoInstance> CreateAnnoInstFromConstEval(const Function& func)
+    {
+        auto arrRef = func.GetReturnValue();
+        auto users = arrRef->GetUsers();
+        CJC_ASSERT(!users.empty());
+        auto args = StaticCast<Apply>(arrRef->GetUsers()[0])->GetArgs();
+        CJC_ASSERT(args[0] == arrRef);
+        auto rawArray = StaticCast<LocalVar>(args[1]);
+        size_t last{0};
+        std::vector<AnnoInstance> ret{};
+        for (auto use : rawArray->GetUsers()) {
+            if (auto store = DynamicCast<StoreElementRef>(use); store && store->GetBase() == rawArray) {
+                CJC_ASSERT(store->GetBase() == rawArray);
 
-std::vector<AnnoInstance> CreateAnnoInstFromConstEval(const Function& func)
-{
-    auto arrRef = func.GetReturnValue();
-    auto users = arrRef->GetUsers();
-    CJC_ASSERT(!users.empty());
-    auto args = StaticCast<Apply>(arrRef->GetUsers()[0])->GetArgs();
-    CJC_ASSERT(args[0] == arrRef);
-    auto rawArray = StaticCast<LocalVar>(args[1]);
-    size_t last{0};
-    std::vector<AnnoInstance> ret{};
-    for (auto use : rawArray->GetUsers()) {
-        if (auto store = DynamicCast<StoreElementRef>(use); store && store->GetBase() == rawArray) {
-            CJC_ASSERT(store->GetBase() == rawArray);
-            
-            auto& path = store->GetPath();
-            CJC_ASSERT(path.size() == 1);
-            CJC_ASSERT(path[0] >= last);
-            auto obj = StaticCast<LocalVar>(store->GetValue());
-            if (obj->TestAttr(CHIR::Attribute::NO_REFLECT_INFO)) {
-                continue;
+                auto& path = store->GetPath();
+                CJC_ASSERT(path.size() == 1);
+                CJC_ASSERT(path[0] >= last);
+                auto obj = StaticCast<LocalVar>(store->GetValue());
+                if (!includeHidden && obj->TestAttr(CHIR::Attribute::NO_REFLECT_INFO)) {
+                    continue;
+                }
+                auto typecast = StaticCast<TypeCast>(obj->GetExpr())->GetSourceValue();
+                auto load = StaticCast<Load>(StaticCast<LocalVar>(typecast)->GetExpr());
+                ret.push_back(GetValue(*load->GetResult()).Object());
+                last = path[0];
             }
-            auto typecast = StaticCast<TypeCast>(obj->GetExpr())->GetSourceValue();
-            auto load = StaticCast<Load>(StaticCast<LocalVar>(typecast)->GetExpr());
-            ret.push_back(GetValue(*load->GetResult()).Object());
-            last = path[0];
         }
+        return ret;
     }
-    return ret;
-}
 
-AnnoMap CreateAnnoInstFromConstEvalRes(ConstEvalResult& ev)
-{
-    std::unordered_map<const Decl*, std::vector<AnnoInstance>> annoInstMap{};
-    for (auto func : ev.pkg->GetGlobalFuncsWithBody()) {
-        if (func->GetFuncKind() == FuncKind::ANNOFACTORY_FUNC) {
-            auto v = CreateAnnoInstFromConstEval(*func);
-            if (!v.empty()) {
-                annoInstMap[g_annoFactoryMap[func]] = std::move(v);
+public:
+    AnnoMap Read(ConstEvalResult& ev)
+    {
+        std::unordered_map<const Decl*, std::vector<AnnoInstance>> annoInstMap{};
+        for (auto func : ev.pkg->GetGlobalFuncsWithBody()) {
+            if (func->GetFuncKind() == FuncKind::ANNOFACTORY_FUNC) {
+                auto v = CreateAnnoInstFromConstEval(*func);
+                if (!v.empty()) {
+                    annoInstMap[annoFactoryMap.at(func)] = std::move(v);
+                }
             }
         }
+        return annoInstMap;
     }
-    return annoInstMap;
-}
+};
 } // namespace
 
 void ConstEvalResult::Dump() const
@@ -698,19 +715,25 @@ private:
 };
 }
 
-OwnedPtr<ConstEvalResult> ComputeAnnotations(AST::Package& pkg, CompilerInstance& ci)
+OwnedPtr<ConstEvalResult> ComputeAnnotations(AST::Package& pkg, CompilerInstance& ci, AnnotationEvaluationPurpose purpose)
 {
     // only do compute annotations when its debug option is on
     // set the default value to true when this feature is enabled
     auto& opts = ci.invocation.globalOptions;
-    bool doCompute{opts.computeAnnotationsDebug};
+    const bool forMetadata = purpose == AnnotationEvaluationPurpose::METADATA;
+    bool doCompute{forMetadata || opts.computeAnnotationsDebug};
+    // The first metadata implementation is deliberately full-build only.
+    // Never pretend a skipped evaluation represents known-empty annotations.
+    if (forMetadata && (opts.enIncrementalCompilation || opts.IsCompilingCJMP() || !opts.IsConstEvalEnabled())) {
+        return {};
+    }
     // no need to recheck when no change
     if (opts.enIncrementalCompilation && ci.kind == IncreKind::NO_CHANGE) {
         doCompute = false;
     }
     // CJMP does not fully support Annotation
     if (ci.invocation.globalOptions.commonPartCjos.size() > 0 ||
-        ci.invocation.globalOptions.outputMode == GlobalOptions::OutputMode::CHIR) {
+        (!forMetadata && ci.invocation.globalOptions.outputMode == GlobalOptions::OutputMode::CHIR)) {
         doCompute = false;
     }
     if (!doCompute) {
@@ -718,26 +741,37 @@ OwnedPtr<ConstEvalResult> ComputeAnnotations(AST::Package& pkg, CompilerInstance
     }
     auto res = MakeOwned<ConstEvalResult>(ci.GetFileNameMap(), ci.invocation.globalOptions.GetJobs());
     CHIR::ConstAnalysisWrapper constAnalysisWrapper{res->builder};
-    CHIR::ToCHIR convertor(ci, pkg, constAnalysisWrapper, res->builder);
-    bool computeSuccess = convertor.ComputeAnnotations({});
-    if (!computeSuccess) {
+    // Do not mutate the caller's options. Even with user-requested debugging,
+    // the auxiliary pass must not emit bytecode/IR files or optimizer dumps.
+    auto evaluationOptions = opts;
+    if (forMetadata) {
+        evaluationOptions.printBCHIR.assign(evaluationOptions.printBCHIR.size(), false);
+        evaluationOptions.chirDebugOptimizer = false;
+        evaluationOptions.computeAnnotationsDebug = false;
+        evaluationOptions.constEvalDebug = false;
+        evaluationOptions.dumpCHIR = false;
+        evaluationOptions.dumpAll = false;
+    }
+    CHIR::ToCHIR convertor(ci, pkg, constAnalysisWrapper, res->builder, &evaluationOptions);
+    bool computeSuccess = convertor.ComputeAnnotations({}, purpose);
+    if (!computeSuccess || ci.diag.GetErrorCount() != 0) {
         return {};
     }
     res->pkg = convertor.GetPackage();
-    auto& annoFactorys = convertor.GetAnnoFactoryFuncs();
-    for (auto& v : annoFactorys) {
-        g_annoFactoryMap[v.second] = v.first;
+    if (forMetadata) {
+        auto metadata = ReadResolvedAnnotationMetadata(convertor.GetAnnoFactoryFuncs(), ci.GetFileNameMap(),
+            convertor.AreAnnotationScalarsEvaluated());
+        if (!metadata) {
+            return {};
+        }
+        res->metadata = std::move(*metadata);
+    } else {
+        AnnotationValueReader reader(convertor, false);
+        res->map = reader.Read(*res);
     }
-    for (auto& v : convertor.GetGlobalNominalCache().GetALL()) {
-        g_typeMap[v.second] = StaticCast<InheritableDecl>(v.first);
-    }
-    res->map = CreateAnnoInstFromConstEvalRes(*res);
-    if (ci.invocation.globalOptions.computeAnnotationsDebug) {
+    if (!forMetadata && ci.invocation.globalOptions.computeAnnotationsDebug) {
         res->Dump();
     }
-    g_typeMap.clear();
-    g_valueMap.clear();
-    g_annoFactoryMap.clear();
     return res;
 }
 } // namespace Cangjie

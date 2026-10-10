@@ -38,6 +38,12 @@ public:
     std::string GetName() const;
     AccessLevel GetPackageAccessLevel() const;
     void SetPackageAccessLevel(const AccessLevel& level);
+    uint8_t GetAnnotationMetadataVersion() const;
+    void SetAnnotationMetadataVersion(uint8_t version);
+    uint8_t GetAspectWeaveState() const;
+    void SetAspectWeaveState(uint8_t state);
+    const std::string& GetAspectWeavePlanDigest() const;
+    void SetAspectWeavePlanDigest(std::string digest);
 
     // ===--------------------------------------------------------------------===//
     // Global Var API
@@ -144,6 +150,9 @@ public:
 private:
     std::string name;                                  // full package name, like "std.core"
     AccessLevel pkgAccessLevel{AccessLevel::INVALID};  // public/internal/protected, get from AST
+    uint8_t annotationMetadataVersion{0};             // 0: legacy/unknown; 1: complete annotation contract
+    uint8_t aspectWeaveState{0};
+    std::string aspectWeavePlanDigest;
 
     // imported decls
     std::vector<StructDef*> importedStructs;

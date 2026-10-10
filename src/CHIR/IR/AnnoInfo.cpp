@@ -9,6 +9,7 @@
 
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
 
 using namespace Cangjie::CHIR;
 
@@ -88,4 +89,36 @@ std::string AnnoInfo::GetAnnoFactoryFuncMangledName() const
 const std::vector<CustomAnnoInstance>& AnnoInfo::GetCustomAnnoInstances() const
 {
     return annoInstances;
+}
+
+bool AnnoInfo::HasCompleteSnapshot() const
+{
+    return snapshotComplete;
+}
+
+const std::string& AnnoInfo::GetSnapshotSourcePackage() const
+{
+    return sourcePackage;
+}
+
+const std::string& AnnoInfo::GetSnapshotSourceDeclId() const
+{
+    return sourceDeclId;
+}
+
+const std::vector<ResolvedAnnotationData>& AnnoInfo::GetResolvedAnnotations() const
+{
+    return resolvedAnnotations;
+}
+
+void AnnoInfo::SetResolvedAnnotations(
+    std::string packageName, std::string declId, std::vector<ResolvedAnnotationData> annotations)
+{
+    if (packageName.empty() || declId.empty()) {
+        throw std::invalid_argument("complete annotation snapshot requires a source identity");
+    }
+    sourcePackage = std::move(packageName);
+    sourceDeclId = std::move(declId);
+    resolvedAnnotations = std::move(annotations);
+    snapshotComplete = true;
 }

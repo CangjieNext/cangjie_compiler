@@ -11,6 +11,7 @@
 
 #include "cangjie/AST/Node.h"
 #include "cangjie/CHIR/CHIR.h"
+#include "cangjie/CHIR/Checker/AnnotationMetadata.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 
 namespace Cangjie::CHIR {
@@ -68,6 +69,7 @@ struct ConstEvalResult {
     CHIRBuilder builder;
     CHIR::Package* pkg;
     AnnoMap map;
+    ResolvedAnnotationMap metadata;
     ConstEvalResult(std::unordered_map<unsigned int, std::string>& fileNameMap, size_t jobs)
         : ctx{}, builder{ctx, jobs}, pkg{}, map{}
     {
@@ -77,6 +79,9 @@ struct ConstEvalResult {
 
     void Dump() const;
 };
-OwnedPtr<ConstEvalResult> ComputeAnnotations(AST::Package& pkg, CompilerInstance& ci);
+// METADATA is an internal, side-effect-free evaluation purpose, not a public
+// capability promise. A null result must never be converted to Complete+[].
+OwnedPtr<ConstEvalResult> ComputeAnnotations(AST::Package& pkg, CompilerInstance& ci,
+    AnnotationEvaluationPurpose purpose = AnnotationEvaluationPurpose::DEBUG);
 }
 #endif

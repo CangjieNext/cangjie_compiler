@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <stdexcept>
 #include <type_traits>
 
 #include "cangjie/CHIR/IR/Expression/Expression.h"
@@ -267,7 +268,68 @@ template <> AnnoInfo CHIRDeserializer::CHIRDeserializerImpl::Create(const CHIRFo
             instances.emplace_back(className, std::move(argValues), loc);
         }
     }
-    return AnnoInfo(mangledName, std::move(instances));
+    AnnoInfo info(mangledName, std::move(instances));
+    if (obj->snapshotComplete()) {
+        if (!obj->sourcePackage() || !obj->sourceDeclId()) {
+            throw std::invalid_argument("complete annotation snapshot is missing its source identity");
+        }
+        std::vector<ResolvedAnnotationData> annotations;
+        if (obj->resolvedAnnotations()) {
+            for (const auto* item : *obj->resolvedAnnotations()) {
+                if (!item || !item->qualifiedClassName() || !item->declarationSymbol() || !item->loc()) {
+                    throw std::invalid_argument("malformed resolved annotation");
+                }
+                ResolvedAnnotationData annotation;
+                annotation.qualifiedClassName = item->qualifiedClassName()->str();
+                annotation.declarationSymbol = item->declarationSymbol()->str();
+                const auto* location = item->loc();
+                annotation.sourceFile = location->filePath() ? location->filePath()->str() : std::string{};
+                annotation.fileId = location->fileId();
+                if (location->beginPos()) {
+                    annotation.beginLine = location->beginPos()->line();
+                    annotation.beginColumn = location->beginPos()->column();
+                }
+                if (location->endPos()) {
+                    annotation.endLine = location->endPos()->line();
+                    annotation.endColumn = location->endPos()->column();
+                }
+                if (item->scalarFieldsComplete()) {
+                    std::vector<EvaluatedAnnotationField> fields;
+                    if (item->scalarFields()) {
+                        for (const auto* field : *item->scalarFields()) {
+                            if (!field || !field->name()) {
+                                throw std::invalid_argument("malformed annotation scalar field");
+                            }
+                            EvaluatedAnnotationField value;
+                            value.name = field->name()->str();
+                            switch (field->kind()) {
+                                case CHIRFormat::AnnotationScalarKind_STRING:
+                                    if (!field->stringValue()) {
+                                        throw std::invalid_argument("annotation string scalar has no value");
+                                    }
+                                    value.value = field->stringValue()->str();
+                                    break;
+                                case CHIRFormat::AnnotationScalarKind_BOOL:
+                                    value.value = field->boolValue();
+                                    break;
+                                default:
+                                    throw std::invalid_argument("unsupported annotation scalar kind");
+                            }
+                            fields.push_back(std::move(value));
+                        }
+                    }
+                    annotation.scalarFields = std::move(fields);
+                } else if (item->scalarFields() && item->scalarFields()->size() != 0) {
+                    throw std::invalid_argument("unavailable annotation fields have serialized values");
+                }
+                annotations.push_back(std::move(annotation));
+            }
+        }
+        info.SetResolvedAnnotations(obj->sourcePackage()->str(), obj->sourceDeclId()->str(), std::move(annotations));
+    } else if (obj->resolvedAnnotations() && obj->resolvedAnnotations()->size() != 0) {
+        throw std::invalid_argument("unknown annotation snapshot has serialized values");
+    }
+    return info;
 }
 
 template <> MemberVarInfo CHIRDeserializer::CHIRDeserializerImpl::Create(const CHIRFormat::MemberVarInfo* obj)
@@ -665,6 +727,7 @@ template <> GlobalVar* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const
     auto result = builder.CreateGlobalVar(
         type, GetMangleNameFromIdentifier(identifier), srcCodeIdentifier, rawMangledName, packageName);
     result->SetFeatures(GetFeatures(globalValue));
+    result->SetAspectSourceOrigin(globalValue->aspectSourceOrigin() ? globalValue->aspectSourceOrigin()->str() : "");
     if (compilePlatform) {
         result->EnableAttr(Attribute::DESERIALIZED);
     }
@@ -690,6 +753,7 @@ template <> Function* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const 
     auto result = builder.CreateFunction(type, GetMangleNameFromIdentifier(identifier),
         srcCodeIdentifier, rawMangledName, packageName, genericTypeParams);
     result->SetFeatures(GetFeatures(globalValue));
+    result->SetAspectSourceOrigin(globalValue->aspectSourceOrigin() ? globalValue->aspectSourceOrigin()->str() : "");
     result->SetFastNative(obj->isFastNative());
     result->SetCFFIWrapper(obj->isCFFIWrapper());
     result->SetFuncKind(static_cast<FuncKind>(obj->funcKind()));
@@ -1986,6 +2050,10 @@ void CHIRDeserializer::CHIRDeserializerImpl::Run(const CHIRFormat::CHIRPackage* 
         builder.CreatePackage(pool->name()->str());
         builder.GetCurPackage()->SetPackageAccessLevel(Package::AccessLevel(pool->pkgAccessLevel()));
     }
+    builder.GetCurPackage()->SetAnnotationMetadataVersion(pool->annotationMetadataVersion());
+    builder.GetCurPackage()->SetAspectWeaveState(pool->aspectWeaveState());
+    builder.GetCurPackage()->SetAspectWeavePlanDigest(
+        pool->aspectWeavePlanDigest() ? pool->aspectWeavePlanDigest()->str() : "");
     // 1. deserialize CustomTypeDef, for order and CustomType
     //    CustomType will be used in Value, we need to prepare in order first
     for (unsigned id = 1; id <= pool->defs()->size(); ++id) {

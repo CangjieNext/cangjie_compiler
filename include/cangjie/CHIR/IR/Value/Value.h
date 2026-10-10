@@ -456,6 +456,8 @@ public:
 
     const std::string& GetRawMangledName() const;
     void SetRawMangledName(const std::string& name);
+    const std::string& GetAspectSourceOrigin() const;
+    void SetAspectSourceOrigin(std::string origin);
 
     const std::set<std::string>& GetFeatures() const;
     void SetFeatures(const std::set<std::string>& newFeatures);
@@ -497,6 +499,7 @@ private:
 protected:
     std::string srcCodeIdentifier;
     std::string rawMangledName;
+    std::string aspectSourceOrigin;
     std::string packageName;
     CustomTypeDef* declaredParent{nullptr};
     std::set<std::string> features;

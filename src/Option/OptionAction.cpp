@@ -969,6 +969,12 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
         opts.computeAnnotationsDebug = true;
         return true;
     }},
+    { Options::ID::EMIT_CHIR_ANNOTATION_METADATA,
+        OPTION_TRUE_ACTION(opts.emitCHIRAnnotationMetadata = true) },
+    { Options::ID::ASPECT_IMPORT_SYMBOLS, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+        opts.aspectImportSymbolsPath = arg.value;
+        return !arg.value.empty();
+    }},
 #endif
     { Options::ID::RENDER_CHIR, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         CJC_ASSERT(DUMP_CHIR_MODE_MAP.count(arg.value) != 0);

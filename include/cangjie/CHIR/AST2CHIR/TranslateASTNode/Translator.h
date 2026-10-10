@@ -15,6 +15,7 @@
 
 #include "cangjie/AST/NodeX.h"
 #include "cangjie/CHIR/AST2CHIR/AST2CHIRNodeMap.h"
+#include "cangjie/CHIR/Checker/AnnotationMetadata.h"
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/ExceptionTypeMapping.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
@@ -38,7 +39,8 @@ public:
         const std::unordered_map<std::string, Value*>& deserializedVals,
         std::vector<std::pair<const AST::Decl*, Function*>>& annoFactories,
         bool computeAnnotations,
-        std::vector<CHIR::Function*>& initFuncForAnnoFactory, Cangjie::TypeManager& typeManager)
+        std::vector<CHIR::Function*>& initFuncForAnnoFactory, Cangjie::TypeManager& typeManager,
+        bool evaluateAllAnnotations = false, const ResolvedAnnotationMap* resolvedMetadata = nullptr)
         : builder(builder),
           chirTy(chirTy),
           globalSymbolTable(globalSymbolTable),
@@ -51,6 +53,8 @@ public:
           deserializedVals(deserializedVals),
           annoFactoryFuncs(annoFactories),
           isComputingAnnos{computeAnnotations},
+          evaluateAllAnnotations{evaluateAllAnnotations},
+          resolvedAnnotationMetadata{resolvedMetadata},
           initFuncsForAnnoFactory{initFuncForAnnoFactory},
           typeManager{typeManager}
     {
@@ -602,6 +606,8 @@ private:
     const std::unordered_map<std::string, Value*>& deserializedVals; // add by cjmp
     std::vector<std::pair<const AST::Decl*, Function*>>& annoFactoryFuncs;
     bool isComputingAnnos{};
+    bool evaluateAllAnnotations{};
+    const ResolvedAnnotationMap* resolvedAnnotationMetadata{};
     std::vector<CHIR::Function*>& initFuncsForAnnoFactory;
     Cangjie::TypeManager& typeManager;
 
