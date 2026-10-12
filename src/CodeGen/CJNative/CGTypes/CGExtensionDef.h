@@ -25,6 +25,11 @@
 #include "cangjie/CHIR/IR/Type/Type.h"
 
 namespace Cangjie::CodeGen {
+// Residual runtime conformance condition of an ExtensionDef entry inherited from an ancestor's
+// extension: (actual argument, upper bound) pairs, both substituted into the generic context of
+// the class being emitted. An empty list means the conformance is unconditional.
+using ExtendCondPairs = std::vector<std::pair<CHIR::Type*, CHIR::Type*>>;
+
 class CGExtensionDef {
 public:
     // Indicates the interpretation of 'value' based on the `isTypeInfo` flag.
@@ -57,7 +62,8 @@ public:
         std::queue<size_t>&& remainPath, std::unordered_map<const CHIR::Type*, InnerTiInfo>& innerTypeMap);
 
 private:
-    bool CreateExtensionDefForType(const CHIR::ClassType& inheritedType);
+    bool CreateExtensionDefForType(
+        const CHIR::ClassType& inheritedType, const ExtendCondPairs* extendConds = nullptr);
     /**
      * Returns a pair:
      * The first element is FuncPtr if the second is `false` or TypeInfo if the second is `true`.
@@ -66,7 +72,7 @@ private:
     llvm::Constant* GenerateOuterTi(const CHIR::VirtualMethodInfo& funcInfo);
     llvm::Constant* GenerateOuterTiFn(const CHIR::VirtualMethodInfo& funcInfo);
     llvm::Constant* GenerateFuncTableForType(const CHIR::ClassType& inheritedType, const CHIR::VTableInType& vtableInType);
-    llvm::Constant* GenerateWhereConditionFn();
+    llvm::Constant* GenerateWhereConditionFn(const ExtendCondPairs* extendConds = nullptr);
     llvm::Value* CreateTypeComparison(
         IRBuilder2& irBuilder, llvm::Value* typeInfo, const CHIR::Type& staticType, const std::string& prefix);
     llvm::Value* CreateCompareArgs(IRBuilder2& irBuilder, llvm::Value* typeInfos,
