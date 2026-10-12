@@ -1130,6 +1130,15 @@ void EmitCHIR(const std::string& outputPath, const CHIR::Package& package, ToCHI
         CHIRPrinter::PrintPackage(package, dumpFileName);
     }
 }
+struct AnnotationEvaluationScope {
+    bool& active;
+    uint64_t& fileIndex;
+    ~AnnotationEvaluationScope()
+    {
+        active = false;
+        fileIndex = 0;
+    }
+};
 } // namespace
 
 bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly, AnnotationEvaluationPurpose purpose)
@@ -1138,11 +1147,7 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly, Annota
     annotationEvaluationPurpose = purpose;
     annotationScalarsEvaluated = false;
     // Restore state on ALL exits, including failed translation/evaluation.
-    struct EvaluationScope {
-        bool& active;
-        uint64_t& fileIndex;
-        ~EvaluationScope() { active = false; fileIndex = 0; }
-    } scope{isComputingAnnos, debugFileIndex};
+    AnnotationEvaluationScope scope{isComputingAnnos, debugFileIndex};
     if (!TranslateToCHIR(std::move(annoOnly))) {
         return false;
     }

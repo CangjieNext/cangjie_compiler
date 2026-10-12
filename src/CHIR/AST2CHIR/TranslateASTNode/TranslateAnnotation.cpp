@@ -71,7 +71,8 @@ std::vector<GlobalVar*> Translator::TranslateAnnotationsArraySig(const ArrayLit&
 {
     std::vector<GlobalVar*> res;
     for (size_t i{0}; i < annos.children.size(); ++i) {
-        if (isComputingAnnos && !evaluateAllAnnotations && annos.children[i]->TestAttr(AST::Attribute::NO_REFLECT_INFO)) {
+        if (isComputingAnnos && !evaluateAllAnnotations &&
+            annos.children[i]->TestAttr(AST::Attribute::NO_REFLECT_INFO)) {
             continue;
         }
         res.push_back(TranslateCustomAnnoInstanceSig(*annos.children[i], func, i));
@@ -160,35 +161,38 @@ void Translator::TranslateAnnoFactoryFuncBody([[maybe_unused]] const AST::Decl& 
     blockGroupStack.pop_back();
 }
 
+static void AttachResolvedAnnotationSnapshot(
+    const AST::Decl& decl, const ResolvedAnnotationMap* metadata, AnnoInfo& info)
+{
+    if (!metadata || decl.TestAttr(AST::Attribute::IMPORTED) ||
+        decl.TestAttr(AST::Attribute::SPECIFIC) || decl.fullPackageName.empty() || decl.mangledName.empty()) {
+        return;
+    }
+    auto entry = metadata->find(&decl);
+    // Generic instantiation copies the source declaration after metadata
+    // evaluation. Its concrete body inherits the source annotation facts,
+    // but must keep its own mangled identity in the CHIR snapshot.
+    if (entry == metadata->end() && decl.genericDecl &&
+        decl.genericDecl->fullPackageName == decl.fullPackageName) {
+        entry = metadata->find(decl.genericDecl);
+    }
+    if (entry != metadata->end()) {
+        info.SetResolvedAnnotations(decl.fullPackageName, decl.mangledName, entry->second);
+    } else if (!decl.annotationsArray || decl.annotationsArray->children.empty()) {
+        info.SetResolvedAnnotations(decl.fullPackageName, decl.mangledName, {});
+    }
+    // A declaration with annotations but no auxiliary result remains Unknown.
+}
+
 AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeDef* parent)
 {
-    auto attachResolvedSnapshot = [this, &decl](AnnoInfo& info) {
-        if (!resolvedAnnotationMetadata || decl.TestAttr(AST::Attribute::IMPORTED) ||
-            decl.TestAttr(AST::Attribute::SPECIFIC) || decl.fullPackageName.empty() || decl.mangledName.empty()) {
-            return;
-        }
-        auto entry = resolvedAnnotationMetadata->find(&decl);
-        // Generic instantiation copies the source declaration after metadata
-        // evaluation. Its concrete body inherits the source annotation facts,
-        // but must keep its own mangled identity in the CHIR snapshot.
-        if (entry == resolvedAnnotationMetadata->end() && decl.genericDecl &&
-            decl.genericDecl->fullPackageName == decl.fullPackageName) {
-            entry = resolvedAnnotationMetadata->find(decl.genericDecl);
-        }
-        if (entry != resolvedAnnotationMetadata->end()) {
-            info.SetResolvedAnnotations(decl.fullPackageName, decl.mangledName, entry->second);
-        } else if (!decl.annotationsArray || decl.annotationsArray->children.empty()) {
-            info.SetResolvedAnnotations(decl.fullPackageName, decl.mangledName, {});
-        }
-        // A declaration with annotations but no auxiliary result remains Unknown.
-    };
     // Since annotations must be consistent between common and specific sides,
     // the specific side can directly use the serialized annotations.
     auto annosArray = decl.annotationsArray.get();
     if (decl.TestAttr(AST::Attribute::IMPORTED) || !annosArray || annosArray->children.empty() ||
         decl.TestAttr(AST::Attribute::SPECIFIC) || (opts.disableReflection && !evaluateAllAnnotations)) {
         AnnoInfo info;
-        attachResolvedSnapshot(info);
+        AttachResolvedAnnotationSnapshot(decl, resolvedAnnotationMetadata, info);
         return info;
     }
 
@@ -251,7 +255,7 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
         annoInstances.emplace_back(annoClassDeclName, paramValues, annoLoc);
     }
     auto annoInfo = AnnoInfo(mangledName, std::move(annoInstances));
-    attachResolvedSnapshot(annoInfo);
+    AttachResolvedAnnotationSnapshot(decl, resolvedAnnotationMetadata, annoInfo);
     annotationFuncMap.emplace(&decl, annoInfo);
     return annoInfo;
 }

@@ -452,16 +452,8 @@ void AST2CHIR::CollectImportedPropDecl(AST::PropDecl& propDecl)
     }
 }
 
-void AST2CHIR::CollectImportedDeclUsedInCurPkg(AST::Decl& decl, bool forceAspectMembers)
+bool AST2CHIR::IsRequestedByAspect(const AST::Decl& decl)
 {
-    // Don't need to collect intrinsic func decl, because in CHIR, if we visit an intrinsic call expr, we will create
-    // an `intrinsic` expression of CHIR, and pass in intrinsic kind, then codegen will know which function need to be
-    // called. we don't need to translate intrinsic func decl to any CHIR node.
-    if (decl.TestAttr(AST::Attribute::INTRINSIC)) {
-        return;
-    }
-    // Don't need to collect imported decl that is not used in current package.
-    // The import package of cjdb mock might indeed have the "IMPORTED" attribute.
     bool requestedByAspect = aspectExternalSymbols.count(decl.mangledName) != 0;
     if (requestedByAspect && decl.IsFunc()) {
         aspectExternalSymbols.erase(decl.mangledName);
@@ -474,6 +466,20 @@ void AST2CHIR::CollectImportedDeclUsedInCurPkg(AST::Decl& decl, bool forceAspect
             }
         }
     }
+    return requestedByAspect;
+}
+
+void AST2CHIR::CollectImportedDeclUsedInCurPkg(AST::Decl& decl, bool forceAspectMembers)
+{
+    // Don't need to collect intrinsic func decl, because in CHIR, if we visit an intrinsic call expr, we will create
+    // an `intrinsic` expression of CHIR, and pass in intrinsic kind, then codegen will know which function need to be
+    // called. we don't need to translate intrinsic func decl to any CHIR node.
+    if (decl.TestAttr(AST::Attribute::INTRINSIC)) {
+        return;
+    }
+    // Don't need to collect imported decl that is not used in current package.
+    // The import package of cjdb mock might indeed have the "IMPORTED" attribute.
+    const bool requestedByAspect = IsRequestedByAspect(decl);
     if (decl.TestAttr(AST::Attribute::IMPORTED) && !decl.isUsedImports && !requestedByAspect &&
         !forceAspectMembers) {
         return;
@@ -507,36 +513,86 @@ void AST2CHIR::CollectImportedDeclUsedInCurPkg(AST::Decl& decl, bool forceAspect
     }
 }
 
+bool AST2CHIR::ReadAspectImportSymbols()
+{
+    if (isComputingAnnos || !opts.emitCHIRAnnotationMetadata || opts.aspectImportSymbolsPath.empty()) {
+        return true;
+    }
+    std::ifstream input(opts.aspectImportSymbolsPath);
+    if (!input) {
+        diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_input_mismatch,
+            DEFAULT_POSITION, "cannot read aspect symbol list: " + opts.aspectImportSymbolsPath);
+        failure = true;
+        return false;
+    }
+    std::string symbol;
+    while (std::getline(input, symbol)) {
+        if (!symbol.empty() && symbol.back() == '\r') {
+            symbol.pop_back();
+        }
+        if (symbol.empty() || symbol.size() > 4096 || symbol.find_first_of(" \t\r\n") != std::string::npos ||
+            aspectExternalSymbols.size() >= 262144 || !aspectExternalSymbols.insert(symbol).second) {
+            diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_input_mismatch,
+                DEFAULT_POSITION, "invalid aspect symbol list entry");
+            failure = true;
+            return false;
+        }
+    }
+    if (!input.eof()) {
+        diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_input_mismatch,
+            DEFAULT_POSITION, "failed reading aspect symbol list");
+        failure = true;
+        return false;
+    }
+    return true;
+}
+
+void AST2CHIR::WriteAspectDependencyReport(const AST::Package& node)
+{
+    if (isComputingAnnos || !opts.emitCHIRAnnotationMetadata) {
+        return;
+    }
+    const char* reportPath = std::getenv("ASPECT_CJ_DEPENDENCY_REPORT");
+    if (reportPath == nullptr) {
+        return;
+    }
+    const std::filesystem::path path(reportPath);
+    if (!path.is_absolute() || std::filesystem::exists(path)) {
+        diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_phase_invalid,
+            DEFAULT_POSITION, "dependency report path");
+        failure = true;
+        return;
+    }
+    std::set<std::string> importedNames;
+    for (const auto& importPkg : importManager.GetAllImportedPackages()) {
+        if (importPkg->srcPackage != nullptr && importPkg->srcPackage != &node) {
+            importedNames.insert(importPkg->srcPackage->fullPackageName);
+        }
+    }
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_phase_invalid,
+            DEFAULT_POSITION, "cannot write dependency report");
+        failure = true;
+        return;
+    }
+    out << "#aspect_cj_dependencies_v1\n" << node.fullPackageName << '\n';
+    for (const auto& name : importedNames) {
+        out << name << '\n';
+    }
+    out.close();
+    if (!out) {
+        diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_phase_invalid,
+            DEFAULT_POSITION, "incomplete dependency report");
+        failure = true;
+    }
+}
+
 void AST2CHIR::CollectImportedDecls(const AST::Package& node)
 {
     aspectExternalSymbols.clear();
-    if (!isComputingAnnos && opts.emitCHIRAnnotationMetadata && !opts.aspectImportSymbolsPath.empty()) {
-        std::ifstream input(opts.aspectImportSymbolsPath);
-        if (!input) {
-            diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_input_mismatch,
-                DEFAULT_POSITION, "cannot read aspect symbol list: " + opts.aspectImportSymbolsPath);
-            failure = true;
-            return;
-        }
-        std::string symbol;
-        while (std::getline(input, symbol)) {
-            if (!symbol.empty() && symbol.back() == '\r') {
-                symbol.pop_back();
-            }
-            if (symbol.empty() || symbol.size() > 4096 || symbol.find_first_of(" \t\r\n") != std::string::npos ||
-                aspectExternalSymbols.size() >= 262144 || !aspectExternalSymbols.insert(symbol).second) {
-                diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_input_mismatch,
-                    DEFAULT_POSITION, "invalid aspect symbol list entry");
-                failure = true;
-                return;
-            }
-        }
-        if (!input.eof()) {
-            diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_input_mismatch,
-                DEFAULT_POSITION, "failed reading aspect symbol list");
-            failure = true;
-            return;
-        }
+    if (!ReadAspectImportSymbols()) {
+        return;
     }
     usedSrcImportedNonGenericDecls = std::unordered_set<Ptr<const AST::Decl>>{
         node.srcImportedNonGenericDecls.begin(), node.srcImportedNonGenericDecls.end()};
@@ -566,41 +622,7 @@ void AST2CHIR::CollectImportedDecls(const AST::Package& node)
             DEFAULT_POSITION, "aspect symbol is absent from imported packages: " + *aspectExternalSymbols.begin());
         failure = true;
     }
-    if (!isComputingAnnos && opts.emitCHIRAnnotationMetadata) {
-        const char* reportPath = std::getenv("ASPECT_CJ_DEPENDENCY_REPORT");
-        if (reportPath != nullptr) {
-            const std::filesystem::path path(reportPath);
-            if (!path.is_absolute() || std::filesystem::exists(path)) {
-                diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_phase_invalid,
-                    DEFAULT_POSITION, "dependency report path");
-                failure = true;
-                return;
-            }
-            std::set<std::string> importedNames;
-            for (const auto& importPkg : importManager.GetAllImportedPackages()) {
-                if (importPkg->srcPackage != nullptr && importPkg->srcPackage != &node) {
-                    importedNames.insert(importPkg->srcPackage->fullPackageName);
-                }
-            }
-            std::ofstream out(path, std::ios::binary);
-            if (!out) {
-                diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_phase_invalid,
-                    DEFAULT_POSITION, "cannot write dependency report");
-                failure = true;
-                return;
-            }
-            out << "#aspect_cj_dependencies_v1\n" << node.fullPackageName << '\n';
-            for (const auto& name : importedNames) {
-                out << name << '\n';
-            }
-            out.close();
-            if (!out) {
-                diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_phase_invalid,
-                    DEFAULT_POSITION, "incomplete dependency report");
-                failure = true;
-            }
-        }
-    }
+    WriteAspectDependencyReport(node);
 }
 
 void AST2CHIR::CollectDeclsInCurPkg(AST::Package& node)

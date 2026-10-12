@@ -48,6 +48,21 @@ const LiteralValue* GetScalarLiteral(const Value* value)
     return nullptr;
 }
 
+std::optional<EvaluatedAnnotationField> ReadScalarField(
+    const Value* value, const std::string& name, const Type& type)
+{
+    const auto literal = GetScalarLiteral(value);
+    if (auto str = DynamicCast<StringLiteral>(literal); str && type.IsString()) {
+        return EvaluatedAnnotationField{name, str->GetVal()};
+    }
+    if (auto boolean = DynamicCast<BoolLiteral>(literal); boolean && type.IsBoolean()) {
+        return EvaluatedAnnotationField{name, boolean->GetVal()};
+    }
+    // Do not recursively interpret arbitrary business annotation object
+    // graphs. Preserve their identity, but mark scalar fields unavailable.
+    return std::nullopt;
+}
+
 std::string QualifiedAnnotationName(const AST::Decl& annotationClass)
 {
     std::vector<std::string> names;
@@ -91,14 +106,8 @@ std::optional<std::vector<EvaluatedAnnotationField>> TryReadAnnotationScalarFiel
             return std::nullopt;
         }
         const auto index = path.front();
-        const auto literal = GetScalarLiteral(store->GetValue());
-        if (auto str = DynamicCast<StringLiteral>(literal); str && fields[index].type->IsString()) {
-            values[index] = EvaluatedAnnotationField{fields[index].name, str->GetVal()};
-        } else if (auto boolean = DynamicCast<BoolLiteral>(literal); boolean && fields[index].type->IsBoolean()) {
-            values[index] = EvaluatedAnnotationField{fields[index].name, boolean->GetVal()};
-        } else {
-            // Do not recursively interpret arbitrary business annotation object
-            // graphs. Preserve their identity, but mark scalar fields unavailable.
+        values[index] = ReadScalarField(store->GetValue(), fields[index].name, *fields[index].type);
+        if (!values[index]) {
             return std::nullopt;
         }
     }

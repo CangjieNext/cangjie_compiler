@@ -715,7 +715,8 @@ private:
 };
 }
 
-OwnedPtr<ConstEvalResult> ComputeAnnotations(AST::Package& pkg, CompilerInstance& ci, AnnotationEvaluationPurpose purpose)
+OwnedPtr<ConstEvalResult> ComputeAnnotations(
+    AST::Package& pkg, CompilerInstance& ci, AnnotationEvaluationPurpose purpose)
 {
     // only do compute annotations when its debug option is on
     // set the default value to true when this feature is enabled

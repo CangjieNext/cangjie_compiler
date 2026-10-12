@@ -256,6 +256,9 @@ private:
 
     void AST2CHIRCheck();
     void CollectImportedDecls(const AST::Package& node);
+    bool ReadAspectImportSymbols();
+    void WriteAspectDependencyReport(const AST::Package& node);
+    bool IsRequestedByAspect(const AST::Decl& decl);
     void CollectDeclsInCurPkg(AST::Package& node);
     void CollectImportedGenericInstantiatedDecl(
         const AST::Package& node, std::unordered_set<std::string>& mangledNameSet);
