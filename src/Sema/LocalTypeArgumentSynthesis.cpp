@@ -820,11 +820,26 @@ std::optional<TypeSubst> LocalTypeArgumentSynthesis::FindSolution(
             bool validAnyTy = hasAnyTy || (deterministic && thisM[tyVar].ubs.count(ModalTy{tyMgr.GetAnyTy()}) > 0);
             bool validNothingTy =
                 hasNothingTy || (deterministic && thisM[tyVar].lbs.count(ModalTy{TypeManager::GetNothingTy()}) > 0);
+            // A pending ideal of the joined lower bound is defaulted unless the meet of the upper
+            // bounds can supply the type it should adopt. Besides a numeric upper bound - the only
+            // case handled before - that is an upper bound which is a solution by itself and comes
+            // from the expected type the enclosing expression is checked against (e.g. '() -> Int8'
+            // for a literal kept pending in a lambda's body); it carries that expectation, so the
+            // branch below takes it as the solution. An upper bound coming from a generic constraint
+            // is no expectation of the literal, and keeps the default.
+            auto upperBoundIsExpectedType = [&thisM, &tyVar]() {
+                const auto& ubBlames = thisM[tyVar].ub2Blames;
+                return std::any_of(ubBlames.cbegin(), ubBlames.cend(), [](const auto& ubToBlames) {
+                    return std::any_of(ubToBlames.second.cbegin(), ubToBlames.second.cend(),
+                        [](const Blame& blame) { return blame.style == BlameStyle::RETURN; });
+                });
+            };
             if (IsValidSolution(tyJ, validNothingTy, validAnyTy)) {
                 thisSubst.emplace(std::make_pair(tyVar, tyJ.Ty()));
                 newInfo = true;
                 thisM.erase(tyVar);
-            } else if (tyJ->HasIdealTy() && !tyM->IsNumeric()) {
+            } else if (tyJ->HasIdealTy() && !tyM->IsNumeric() &&
+                !(upperBoundIsExpectedType() && IsValidSolution(tyM, false, false))) {
                 tyJ = tyMgr.ReplaceIdealTy(tyJ);
                 thisSubst.emplace(std::make_pair(tyVar, tyJ.Ty()));
                 newInfo = true;
