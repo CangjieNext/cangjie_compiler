@@ -123,36 +123,10 @@ private:
     void HanldeStoreElemRefExpr(ReachingDefinitionDomain& state, const StoreElementRef& storeElemRef);
     void HandleGetElemRefExpr(ReachingDefinitionDomain& state, const GetElementRef* getElemRef);
     void HandleLoadExpr(ReachingDefinitionDomain& state, const Load* load);
-
-    template <typename TApply> void HandleApplyExpr(ReachingDefinitionDomain& state, const TApply* apply)
-    {
-        // If it's a apply to a mut function of a tracked struct.
-        if (auto callee = apply->GetCallee(); callee->TestAttr(Attribute::MUT)) {
-            auto structArg = apply->GetArgs()[0];
-            if (!StaticCast<RefType*>(structArg->GetType())->GetBaseType()->IsStruct()) {
-                return;
-            }
-            if (auto it = allocateIdxMap.find(structArg); it != allocateIdxMap.end()) {
-                state.reachingDefs[it->second].SetToBound(/* isTop = */ true);
-                state.reachingLoadDefs[it->second].SetToBound(/* isTop = */ true);
-            }
-        }
-    }
-
-    template <typename TIntrinsic>
-    void HandleIntrinsicExpr(ReachingDefinitionDomain& state, const TIntrinsic* intrinsic)
-    {
-        // If the tracked object is the parameter of the inout intrinsic
-        if (intrinsic->GetIntrinsicKind() == CHIR::IntrinsicKind::INOUT_PARAM) {
-            auto args = intrinsic->GetArgs();
-            CJC_ASSERT(args.size() == 1);
-            auto operand = args[0];
-            if (auto it = allocateIdxMap.find(operand); it != allocateIdxMap.end()) {
-                state.reachingDefs[it->second].SetToBound(/* isTop = */ true);
-                state.reachingLoadDefs[it->second].SetToBound(/* isTop = */ true);
-            }
-        }
-    }
+    void HandleApplyExpr(ReachingDefinitionDomain& state, const ApplyBase* apply);
+    void HandleIntrinsicExpr(ReachingDefinitionDomain& state, const IntrinsicBase* intrinsic);
+    void KillTrackedStructReachingDefs(ReachingDefinitionDomain& state, const Value* location);
+    void KillTrackedReachingDefs(ReachingDefinitionDomain& state, const Value* location);
 
     /// allocate index map of one function.
     std::unordered_map<const Value*, size_t> allocateIdxMap;
