@@ -8,7 +8,6 @@
 #define CANGJIE_CHIR_TRANSFORMATION_REDUNDANT_LOAD_ELIMINATION_H
 
 #include "cangjie/CHIR/IR/Package.h"
-#include "cangjie/CHIR/IR/Value/Value.h"
 
 namespace Cangjie::CHIR {
 /**
@@ -24,12 +23,11 @@ public:
     /**
      * @brief Main process to do redundant load elimination.
      * @param package package to do optimization.
-     * @param isDebug flag whether print debug log.
      */
-    void RunOnPackage(const Ptr<const Package>& package, bool isDebug) const;
+    void RunOnPackage(const Package& package) const;
 
 private:
-    void RunOnFunc(const Ptr<const Function>& func, bool isDebug) const;
+    void RunOnFunc(const Function& func) const;
 };
 } // namespace Cangjie::CHIR
 

@@ -123,6 +123,7 @@ private:
     void HanldeStoreElemRefExpr(ReachingDefinitionDomain& state, const StoreElementRef& storeElemRef);
     void HandleGetElemRefExpr(ReachingDefinitionDomain& state, const GetElementRef* getElemRef);
     void HandleLoadExpr(ReachingDefinitionDomain& state, const Load* load);
+    void KillTrackedStructReachingDefs(ReachingDefinitionDomain& state, const Value* location);
 
     template <typename TApply> void HandleApplyExpr(ReachingDefinitionDomain& state, const TApply* apply)
     {

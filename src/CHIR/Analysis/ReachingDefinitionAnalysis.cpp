@@ -13,6 +13,34 @@
 using namespace Cangjie;
 using namespace Cangjie::CHIR;
 
+namespace {
+/**
+ * Nested field writes use GetElementRef/GetElementByName results as StoreElementRef base.
+ * allocateIdxMap only tracks Allocate results, so walk back to the root ref.
+ */
+const Value* GetRootRefLocation(const Value* val)
+{
+    while (val != nullptr) {
+        auto localVar = DynamicCast<const LocalVar*>(val);
+        if (localVar == nullptr) {
+            break;
+        }
+        auto expr = localVar->GetExpr();
+        if (auto getElemRef = DynamicCast<const GetElementRef*>(expr)) {
+            val = getElemRef->GetBase();
+            continue;
+        }
+        if (auto getByName = DynamicCast<const GetElementByName*>(expr)) {
+            val = getByName->GetLocation();
+            continue;
+        }
+        break;
+    }
+    return val;
+}
+
+} // namespace
+
 ReachingDefinitionDomain::ReachingDefinitionDomain(std::unordered_map<const Value*, size_t>* allocateIdxMap)
     : AbstractDomain(),
       reachingDefs(std::vector<FlatSet<const Store*>>(allocateIdxMap->size(), FlatSet<const Store*>(false))),
@@ -181,30 +209,32 @@ void ReachingDefinitionAnalysis::HandleStoreExpr(ReachingDefinitionDomain& state
     }
 }
 
+void ReachingDefinitionAnalysis::KillTrackedStructReachingDefs(
+    ReachingDefinitionDomain& state, const Value* location)
+{
+    if (auto it = allocateIdxMap.find(location); it != allocateIdxMap.end()) {
+        if (StaticCast<RefType*>(location->GetType())->GetBaseType()->IsStruct()) {
+            state.reachingDefs[it->second].SetToBound(/* isTop = */ true);
+            state.reachingLoadDefs[it->second].SetToBound(/* isTop = */ true);
+        }
+    }
+}
+
 void ReachingDefinitionAnalysis::HandleGetElemRefExpr(ReachingDefinitionDomain& state, const GetElementRef* getElemRef)
 {
-    // If it's a non-readonly GetElementRef to a tracked struct.
-    auto target = getElemRef->GetBase();
-    if (auto it = allocateIdxMap.find(target); it != allocateIdxMap.end()) {
-        if (StaticCast<RefType*>(target->GetType())->GetBaseType()->IsStruct()) {
-            if (!getElemRef->GetResult()->TestAttr(Attribute::READONLY)) {
-                state.reachingDefs[it->second].SetToBound(/* isTop = */ true);
-                state.reachingLoadDefs[it->second].SetToBound(/* isTop = */ true);
-            }
-        }
+    // Non-readonly field refs may later be written; kill whole-object reaching defs.
+    // Keep READONLY (e.g. `let` fields) so store-to-load forwarding like struct1 still works.
+    // Base may itself be a nested GetElementRef; walk to the root Allocate like StoreElementRef.
+    if (!getElemRef->GetResult()->TestAttr(Attribute::READONLY)) {
+        KillTrackedStructReachingDefs(state, GetRootRefLocation(getElemRef->GetBase()));
     }
 }
 
 void ReachingDefinitionAnalysis::HanldeStoreElemRefExpr(
     ReachingDefinitionDomain& state, const StoreElementRef& storeElemRef)
 {
-    auto target = storeElemRef.GetBase();
-    if (auto it = allocateIdxMap.find(target); it != allocateIdxMap.end()) {
-        if (StaticCast<RefType*>(target->GetType())->GetBaseType()->IsStruct()) {
-            state.reachingDefs[it->second].SetToBound(/* isTop = */ true);
-            state.reachingLoadDefs[it->second].SetToBound(/* isTop = */ true);
-        }
-    }
+    // Base may be a nested field ref (e.g. GetElementRef(tmp1, 0)); kill the root Allocate.
+    KillTrackedStructReachingDefs(state, GetRootRefLocation(storeElemRef.GetBase()));
 }
 
 void ReachingDefinitionAnalysis::HandleLoadExpr(ReachingDefinitionDomain& state, const Load* load)
