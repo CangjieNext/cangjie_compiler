@@ -579,7 +579,20 @@ void AST2CHIR::SetFuncAttributeAndLinkageType(const AST::FuncDecl& astFunc, Func
     // 3. ----------------------- Others -----------------------
     chirFunc.SetFuncKind(GetFuncKindFromAST(astFunc));
     if (chirFunc.GetFuncKind() == FuncKind::DEFAULT_PARAMETER_FUNC) {
-        chirFunc.SetParamDftValHostFunc(*StaticCast<Function*>(globalCache.Get(*astFunc.ownerFunc)));
+        CJC_NULLPTR_CHECK(astFunc.ownerFunc);
+        auto* hostChirFunc = StaticCast<Function*>(globalCache.Get(*astFunc.ownerFunc));
+        CJC_NULLPTR_CHECK(hostChirFunc);
+        size_t offset = IsInstanceMember(*astFunc.ownerFunc) ? 1 : 0;
+        auto& astParams = astFunc.ownerFunc->funcBody->paramLists[0]->params;
+        Parameter* hostParam = nullptr;
+        for (size_t i = 0; i < astParams.size(); ++i) {
+            if (astParams[i]->desugarDecl.get() == &astFunc) {
+                hostParam = hostChirFunc->GetParam(i + offset);
+                break;
+            }
+        }
+        CJC_NULLPTR_CHECK(hostParam);
+        chirFunc.SetParamDftValHostParam(*hostParam);
     }
     chirFunc.SetFastNative(astFunc.isFastNative);
 }
