@@ -10,10 +10,20 @@
 #
 # See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-# Generate cangjie code for libast using flatc with cangjie backend.
-set(FLATC_EXECUTABLE "${CMAKE_BINARY_DIR}/bin/flatc")
+# Generate headers with a host-runnable flatc; install the target-platform flatc.
+if(NOT FLATC_HOST_EXECUTABLE)
+    set(FLATC_HOST_EXECUTABLE "${CMAKE_BINARY_DIR}/bin/flatc${CMAKE_EXECUTABLE_SUFFIX}")
+endif()
+if(NOT FLATC_TARGET_EXECUTABLE)
+    set(FLATC_TARGET_EXECUTABLE "${CMAKE_BINARY_DIR}/bin/flatc${CMAKE_EXECUTABLE_SUFFIX}")
+endif()
 
 file(GLOB FLATBUFFERS_SOURCE CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.fbs")
+
+set(FLATC_GENERATION_DEPS flatbuffers)
+if(CMAKE_CROSSCOMPILING)
+    list(APPEND FLATC_GENERATION_DEPS flatbuffers-host)
+endif()
 
 set(FLATC_OUTPUTS)
 foreach(FILE ${FLATBUFFERS_SOURCE})
@@ -22,8 +32,8 @@ foreach(FILE ${FLATBUFFERS_SOURCE})
 
     add_custom_command(
         OUTPUT ${FLATC_OUTPUT}
-        COMMAND ${FLATC_EXECUTABLE} ARGS --no-warnings -c -o "${CMAKE_CURRENT_BINARY_DIR}/flatbuffers" ${FILE}
-        DEPENDS ${FILE} flatbuffers # flatc defined in flatbuffers project: add_executable(flatc..)
+        COMMAND ${FLATC_HOST_EXECUTABLE} ARGS --no-warnings -c -o "${CMAKE_CURRENT_BINARY_DIR}/flatbuffers" ${FILE}
+        DEPENDS ${FILE} ${FLATC_GENERATION_DEPS} # flatc defined in flatbuffers project: add_executable(flatc..)
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
     list(APPEND FLATC_OUTPUTS ${FLATC_OUTPUT})
 endforeach()
@@ -34,7 +44,10 @@ set(FLATBUFFERS_INCLUDE_DIR
 add_custom_target(CangjieFlatbuffersHeaders DEPENDS ${FLATC_OUTPUTS} ${FLATC_LIBAST_OUTPUTS})
 
 # Install flatbuffers toolchain and runtime support for std.ast / libast consumers.
-install(PROGRAMS ${FLATC_EXECUTABLE} DESTINATION third_party/flatbuffers/bin)
+# flatc ships with cjc; libs-only / cross-libs builds must not overwrite the host SDK flatc.
+if(CANGJIE_BUILD_CJC)
+    install(PROGRAMS ${FLATC_TARGET_EXECUTABLE} DESTINATION third_party/flatbuffers/bin)
+endif()
 install(DIRECTORY ${FLATBUFFERS_SOURCE_DIR}/include/flatbuffers
     DESTINATION third_party/flatbuffers/include)
 install(
