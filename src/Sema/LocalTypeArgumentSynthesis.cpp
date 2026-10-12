@@ -820,11 +820,13 @@ std::optional<TypeSubst> LocalTypeArgumentSynthesis::FindSolution(
             bool validAnyTy = hasAnyTy || (deterministic && thisM[tyVar].ubs.count(ModalTy{tyMgr.GetAnyTy()}) > 0);
             bool validNothingTy =
                 hasNothingTy || (deterministic && thisM[tyVar].lbs.count(ModalTy{TypeManager::GetNothingTy()}) > 0);
+            // A pending ideal of the joined lower bound is defaulted unless the meet of the upper
+            // bounds supplies the type it should adopt; see 'UpperBoundResolvesPendingIdeal'.
             if (IsValidSolution(tyJ, validNothingTy, validAnyTy)) {
                 thisSubst.emplace(std::make_pair(tyVar, tyJ.Ty()));
                 newInfo = true;
                 thisM.erase(tyVar);
-            } else if (tyJ->HasIdealTy() && !tyM->IsNumeric()) {
+            } else if (tyJ->HasIdealTy() && !UpperBoundResolvesPendingIdeal(thisM[tyVar], tyJ, tyM)) {
                 tyJ = tyMgr.ReplaceIdealTy(tyJ);
                 thisSubst.emplace(std::make_pair(tyVar, tyJ.Ty()));
                 newInfo = true;
@@ -868,6 +870,30 @@ bool LocalTypeArgumentSynthesis::IsValidSolution(ModalTy ty, const bool hasNothi
     solution = solution || (hasNothingTy && ty->IsNothing());
     solution = solution || (hasAnyTy && ty->IsAny());
     return solution;
+}
+
+bool LocalTypeArgumentSynthesis::UpperBoundResolvesPendingIdeal(
+    const TyVarBounds& bounds, const ModalTy& tyJ, const ModalTy& tyM) const
+{
+    if (tyM->IsNumeric()) {
+        return true;
+    }
+    // Only a pending state carried by a function type is resolved from the upper bounds: a bare
+    // literal keeps its own default (Int64/Float64), which is more specific than an expected type
+    // that is merely an upper bound of it.
+    if (!tyJ->IsFunc() || !IsValidSolution(tyM, false, false)) {
+        return false;
+    }
+    // The meet has to be the expected type itself: a meet that a generic constraint contributes to
+    // is no expectation of the literal.
+    const auto& ubBlames = bounds.ub2Blames;
+    auto ub = std::find_if(ubBlames.cbegin(), ubBlames.cend(),
+        [&tyM](const auto& ubToBlames) { return ubToBlames.first.Ty() == tyM.Ty(); });
+    if (ub == ubBlames.cend()) {
+        return false;
+    }
+    return std::any_of(ub->second.cbegin(), ub->second.cend(),
+        [](const Blame& blame) { return blame.style == BlameStyle::RETURN; });
 }
 
 bool LocalTypeArgumentSynthesis::HasUnsolvedTyVars(const TypeSubst& subst)
