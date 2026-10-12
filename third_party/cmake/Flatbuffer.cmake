@@ -5,11 +5,37 @@
 # See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 set(FLATBUFFERS_SRC ${CMAKE_CURRENT_SOURCE_DIR}/flatbuffers)
-set(FLATBUFFERS_COMPILE_OPTIONS -DCMAKE_C_FLAGS=${GCC_TOOLCHAIN_FLAG} -DCMAKE_CXX_FLAGS=${GCC_TOOLCHAIN_FLAG})
-if(CMAKE_HOST_WIN32)
-    list(APPEND FLATBUFFERS_COMPILE_OPTIONS -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++)
+
+# Build flatc for the target platform (the installed / shipped binary).
+set(FLATBUFFERS_COMPILE_OPTIONS
+    -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER})
+if(CMAKE_CROSSCOMPILING)
+    # Ensure the ExternalProject uses the target sysroot/toolchain rather than the host.
+    list(APPEND FLATBUFFERS_COMPILE_OPTIONS
+        -DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}
+        -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR})
+    if(CMAKE_TOOLCHAIN_FILE)
+        # Prefer the target toolchain file; do not override its CMAKE_C/CXX_FLAGS.
+        list(APPEND FLATBUFFERS_COMPILE_OPTIONS
+            -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+            -DCANGJIE_TARGET_TOOLCHAIN=${CANGJIE_TARGET_TOOLCHAIN}
+            -DCANGJIE_TARGET_SYSROOT=${CANGJIE_TARGET_SYSROOT})
+    else()
+        list(APPEND FLATBUFFERS_COMPILE_OPTIONS
+            -DCMAKE_C_FLAGS=${GCC_TOOLCHAIN_FLAG}
+            -DCMAKE_CXX_FLAGS=${GCC_TOOLCHAIN_FLAG})
+    endif()
+    if(CMAKE_AR)
+        list(APPEND FLATBUFFERS_COMPILE_OPTIONS -DCMAKE_AR=${CMAKE_AR})
+    endif()
+    if(CMAKE_RANLIB)
+        list(APPEND FLATBUFFERS_COMPILE_OPTIONS -DCMAKE_RANLIB=${CMAKE_RANLIB})
+    endif()
 else()
-    list(APPEND FLATBUFFERS_COMPILE_OPTIONS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++)
+    list(APPEND FLATBUFFERS_COMPILE_OPTIONS
+        -DCMAKE_C_FLAGS=${GCC_TOOLCHAIN_FLAG}
+        -DCMAKE_CXX_FLAGS=${GCC_TOOLCHAIN_FLAG})
 endif()
 
 # for CloudDragon, download in Prebuild
@@ -40,7 +66,45 @@ ExternalProject_Add(
         # Build only necessary targets.
         -DFLATBUFFERS_BUILD_FLATHASH=OFF
         -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
-        ${FLATBUFFERS_COMPILE_OPTIONS})
+        ${FLATBUFFERS_COMPILE_OPTIONS}
+    STEP_TARGETS patch
+    BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/bin/flatc${CMAKE_EXECUTABLE_SUFFIX})
 externalproject_get_property(flatbuffers SOURCE_DIR)
 set(FLATBUFFERS_SRC ${SOURCE_DIR})
 set(FLATBUFFERS_SOURCE_DIR ${SOURCE_DIR} PARENT_SCOPE)
+
+set(FLATC_TARGET_EXECUTABLE "${CMAKE_BINARY_DIR}/bin/flatc${CMAKE_EXECUTABLE_SUFFIX}")
+
+# flatc is also invoked during the build to generate headers. When cross-compiling,
+# the target flatc cannot run on the host, so build a host-native flatc as well.
+if(CMAKE_CROSSCOMPILING)
+    if(CMAKE_HOST_WIN32)
+        set(FLATBUFFERS_HOST_C_COMPILER gcc)
+        set(FLATBUFFERS_HOST_CXX_COMPILER g++)
+        set(FLATC_HOST_EXECUTABLE "${CMAKE_BINARY_DIR}/host-tools/bin/flatc.exe")
+    else()
+        set(FLATBUFFERS_HOST_C_COMPILER clang)
+        set(FLATBUFFERS_HOST_CXX_COMPILER clang++)
+        set(FLATC_HOST_EXECUTABLE "${CMAKE_BINARY_DIR}/host-tools/bin/flatc")
+    endif()
+    ExternalProject_Add(
+        flatbuffers-host
+        DEPENDS flatbuffers-patch
+        DOWNLOAD_COMMAND ""
+        UPDATE_COMMAND ""
+        PATCH_COMMAND ""
+        SOURCE_DIR ${SOURCE_DIR}
+        CMAKE_ARGS
+            -DFLATBUFFERS_BUILD_TESTS=OFF
+            -DFLATBUFFERS_INSTALL=ON
+            -DFLATBUFFERS_BUILD_FLATHASH=OFF
+            -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/host-tools
+            -DCMAKE_C_COMPILER=${FLATBUFFERS_HOST_C_COMPILER}
+            -DCMAKE_CXX_COMPILER=${FLATBUFFERS_HOST_CXX_COMPILER}
+        BUILD_BYPRODUCTS ${FLATC_HOST_EXECUTABLE})
+else()
+    set(FLATC_HOST_EXECUTABLE "${FLATC_TARGET_EXECUTABLE}")
+endif()
+
+set(FLATC_TARGET_EXECUTABLE ${FLATC_TARGET_EXECUTABLE} PARENT_SCOPE)
+set(FLATC_HOST_EXECUTABLE ${FLATC_HOST_EXECUTABLE} PARENT_SCOPE)
