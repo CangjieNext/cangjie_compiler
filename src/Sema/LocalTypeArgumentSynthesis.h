@@ -132,6 +132,13 @@ private:
 
     std::optional<TypeSubst> FindSolution(Constraint& thisM, const bool hasNothingTy, const bool hasAnyTy);
     bool IsValidSolution(AST::ModalTy ty, const bool hasNothingTy, const bool hasAnyTy) const;
+    /**
+     * Whether the upper bounds of \p bounds supply the type a pending ideal of the solved type has to
+     * adopt instead of its default: a numeric meet of the upper bounds, or a meet that can be a
+     * solution by itself and comes from the expected type the enclosing expression is checked against
+     * (blamed with 'RETURN') rather than from a generic constraint.
+     */
+    bool UpperBoundResolvesPendingIdeal(const TyVarBounds& bounds, const AST::ModalTy& tyM) const;
     bool DoesCSCoverAllTyVars(const Constraint& m);
     TypeSubst ResetIdealTypesInSubst(TypeSubst& m);
     Constraint ApplyTypeSubstForCS(const TypeSubst& subst, const Constraint& cs);

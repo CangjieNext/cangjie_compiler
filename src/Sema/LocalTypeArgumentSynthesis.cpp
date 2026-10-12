@@ -820,11 +820,13 @@ std::optional<TypeSubst> LocalTypeArgumentSynthesis::FindSolution(
             bool validAnyTy = hasAnyTy || (deterministic && thisM[tyVar].ubs.count(ModalTy{tyMgr.GetAnyTy()}) > 0);
             bool validNothingTy =
                 hasNothingTy || (deterministic && thisM[tyVar].lbs.count(ModalTy{TypeManager::GetNothingTy()}) > 0);
+            // A pending ideal of the joined lower bound is defaulted unless the meet of the upper
+            // bounds supplies the type it should adopt; see 'UpperBoundResolvesPendingIdeal'.
             if (IsValidSolution(tyJ, validNothingTy, validAnyTy)) {
                 thisSubst.emplace(std::make_pair(tyVar, tyJ.Ty()));
                 newInfo = true;
                 thisM.erase(tyVar);
-            } else if (tyJ->HasIdealTy() && !tyM->IsNumeric()) {
+            } else if (tyJ->HasIdealTy() && !UpperBoundResolvesPendingIdeal(thisM[tyVar], tyM)) {
                 tyJ = tyMgr.ReplaceIdealTy(tyJ);
                 thisSubst.emplace(std::make_pair(tyVar, tyJ.Ty()));
                 newInfo = true;
@@ -868,6 +870,21 @@ bool LocalTypeArgumentSynthesis::IsValidSolution(ModalTy ty, const bool hasNothi
     solution = solution || (hasNothingTy && ty->IsNothing());
     solution = solution || (hasAnyTy && ty->IsAny());
     return solution;
+}
+
+bool LocalTypeArgumentSynthesis::UpperBoundResolvesPendingIdeal(const TyVarBounds& bounds, const ModalTy& tyM) const
+{
+    if (tyM->IsNumeric()) {
+        return true;
+    }
+    if (!IsValidSolution(tyM, false, false)) {
+        return false;
+    }
+    const auto& ubBlames = bounds.ub2Blames;
+    return std::any_of(ubBlames.cbegin(), ubBlames.cend(), [](const auto& ubToBlames) {
+        return std::any_of(ubToBlames.second.cbegin(), ubToBlames.second.cend(),
+            [](const Blame& blame) { return blame.style == BlameStyle::RETURN; });
+    });
 }
 
 bool LocalTypeArgumentSynthesis::HasUnsolvedTyVars(const TypeSubst& subst)
