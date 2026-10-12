@@ -304,6 +304,7 @@ table Decl {
 
   // record dependencies result of common part for CJMP
   dependencies:[FullId];
+
 }
 
 enum AnnoKind : uint16 {
@@ -319,7 +320,8 @@ enum AnnoKind : uint16 {
   JavaHasDefault,
   Annotation,
   Java,
-  ObjC
+  ObjC,
+  ArkTS
 }
 
 // Current annotation representation is a balance between needs of @Deprecated
