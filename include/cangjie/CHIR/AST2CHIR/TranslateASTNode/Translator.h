@@ -13,6 +13,8 @@
 #ifndef CANGJIE_CHIR_TRANSLATOR_H
 #define CANGJIE_CHIR_TRANSLATOR_H
 
+#include <optional>
+
 #include "cangjie/AST/NodeX.h"
 #include "cangjie/CHIR/AST2CHIR/AST2CHIRNodeMap.h"
 #include "cangjie/CHIR/Checker/AnnotationMetadata.h"
@@ -520,6 +522,7 @@ public:
     };
 
 private:
+    std::optional<CustomAnnoInstance> TryCollectLiteralAnnotationInstance(const AST::Expr& annotation);
     std::vector<CustomAnnoInstance> CollectLiteralAnnotationInstances(const AST::ArrayLit& annotations);
 
     friend class GlobalVarInitializer;

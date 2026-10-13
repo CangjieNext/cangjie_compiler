@@ -184,22 +184,40 @@ static void AttachResolvedAnnotationSnapshot(
     // A declaration with annotations but no auxiliary result remains Unknown.
 }
 
+static std::optional<std::vector<std::string>> CollectLiteralAnnotationArguments(const AST::CallExpr& annotation)
+{
+    std::vector<std::string> paramValues;
+    for (const auto& arg : annotation.args) {
+        if (arg->expr->astKind != AST::ASTKind::LIT_CONST_EXPR) {
+            return std::nullopt;
+        }
+        auto lit = StaticCast<AST::LitConstExpr*>(arg->expr.get().get());
+        paramValues.emplace_back(lit->rawString);
+    }
+    return paramValues;
+}
+
+std::optional<CustomAnnoInstance> Translator::TryCollectLiteralAnnotationInstance(const AST::Expr& annotation)
+{
+    auto& callExpr = StaticCast<const AST::CallExpr&>(annotation);
+    auto annoClassDecl = callExpr.resolvedFunction->funcBody->parentClassLike;
+    CJC_ASSERT(annoClassDecl);
+    auto paramValues = CollectLiteralAnnotationArguments(callExpr);
+    if (!paramValues) {
+        return std::nullopt;
+    }
+    return CustomAnnoInstance(annoClassDecl->identifier.GetRawText(), *paramValues, TranslateLocation(annotation));
+}
+
 std::vector<CustomAnnoInstance> Translator::CollectLiteralAnnotationInstances(const AST::ArrayLit& annotations)
 {
     std::vector<CustomAnnoInstance> instances;
     for (const auto& elem : annotations.children) {
-        auto callExpr = StaticCast<AST::CallExpr*>(elem.get().get());
-        auto annoClassDecl = callExpr->resolvedFunction->funcBody->parentClassLike;
-        CJC_ASSERT(annoClassDecl);
-        std::vector<std::string> paramValues;
-        for (const auto& arg : callExpr->args) {
-            if (arg->expr->astKind != AST::ASTKind::LIT_CONST_EXPR) {
-                return {};
-            }
-            auto lit = StaticCast<AST::LitConstExpr*>(arg->expr.get().get());
-            paramValues.emplace_back(lit->rawString);
+        auto instance = TryCollectLiteralAnnotationInstance(*elem);
+        if (!instance) {
+            return {};
         }
-        instances.emplace_back(annoClassDecl->identifier.GetRawText(), paramValues, TranslateLocation(*elem));
+        instances.emplace_back(std::move(*instance));
     }
     return instances;
 }
