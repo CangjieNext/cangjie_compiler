@@ -2022,6 +2022,7 @@ void TypeChecker::TypeCheckerImpl::PreCheck(const std::vector<Ptr<ASTContext>>& 
     for (auto& ctx : contexts) {
         // Phase: check annotation for FFI.
         LowerArkTSFunctions(*ctx);
+        LowerArkTSVariables(*ctx);
         PreCheckAnnoForFFI(*ctx->curPackage);
         PreCheckUsage(*ctx, *ctx->curPackage);
     }

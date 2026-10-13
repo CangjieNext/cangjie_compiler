@@ -326,6 +326,8 @@ ERROR(parse_arkts_argument_not_named, "argument of @ArkTS must be a named argume
 ERROR(parse_arkts_wrong_argument, "argument '%s' of @ArkTS should be %s")
 ERROR(parse_arkts_argument_duplication, "argument '%s' of @ArkTS can not be duplicated")
 ERROR(parse_arkts_unknown_argument, "unknown argument '%s' in @ArkTS", "expected 'module', 'foreignName' or 'namespace' here")
+ERROR(parse_foreign_value_not_literal, "argument of @ForeignValue should be an integer or string literal", "expected a literal value here")
+ERROR(parse_foreign_var_with_initializer, "a foreign variable cannot have an initializer", "remove the initializer here")
 ERROR(parse_arkts_rest_deferred, "ArkTS foreign signature is not supported in phase 1: rest parameter")
 ERROR(parse_arkts_mixed_interop, "ArkTS entry cannot be combined with Interop on the same declaration")
 

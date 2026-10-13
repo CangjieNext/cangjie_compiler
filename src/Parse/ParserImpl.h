@@ -1034,6 +1034,7 @@ private:
     void CheckObjCMirrorAnnotation(AST::Annotation& anno) const;
     // Check @ArkTS module/foreignName/namespace options against the proposal grammar.
     void CheckArkTSAnnotation(const AST::Annotation& anno);
+    void CheckForeignValueAnnotation(const AST::Annotation& anno);
     // Check whether member decl can be abstract
     bool CanBeAbstract(const AST::Decl& decl, ScopeKind scopeKind) const;
     void CheckConstructorBody(AST::FuncDecl& ctor, ScopeKind scopeKind, bool inMacro = false);

@@ -393,6 +393,25 @@ void ParserImpl::CheckArkTSAnnotation(const Annotation& anno)
     }
 }
 
+void ParserImpl::CheckForeignValueAnnotation(const Annotation& anno)
+{
+    for (auto& arg : anno.args) {
+        CJC_NULLPTR_CHECK(arg);
+        if (!arg->name.Empty()) {
+            ParseDiagnoseRefactor(DiagKindRefactor::parse_foreign_value_not_literal, *arg);
+            continue;
+        }
+        auto lce = (arg->expr != nullptr && arg->expr->astKind == ASTKind::LIT_CONST_EXPR)
+                       ? DynamicCast<LitConstExpr*>(arg->expr.get())
+                       : nullptr;
+        if (lce == nullptr ||
+            (lce->kind != LitConstKind::INTEGER && lce->kind != LitConstKind::FLOAT &&
+                lce->kind != LitConstKind::STRING)) {
+            ParseDiagnoseRefactor(DiagKindRefactor::parse_foreign_value_not_literal, *arg);
+        }
+    }
+}
+
 OwnedPtr<Annotation> ParserImpl::ParseAnnotation()
 {
     if (this->enableCustomAnno && SeeingMacroCallDecl()) {
@@ -448,6 +467,11 @@ OwnedPtr<Annotation> ParserImpl::ParseAnnotation()
         case AnnotationKind::ARKTS: {
             ParseAnnotationArguments(*annotation);
             CheckArkTSAnnotation(*annotation);
+            break;
+        }
+        case AnnotationKind::FOREIGN_VALUE: {
+            ParseAnnotationArguments(*annotation);
+            CheckForeignValueAnnotation(*annotation);
             break;
         }
         default: {

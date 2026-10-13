@@ -707,6 +707,15 @@ bool CompilerInstance::PerformImportPackage()
                 hasArkTS = hasArkTS || (fd && fd->HasAnno(AnnotationKind::ARKTS) &&
                     fd->TestAttr(Attribute::FOREIGN) && !fd->TestAttr(Attribute::PRIVATE) &&
                     fd->funcBody && !fd->funcBody->body && !fd->GetGeneric());
+                // Foreign variables and enums need the same context/import
+                // injection as foreign functions: their generated glue calls
+                // __cj_arkts_current and ohos.ark_interop value factories.
+                auto vd = DynamicCast<VarDecl*>(decl.get());
+                hasArkTS = hasArkTS || (vd && vd->HasAnno(AnnotationKind::ARKTS) &&
+                    vd->TestAttr(Attribute::FOREIGN) && !vd->outerDecl);
+                auto ed = DynamicCast<EnumDecl*>(decl.get());
+                hasArkTS = hasArkTS || (ed && ed->HasAnno(AnnotationKind::ARKTS) &&
+                    ed->TestAttr(Attribute::FOREIGN) && !ed->outerDecl);
                 // Leave duplicate source declarations to normal conflict
                 // diagnostics; generated calls would add ambiguous-call errors.
                 if (!fd || !IsMinimalArkTSEntry(*fd) || entryNames[fd->identifier.Val()] != 1) {
