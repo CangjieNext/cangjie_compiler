@@ -1482,6 +1482,11 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFor
     if (auto *retVal = GetValue<LocalVar>(buffer->retVal()); retVal != nullptr) {
         obj.SetReturnValue(*retVal);
     }
+    if (buffer->paramDftValHostParam() != 0) {
+        auto paramDftValHostParam = GetValue<Parameter>(buffer->paramDftValHostParam());
+        CJC_NULLPTR_CHECK(paramDftValHostParam);
+        obj.SetParamDftValHostParam(*paramDftValHostParam);
+    }
 }
 
 template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFormat::Function* buffer, Function& obj)
@@ -1490,10 +1495,10 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFor
         return;
     }
     ConfigBase(buffer->base()->base()->base(), obj);
-    if (buffer->paramDftValHostFunc() != 0) {
-        auto paramDftValHostFunc = GetValue<Function>(buffer->paramDftValHostFunc());
-        CJC_NULLPTR_CHECK(paramDftValHostFunc);
-        obj.SetParamDftValHostFunc(*paramDftValHostFunc);
+    if (buffer->paramDftValHostParam() != 0) {
+        auto paramDftValHostParam = GetValue<Parameter>(buffer->paramDftValHostParam());
+        CJC_NULLPTR_CHECK(paramDftValHostParam);
+        obj.SetParamDftValHostParam(*paramDftValHostParam);
     }
     if (buffer->genericDecl() != 0) {
         auto genericDecl = GetValue<Function>(buffer->genericDecl());

@@ -169,6 +169,7 @@ class Parameter : public Value {
     friend class CHIRBuilder;
     friend class FuncBody;
     friend class Expression;
+    friend class Function;
     friend class Lambda;
 
 public:
@@ -203,13 +204,24 @@ public:
     // if parameter do not have debug, return nullptr
     Debug* GetDebugExpr() const;
 
+    // ===--------------------------------------------------------------------===//
+    // Default Parameter Value
+    // ===--------------------------------------------------------------------===//
+    // Desugared function that computes this parameter's default value.
+    // For global/member funcs this is a Function*; for nested funcs it is the
+    // LocalVar result of a Lambda (lifted to Function* after closure conversion).
+    Value* GetParamDftValFunc() const;
+
 private:
+    void SetParamDftValFunc(Value& func);
+    void ClearParamDftValFunc();
+
     Function* ownerFunc = nullptr;
     Lambda* ownerLambda = nullptr;
     std::string srcCodeIdentifier;
     AnnoInfo annoInfo;
+    Value* paramDftValFunc{nullptr};
 
-private:
     explicit Parameter(Type* ty, const std::string& id, Function* ownerFunc);
     explicit Parameter(Type* ty, const std::string& id, Lambda& ownerLambda);
     ~Parameter() override = default;
@@ -550,9 +562,12 @@ public:
     bool IsCFFIWrapper() const;
     void SetCFFIWrapper(bool isWrapper);
 
+    // The host Parameter whose default value is computed by this (desugared) function.
+    Parameter* GetParamDftValHostParam() const;
+    // Convenience: owner Function of GetParamDftValHostParam(), or nullptr.
     Function* GetParamDftValHostFunc() const;
-    void SetParamDftValHostFunc(Function& hostFunc);
-    void ClearParamDftValHostFunc();
+    void SetParamDftValHostParam(Parameter& hostParam);
+    void ClearParamDftValHostParam();
 
     uint64_t GenerateBlockId();
     uint64_t GenerateBlockGroupId();
@@ -703,7 +718,7 @@ private:
     bool isFastNative{false};
     bool isCFFIWrapper{false};
     FuncSigInfo originalLambdaInfo;
-    Function* paramDftValHostFunc{nullptr};
+    Parameter* paramDftValHostParam{nullptr};
     DebugLocation propLoc;
 };
 

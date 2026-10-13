@@ -191,6 +191,11 @@ bool Type::IsMustLocalRegion() const
     return modal.Local() == Mode::MUST && !IsCopyable();
 }
 
+bool Type::IsMaybeLocalRegion() const
+{
+    return modal.Local() == Mode::MAYBE && !IsCopyable();
+}
+
 bool Type::IsReferenceTypeWithRefDims(size_t dims) const
 {
     if (GetRefDims(*this) != dims) {

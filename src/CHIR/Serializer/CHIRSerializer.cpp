@@ -455,8 +455,12 @@ flatbuffers::Offset<PackageFormat::Parameter> CHIRSerializer::CHIRSerializerImpl
     auto ownedLambda = GetId<Expression>(obj.GetOwnerLambda());
     auto srcCodeIdentifier = obj.GetSrcCodeIdentifier();
     auto annoInfo = Serialize<PackageFormat::AnnoInfo>(obj.GetAnnoInfo());
+    uint32_t paramDftValFunc = 0;
+    if (auto* dftFunc = DynamicCast<Function*>(obj.GetParamDftValFunc())) {
+        paramDftValFunc = GetId<Value>(dftFunc);
+    }
     return PackageFormat::CreateParameterDirect(
-        builder, base, ownedFunc, ownedLambda, srcCodeIdentifier.data(), annoInfo);
+        builder, base, ownedFunc, ownedLambda, srcCodeIdentifier.data(), annoInfo, paramDftValFunc);
 }
 
 template <>
@@ -538,7 +542,7 @@ flatbuffers::Offset<PackageFormat::Function> CHIRSerializer::CHIRSerializerImpl:
             oriLambdaGenericTypeParams.empty() ? nullptr : &oriLambdaGenericTypeParams);
     }
     auto genericTypeParams = GetId<Type>(obj.GetGenericTypeParams());
-    auto paramDftValHostFunc = GetId<Value>(obj.GetParamDftValHostFunc());
+    auto paramDftValHostParam = GetId<Value>(obj.GetParamDftValHostParam());
 
     uint32_t body = 0;
     std::vector<uint32_t> params = GetId<Value>(obj.GetParams());
@@ -552,7 +556,7 @@ flatbuffers::Offset<PackageFormat::Function> CHIRSerializer::CHIRSerializerImpl:
 
     return PackageFormat::CreateFunctionDirect(builder, globalSymbolOffset, genericDecl, funcKind, obj.IsFastNative(),
         obj.IsCFFIWrapper(), originalLambdaInfoOffset, genericTypeParams.empty() ? nullptr : &genericTypeParams,
-        paramDftValHostFunc, body, params.empty() ? nullptr : &params, retVal, propLoc, obj.localId, obj.blockId,
+        paramDftValHostParam, body, params.empty() ? nullptr : &params, retVal, propLoc, obj.localId, obj.blockId,
         obj.blockGroupId);
 }
 
@@ -969,9 +973,10 @@ flatbuffers::Offset<PackageFormat::Lambda> CHIRSerializer::CHIRSerializerImpl::S
     auto body = GetId<Value>(obj.GetBody());
     auto retVal = GetId<Value>(obj.GetReturnValue());
     auto isConst = obj.IsCompileTimeValue();
+    auto paramDftValHostParam = GetId<Value>(obj.GetParamDftValHostParam());
     return PackageFormat::CreateLambdaDirect(builder, base, funcTy, isLocalFunc, identifier.data(),
         srcCodeIdentifier.data(), params.empty() ? nullptr : &params,
-        genericTypeParams.empty() ? nullptr : &genericTypeParams, body, retVal, isConst);
+        genericTypeParams.empty() ? nullptr : &genericTypeParams, body, retVal, isConst, paramDftValHostParam);
 }
 
 // ======================= Custom Type Def Serializers =========================
