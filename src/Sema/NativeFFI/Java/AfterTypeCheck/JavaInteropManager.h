@@ -48,12 +48,8 @@ public:
      * depending on the presence of Java interop declarations.
      *
      * @param pkg The package that contains files to be desugared.
-     * @param memberMap A reference to a collection containing member signature metadata,
-     *        used for generating method stubs in synthetic classes.
-     *        This collection contains method signatures of all structs.
      */
-    void DesugarPackage(Package& pkg, const std::unordered_map<Ptr<const InheritableDecl>, MemberMap>& memberMap,
-        std::function<void(AST::Node&)> desugarPropRef);
+    void DesugarPackage(Package& pkg, std::function<void(AST::Node&)> desugarPropRef);
 
 private:
     void CheckNonJavaSuperType(ClassLikeDecl& decl) const;

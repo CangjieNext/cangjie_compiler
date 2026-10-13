@@ -47,6 +47,13 @@ bool IsJavaExportRegistryCompanionReferenceField(const AST::Node& node);
 bool IsUserDefinedJavaImplConstructor(const AST::Decl& implMember);
 
 /**
+ * for interfaces and abstract classes
+ */
+Ptr<AST::FuncDecl> GetJavaRefGetter(AST::ClassLikeDecl& mirrorLike);
+
+bool IsJavaRefGetter(const AST::Decl& fd);
+
+/**
  * Returns JNI signature of `javaCompatibleTy` type.
  * An example of signatures:
  * - `B` for `Int8`

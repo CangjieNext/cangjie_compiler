@@ -11,8 +11,8 @@
  */
 
 #include "OCStructInheritanceCheckerImpl.h"
-#include "../../Utils.h"
-#include "InheritanceChecker/StructInheritanceChecker.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
+#include "NativeFFI/Utils.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
@@ -22,7 +22,7 @@ using namespace Cangjie;
 using namespace Cangjie::AST;
 using namespace Cangjie::Native::FFI;
 
-namespace Cangjie::Interop::ObjC {
+namespace Cangjie::Native::FFI::ObjC {
 
 namespace {
 
@@ -36,8 +36,8 @@ std::string GetAnnoValue(Ptr<Annotation> anno)
     return litExpr->stringValue;
 }
 
-void DiagConflictingAnnotation(
-    DiagnosticEngine& diag, const Decl& declWithAnno, const Decl& otherDecl, const Decl& checkingDecl, AnnotationKind annotationKind)
+void DiagConflictingAnnotation(DiagnosticEngine& diag,
+    const Decl& declWithAnno, const Decl& otherDecl, const Decl& checkingDecl, AnnotationKind annotationKind)
 {
     auto anno = GetAnnotation(declWithAnno, annotationKind);
     CJC_ASSERT(anno);
@@ -49,7 +49,8 @@ void DiagConflictingAnnotation(
                 declWithAnnoRange, declWithAnno.identifier, anno->identifier);
         } else {
             return diag.DiagnoseRefactor(DiagKindRefactor::sema_foreign_name_conflicting_derived_annotation,
-                declWithAnno, MakeRange(declWithAnno.identifier), declWithAnno.identifier, anno->identifier, GetAnnoValue(anno));
+                declWithAnno, MakeRange(declWithAnno.identifier), declWithAnno.identifier, anno->identifier,
+                GetAnnoValue(anno));
         }
     }();
 
@@ -57,7 +58,8 @@ void DiagConflictingAnnotation(
     if (otherAnno && !otherAnno->TestAttr(Attribute::COMPILER_ADD)) {
         auto otherDeclRange = MakeRange(otherAnno->GetBegin(), otherDecl.identifier.End());
         builder.AddNote(
-            otherDecl, otherDeclRange, "Other declaration '" + otherDecl.identifier + "' has a different @" + anno->identifier);
+            otherDecl, otherDeclRange,
+            "Other declaration '" + otherDecl.identifier + "' has a different @" + anno->identifier);
     } else if (otherAnno) {
         builder.AddNote(otherDecl, MakeRange(otherDecl.identifier),
             "Other declaration '" + otherDecl.identifier + "' has a different derived @" + anno->identifier + " '" +
@@ -65,7 +67,8 @@ void DiagConflictingAnnotation(
     } else {
         auto otherDeclRange = MakeRange(otherDecl.identifier);
         builder.AddNote(
-            otherDecl, otherDeclRange, "Other declaration '" + otherDecl.identifier + "' doesn't have a @" + anno->identifier);
+            otherDecl, otherDeclRange,
+            "Other declaration '" + otherDecl.identifier + "' doesn't have a @" + anno->identifier);
     }
 
     builder.AddNote(checkingDecl, MakeRange(checkingDecl.identifier),
@@ -121,7 +124,7 @@ void CheckAnnotation(DiagnosticEngine& diag, TypeManager& typeManager, Annotatio
             DiagConflictingAnnotation(diag, *parent.decl, *child.decl, checkingDecl, annotationKind);
         } else if (!parentAnno && childAnno) {
             DiagConflictingAnnotation(diag, *child.decl, *parent.decl, checkingDecl, annotationKind);
-        } else if (IsForeignNameLikeAnnotation(annotationKind) && (GetAnnoValue(childAnno) != GetAnnoValue(parentAnno))) {
+        } else if (IsForeignNameLikeAnnotation(annotationKind) && GetAnnoValue(childAnno) != GetAnnoValue(parentAnno)) {
             DiagConflictingAnnotation(diag, *parent.decl, *child.decl, checkingDecl, annotationKind);
         }
         return;
@@ -129,7 +132,8 @@ void CheckAnnotation(DiagnosticEngine& diag, TypeManager& typeManager, Annotatio
 
     if (childAnno && !childAnno->TestAttr(Attribute::COMPILER_ADD)) {
         auto range = MakeRange(childAnno->GetBegin(), child.decl->identifier.End());
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_foreign_name_appeared_in_child, *child.decl, range, childAnno->identifier);
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_foreign_name_appeared_in_child,
+            *child.decl, range, childAnno->identifier);
     } else if (childAnno && !parentAnno) {
         DiagConflictingAnnotation(diag, *child.decl, *parent.decl, checkingDecl, annotationKind);
     } else if (!childAnno && parentAnno && child.replaceOther) {
@@ -156,4 +160,58 @@ void CheckForeignAnnotations(DiagnosticEngine& diag, TypeManager& typeManager, c
     CheckAnnotation(diag, typeManager, AnnotationKind::OBJ_C_OPTIONAL, parent, child, checkingDecl);
 }
 
-} // namespace Cangjie::Interop::ObjC
+namespace {
+/**
+    * Clones @p member into @p handleWrapper as a stub.
+    *
+    * The clone drops @ForeignName: the selector it names belongs to the mirrored protocol member, and the stub is
+    * only the wrapper's own implementation of it.
+    */
+template <typename T> void GenerateHandleWrapperClassStub(const ClassDecl& handleWrapper, T& member)
+{
+    auto stub = ASTCloner::Clone(Ptr(&member));
+
+    auto& annos = stub->annotations;
+    auto eraseBeginIt = std::remove_if(
+        annos.begin(), annos.end(), [](auto& anno) { return anno->kind == AnnotationKind::FOREIGN_NAME; });
+    annos.erase(eraseBeginIt, annos.end());
+
+    RebindClonedStubToSynthetic(*stub, const_cast<ClassDecl&>(handleWrapper));
+    handleWrapper.body->decls.push_back(std::move(stub));
+}
+
+void InsertSyntheticAbstractWrapperMethodStubs(const ClassDecl& wrapper, const MemberMap& members)
+{
+    for (const auto& idMemberSignature : members) {
+        const auto& signature = idMemberSignature.second;
+
+        // Only abstract members need an implementation stub in the handle wrapper.
+        if (!signature.decl->TestAttr(Attribute::ABSTRACT)) {
+            continue;
+        }
+
+        switch (signature.decl->astKind) {
+            case ASTKind::FUNC_DECL:
+                GenerateHandleWrapperClassStub(wrapper, *StaticAs<ASTKind::FUNC_DECL>(signature.decl));
+                break;
+            case ASTKind::PROP_DECL:
+                GenerateHandleWrapperClassStub(wrapper, *StaticAs<ASTKind::PROP_DECL>(signature.decl));
+                break;
+            default:
+                continue;
+        }
+    }
+}
+}
+
+void GenerateObjCForeignAbstractStub(const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& memberMap)
+{
+    using namespace Interop::ObjC;
+    for (auto& [decl, members] : memberMap) {
+        if (auto cd = DynamicCast<ClassDecl*>(decl); cd && IsObjCForeignInterfaceHandleWrapper(*cd)) {
+            InsertSyntheticAbstractWrapperMethodStubs(*cd, members);
+        }
+    }
+}
+
+} // namespace Cangjie::Native::FFI::ObjC

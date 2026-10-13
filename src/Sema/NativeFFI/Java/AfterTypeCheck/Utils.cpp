@@ -10,7 +10,6 @@
 #include "NativeFFI/Java/Utils.h"
 #include "TypeCheckUtil.h"
 
-#include "Desugar/AfterTypeCheck.h"
 #include "JavaDesugarManager.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
@@ -134,30 +133,6 @@ Ptr<VarDecl> GetJavaRefField(ClassLikeDecl& mirror)
     }
     CJC_ABORT(); // Internal error: mirror is not @JavaMirror or weak reference field was not generated!
     return nullptr;
-}
-
-bool IsJavaRefGetter(const Decl& fd)
-{
-    return fd.astKind == ASTKind::FUNC_DECL && fd.TestAttr(Attribute::COMPILER_ADD) &&
-        fd.identifier.Val() == JAVA_REF_GETTER_FUNC_NAME;
-}
-
-Ptr<FuncDecl> GetJavaRefGetter(ClassLikeDecl& mirrorLike)
-{
-    CJC_ASSERT(mirrorLike.IsJavaForeign() || mirrorLike.IsJavaExport());
-    const std::function<bool(const Decl& d)>& isDeclJavaRefGetterFunc = [](const Decl& d) {
-        return IsJavaRefGetter(d);
-    };
-
-    if (auto cd = DynamicCast<ClassDecl*>(&mirrorLike)) {
-        if (!IsJObject(mirrorLike)) {
-            return GetJavaRefGetter(*cd->GetSuperClassDecl());
-        } else {
-            return FindFirstMemberDecl<FuncDecl, ASTKind::FUNC_DECL>(mirrorLike, isDeclJavaRefGetterFunc);
-        }
-    } else {
-        return FindFirstMemberDecl<FuncDecl, ASTKind::FUNC_DECL>(mirrorLike, isDeclJavaRefGetterFunc);
-    }
 }
 
 OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr, FuncDecl& javaRefGetter)

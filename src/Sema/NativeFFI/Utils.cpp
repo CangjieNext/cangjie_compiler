@@ -481,7 +481,7 @@ bool AreParamTypeKindsValid(const FuncDecl& fd, const std::vector<TypeKind>& typ
 
 void RebindClonedStubToSynthetic(Decl& stub, ClassDecl& synthetic)
 {
-    stub.outerDecl = Ptr(&synthetic);
+    stub.outerDecl = &synthetic;
     Walker(&stub, [&synthetic](Ptr<Node> node) {
         node->curFile = synthetic.curFile;
         if (auto decl = DynamicCast<Decl>(node)) {
