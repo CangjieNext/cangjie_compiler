@@ -222,6 +222,23 @@ std::set<std::string> GetFeatures(const CHIRFormat::GlobalValue* val)
     
     return features;
 }
+
+// When merging several parent CHIRs, keep the more specific definition:
+// feature-set strict supersets win (same as TryUpdateExistingValue), and SPECIFIC
+// overrides COMMON even when both feature sets are equal (e.g. both empty).
+bool ShouldOverrideDeserializedGlobalValue(
+    const GlobalValue& existing, const std::set<std::string>& newFeatures, const AttributeInfo& newAttrs)
+{
+    const auto& oldFeatures = existing.GetFeatures();
+    bool newIsFeatureSuperSet = std::includes(newFeatures.begin(), newFeatures.end(), oldFeatures.begin(),
+                                        oldFeatures.end()) &&
+        newFeatures.size() > oldFeatures.size();
+    if (newIsFeatureSuperSet) {
+        return true;
+    }
+    return newAttrs.TestAttr(Attribute::SPECIFIC) && existing.TestAttr(Attribute::COMMON) &&
+        !existing.TestAttr(Attribute::SPECIFIC);
+}
 } // namespace
 
 template <> Position CHIRDeserializer::CHIRDeserializerImpl::Create(const CHIRFormat::Pos* obj)
@@ -404,6 +421,10 @@ template <> ExtendDef* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const
     auto srcCodeIdentifier = obj->base()->srcCodeIdentifier()->str();
     auto packageName = obj->base()->packageName()->str();
     auto attrs = CreateAttr(obj->base()->base()->attributes());
+    // Nested multi-parent merges may serialize PREVIOUSLY_DESERIALIZED on ExtendDef (set when a
+    // later parent skipped Config). Restoring it here would make Config() bail out before
+    // SetExtendedType, leaving a hollow ExtendDef that crashes in SetExtendInfo.
+    attrs.SetAttr(Attribute::PREVIOUSLY_DESERIALIZED, false);
     auto imported = attrs.TestAttr(CHIR::Attribute::IMPORTED);
     auto genericParams = GetType<GenericType>(obj->genericParams());
     auto result = builder.CreateExtend(
@@ -654,6 +675,35 @@ template <> GlobalVar* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const
     auto identifier = valueBase->identifier()->str();
     if (compilePlatform) {
         if (auto exist = builder.GetCurPackage()->TryGetGlobalVar(identifier)) {
+            auto newFeatures = GetFeatures(globalValue);
+            auto newAttrs = CreateAttr(valueBase->base()->attributes());
+            if (ShouldOverrideDeserializedGlobalValue(*exist, newFeatures, newAttrs)) {
+                // Allow Config() to replace initializer / attrs from the more specific parent.
+                exist->DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+                exist->SetFeatures(newFeatures);
+                // Common/specific lets use GLOBALVAR_INIT funcs; those must be replaced too.
+                if (auto* initFunc = exist->GetInitFunc()) {
+                    initFunc->DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+                    pendingInitFuncReplace.insert(initFunc);
+                    // Drop Apply(initFunc) from earlier parents' file inits; the overriding
+                    // parent's file init will own the call (avoids double-init / wrong order).
+                    for (auto* func : builder.GetCurPackage()->GetGlobalFunctions()) {
+                        if (!func->TestAttr(Attribute::INITIALIZER) || func->GetBody() == nullptr) {
+                            continue;
+                        }
+                        for (auto* block : func->GetBody()->GetBlocks()) {
+                            auto exprs = block->GetExpressions();
+                            for (auto* expr : exprs) {
+                                if (auto* apply = DynamicCast<Apply>(expr);
+                                    apply && apply->GetCallee() == initFunc) {
+                                    apply->RemoveSelfFromBlock();
+                                }
+                            }
+                        }
+                    }
+                }
+                return exist;
+            }
             exist->EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
             return exist;
         }
@@ -679,6 +729,15 @@ template <> Function* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const 
     auto identifier = valueBase->identifier()->str();
     if (compilePlatform) {
         if (auto exist = builder.GetCurPackage()->TryGetGlobalFunc(identifier)) {
+            auto newFeatures = GetFeatures(globalValue);
+            auto newAttrs = CreateAttr(valueBase->base()->attributes());
+            bool overrideByAttrs = ShouldOverrideDeserializedGlobalValue(*exist, newFeatures, newAttrs);
+            bool overrideInitBody = pendingInitFuncReplace.erase(exist) > 0;
+            if (overrideByAttrs || overrideInitBody) {
+                exist->DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+                exist->SetFeatures(newFeatures);
+                return exist;
+            }
             exist->EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
             return exist;
         }
@@ -1469,6 +1528,11 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const CHIRFormat
         return;
     }
     ConfigBase(buffer->base()->base()->base(), obj);
+    // Serialized parents may carry PREVIOUSLY_DESERIALIZED; drop it after a real Config.
+    obj.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+    if (obj.TestAttr(Attribute::SPECIFIC)) {
+        obj.DisableAttr(Attribute::COMMON);
+    }
     if (buffer->paramDftValHostFunc() != 0) {
         auto paramDftValHostFunc = GetValue<Function>(buffer->paramDftValHostFunc());
         CJC_NULLPTR_CHECK(paramDftValHostFunc);
@@ -1493,7 +1557,11 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const CHIRFormat
         // func with body
         auto body = GetValue<BlockGroup>(buffer->body());
         if (body) {
-            obj.InitBody(*body);
+            if (obj.GetBody() != nullptr) {
+                obj.ReplaceBody(*body);
+            } else {
+                obj.InitBody(*body);
+            }
         } else {
             CJC_ASSERT(obj.TestAttr(Attribute::COMMON));
         }
@@ -1549,6 +1617,11 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const CHIRFormat
         return;
     }
     ConfigBase(buffer->base()->base()->base(), obj);
+    // Serialized parents may carry PREVIOUSLY_DESERIALIZED; drop it after a real Config.
+    obj.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+    if (obj.TestAttr(Attribute::SPECIFIC)) {
+        obj.DisableAttr(Attribute::COMMON);
+    }
     if (buffer->base()->annoInfo()) {
         obj.SetAnnoInfo(Create<AnnoInfo>(buffer->base()->annoInfo()));
     }
@@ -1568,6 +1641,8 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const CHIRFormat
         return;
     }
     ConfigCustomTypeDef(buffer->base(), obj);
+    // Serialized parents may carry PREVIOUSLY_DESERIALIZED; drop it after a real Config.
+    obj.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
     for (auto info : Create<EnumCtorInfo>(buffer->ctors())) {
         obj.AddCtor(info);
     }
@@ -1579,6 +1654,7 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const CHIRFormat
         return;
     }
     ConfigCustomTypeDef(buffer->base(), obj);
+    obj.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
     obj.SetCStruct(buffer->isCStruct());
 }
 
@@ -1588,6 +1664,7 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const CHIRFormat
         return;
     }
     ConfigCustomTypeDef(buffer->base(), obj);
+    obj.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
     if (buffer->isAnnotation()) {
         auto targets = GetValue<GlobalVar>(buffer->annotationTargets());
         obj.SetAnnotationTargets(std::move(targets));
@@ -1604,6 +1681,7 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const CHIRFormat
         return;
     }
     ConfigCustomTypeDef(buffer->base(), obj);
+    obj.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
     auto info = GetType<Type>(buffer->extendedType());
     if (info) {
         obj.SetExtendedType(*info);

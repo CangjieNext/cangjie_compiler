@@ -61,18 +61,28 @@ void SetGlobalVarLinkageType(Value& var, const AST::VarDecl& decl, bool isLifted
     var.Set<LinkTypeInfo>(decl.linkage);
 }
 
-void TryUpdateExistingValue(GlobalValue& existing, const std::set<std::string>& newFeatures)
+void TryUpdateExistingValue(GlobalValue& existing, const std::set<std::string>& newFeatures,
+    bool newIsSpecific = false)
 {
     auto oldFeatures = existing.GetFeatures();
     bool newIsSuperSet = std::includes(newFeatures.begin(), newFeatures.end(),
         oldFeatures.begin(), oldFeatures.end()) && newFeatures.size() > oldFeatures.size();
-    if (!newIsSuperSet) {
-        // already existed value more specific, so no need to update
-        existing.EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+    bool specificOverridesCommon = newIsSpecific && existing.TestAttr(Attribute::COMMON) &&
+        !existing.TestAttr(Attribute::SPECIFIC);
+    if (!newIsSuperSet && !specificOverridesCommon) {
+        // Keep a more-specific definition for later chir merge: do not stamp
+        // PREVIOUSLY_DESERIALIZED when a COMMON/less-specific decl is seen after SPECIFIC.
+        if (!(existing.TestAttr(Attribute::SPECIFIC) && !newIsSpecific)) {
+            existing.EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+        }
     } else {
         // will be updated as it is loaded first time
         existing.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
         existing.SetFeatures(newFeatures);
+        if (specificOverridesCommon) {
+            existing.DisableAttr(Attribute::COMMON);
+            existing.EnableAttr(Attribute::SPECIFIC);
+        }
     }
 }
 } // namespace
@@ -780,6 +790,12 @@ void AST2CHIR::CreateImportedValueSignatureAndSetGlobalCache(const AST::VarDecl&
 GlobalVar* AST2CHIR::CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLocalConst)
 {
     if (auto gv = TryGetDeserialized<Value>(decl); gv) {
+        if (mergingSpecific) {
+            auto* globalVar = StaticCast<GlobalVar*>(gv);
+            auto features = decl.curFile ? decl.curFile->GetFeatures() : std::set<std::string>{};
+            TryUpdateExistingValue(
+                *globalVar, features, decl.TestAttr(AST::Attribute::SPECIFIC));
+        }
         globalCache.Set(decl, *gv);
         // for cjmp, want to serializer whole decl, it is a temp solution
         if (IsSrcCodeImportedGlobalDecl(decl, opts)) {

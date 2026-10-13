@@ -224,6 +224,11 @@ bool NeedCheck(Node& node)
         }
         return NeedRecheck(*RawStaticCast<InheritableDecl*>(&node));
     }
+    // Common decl already merged into its specific counterpart: do not re-check the hollow shell.
+    if (auto* decl = DynamicCast<Decl*>(&node);
+        decl && decl->TestAttr(Attribute::COMMON) && decl->specificImplementation) {
+        return false;
+    }
     return true;
 }
 
@@ -366,6 +371,19 @@ void StructInheritanceChecker::Check()
 void StructInheritanceChecker::CheckMembersWithInheritedDecls(const InheritableDecl& decl)
 {
     if (structInheritedMembers.count(&decl) > 0) {
+        return;
+    }
+    // After MergeCommonIntoSpecific, the common nominal is a hollow shell (members moved).
+    // Instantiation checks (CheckInstMemberSignatures) may still visit the common generic decl;
+    // redirect to the specific implementation and reuse its member map.
+    if (decl.TestAttr(Attribute::COMMON) && decl.specificImplementation) {
+        auto& specific = *StaticCast<InheritableDecl*>(decl.specificImplementation.get());
+        CheckMembersWithInheritedDecls(specific);
+        if (auto it = structInheritedMembers.find(&specific); it != structInheritedMembers.end()) {
+            structInheritedMembers.emplace(&decl, it->second);
+        } else {
+            structInheritedMembers.emplace(&decl, MemberMap{});
+        }
         return;
     }
     checkingDecls.push_back(&decl);

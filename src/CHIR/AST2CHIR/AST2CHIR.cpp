@@ -553,11 +553,11 @@ bool AST2CHIR::ToCHIRPackage(AST::Package& node)
     } else if (TryToDeserializeCHIR()) {
         package = builder.GetCurPackage();
         BuildDeserializedTable();
+        // Relative common: merge parent parts and still emit CHIR for the next stage.
+        outputCHIR = opts.outputMode == GlobalOptions::OutputMode::CHIR;
     } else {
         return false;
     }
-    // Translating common alongside with merging specific is not supported
-    CJC_ASSERT(!(outputCHIR && mergingSpecific));
     package->SetPackageAccessLevel(BuildPackageAccessLevel(node.accessible));
     RegisterAllSources();
     CJC_NULLPTR_CHECK(package);

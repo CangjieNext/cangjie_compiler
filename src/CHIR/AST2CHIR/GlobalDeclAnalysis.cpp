@@ -362,9 +362,15 @@ static void SaveCJMPDependencies(Ptr<const AST::Decl> decl, std::vector<Ptr<cons
 
 static void RestoreCJMPDependencies(Ptr<const AST::Decl> decl, std::vector<Ptr<const AST::Decl>>& dependencies)
 {
+    // Matched common: its initializer is not emitted. Drop deps scanned from the old
+    // initializer and do not restore edges saved on this decl.
+    if (decl->specificImplementation) {
+        dependencies.clear();
+        return;
+    }
     for (auto dependency : decl->dependencies) {
+        // Prefer the specific side only; common initializer may be removed later.
         if (dependency->specificImplementation) {
-            dependencies.emplace_back(dependency);
             dependencies.emplace_back(dependency->specificImplementation);
         } else {
             dependencies.emplace_back(dependency);
@@ -397,8 +403,13 @@ void GlobalDeclAnalysis::AnalysisDependency(const ElementList<Ptr<const AST::Dec
         if (mergingSpecific) {
             ReplaceCommonDependenciesWithSpecific(dependencies);
             RestoreCJMPDependencies(node, dependencies);
-        }
-        if (outputChir) {
+            // Persist onto the decl for multi-parent package-init ordering. Parents already
+            // saved edges when emitting CHIR; newly introduced specific vars (e.g. child
+            // `let d = c + 1000` with --output-type=dylib) only exist in this analysis
+            // result and would otherwise be invisible to CreatePackageInit.
+            node->dependencies.clear();
+            SaveCJMPDependencies(node, dependencies);
+        } else if (outputChir) {
             SaveCJMPDependencies(node, dependencies);
         }
         (void)std::remove_if(dependencies.begin(), dependencies.end(),

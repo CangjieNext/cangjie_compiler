@@ -6,6 +6,9 @@
 
 #include "cangjie/CHIR/AST2CHIR/GlobalVarInitializer.h"
 
+#include <unordered_map>
+#include <unordered_set>
+
 #include "cangjie/AST/Node.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/IR/Annotation.h"
@@ -860,20 +863,221 @@ inline std::pair<Function*, Block*> GlobalVarInitializer::PreparePackageInit(con
 /// 4. call runtime CJ_MRT_PreInitializePackage
 /// 5. annotation factory instance inits
 /// 6. current package file / global-var inits
+namespace {
+// Prefer the specific decl when a common decl was matched; used when ordering inits across
+// several parent CHIRs (diamond merge) where the same logical var appears more than once.
+Ptr<const AST::Decl> EffectiveInitDecl(Ptr<const AST::Decl> decl)
+{
+    if (decl->specificImplementation) {
+        return decl->specificImplementation;
+    }
+    return decl;
+}
+
+bool IsCurrentPackageFileInit(const Function& func, const std::string& pkgName)
+{
+    if (!func.TestAttr(Attribute::INITIALIZER) || func.GetPackageName() != pkgName) {
+        return false;
+    }
+    // File-level init mangling: @_CGF... (see MANGLE_GLOBAL_FILE_INIT_PREFIX).
+    const auto& id = func.GetIdentifier();
+    return id.find("_CGF") != std::string::npos;
+}
+
+// Topological order of vars for diamond/multi-parent merge. File-level initOrder is not
+// reliable here: the same common file can appear once per parent with different remnants.
+std::vector<Ptr<const AST::VarDecl>> OrderVarsByDependencies(
+    const std::vector<Ptr<const AST::VarDecl>>& vars)
+{
+    // Match by mangled name: diamond merge has distinct AST nodes per parent for one var.
+    std::unordered_map<std::string, size_t> index;
+    for (size_t i = 0; i < vars.size(); ++i) {
+        index.emplace(vars[i]->mangledName, i);
+    }
+    std::vector<std::vector<size_t>> succ(vars.size());
+    std::vector<size_t> indeg(vars.size(), 0);
+    for (size_t i = 0; i < vars.size(); ++i) {
+        for (auto dep : vars[i]->dependencies) {
+            auto effective = EffectiveInitDecl(dep);
+            auto* depVd = DynamicCast<const AST::VarDecl*>(effective.get());
+            if (depVd == nullptr) {
+                continue;
+            }
+            auto it = index.find(depVd->mangledName);
+            if (it == index.end() || it->second == i) {
+                continue;
+            }
+            // vars[i] depends on effective => effective must run first.
+            succ[it->second].push_back(i);
+            indeg[i]++;
+        }
+    }
+    std::vector<size_t> queue;
+    for (size_t i = 0; i < vars.size(); ++i) {
+        if (indeg[i] == 0) {
+            queue.push_back(i);
+        }
+    }
+    std::vector<Ptr<const AST::VarDecl>> ordered;
+    ordered.reserve(vars.size());
+    std::vector<bool> seen(vars.size(), false);
+    for (size_t qi = 0; qi < queue.size(); ++qi) {
+        size_t u = queue[qi];
+        ordered.push_back(vars[u]);
+        seen[u] = true;
+        for (size_t v : succ[u]) {
+            if (--indeg[v] == 0) {
+                queue.push_back(v);
+            }
+        }
+    }
+    // Cycle or missing edges: append leftovers in original order.
+    for (size_t i = 0; i < vars.size(); ++i) {
+        if (!seen[i]) {
+            ordered.push_back(vars[i]);
+        }
+    }
+    return ordered;
+}
+} // namespace
+
 void GlobalVarInitializer::CreatePackageInit(const AST::Package& curPackage, const InitOrder& initOrder)
 {
     auto [packageInit, curBlock] = PreparePackageInit(curPackage);
     InsertAnnoFactoryInitsIntoPackageInit(*packageInit);
 
-    for (auto& fileAndVars : initOrder) {
-        // maybe there isn't global var decl in one file, in this case, we don't generate file init func
-        if (!fileAndVars.second.empty() || enableIncre) {
-            if (!fileAndVars.second.empty() && IsSymbolImportedDecl(*fileAndVars.second[0], opts)) {
+    const bool multiParentMerge = trans.mergingSpecific && opts.commonPartChirs.size() > 1;
+    if (multiParentMerge) {
+        // Diamond merge can list the same common file once per parent. File-level initOrder is
+        // then wrong (e.g. c before b). Translate file inits, then re-insert Applies in an order
+        // derived from per-var dependencies (specific wins).
+        std::unordered_map<std::string, Ptr<const AST::VarDecl>> byMangle;
+        std::vector<Ptr<const AST::VarDecl>> uniqueVars;
+        std::unordered_map<const AST::File*, Function*> fileToInit;
+        for (auto& fileAndVars : initOrder) {
+            if (fileAndVars.second.empty() && !enableIncre) {
                 continue;
             }
-            // only generate file init for this package, not imported files
-            if (auto fileInit = TranslateFileInitializer(*fileAndVars.first, fileAndVars.second)) {
-                InsertInitializerIntoPackageInitializer(*fileInit, *packageInit);
+            const AST::File* file = fileAndVars.first.get();
+            // Parent source-set files are often marked IMPORTED; still belong to this package.
+            if (file == nullptr || file->curPackage == nullptr ||
+                file->curPackage->fullPackageName != curPackage.fullPackageName) {
+                continue;
+            }
+            auto fileInit = TranslateFileInitializer(*file, fileAndVars.second);
+            if (fileInit) {
+                fileToInit[file] = fileInit;
+            }
+            for (auto decl : fileAndVars.second) {
+                auto* vd = DynamicCast<const AST::VarDecl*>(decl);
+                if (vd == nullptr) {
+                    continue;
+                }
+                // Use the specific decl when the common one was matched.
+                if (vd->specificImplementation) {
+                    vd = DynamicCast<const AST::VarDecl*>(vd->specificImplementation.get());
+                    if (vd == nullptr) {
+                        continue;
+                    }
+                }
+                auto [it, inserted] = byMangle.emplace(vd->mangledName, vd);
+                if (inserted) {
+                    uniqueVars.push_back(vd);
+                    continue;
+                }
+                // Parent AST often keeps COMMON on both sides after cjo merge; prefer the
+                // decl whose file-init actually Applies this var's initializer.
+                auto fileInitOwnsVar = [](Function* fi, const AST::VarDecl& varDecl) {
+                    if (fi == nullptr || fi->GetBody() == nullptr) {
+                        return false;
+                    }
+                    const std::string initName = "@" + GetVarInitName(varDecl);
+                    for (auto* block : fi->GetBody()->GetBlocks()) {
+                        for (auto* expr : block->GetExpressions()) {
+                            auto* apply = DynamicCast<Apply>(expr);
+                            if (apply == nullptr || apply->GetCallee() == nullptr) {
+                                continue;
+                            }
+                            if (apply->GetCallee()->GetIdentifier() == initName) {
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                };
+                Function* newFI = nullptr;
+                Function* oldFI = nullptr;
+                if (vd->curFile) {
+                    auto fIt = fileToInit.find(vd->curFile.get());
+                    if (fIt != fileToInit.end()) {
+                        newFI = fIt->second;
+                    }
+                }
+                if (it->second->curFile) {
+                    auto fIt = fileToInit.find(it->second->curFile.get());
+                    if (fIt != fileToInit.end()) {
+                        oldFI = fIt->second;
+                    }
+                }
+                const bool newBetter =
+                    (vd->TestAttr(AST::Attribute::SPECIFIC) &&
+                        !it->second->TestAttr(AST::Attribute::SPECIFIC)) ||
+                    (!vd->TestAttr(AST::Attribute::COMMON) &&
+                        it->second->TestAttr(AST::Attribute::COMMON)) ||
+                    (fileInitOwnsVar(newFI, *vd) && !fileInitOwnsVar(oldFI, *it->second));
+                if (newBetter) {
+                    for (auto& slot : uniqueVars) {
+                        if (slot == it->second) {
+                            slot = vd;
+                            break;
+                        }
+                    }
+                    it->second = vd;
+                }
+            }
+        }
+        auto orderedVars = OrderVarsByDependencies(uniqueVars);
+        std::vector<Function*> orderedFileInits;
+        std::unordered_set<Function*> seenFileInits;
+        for (auto vd : orderedVars) {
+            auto it = fileToInit.find(vd->curFile.get());
+            if (it == fileToInit.end() || it->second == nullptr) {
+                continue;
+            }
+            if (seenFileInits.insert(it->second).second) {
+                orderedFileInits.push_back(it->second);
+            }
+        }
+        // Drop stale file-init Applies (wrong order / empty common remnants), then re-append
+        // in dependency order via InsertInitializerIntoPackageInitializer (move-to-end).
+        Ptr<Block> block = GetBlockWithInitializers(*packageInit->GetBody());
+        {
+            auto exprs = block->GetExpressions();
+            for (auto* expr : exprs) {
+                auto* apply = DynamicCast<Apply>(expr);
+                if (apply == nullptr) {
+                    continue;
+                }
+                auto* callee = DynamicCast<Function>(apply->GetCallee());
+                if (callee && IsCurrentPackageFileInit(*callee, curPackage.fullPackageName)) {
+                    apply->RemoveSelfFromBlock();
+                }
+            }
+        }
+        for (auto* fileInit : orderedFileInits) {
+            InsertInitializerIntoPackageInitializer(*fileInit, *packageInit);
+        }
+    } else {
+        for (auto& fileAndVars : initOrder) {
+            // maybe there isn't global var decl in one file, in this case, we don't generate file init func
+            if (!fileAndVars.second.empty() || enableIncre) {
+                if (!fileAndVars.second.empty() && IsSymbolImportedDecl(*fileAndVars.second[0], opts)) {
+                    continue;
+                }
+                // only generate file init for this package, not imported files
+                if (auto fileInit = TranslateFileInitializer(*fileAndVars.first, fileAndVars.second)) {
+                    InsertInitializerIntoPackageInitializer(*fileInit, *packageInit);
+                }
             }
         }
     }

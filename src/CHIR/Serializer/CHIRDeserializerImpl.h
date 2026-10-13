@@ -18,6 +18,7 @@
 #endif
 #include <fstream>
 #include <iostream>
+#include <unordered_set>
 #include <utility>
 
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
@@ -71,6 +72,10 @@ private:
     std::unordered_map<uint32_t, Value*> id2Value{{0, nullptr}};
     std::unordered_map<uint32_t, Expression*> id2Expression{{0, nullptr}};
     std::unordered_map<uint32_t, CustomTypeDef*> id2CustomTypeDef{{0, nullptr}};
+
+    // When a later parent overrides a GlobalVar, its existing init Function must also
+    // accept Config() (ReplaceBody). Track those funcs across Deserialize of the same chir.
+    std::unordered_set<Function*> pendingInitFuncReplace;
 
     // lazy GenericType config
     std::vector<std::pair<GenericType*, const CHIRFormat::GenericType*>> genericTypeConfig;
