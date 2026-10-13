@@ -118,6 +118,8 @@ static std::unordered_set<std::string> CollectAspectCandidates(const Package& pk
         if (func->GetPackageName() != pkg.GetName() || func->GetFuncKind() != FuncKind::DEFAULT ||
             func->TestAttr(Attribute::GENERIC) || func->TestAttr(Attribute::FOREIGN) ||
             func->TestAttr(Attribute::ABSTRACT) || func->GetSrcCodeIdentifier() == "main" ||
+            (func->TestAttr(Attribute::PLUGIN_ADDED) && func->GetSrcCodeIdentifier().empty() &&
+                func->GetAspectSourceOrigin().empty()) ||
             (func->GetParentCustomTypeDef() != nullptr && func->GetParentCustomTypeDef()->IsGenericDef()) ||
             (func->TestAttr(Attribute::COMPILER_ADD) && func->GetAspectSourceOrigin().empty())) {
             continue;
@@ -1250,6 +1252,10 @@ bool ToCHIR::Run()
         std::unordered_set<std::string>{};
     // 3. run plugin for CHIR
     if (!PerformPlugin()) {
+        return false;
+    }
+    // Reject late source candidates before optimization can erase an unused declaration.
+    if (sealAspectCandidates && !CheckAspectCandidateSeal(*chirPkg, aspectCandidates, diag)) {
         return false;
     }
     // 4. Canonicalization, after this pass, the CHIR is ready for analysis and optimization.

@@ -51,6 +51,19 @@ TEST_F(OptionTest, GlobalOptionParseFromArgsTest)
     EXPECT_EQ(gblOpts->outputMode, GlobalOptions::OutputMode::STATIC_LIB);
 }
 
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+TEST_F(OptionTest, RepeatedAnnotationMetadataFlag)
+{
+    std::vector<std::string> argStrs = {"cjc", "--no-prelude", "--experimental",
+        "--emit-chir-annotation-metadata", "--emit-chir-annotation-metadata", srcFile};
+    ArgList argList;
+    ASSERT_TRUE(optTbl->ParseArgs(argStrs, argList));
+    ASSERT_TRUE(gblOpts->ParseFromArgs(argList));
+    EXPECT_TRUE(gblOpts->emitCHIRAnnotationMetadata);
+    EXPECT_FALSE(argList.IsWarned(Options::ID::EMIT_CHIR_ANNOTATION_METADATA));
+}
+#endif
+
 TEST_F(OptionTest, PgoOptionsTest01)
 {
     std::vector<std::string> argStrs = {"cjc", "--pgo-instr-gen=cj.profraw", srcFile};

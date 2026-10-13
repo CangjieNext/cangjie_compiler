@@ -366,7 +366,7 @@ OPTION("--debug-annotations", DUMP_ANNOTATIONS_DEBUG, FLAG, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Debug computing annotations stage")
 OPTION("--emit-chir-annotation-metadata", EMIT_CHIR_ANNOTATION_METADATA, FLAG, { BACKEND(CJNATIVE) },
-    { GROUP(GLOBAL) COMMA GROUP(VISIBLE) }, nullptr, {}, SINGLE_OCCURRENCE,
+    { GROUP(GLOBAL) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Emit compiler-resolved annotation identities and scalar fields in CHIR")
 OPTION("--aspect-import-symbols", ASPECT_IMPORT_SYMBOLS, SEPARATED, { BACKEND(CJNATIVE) },
     { GROUP(GLOBAL) COMMA GROUP(VISIBLE) }, nullptr, {}, SINGLE_OCCURRENCE,
