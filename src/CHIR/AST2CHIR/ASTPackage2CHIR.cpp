@@ -47,6 +47,18 @@ bool IsLocalConstFuncInStaticMember(const AST::FuncDecl& astFunc)
     return IsLocalFunc(astFunc) && GetOuterDecl(astFunc)->TestAttr(AST::Attribute::STATIC);
 }
 
+// Wire a host Parameter that has a default value to its desugar Function.
+// Desugar funcs must already be present in globalCache (collected/created before the host).
+void LinkParamWithDftValFuncIfAny(
+    const AST::FuncParam& astParam, Parameter& chirParam, const AST2CHIRNodeMap<Value>& globalCache)
+{
+    if (astParam.desugarDecl == nullptr) {
+        return;
+    }
+    auto dftFunc = StaticCast<Function*>(globalCache.Get(*astParam.desugarDecl));
+    dftFunc->SetParamDftValHostParam(chirParam);
+}
+
 void SetGlobalVarLinkageType(Value& var, const AST::VarDecl& decl, bool isLiftedLocalConst, bool isWin)
 {
     // local const var is lifted to global const var by CHIR, its linkage must be internal
@@ -157,44 +169,10 @@ void AST2CHIR::CollectFuncDecl(AST::FuncDecl& funcDecl)
 
     if (funcDecl.TestAttr(AST::Attribute::GENERIC)) {
         CollectInstantiatedDecls(funcDecl);
-        // Collect the function
-        CollectDeclToList(funcDecl, globalAndMemberFuncs);
-        // We need to collect the func itself and the default param func if there is any
-        for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
-            if (param->desugarDecl) {
-                CollectDeclToList(*param->desugarDecl, globalAndMemberFuncs);
-            }
-        }
-    } else if (funcDecl.outerDecl && funcDecl.outerDecl->GetTy()->HasGeneric()) {
-        // When the func is not generic decl, but if the outerDecl of the funcDecl is generic, we still need to
-        // collect this funcDecl.
-        CollectDeclToList(funcDecl, globalAndMemberFuncs);
-        for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
-            /*
-            class A<T> {
-                var a:T
-                init(b:T) {
-                    a = b
-                }
-                func foo(c!:T = a, b!:Int64 = 2) {
-                    return 0
-                }
-            }
-            */
-            if (param->desugarDecl) {
-                CollectDeclToList(*param->desugarDecl, globalAndMemberFuncs);
-            }
-        }
-    } else {
-        // `instantiated` decl denote that: generic definition in up-stream pkg, but instantiated in current pkg, these
-        // decls's IMPORTED Attribute is false,So we can't distinguish it from the current package decl.
-        CollectDeclToList(funcDecl, globalAndMemberFuncs);
-        for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
-            if (param->desugarDecl) {
-                CollectDeclToList(*param->desugarDecl, globalAndMemberFuncs);
-            }
-        }
     }
+    // Also covers: non-generic method of a generic outerDecl, and instantiated decls whose
+    // IMPORTED attr is false (generic defined upstream, instantiated in current package).
+    CollectFuncDeclToList(funcDecl, globalAndMemberFuncs);
 }
 
 void AST2CHIR::CollectMemberDecl(AST::Decl& decl)
@@ -429,14 +407,24 @@ void AST2CHIR::CollectImportedGenericDecl(AST::Decl& decl)
     }
 }
 
-void AST2CHIR::CollectFuncDeclToList(AST::FuncDecl& func, std::vector<Ptr<const AST::Decl>>& list)
+void AST2CHIR::CollectDesugarParamFuncs(AST::FuncDecl& func, std::vector<Ptr<const AST::Decl>>& list)
 {
-    CollectDeclToList(func, list);
     for (auto& param : func.funcBody->paramLists[0]->params) {
         if (param->desugarDecl) {
             CollectDeclToList(*param->desugarDecl, list);
         }
     }
+}
+
+void AST2CHIR::CollectFuncDeclToList(AST::FuncDecl& func, std::vector<Ptr<const AST::Decl>>& list)
+{
+    // Order matters: desugar funcs first, then host.
+    // Must collect param default-value desugar funcs before the host.
+    // CacheTopLevelDeclToGlobalSymbolTable / CreateFuncSignature iterate lists in order:
+    // desugar signatures are created first, then the host; TranslateFuncParams of the host
+    // looks up desugar decls from globalCache to wire Parameter <-> desugar Function.
+    CollectDesugarParamFuncs(func, list);
+    CollectDeclToList(func, list);
 }
 
 void AST2CHIR::CollectImportedPropDecl(AST::PropDecl& propDecl)
@@ -578,9 +566,6 @@ void AST2CHIR::SetFuncAttributeAndLinkageType(const AST::FuncDecl& astFunc, Func
 
     // 3. ----------------------- Others -----------------------
     chirFunc.SetFuncKind(GetFuncKindFromAST(astFunc));
-    if (chirFunc.GetFuncKind() == FuncKind::DEFAULT_PARAMETER_FUNC) {
-        chirFunc.SetParamDftValHostFunc(*StaticCast<Function*>(globalCache.Get(*astFunc.ownerFunc)));
-    }
     chirFunc.SetFastNative(astFunc.isFastNative);
 }
 
@@ -679,22 +664,8 @@ void AST2CHIR::CreatePseudoImportedFuncSignatureAndSetGlobalCache(const AST::Fun
     // an AST decl in imported package but without `IMPORTED` attr
     fn->EnableAttr(Attribute::IMPORTED);
     SetFuncAttributeAndLinkageType(funcDecl, *fn);
-
-    CJC_ASSERT(funcDecl.funcBody->paramLists.size() == 1);
     // NOTE: 'AnnoInfo' will be added during translating customDef.
-    if (IsInstanceMember(funcDecl)) {
-        auto pType = funcTy->GetParamTypes()[0];
-        auto chirParam = builder.CreateParameter(pType, INVALID_LOCATION, *fn);
-        chirParam->SetSrcCodeIdentifier("this");
-        fn->AddParam(*chirParam);
-    }
-    for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
-        auto pType = chirType.TranslateType(param->GetTy());
-        auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), param->begin, param->end);
-        auto chirParam = builder.CreateParameter(pType, loc, *fn);
-        chirParam->SetSrcCodeIdentifier(param->identifier.GetRawText());
-        fn->AddParam(*chirParam);
-    }
+    TranslateFuncParams(funcDecl, *fn);
     globalCache.Set(funcDecl, *fn);
 }
 
@@ -736,18 +707,7 @@ void AST2CHIR::CreateImportedFuncSignatureAndSetGlobalCache(const AST::FuncDecl&
     auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), funcDecl.begin, funcDecl.end);
     fn->SetDebugLocation(loc);
     SetFuncAttributeAndLinkageType(funcDecl, *fn);
-    // set param infos of imported func
-    if (IsInstanceMember(funcDecl)) {
-        auto pType = StaticCast<FuncType*>(fnTy)->GetParamTypes()[0];
-        auto chirParam = builder.CreateParameter(pType, INVALID_LOCATION, *fn);
-        chirParam->SetSrcCodeIdentifier("this");
-    }
-    for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
-        auto pType = chirType.TranslateType(param->GetTy());
-        auto pLoc = TranslateLocationWithoutScope(builder.GetChirContext(), param->begin, param->end);
-        auto chirParam = builder.CreateParameter(pType, pLoc, *fn);
-        chirParam->SetSrcCodeIdentifier(param->identifier.GetRawText());
-    }
+    TranslateFuncParams(funcDecl, *fn);
     globalCache.Set(funcDecl, *fn);
 }
 
@@ -1332,25 +1292,27 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
 
 void AST2CHIR::TranslateFuncParams(const AST::FuncDecl& funcDecl, Function& func) const
 {
-    std::vector<DebugLocation> paramLoc;
-    std::vector<std::string> paramSrcCodeIdentifiers;
-    if (IsInstanceMember(funcDecl)) {
-        paramLoc.emplace_back(INVALID_LOCATION);
-        paramSrcCodeIdentifiers.emplace_back("this");
-    }
-    for (auto& astParam : funcDecl.funcBody->paramLists[0]->params) {
-        paramLoc.emplace_back(TranslateLocationWithoutScope(builder.GetChirContext(), astParam->begin, astParam->end));
-        paramSrcCodeIdentifiers.emplace_back(astParam->identifier.GetRawText());
-    }
+    CJC_ASSERT(funcDecl.funcBody->paramLists.size() == 1);
     auto fnTy = func.GetFuncType();
     CJC_NULLPTR_CHECK(fnTy);
     auto paramTypes = fnTy->GetParamTypes();
-    CJC_ASSERT(paramTypes.size() == paramLoc.size());
-    CJC_ASSERT(paramTypes.size() == paramSrcCodeIdentifiers.size());
-    for (size_t i = 0; i < paramTypes.size(); ++i) {
-        auto param = builder.CreateParameter(paramTypes[i], paramLoc[i], func);
-        param->SetSrcCodeIdentifier(paramSrcCodeIdentifiers[i]);
+    size_t idx = 0;
+    if (IsInstanceMember(funcDecl)) {
+        CJC_ASSERT(idx < paramTypes.size());
+        auto param = builder.CreateParameter(paramTypes[idx], INVALID_LOCATION, func);
+        param->SetSrcCodeIdentifier("this");
+        ++idx;
     }
+    for (auto& astParam : funcDecl.funcBody->paramLists[0]->params) {
+        CJC_ASSERT(idx < paramTypes.size());
+        auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), astParam->begin, astParam->end);
+        auto param = builder.CreateParameter(paramTypes[idx], loc, func);
+        param->SetSrcCodeIdentifier(astParam->identifier.GetRawText());
+        // Desugar default-value funcs are created before the host; link both sides here.
+        LinkParamWithDftValFuncIfAny(*astParam, *param, globalCache);
+        ++idx;
+    }
+    CJC_ASSERT(idx == paramTypes.size());
 }
 
 void AST2CHIR::TranslateVecDecl(const std::vector<Ptr<const AST::Decl>>& decls, Translator& trans) const

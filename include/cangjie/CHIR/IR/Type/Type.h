@@ -370,6 +370,8 @@ public:
      */
     bool IsMustLocalRegion() const;
 
+    bool IsMaybeLocalRegion() const;
+
     bool IsReferenceTypeWithRefDims(size_t dims) const;
 
     bool IsValueOrGenericTypeWithRefDims(size_t dims) const;

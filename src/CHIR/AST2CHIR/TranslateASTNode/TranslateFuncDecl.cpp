@@ -535,8 +535,19 @@ Ptr<Value> Translator::TranslateNestedFunc(const AST::FuncDecl& func)
     // upper bounds into any T@local! / T@local? that appear in the signature.
     auto genericTys = GetNestedFuncGenericParams(func);
     auto funcTy = StaticCast<FuncType*>(TranslateType(func.GetTy()));
-    // Create nested functions' body and parameters.
     CJC_NULLPTR_CHECK(currentBlock->GetTopLevelFunc());
+    auto& astParams = func.funcBody->paramLists[0]->params;
+
+    // Translate default-value desugar funcs first so they are appended to the block before the
+    // host Lambda (same order as global collect/signature; CC then lifts desugar before host).
+    std::vector<Ptr<Value>> defaultArgFuncs(astParams.size(), nullptr);
+    for (size_t i = 0; i < astParams.size(); ++i) {
+        if (astParams[i]->desugarDecl) {
+            defaultArgFuncs[i] = TranslateNestedFunc(*astParams[i]->desugarDecl);
+        }
+    }
+
+    // Create host Lambda body and parameters (appended after desugars).
     BlockGroup* body = builder.CreateBlockGroup(*currentBlock->GetTopLevelFunc());
     const auto& loc = TranslateLocation(func);
     std::string lambdaMangleName = func.mangledName;
@@ -550,7 +561,7 @@ Ptr<Value> Translator::TranslateNestedFunc(const AST::FuncDecl& func)
 
     std::vector<DebugLocation> paramLoc;
     std::vector<std::string> paramSrcCodeIdentifiers;
-    for (auto& astParam : func.funcBody->paramLists[0]->params) {
+    for (auto& astParam : astParams) {
         paramLoc.emplace_back(TranslateLocationWithoutScope(builder.GetChirContext(), astParam->begin, astParam->end));
         paramSrcCodeIdentifiers.emplace_back(astParam->identifier.GetRawText());
     }
@@ -562,19 +573,21 @@ Ptr<Value> Translator::TranslateNestedFunc(const AST::FuncDecl& func)
         param->SetSrcCodeIdentifier(paramSrcCodeIdentifiers[i]);
     }
 
-    SetSymbolTable(func, *lambda->GetResult());
-    for (auto& param : func.funcBody->paramLists[0]->params) {
-        if (param->desugarDecl) {
-            // recursively translate default parameter function of a lambda (possibly a local func)
-            auto defaultArgFunc = TranslateNestedFunc(*param->desugarDecl);
-            StaticCast<Lambda*>(StaticCast<LocalVar*>(defaultArgFunc)->GetExpr())->SetParamDftValHostFunc(*lambda);
-
-            // set such functions as local symbols in the current scope but not in the lambda translation context
-            // as a default parameter function can only be called outside the function
-            lambdaTrans.SetSymbolTable(*param->desugarDecl, *defaultArgFunc);
+    // Wire Parameter <-> desugar after host params exist; register desugar in the outer scope
+    // (default-value funcs are only called outside the host).
+    auto& chirParams = lambda->GetParams();
+    CJC_ASSERT(chirParams.size() == astParams.size());
+    for (size_t i = 0; i < astParams.size(); ++i) {
+        if (defaultArgFuncs[i] == nullptr) {
+            continue;
         }
+        auto defaultLambda = StaticCast<Lambda*>(StaticCast<LocalVar*>(defaultArgFuncs[i])->GetExpr());
+        defaultLambda->SetParamDftValHostParam(*chirParams[i]);
+        lambdaTrans.SetSymbolTable(*astParams[i]->desugarDecl, *defaultArgFuncs[i]);
     }
+
     // Local function allows to call itself inside funcBody.
+    SetSymbolTable(func, *lambda->GetResult());
     lambdaTrans.SetSymbolTable(func, *lambda->GetResult());
     return lambdaTrans.TranslateLambdaBody(
         lambda, *func.funcBody, {.hasInitial = func.TestAttr(AST::Attribute::HAS_INITIAL)});

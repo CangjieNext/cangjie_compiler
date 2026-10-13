@@ -18,10 +18,10 @@ public:
     void RunOnPackage(const Package& package);
 
 private:
-    void RunOnFunc(const Function& func);
+    void RunOnFunc(Function& func);
     std::unordered_set<BlockGroup*> CollectFunctionRegionBlockGroup(const Function& func) const;
     void SetRegions(const std::unordered_set<BlockGroup*>& bgsNeedRegion);
-    void FlattenExclave(BlockGroup& funcBody);
+    void FlattenExclave(Function& func);
 
     CHIRBuilder& builder;
 };
