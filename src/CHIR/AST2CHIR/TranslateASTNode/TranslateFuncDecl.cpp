@@ -563,15 +563,19 @@ Ptr<Value> Translator::TranslateNestedFunc(const AST::FuncDecl& func)
     }
 
     SetSymbolTable(func, *lambda->GetResult());
-    for (auto& param : func.funcBody->paramLists[0]->params) {
-        if (param->desugarDecl) {
+    auto& chirParams = lambda->GetParams();
+    auto& astParams = func.funcBody->paramLists[0]->params;
+    CJC_ASSERT(chirParams.size() == astParams.size());
+    for (size_t i = 0; i < astParams.size(); ++i) {
+        if (astParams[i]->desugarDecl) {
             // recursively translate default parameter function of a lambda (possibly a local func)
-            auto defaultArgFunc = TranslateNestedFunc(*param->desugarDecl);
-            StaticCast<Lambda*>(StaticCast<LocalVar*>(defaultArgFunc)->GetExpr())->SetParamDftValHostFunc(*lambda);
+            auto defaultArgFunc = TranslateNestedFunc(*astParams[i]->desugarDecl);
+            auto defaultLambda = StaticCast<Lambda*>(StaticCast<LocalVar*>(defaultArgFunc)->GetExpr());
+            defaultLambda->SetParamDftValHostParam(*chirParams[i]);
 
             // set such functions as local symbols in the current scope but not in the lambda translation context
             // as a default parameter function can only be called outside the function
-            lambdaTrans.SetSymbolTable(*param->desugarDecl, *defaultArgFunc);
+            lambdaTrans.SetSymbolTable(*astParams[i]->desugarDecl, *defaultArgFunc);
         }
     }
     // Local function allows to call itself inside funcBody.

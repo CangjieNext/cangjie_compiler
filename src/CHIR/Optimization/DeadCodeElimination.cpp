@@ -101,16 +101,15 @@ std::string GetFuncIdent(const Function& func)
     return func.GetSrcCodeIdentifier();
 }
 
-void ClearRemovedFuncParamDftValHostFunc(Package& package)
+void ClearRemovedFuncParamDftValHostParam(Package& package)
 {
     for (auto func : package.GetGlobalFuncsWithBody()) {
         if (func->TestAttr(Attribute::IMPORTED)) {
             continue;
         }
         auto hostFunc = func->GetParamDftValHostFunc();
-        if (hostFunc != nullptr && hostFunc->IsFuncWithBody() &&
-            Cangjie::StaticCast<Function*>(hostFunc)->GetBody() == nullptr) {
-            func->ClearParamDftValHostFunc();
+        if (hostFunc != nullptr && hostFunc->IsFuncWithBody() && hostFunc->GetBody() == nullptr) {
+            func->ClearParamDftValHostParam();
         }
     }
 }
@@ -161,7 +160,7 @@ void DeadCodeElimination::UselessFuncElimination(Package& package, const GlobalO
         }
     } while (!funcsToBeRemoved.empty());
     package.SetAllGlobalFuncs(std::move(allFuncs));
-    ClearRemovedFuncParamDftValHostFunc(package);
+    ClearRemovedFuncParamDftValHostParam(package);
 }
 
 void DeadCodeElimination::ReportUnusedCode(const Package& package, const GlobalOptions& opts)
