@@ -9,11 +9,13 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 
 #define private public
 #define protected public
 #include "TestCompilerInstance.h"
+#include "cangjie/CHIR/AST2CHIR/AST2CHIR.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -1895,4 +1897,227 @@ TEST_F(PackageTest, TypeAliasRefExport)
         }
         return VisitAction::WALK_CHILDREN;
     }).Walk();
+}
+
+namespace {
+// Clear an optional field without invalidating the FlatBuffers structure.
+void DropTableField(std::vector<uint8_t>& data, size_t offset, flatbuffers::voffset_t field)
+{
+    auto table = data.data() + offset;
+    auto vtable = table - flatbuffers::ReadScalar<flatbuffers::soffset_t>(table);
+    if (field < flatbuffers::ReadScalar<flatbuffers::voffset_t>(vtable)) {
+        flatbuffers::WriteScalar<flatbuffers::voffset_t>(vtable + field, 0);
+    }
+}
+
+void ReplacePosition(std::vector<uint8_t>& data, size_t offset, uint32_t file, uint32_t pkgId)
+{
+    auto pos = reinterpret_cast<const PackageFormat::Position*>(data.data() + offset);
+    PackageFormat::Position replacement(file, pkgId, pos->line(), pos->column(), pos->ignore());
+    std::memcpy(data.data() + offset, &replacement, sizeof(replacement));
+}
+} // namespace
+
+TEST_F(PackageTest, CommonPartCjoGate)
+{
+    diag.ClearError();
+    invocation.globalOptions.outputMode = GlobalOptions::OutputMode::CHIR;
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->code = "package cmp\npublic const func foo(): Int64 { 1 }\n"
+        "public struct Point { public var x: Int64 = 0 }\n";
+    instance->Compile();
+    ASSERT_FALSE(instance->GetSourcePackages().empty());
+    std::vector<uint8_t> cjoData;
+    instance->importManager->ExportAST(false, cjoData, *instance->GetSourcePackages()[0]);
+    ASSERT_FALSE(cjoData.empty());
+    auto rootOffset = flatbuffers::ReadScalar<flatbuffers::uoffset_t>(cjoData.data());
+    auto cjoManager = instance->importManager->GetCjoManager();
+    ASSERT_NE(cjoManager, nullptr);
+
+    auto preload = [this, &cjoManager](std::vector<uint8_t> data, Package& pkg) {
+        auto loader = std::make_unique<ASTLoader>(
+            std::move(data), "cmp", *instance->typeManager, *cjoManager, instance->invocation.globalOptions);
+        loader->SetCjoPath("cmp.cjo");
+        diag.Reset();
+        bool ok = loader->PreloadCommonPartOfPackage(pkg);
+        return std::make_pair(ok, std::move(loader));
+    };
+
+    auto expectRejected = [&](std::vector<uint8_t> mutated) {
+        Package pkg("cmp");
+        auto nFiles = instance->GetSourceManager().GetNumberOfFiles();
+        auto [ok, loader] = preload(std::move(mutated), pkg);
+        EXPECT_FALSE(ok);
+        EXPECT_EQ(diag.GetErrorCount(), 1u);
+        EXPECT_TRUE(pkg.files.empty());
+        EXPECT_EQ(instance->GetSourceManager().GetNumberOfFiles(), nFiles);
+        loader->LoadPackageDecls();
+        loader->LoadRefs();
+    };
+
+    // A complete common part cjo is accepted.
+    {
+        Package pkg("cmp");
+        auto [ok, loader] = preload(cjoData, pkg);
+        ASSERT_TRUE(ok);
+        EXPECT_EQ(diag.GetErrorCount(), 0u);
+        EXPECT_TRUE(loader->IsCommonPartPreloaded());
+        EXPECT_FALSE(pkg.files.empty());
+    }
+
+    // Each field used when the common part is loaded must be present, an absent one is not an empty one.
+    for (auto field : {PackageFormat::Package::VT_FULLPKGNAME, PackageFormat::Package::VT_MODULENAME,
+             PackageFormat::Package::VT_ALLFILES, PackageFormat::Package::VT_ALLFILEIMPORTS,
+             PackageFormat::Package::VT_ALLFILEINFO, PackageFormat::Package::VT_ALLTYPES,
+             PackageFormat::Package::VT_ALLDECLS, PackageFormat::Package::VT_ALLEXPRS,
+             PackageFormat::Package::VT_IMPORTS, PackageFormat::Package::VT_OPTIONS}) {
+        std::vector<uint8_t> mutated = cjoData;
+        DropTableField(mutated, rootOffset, field);
+        expectRejected(std::move(mutated));
+    }
+
+    // The reason for a missing field remains visible when the CJMP file info is also absent.
+    for (auto field : {PackageFormat::Package::VT_FULLPKGNAME, PackageFormat::Package::VT_ALLFILES,
+             PackageFormat::Package::VT_ALLFILEIMPORTS}) {
+        auto mutated = cjoData;
+        DropTableField(mutated, rootOffset, field);
+        DropTableField(mutated, rootOffset, PackageFormat::Package::VT_ALLFILEINFO);
+        expectRejected(std::move(mutated));
+        auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::MODULE);
+        ASSERT_EQ(diagnostics.size(), 1u);
+        ASSERT_EQ(diagnostics[0].subDiags.size(), 1u);
+        EXPECT_NE(diagnostics[0].subDiags[0].subDiagMessage.find("is missing"), std::string::npos);
+        EXPECT_EQ(diagnostics[0].subDiags[0].subDiagMessage.find("overwritten"), std::string::npos);
+    }
+
+    auto package = PackageFormat::GetPackage(cjoData.data());
+    ASSERT_GT(package->allDecls()->size(), 0u);
+    ASSERT_GT(package->allExprs()->size(), 0u);
+    ASSERT_GT(package->allFileImports()->Get(0)->importSpecs()->size(), 0u);
+    auto decl = package->allDecls()->Get(0);
+    auto expr = package->allExprs()->Get(0);
+    auto file = package->allFileInfo()->Get(0);
+    auto import = package->allFileImports()->Get(0)->importSpecs()->Get(0);
+    auto offset = [&cjoData](const void* ptr) {
+        return static_cast<size_t>(static_cast<const uint8_t*>(ptr) - cjoData.data());
+    };
+    struct PositionCase {
+        size_t table;
+        flatbuffers::voffset_t field;
+        size_t position;
+        bool local;
+    };
+    const PositionCase positions[] = {
+        {offset(decl), PackageFormat::Decl::VT_BEGIN, offset(decl->begin()), false},
+        {offset(decl), PackageFormat::Decl::VT_END, offset(decl->end()), false},
+        {offset(decl), PackageFormat::Decl::VT_IDENTIFIERPOS, offset(decl->identifierPos()), false},
+        {offset(expr), PackageFormat::Expr::VT_BEGIN, offset(expr->begin()), false},
+        {offset(expr), PackageFormat::Expr::VT_END, offset(expr->end()), false},
+        {offset(file), PackageFormat::FileInfo::VT_BEGIN, offset(file->begin()), true},
+        {offset(file), PackageFormat::FileInfo::VT_END, offset(file->end()), true},
+        {offset(import), PackageFormat::ImportSpec::VT_BEGIN, offset(import->begin()), true},
+        {offset(import), PackageFormat::ImportSpec::VT_END, offset(import->end()), true},
+    };
+    for (auto [table, field, position, local] : positions) {
+        SCOPED_TRACE(std::to_string(table) + ":" + std::to_string(field));
+        auto mutated = cjoData;
+        DropTableField(mutated, table, field);
+        expectRejected(std::move(mutated));
+        for (bool invalidPackage : {false, true}) {
+            if (invalidPackage && !local) {
+                continue;
+            }
+            mutated = cjoData;
+            ReplacePosition(mutated, position, invalidPackage ? 0u : 1000u, invalidPackage ? 1u : 0u);
+            expectRejected(std::move(mutated));
+        }
+    }
+
+    // An option mismatch must not preload any files.
+    auto& options = instance->invocation.globalOptions;
+    options.enableCompileDebug = !options.enableCompileDebug;
+    expectRejected(cjoData);
+    options.enableCompileDebug = !options.enableCompileDebug;
+    auto optimizationLevel = options.optimizationLevel;
+    options.optimizationLevel = GlobalOptions::OptimizationLevel::O2;
+    expectRejected(cjoData);
+    options.optimizationLevel = optimizationLevel;
+}
+
+TEST_F(PackageTest, CommonPartCHIRGate)
+{
+    CHIR::CHIRContext context;
+    CHIR::CHIRBuilder builder(context);
+    builder.CreatePackage("cmp");
+    std::unordered_map<AST::Ty*, CHIR::Type*> typeMap;
+    CHIR::CHIRTypeCache typeCache(typeMap);
+    CHIR::CHIRType chirType(builder, typeCache);
+    CHIR::AST2CHIR::AST2CHIRBuilder translatorBuilder{};
+    translatorBuilder.SetGlobalOptions(instance->invocation.globalOptions)
+        ->SetGenericInstantiationManager(nullptr)
+        ->SetImportManager(*instance->importManager)
+        ->SetSourceManager(instance->GetSourceManager())
+        ->SetTypeManager(*instance->typeManager)
+        ->SetDiag(diag)
+        ->SetCachedInfo(instance->cachedInfo)
+        ->SetIncreKind(IncreKind::INVALID)
+        ->SetCHIRBuilder(builder)
+        ->SetCHIRType(chirType);
+    auto translator = translatorBuilder.Build();
+    translator.mergingSpecific = true;
+    diag.Reset();
+
+    // Imported declarations and current generic instantiations need not occur in the common CHIR.
+    VarDecl specific;
+    specific.EnableAttr(Attribute::SPECIFIC);
+    VarDecl imported;
+    imported.EnableAttr(Attribute::FROM_COMMON_PART, Attribute::IMPORTED);
+    VarDecl instantiated;
+    instantiated.EnableAttr(Attribute::FROM_COMMON_PART, Attribute::GENERIC_INSTANTIATED);
+    StructDecl outer;
+    outer.EnableAttr(Attribute::GENERIC_INSTANTIATED);
+    VarDecl member;
+    member.EnableAttr(Attribute::FROM_COMMON_PART);
+    member.outerDecl = &outer;
+    for (auto decl : {&specific, &imported, &instantiated, &member}) {
+        EXPECT_EQ(translator.TryGetDeserialized<CHIR::GlobalVar>(*decl), nullptr);
+    }
+    EXPECT_TRUE(translator.CheckCommonPartDeclsDeserialized());
+    EXPECT_EQ(diag.GetErrorCount(), 0u);
+
+    VarDecl present;
+    present.identifier = "present";
+    present.mangledName = "present";
+    present.EnableAttr(Attribute::FROM_COMMON_PART);
+    auto value = builder.CreateGlobalVar(builder.GetInt64Ty(), present.mangledName, "present", "present", "cmp");
+    translator.deserializedVals.emplace(value->GetIdentifier(), value);
+    EXPECT_EQ(translator.TryGetDeserialized<CHIR::GlobalVar>(present), value);
+    EXPECT_TRUE(translator.CheckCommonPartDeclsDeserialized());
+
+    VarDecl missing;
+    missing.identifier = "missing";
+    missing.mangledName = "missing";
+    missing.EnableAttr(Attribute::FROM_COMMON_PART);
+    EXPECT_EQ(translator.TryGetDeserialized<CHIR::GlobalVar>(missing), nullptr);
+    EXPECT_EQ(translator.TryGetDeserialized<CHIR::GlobalVar>(missing), nullptr);
+    EXPECT_FALSE(translator.CheckCommonPartDeclsDeserialized());
+    EXPECT_EQ(diag.GetErrorCount(), 1u);
+    auto diagnostics = diag.GetCategoryDiagnostic(DiagCategory::CHIR);
+    ASSERT_EQ(diagnostics.size(), 1u);
+    EXPECT_NE(diagnostics[0].errorMessage.find("declaration 'missing' is missing"), std::string::npos);
+    ASSERT_EQ(diagnostics[0].subDiags.size(), 1u);
+    EXPECT_EQ(diagnostics[0].subDiags[0].subDiagMessage.find('\n'), std::string::npos);
+    ASSERT_EQ(diagnostics[0].helps.size(), 1u);
+    EXPECT_EQ(diagnostics[0].helps[0].helpMes.find('\n'), std::string::npos);
+
+    translator.missingCommonPartDecls.clear();
+    diag.Reset();
+    StructDecl missingType;
+    missingType.identifier = "MissingType";
+    missingType.mangledName = "MissingType";
+    missingType.EnableAttr(Attribute::FROM_COMMON_PART);
+    EXPECT_EQ(translator.TryGetDeserialized<CHIR::StructDef>(missingType), nullptr);
+    EXPECT_FALSE(translator.CheckCommonPartDeclsDeserialized());
+    EXPECT_EQ(diag.GetErrorCount(), 1u);
 }

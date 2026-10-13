@@ -21,6 +21,9 @@
 #include "cangjie/Option/Option.h"
 #include "flatbuffers/CjoFormat_generated.h"
 
+#include <optional>
+#include <string_view>
+
 namespace Cangjie {
 
 namespace ASTLoaderCJMP {
@@ -60,8 +63,103 @@ void ReportPackageMismatch(
 
 std::set<std::string> CollectFeaturesFromPackage(AST::Package& pkg)
 {
-    return (*pkg.files.begin())->GetFeatures();
+    return pkg.files.empty() ? std::set<std::string>{} : pkg.files.front()->GetFeatures();
 }
+
+namespace {
+// Positions of the current package refer to its files by 'file' index plus 1, and positions of other packages
+// refer to the imported packages by 'pkgId' index plus 1, see 'ASTLoaderImpl::LoadPos'.
+bool IsValidPosition(const PackageFormat::Position* pos, uoffset_t nFiles, uoffset_t nImports)
+{
+    return pos && (pos->pkgId() == INVALID_FORMAT_INDEX ? pos->file() <= nFiles : pos->pkgId() <= nImports);
+}
+
+template <typename T>
+std::optional<std::string> FindInvalidPosition(
+    const flatbuffers::Vector<flatbuffers::Offset<T>>& nodes, std::string_view kind, uoffset_t nFiles,
+    uoffset_t nImports)
+{
+    for (uoffset_t i = 0; i < nodes.size(); i++) {
+        auto node = nodes.Get(i);
+        if (!IsValidPosition(node->begin(), nFiles, nImports) || !IsValidPosition(node->end(), nFiles, nImports)) {
+            return std::string(kind) + " " + std::to_string(i + 1) +
+                " has a missing position or refers to an unlisted file or package";
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> FindCommonPartCjoDefect(const PackageFormat::Package& package)
+{
+    // FlatBuffers accepts absent fields. Check the package metadata required by the common part loader.
+    const std::pair<const void*, std::string_view> requiredFields[] = {
+        {package.fullPkgName(), "fullPkgName"},
+        {package.moduleName(), "moduleName"},
+        {package.allFiles(), "allFiles"},
+        {package.allFileImports(), "allFileImports"},
+        {package.allTypes(), "allTypes"},
+        {package.allDecls(), "allDecls"},
+        {package.allExprs(), "allExprs"},
+        {package.imports(), "imports"},
+        {package.options(), "options"},
+    };
+    for (auto [field, name] : requiredFields) {
+        if (field == nullptr) {
+            return "the field '" + std::string(name) + "' is missing";
+        }
+    }
+    // A specific part has no file info. Check its other metadata before reporting that distinction.
+    if (package.allFileInfo() == nullptr) {
+        return std::nullopt;
+    }
+    auto nFiles = package.allFiles()->size();
+    if (package.allFileImports()->size() != nFiles || package.allFileInfo()->size() != nFiles) {
+        return "file imports or CJMP data do not match the file list";
+    }
+    auto nImports = package.imports()->size();
+    // File and import positions belong to the current package, as written by SaveFileInfo and SaveFileImports.
+    for (uoffset_t i = 0; i < nFiles; i++) {
+        auto importSpecs = package.allFileImports()->Get(i)->importSpecs();
+        auto fileInfo = package.allFileInfo()->Get(i);
+        if (importSpecs == nullptr || !IsValidPosition(fileInfo->begin(), nFiles, 0) ||
+            !IsValidPosition(fileInfo->end(), nFiles, 0)) {
+            return "the import list or position of file " + std::to_string(i + 1) + " is missing or invalid";
+        }
+        for (uoffset_t j = 0; j < importSpecs->size(); j++) {
+            auto importSpec = importSpecs->Get(j);
+            if (!IsValidPosition(importSpec->begin(), nFiles, 0) ||
+                !IsValidPosition(importSpec->end(), nFiles, 0)) {
+                return "the position of an import of file " + std::to_string(i + 1) + " is missing or invalid";
+            }
+        }
+    }
+    if (auto defect = FindInvalidPosition(*package.allDecls(), "declaration", nFiles, nImports)) {
+        return defect;
+    }
+    for (uoffset_t i = 0; i < package.allDecls()->size(); i++) {
+        if (!IsValidPosition(package.allDecls()->Get(i)->identifierPos(), nFiles, nImports)) {
+            return "the identifier position of declaration " + std::to_string(i + 1) + " is missing or invalid";
+        }
+    }
+    return FindInvalidPosition(*package.allExprs(), "expression", nFiles, nImports);
+}
+
+void ReportUnusableCommonPartCjo(DiagnosticEngine& diag, const std::string& cjoPath, const std::string& packageName,
+    const std::optional<std::string>& defect)
+{
+    auto builder = diag.DiagnoseRefactor(
+        DiagKindRefactor::module_common_cjo_not_common_part, DEFAULT_POSITION, cjoPath, packageName);
+    if (defect) {
+        builder.AddNote("its common part information is incomplete or corrupted: " + *defect);
+    } else {
+        builder.AddNote("this cjo was not produced by a common part compilation with '--output-type=chir'");
+        builder.AddNote("a specific part compilation writes '" + packageName +
+            ".cjo' to its output directory and may have overwritten the common part cjo");
+    }
+    builder.AddHelp(DiagHelp("recompile the common part with '--output-type=chir' and keep its '.cjo' and '.chir' "
+        "together in a separate directory, e.g. with '--output-dir'"));
+}
+} // namespace
 
 void ValidateCommonSpecificFeatureSetsRelations(
     const AST::File& commonFile,
@@ -153,15 +251,12 @@ OwnedPtr<AST::File> ASTLoader::ASTLoaderImpl::PreloadCommonFile(uoffset_t indexO
 
 /**
  * @brief Validate that compilation options match between common cjo and current compile
- * @return true if options match or are compatible, false if there is a mismatch
+ * @return true if options match, false if there is a mismatch
  */
 bool ASTLoader::ASTLoaderImpl::ValidateOptions()
 {
     auto options = package->options();
-    if (options == nullptr) {
-        diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_no_options, DEFAULT_POSITION);
-        return true;
-    }
+    CJC_NULLPTR_CHECK(options);
 
     bool failed = false;
     if (options->debug() != this->opts.enableCompileDebug) {
@@ -184,6 +279,7 @@ bool ASTLoader::ASTLoaderImpl::ValidateOptions()
 
 bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
 {
+    commonPartPreloaded = false;
     if (!VerifyForData("ast")) {
         return false;
     }
@@ -193,15 +289,21 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
     if (!CheckCjoVersion()) {
         return false;
     }
-    CJC_NULLPTR_CHECK(package->fullPkgName());
-
-    curPackage = &pkg;
+    auto defect = ASTLoaderCJMP::FindCommonPartCjoDefect(*package);
+    if (defect || package->allFileInfo() == nullptr) {
+        ASTLoaderCJMP::ReportUnusableCommonPartCjo(diag, cjoPath, pkg.fullPackageName, defect);
+        return false;
+    }
 
     auto deserializedPackageName = package->fullPkgName()->str();
     if (pkg.fullPackageName != deserializedPackageName) {
         ASTLoaderCJMP::ReportPackageMismatch(diag, pkg, pkg.fullPackageName, deserializedPackageName);
         return false;
     }
+    if (!ValidateOptions()) {
+        return false;
+    }
+    curPackage = &pkg;
     auto specificFeatures = ASTLoaderCJMP::CollectFeaturesFromPackage(pkg);
 
     allTypes.resize(package->allTypes()->size(), nullptr);
@@ -216,22 +318,15 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
         pkg.files.emplace_back(std::move(file));
     }
 
-    if (!ValidateOptions()) {
-        // options mismatch must abort compilation
-        // otherwise the difference in desugaring/chir generation
-        // may lead to a crash in subsequent compilation stages
-        return false;
-    }
-
     AddCurFile(pkg);
     auto imports = package->imports();
-    CJC_NULLPTR_CHECK(imports);
     uoffset_t nImports = imports->size();
     for (uoffset_t i = 0; i < nImports; i++) {
         std::string importItem = imports->Get(i)->str();
         importedFullPackageNames.emplace_back(importItem);
     }
 
+    commonPartPreloaded = true;
     return true;
 }
 

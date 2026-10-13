@@ -18,6 +18,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -361,4 +362,88 @@ TEST(EngineTest, OldDiagKindDefGuard)
     }
     ASSERT_FALSE(oldDiagKindBeModified)
         << "Old diag kind be modified, please adpate case or def according the above hints.";
+}
+
+namespace {
+size_t CountOccurrences(std::string_view str, std::string_view sub)
+{
+    size_t count = 0;
+    for (auto pos = str.find(sub); pos != std::string_view::npos; pos = str.find(sub, pos + sub.size())) {
+        ++count;
+    }
+    return count;
+}
+
+std::string EmitDiagnostic(Diagnostic& diagnostic, SourceManager& sm, bool onlyHint = false)
+{
+    std::ostringstream out;
+    DiagnosticEmitter(diagnostic, true, true, out, sm).Emit(onlyHint);
+    return out.str();
+}
+} // namespace
+
+TEST(EngineTest, PositionlessDiagnosticNotesAndHelps)
+{
+    DiagnosticEngine diag;
+    SourceManager sm;
+    sm.AddSource("test.cj", std::string(11, '\n') + "main() {}\n");
+    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_debug_mismatch, DEFAULT_POSITION,
+        "enabled", "disabled");
+    builder.AddNote("text note");
+    builder.AddNote(MakeRange(Position{1, 12, 1}, Position{1, 12, 5}), "source note");
+    builder.AddHelp(DiagHelp{"text help"});
+
+    auto out = EmitDiagnostic(builder.diagnostic, sm);
+    auto errorPos =
+        out.find("error: common part is compiled with different debug mode: enabled in common and disabled in current");
+    auto textNotePos = out.find("note: text note");
+    auto sourceNotePos = out.find("note: source note");
+    auto helpPos = out.find("help: text help");
+    ASSERT_NE(helpPos, std::string::npos) << out;
+    EXPECT_LT(errorPos, textNotePos);
+    EXPECT_LT(textNotePos, sourceNotePos);
+    EXPECT_LT(sourceNotePos, helpPos);
+    EXPECT_NE(out.find("test.cj:12:1"), std::string::npos) << out;
+    EXPECT_EQ(CountOccurrences(out, "note: text note"), 1u);
+    EXPECT_NE(out.find("\n # note: text note\n"), std::string::npos) << out;
+    EXPECT_NE(out.find("\n # help: text help\n"), std::string::npos) << out;
+
+    // In hint mode the main message is not shown, but the notes and helps are.
+    auto hint = EmitDiagnostic(builder.diagnostic, sm, true);
+    EXPECT_EQ(hint.find("error:"), std::string::npos) << hint;
+    EXPECT_NE(hint.find("note: text note"), std::string::npos) << hint;
+    EXPECT_NE(hint.find("help: text help"), std::string::npos) << hint;
+}
+
+TEST(EngineTest, PositionlessTextOnlyWarningNotesAndHelps)
+{
+    DiagnosticEngine diag;
+    SourceManager sm;
+    auto builder = diag.DiagnoseRefactor(
+        DiagKindRefactor::driver_warning_argument_unused, DEFAULT_POSITION, "--foo");
+    builder.AddNote("text note");
+    builder.AddHelp(DiagHelp{"text help"});
+
+    auto out = EmitDiagnostic(builder.diagnostic, sm);
+    EXPECT_NE(out.find("warning: the arg '--foo' may be unused"), std::string::npos) << out;
+    EXPECT_EQ(CountOccurrences(out, "note: text note"), 1u) << out;
+    EXPECT_EQ(CountOccurrences(out, "help: text help"), 1u) << out;
+}
+
+TEST(EngineTest, PositionlessDiagnosticMacroCodeNoteShownOnce)
+{
+    DiagnosticEngine diag;
+    SourceManager sm;
+    MacroCallDiagInfo macroInfo;
+    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_debug_mismatch, DEFAULT_POSITION,
+        "enabled", "disabled");
+    builder.AddNote(MACROCALL_CODE);
+    builder.AddNote(MACROCALL_CODE);
+    builder.diagnostic.macroDiagInfo = &macroInfo;
+
+    for (bool hasShownCode : {true, false}) {
+        macroInfo.hasShownCode = hasShownCode;
+        auto out = EmitDiagnostic(builder.diagnostic, sm);
+        EXPECT_EQ(CountOccurrences(out, MACROCALL_CODE), hasShownCode ? 0u : 1u) << out;
+    }
 }

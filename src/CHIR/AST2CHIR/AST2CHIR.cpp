@@ -530,6 +530,21 @@ bool AST2CHIR::TryToDeserializeCHIR()
     return success;
 }
 
+bool AST2CHIR::CheckCommonPartDeclsDeserialized()
+{
+    std::vector<Ptr<const AST::Decl>> missing(missingCommonPartDecls.begin(), missingCommonPartDecls.end());
+    std::sort(missing.begin(), missing.end(), [](auto lhs, auto rhs) { return lhs->mangledName < rhs->mangledName; });
+    for (auto decl : missing) {
+        auto diagBuilder = diag.DiagnoseRefactor(
+            DiagKindRefactor::chir_common_part_decl_missing, DEFAULT_POSITION, decl->identifier.Val());
+        diagBuilder.AddNote("the '.chir' passed with '--common-part-chir' was not produced "
+                            "together with the common part '.cjo'");
+        diagBuilder.AddHelp(DiagHelp("recompile the common part with '--output-type=chir', then "
+                                     "pass its '.cjo' and '.chir' together"));
+    }
+    return missing.empty();
+}
+
 static Package::AccessLevel BuildPackageAccessLevel(const AST::AccessLevel& level)
 {
     static std::unordered_map<AST::AccessLevel, Package::AccessLevel> accessLevelMap = {
@@ -573,6 +588,10 @@ bool AST2CHIR::ToCHIRPackage(AST::Package& node)
 
     // step 3: create signature of nominal decls and top-level func decls
     CacheSomeDeclsToGlobalSymbolTable();
+    // A common part decl without CHIR would be translated without body, which breaks all following analyses.
+    if (mergingSpecific && !CheckCommonPartDeclsDeserialized()) {
+        return false;
+    }
 
     // step 4: translate all colleted decls
     TranslateAllDecls(node, initOrder);
