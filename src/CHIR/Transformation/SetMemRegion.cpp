@@ -13,6 +13,7 @@
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 
+using namespace Cangjie;
 using namespace Cangjie::CHIR;
 
 namespace {
@@ -61,6 +62,44 @@ bool AllReturnValuesInExclave(const LocalVar& result)
     }
     return true;
 }
+
+Function* GetRawCallee(const Expression& expr)
+{
+    Function* callee = nullptr;
+    if (auto apply = DynamicCast<const ApplyBase*>(&expr)) {
+        auto f = apply->GetCallee();
+        if (!Is<Function>(f)) {
+            return nullptr;
+        }
+        callee = StaticCast<Function*>(f);
+    } else if (auto invoke = DynamicCast<const DynamicDispatch*>(&expr)) {
+        callee = StaticCast<Function*>(invoke->GetCallee());
+    }
+    if (callee == nullptr) {
+        return nullptr;
+    }
+    if (auto generic = callee->GetGenericDecl()) {
+        callee = generic;
+    }
+    return callee;
+}
+
+bool CalleeParamTypeHasNonCopyable(const Expression& expr)
+{
+    auto callee = GetRawCallee(expr);
+    if (callee == nullptr) {
+        return false;
+    }
+    for (auto param : callee->GetParams()) {
+        if (param->GetType()->StripAllRefs()->IsMustLocalRegion()) {
+            return true;
+        }
+        if (param->GetType()->StripAllRefs()->IsMaybeLocalRegion() && param->GetParamDftValFunc() != nullptr) {
+            return true;
+        }
+    }
+    return false;
+}
 } // namespace
 
 SetMemRegion::SetMemRegion(CHIRBuilder& builder)
@@ -92,9 +131,11 @@ std::unordered_set<BlockGroup*> SetMemRegion::CollectFunctionRegionBlockGroup(co
                 auto body = expr.GetFuncOrLambdaBody();
                 CJC_NULLPTR_CHECK(body);
                 scopeNeedsRegion.emplace(body);
-            } else if (auto apply = DynamicCast<ApplyBase*>(&expr)) {
-                // 2. constructor call where the `this` argument type does not implement `Copyable` and
-                // has mode `local!` or `local?` (covers both `Apply` and its `TryApply` form)
+                return VisitResult::CONTINUE;
+            }
+            // 2. constructor call where the `this` argument type does not implement `Copyable` and
+            // has mode `local!` or `local?` (covers both `Apply` and its `TryApply` form)
+            if (auto apply = DynamicCast<ApplyBase*>(&expr)) {
                 if (auto func = DynamicCast<Function*>(apply->GetCallee());
                     func && func->IsConstructor() && func->GetParentCustomTypeDef() != nullptr) {
                     auto thisType = func->GetParam(0)->GetType()->StripAllRefs();
@@ -102,11 +143,20 @@ std::unordered_set<BlockGroup*> SetMemRegion::CollectFunctionRegionBlockGroup(co
                         auto body = expr.GetFuncOrLambdaBody();
                         CJC_NULLPTR_CHECK(body);
                         scopeNeedsRegion.emplace(body);
+                        return VisitResult::CONTINUE;
                     }
                 }
             }
+            // 3. func call whose callee has a Parameter that is `local!`, or `local?` with a
+            // default value in parameter
+            if (CalleeParamTypeHasNonCopyable(expr)) {
+                auto body = expr.GetFuncOrLambdaBody();
+                CJC_NULLPTR_CHECK(body);
+                scopeNeedsRegion.emplace(body);
+                return VisitResult::CONTINUE;
+            }
         } else if (auto lambda = DynamicCast<Lambda*>(&expr)) {
-            // 3. lambda where the captured variables are not `Copyable` and have mode `local!` or `local?`
+            // 4. lambda where the captured variables are not `Copyable` and have mode `local!` or `local?`
             for (auto var : lambda->GetCapturedVariables()) {
                 if (var->GetType()->StripAllRefs()->IsLocalRegion()) {
                     auto varBody = var->GetFuncOrLambdaBody();
@@ -116,8 +166,8 @@ std::unordered_set<BlockGroup*> SetMemRegion::CollectFunctionRegionBlockGroup(co
                     }
                 }
             }
-        } else if (Is<AllocateBase>(expr)) {
-            // 4. allocate a non-trivial enum whose type has mode `local!` or `local?`
+        } else if (Is<AllocateBase>(expr) || Is<Tuple>(expr)) {
+            // 5. allocate (Allocate or Tuple expression) a non-trivial enum whose type has mode `local!` or `local?`
             auto resultType = expr.GetResult()->GetType()->StripAllRefs();
             if (resultType->IsLocalRegion() && resultType->IsEnum() &&
                 !StaticCast<EnumType*>(resultType)->GetEnumDef()->IsAllCtorsTrivial() &&
@@ -127,7 +177,7 @@ std::unordered_set<BlockGroup*> SetMemRegion::CollectFunctionRegionBlockGroup(co
                 scopeNeedsRegion.emplace(body);
             }
         } else if (Is<Constant>(expr)) {
-            // 5. a literal whose type does not implement `Copyable` and has mode `local!`.
+            // 6. a literal whose type does not implement `Copyable` and has mode `local!`.
             if (expr.GetResult()->GetType()->StripAllRefs()->IsMustLocalRegion()) {
                 auto body = expr.GetFuncOrLambdaBody();
                 CJC_NULLPTR_CHECK(body);
@@ -142,10 +192,10 @@ std::unordered_set<BlockGroup*> SetMemRegion::CollectFunctionRegionBlockGroup(co
     return scopeNeedsRegion;
 }
 
-void SetMemRegion::RunOnFunc(const Function& func)
+void SetMemRegion::RunOnFunc(Function& func)
 {
     SetRegions(CollectFunctionRegionBlockGroup(func));
-    FlattenExclave(*func.GetBody());
+    FlattenExclave(func);
 }
 
 void SetMemRegion::SetRegions(const std::unordered_set<BlockGroup*>& bgsNeedRegion)
@@ -161,22 +211,24 @@ void SetMemRegion::SetRegions(const std::unordered_set<BlockGroup*>& bgsNeedRegi
 
         // 2. set end region
         Visitor::Visit(*bg, [this](Expression& expr) -> VisitResult {
-            // don't visit nested lambdas or exclaves
+            // don't visit nested lambdas
             // we will visit lambda's body later because `bgsNeedRegion` contains it
-            if (Is<Lambda>(expr) || Is<Exclave>(expr)) {
+            if (Is<Lambda>(expr)) {
                 return VisitResult::SKIP;
-            } else if (Is<Exit>(expr)) {
+            } else if (Is<Exit>(expr) || Is<Exclave>(expr)) {
                 auto parentBlock = expr.GetParentBlock();
                 auto endRegion = builder.CreateExpression<EndRegion>(builder.GetUnitTy(), parentBlock);
                 endRegion->MoveBefore(&expr);
-                return VisitResult::CONTINUE;
+                if (Is<Exclave>(expr)) {
+                    return VisitResult::SKIP;
+                }
             }
             return VisitResult::CONTINUE;
         });
     }
 }
 
-void SetMemRegion::FlattenExclave(BlockGroup& funcBody)
+void SetMemRegion::FlattenExclave(Function& func)
 {
     auto preVisit = []([[maybe_unused]] Expression& e) -> VisitResult {
         return VisitResult::CONTINUE;
@@ -198,5 +250,6 @@ void SetMemRegion::FlattenExclave(BlockGroup& funcBody)
         exclave->ReplaceWith(*gotoExpr);
         return VisitResult::CONTINUE;
     };
-    Visitor::Visit(funcBody, preVisit, postVisit);
+    Visitor::Visit(*func.GetBody(), preVisit, postVisit);
+    func.DisableAttr(Attribute::EXCLAVE);
 }
