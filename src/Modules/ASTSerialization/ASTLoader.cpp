@@ -491,6 +491,12 @@ bool ASTLoader::PreloadCommonPartOfPackage(AST::Package& pkg) const
     return pImpl->PreloadCommonPartOfPackage(pkg);
 }
 
+bool ASTLoader::IsCommonPartPreloaded() const
+{
+    CJC_NULLPTR_CHECK(pImpl);
+    return pImpl->commonPartPreloaded;
+}
+
 std::vector<OwnedPtr<ImportSpec>> ASTLoader::ASTLoaderImpl::LoadImportSpecs(const PackageFormat::Imports* imports)
 {
     std::vector<OwnedPtr<ImportSpec>> importSpecsVec;
