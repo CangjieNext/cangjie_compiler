@@ -92,6 +92,14 @@ private:
     Ptr<AST::Package> curPackage{nullptr};
     bool importSrcCode{false};
     bool deserializingCommon{false};
+    // A common part cjo can be used only after its files are preloaded successfully.
+    bool commonPartPreloaded{false};
+    bool PreloadCommonPartFiles(AST::Package& pkg);
+    // Whether decls of this loader can be loaded: a common part cjo must be preloaded successfully first.
+    bool CanLoadDecls() const
+    {
+        return !deserializingCommon || commonPartPreloaded;
+    }
 
     // Define the context status for loading type cache of incremental compilation.
     bool isLoadCache{false};

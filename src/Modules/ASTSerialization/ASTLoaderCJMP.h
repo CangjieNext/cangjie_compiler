@@ -20,6 +20,8 @@
 #include "ASTSerializeUtils.h"
 #include "flatbuffers/CjoFormat_generated.h"
 
+#include <string>
+
 namespace Cangjie {
 
 namespace ASTLoaderCJMP {
