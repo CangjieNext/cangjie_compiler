@@ -27,6 +27,36 @@
 
 namespace Cangjie::CHIR {
 namespace {
+constexpr size_t ASPECT_IMPORT_SYMBOL_LENGTH_LIMIT = 4096;
+constexpr size_t ASPECT_IMPORT_SYMBOL_COUNT_LIMIT = 262144;
+
+void AttachGenericAspectSnapshot(
+    const AST::FuncDecl& decl, const ResolvedAnnotationMap* metadata, Function& function)
+{
+    // Concrete generic bodies inherit source annotation facts, but retain
+    // their own CHIR identity and never copy facts from an imported package.
+    if (!decl.TestAttr(AST::Attribute::GENERIC_INSTANTIATED) || !decl.genericDecl ||
+        decl.genericDecl->astKind != AST::ASTKind::FUNC_DECL ||
+        decl.genericDecl->fullPackageName != decl.fullPackageName || decl.TestAttr(AST::Attribute::IMPORTED)) {
+        return;
+    }
+    function.SetAspectSourceOrigin(decl.genericDecl->mangledName);
+    AnnoInfo info;
+    if (metadata) {
+        auto entry = metadata->find(decl.genericDecl);
+        if (entry != metadata->end()) {
+            info.SetResolvedAnnotations(decl.fullPackageName, decl.mangledName, entry->second);
+        }
+    }
+    if (!info.HasCompleteSnapshot() && (!decl.genericDecl->annotationsArray ||
+        decl.genericDecl->annotationsArray->children.empty())) {
+        info.SetResolvedAnnotations(decl.fullPackageName, decl.mangledName, {});
+    }
+    if (info.HasCompleteSnapshot()) {
+        function.SetAnnoInfo(std::move(info));
+    }
+}
+
 Linkage GetFuncLinkage(const GlobalOptions& opts, const AST::FuncDecl& func)
 {
     if (func.TestAttr(AST::Attribute::IMPORTED)) {
@@ -530,8 +560,10 @@ bool AST2CHIR::ReadAspectImportSymbols()
         if (!symbol.empty() && symbol.back() == '\r') {
             symbol.pop_back();
         }
-        if (symbol.empty() || symbol.size() > 4096 || symbol.find_first_of(" \t\r\n") != std::string::npos ||
-            aspectExternalSymbols.size() >= 262144 || !aspectExternalSymbols.insert(symbol).second) {
+        if (symbol.empty() || symbol.size() > ASPECT_IMPORT_SYMBOL_LENGTH_LIMIT ||
+            symbol.find_first_of(" \t\r\n") != std::string::npos ||
+            aspectExternalSymbols.size() >= ASPECT_IMPORT_SYMBOL_COUNT_LIMIT ||
+            !aspectExternalSymbols.insert(symbol).second) {
             diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_input_mismatch,
                 DEFAULT_POSITION, "invalid aspect symbol list entry");
             failure = true;
@@ -767,29 +799,7 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
     TranslateFuncParams(funcDecl, *fn);
     globalCache.Set(funcDecl, *fn);
 
-    // Concrete generic bodies are created here, but deliberately skip the
-    // annotation-factory path below. Preserve their source identity and the
-    // already evaluated annotation facts under the concrete CHIR identity.
-    if (funcDecl.TestAttr(AST::Attribute::GENERIC_INSTANTIATED) && funcDecl.genericDecl &&
-        funcDecl.genericDecl->astKind == AST::ASTKind::FUNC_DECL &&
-        funcDecl.genericDecl->fullPackageName == funcDecl.fullPackageName &&
-        !funcDecl.TestAttr(AST::Attribute::IMPORTED)) {
-        fn->SetAspectSourceOrigin(funcDecl.genericDecl->mangledName);
-        AnnoInfo info;
-        if (resolvedAnnotationMetadata) {
-            auto entry = resolvedAnnotationMetadata->find(funcDecl.genericDecl);
-            if (entry != resolvedAnnotationMetadata->end()) {
-                info.SetResolvedAnnotations(funcDecl.fullPackageName, funcDecl.mangledName, entry->second);
-            }
-        }
-        if (!info.HasCompleteSnapshot() && (!funcDecl.genericDecl->annotationsArray ||
-            funcDecl.genericDecl->annotationsArray->children.empty())) {
-            info.SetResolvedAnnotations(funcDecl.fullPackageName, funcDecl.mangledName, {});
-        }
-        if (info.HasCompleteSnapshot()) {
-            fn->SetAnnoInfo(std::move(info));
-        }
-    }
+    AttachGenericAspectSnapshot(funcDecl, resolvedAnnotationMetadata, *fn);
 
     // collect annotation info, and create anno factory func
     // do this here rather than in Function translation, because this function is run serialised but TranslateFuncDecl

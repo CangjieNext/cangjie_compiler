@@ -520,6 +520,8 @@ public:
     };
 
 private:
+    std::vector<CustomAnnoInstance> CollectLiteralAnnotationInstances(const AST::ArrayLit& annotations);
+
     friend class GlobalVarInitializer;
     // Used for add compileTimeVal tag for compile-time evaluation.
     bool isCompileTimeValue = false;

@@ -975,6 +975,33 @@ void RegisterMacroCallDiagInfos(DiagnosticEngine& diag, AST::Package& pkg)
         }
     }
 }
+
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+bool PrepareAnnotationMetadata(AST::Package& pkg, CompilerInstance& ci, const GlobalOptions& opts,
+    DiagnosticEngine& diag, OwnedPtr<CHIR::ConstEvalResult>& annotationMetadata)
+{
+    if (!opts.aspectImportSymbolsPath.empty() && !opts.emitCHIRAnnotationMetadata) {
+        diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_metadata_unsupported_mode, DEFAULT_POSITION);
+        return false;
+    }
+    if (opts.emitCHIRAnnotationMetadata) {
+        if (opts.enIncrementalCompilation || opts.IsCompilingCJMP() || !opts.IsConstEvalEnabled() ||
+            !opts.commonPartCjos.empty()) {
+            diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_metadata_unsupported_mode, DEFAULT_POSITION);
+            return false;
+        }
+        annotationMetadata = CHIR::ComputeAnnotations(pkg, ci, CHIR::AnnotationEvaluationPurpose::METADATA);
+        if (!annotationMetadata) {
+            diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_metadata_unavailable, DEFAULT_POSITION);
+            return false;
+        }
+    } else {
+        // Legacy annotation debugging and API-level compatibility path.
+        (void)CHIR::ComputeAnnotations(pkg, ci);
+    }
+    return true;
+}
+#endif
 } // namespace
 
 bool CompilerInstance::GenerateCHIRForPkg(AST::Package& pkg)
@@ -986,26 +1013,8 @@ bool CompilerInstance::GenerateCHIRForPkg(AST::Package& pkg)
     RegisterMacroCallDiagInfos(diag, pkg);
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     OwnedPtr<CHIR::ConstEvalResult> annotationMetadata;
-    if (!invocation.globalOptions.aspectImportSymbolsPath.empty() &&
-        !invocation.globalOptions.emitCHIRAnnotationMetadata) {
-        diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_metadata_unsupported_mode, DEFAULT_POSITION);
+    if (!PrepareAnnotationMetadata(pkg, *this, invocation.globalOptions, diag, annotationMetadata)) {
         return false;
-    }
-    if (invocation.globalOptions.emitCHIRAnnotationMetadata) {
-        const auto& opts = invocation.globalOptions;
-        if (opts.enIncrementalCompilation || opts.IsCompilingCJMP() || !opts.IsConstEvalEnabled() ||
-            !opts.commonPartCjos.empty()) {
-            diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_metadata_unsupported_mode, DEFAULT_POSITION);
-            return false;
-        }
-        annotationMetadata = CHIR::ComputeAnnotations(pkg, *this, CHIR::AnnotationEvaluationPurpose::METADATA);
-        if (!annotationMetadata) {
-            diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_metadata_unavailable, DEFAULT_POSITION);
-            return false;
-        }
-    } else {
-        // Legacy annotation debugging and API-level compatibility path.
-        (void)CHIR::ComputeAnnotations(pkg, *this);
     }
     auto& constAnalysisWrapper = chirData->GetConstAnalysisResultRef();
 #endif

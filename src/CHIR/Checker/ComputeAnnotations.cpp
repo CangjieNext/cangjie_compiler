@@ -715,6 +715,21 @@ private:
 };
 }
 
+static GlobalOptions GetAnnotationEvaluationOptions(const GlobalOptions& opts, bool forMetadata)
+{
+    auto evaluationOptions = opts;
+    // The auxiliary pass must not mutate caller options or emit debug files.
+    if (forMetadata) {
+        evaluationOptions.printBCHIR.assign(evaluationOptions.printBCHIR.size(), false);
+        evaluationOptions.chirDebugOptimizer = false;
+        evaluationOptions.computeAnnotationsDebug = false;
+        evaluationOptions.constEvalDebug = false;
+        evaluationOptions.dumpCHIR = false;
+        evaluationOptions.dumpAll = false;
+    }
+    return evaluationOptions;
+}
+
 OwnedPtr<ConstEvalResult> ComputeAnnotations(
     AST::Package& pkg, CompilerInstance& ci, AnnotationEvaluationPurpose purpose)
 {
@@ -742,17 +757,7 @@ OwnedPtr<ConstEvalResult> ComputeAnnotations(
     }
     auto res = MakeOwned<ConstEvalResult>(ci.GetFileNameMap(), ci.invocation.globalOptions.GetJobs());
     CHIR::ConstAnalysisWrapper constAnalysisWrapper{res->builder};
-    // Do not mutate the caller's options. Even with user-requested debugging,
-    // the auxiliary pass must not emit bytecode/IR files or optimizer dumps.
-    auto evaluationOptions = opts;
-    if (forMetadata) {
-        evaluationOptions.printBCHIR.assign(evaluationOptions.printBCHIR.size(), false);
-        evaluationOptions.chirDebugOptimizer = false;
-        evaluationOptions.computeAnnotationsDebug = false;
-        evaluationOptions.constEvalDebug = false;
-        evaluationOptions.dumpCHIR = false;
-        evaluationOptions.dumpAll = false;
-    }
+    auto evaluationOptions = GetAnnotationEvaluationOptions(opts, forMetadata);
     CHIR::ToCHIR convertor(ci, pkg, constAnalysisWrapper, res->builder, &evaluationOptions);
     bool computeSuccess = convertor.ComputeAnnotations({}, purpose);
     if (!computeSuccess || ci.diag.GetErrorCount() != 0) {

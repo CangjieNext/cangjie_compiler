@@ -46,6 +46,37 @@ CHIRFormat::OverflowStrategy SerializeOverflowStrategy(Cangjie::OverflowStrategy
             return CHIRFormat::OverflowStrategy_NA;
     }
 }
+
+std::vector<flatbuffers::Offset<CHIRFormat::AnnotationScalarField>> SerializeAnnotationScalarFields(
+    flatbuffers::FlatBufferBuilder& builder, const ResolvedAnnotationData& annotation)
+{
+    std::vector<flatbuffers::Offset<CHIRFormat::AnnotationScalarField>> fields;
+    if (!annotation.scalarFields) {
+        return fields;
+    }
+    for (const auto& field : *annotation.scalarFields) {
+        const bool isBool = std::holds_alternative<bool>(field.value);
+        const std::string* stringValue = isBool ? nullptr : &std::get<std::string>(field.value);
+        fields.push_back(CHIRFormat::CreateAnnotationScalarFieldDirect(builder, field.name.c_str(),
+            isBool ? CHIRFormat::AnnotationScalarKind_BOOL : CHIRFormat::AnnotationScalarKind_STRING,
+            stringValue ? stringValue->c_str() : nullptr,
+            isBool ? std::get<bool>(field.value) : false));
+    }
+    return fields;
+}
+
+flatbuffers::Offset<CHIRFormat::ResolvedAnnotation> SerializeResolvedAnnotation(
+    flatbuffers::FlatBufferBuilder& builder, const ResolvedAnnotationData& annotation)
+{
+    const auto fields = SerializeAnnotationScalarFields(builder, annotation);
+    const auto beginPos = CHIRFormat::CreatePos(builder, annotation.beginLine, annotation.beginColumn);
+    const auto endPos = CHIRFormat::CreatePos(builder, annotation.endLine, annotation.endColumn);
+    const auto loc = CHIRFormat::CreateDebugLocationDirect(builder, annotation.sourceFile.c_str(),
+        annotation.fileId, beginPos, endPos);
+    return CHIRFormat::CreateResolvedAnnotationDirect(builder,
+        annotation.qualifiedClassName.c_str(), annotation.declarationSymbol.c_str(), loc,
+        annotation.scalarFields.has_value(), fields.empty() ? nullptr : &fields);
+}
 } // namespace
 
 void CHIRSerializer::Serialize(const Package& package, const std::string filename, ToCHIR::Phase phase)
@@ -192,24 +223,7 @@ flatbuffers::Offset<CHIRFormat::AnnoInfo> CHIRSerializer::CHIRSerializerImpl::Se
     std::vector<flatbuffers::Offset<CHIRFormat::ResolvedAnnotation>> resolved;
     if (obj.HasCompleteSnapshot()) {
         for (const auto& annotation : obj.GetResolvedAnnotations()) {
-            std::vector<flatbuffers::Offset<CHIRFormat::AnnotationScalarField>> fields;
-            if (annotation.scalarFields) {
-                for (const auto& field : *annotation.scalarFields) {
-                    const bool isBool = std::holds_alternative<bool>(field.value);
-                    const std::string* stringValue = isBool ? nullptr : &std::get<std::string>(field.value);
-                    fields.push_back(CHIRFormat::CreateAnnotationScalarFieldDirect(builder, field.name.c_str(),
-                        isBool ? CHIRFormat::AnnotationScalarKind_BOOL : CHIRFormat::AnnotationScalarKind_STRING,
-                        stringValue ? stringValue->c_str() : nullptr,
-                        isBool ? std::get<bool>(field.value) : false));
-                }
-            }
-            const auto beginPos = CHIRFormat::CreatePos(builder, annotation.beginLine, annotation.beginColumn);
-            const auto endPos = CHIRFormat::CreatePos(builder, annotation.endLine, annotation.endColumn);
-            const auto loc = CHIRFormat::CreateDebugLocationDirect(builder, annotation.sourceFile.c_str(),
-                annotation.fileId, beginPos, endPos);
-            resolved.push_back(CHIRFormat::CreateResolvedAnnotationDirect(builder,
-                annotation.qualifiedClassName.c_str(), annotation.declarationSymbol.c_str(), loc,
-                annotation.scalarFields.has_value(), fields.empty() ? nullptr : &fields));
+            resolved.push_back(SerializeResolvedAnnotation(builder, annotation));
         }
     }
     return CHIRFormat::CreateAnnoInfoDirect(builder, obj.GetAnnoFactoryFuncMangledName().data(),

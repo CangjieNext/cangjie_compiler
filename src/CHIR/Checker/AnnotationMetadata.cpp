@@ -75,6 +75,31 @@ std::string QualifiedAnnotationName(const AST::Decl& annotationClass)
     }
     return result;
 }
+
+std::optional<ResolvedAnnotationData> ReadResolvedAnnotation(const AST::Node* node, const GlobalVar& instance,
+    const std::unordered_map<unsigned, std::string>& fileNames, bool scalarsEvaluated)
+{
+    const auto call = DynamicCast<AST::CallExpr>(node);
+    if (!call || !call->resolvedFunction || !call->resolvedFunction->funcBody) {
+        return std::nullopt;
+    }
+    const auto type = call->resolvedFunction->funcBody->parentClassLike;
+    if (!type || type->fullPackageName.empty() || type->mangledName.empty()) {
+        return std::nullopt;
+    }
+    const auto file = fileNames.find(call->begin.fileID);
+    ResolvedAnnotationData item;
+    item.qualifiedClassName = QualifiedAnnotationName(*type);
+    item.declarationSymbol = type->mangledName;
+    item.sourceFile = file == fileNames.end() ? "" : file->second;
+    item.fileId = call->begin.fileID;
+    item.beginLine = call->begin.line > 0 ? static_cast<unsigned>(call->begin.line) : 0;
+    item.beginColumn = call->begin.column > 0 ? static_cast<unsigned>(call->begin.column) : 0;
+    item.endLine = call->end.line > 0 ? static_cast<unsigned>(call->end.line) : 0;
+    item.endColumn = call->end.column > 0 ? static_cast<unsigned>(call->end.column) : 0;
+    item.scalarFields = scalarsEvaluated ? TryReadAnnotationScalarFields(instance) : std::nullopt;
+    return item;
+}
 } // namespace
 
 std::optional<std::vector<EvaluatedAnnotationField>> TryReadAnnotationScalarFields(const GlobalVar& instance)
@@ -137,26 +162,15 @@ std::optional<ResolvedAnnotationMap> ReadResolvedAnnotationMetadata(
         }
         std::vector<ResolvedAnnotationData> annotations;
         for (size_t i = 0; i < children.size(); ++i) {
-            const auto call = DynamicCast<AST::CallExpr>(children[i].get().get());
-            if (!call || !call->resolvedFunction || !call->resolvedFunction->funcBody || !instances[i]) {
+            if (!instances[i]) {
                 return std::nullopt;
             }
-            const auto type = call->resolvedFunction->funcBody->parentClassLike;
-            if (!type || type->fullPackageName.empty() || type->mangledName.empty()) {
+            auto annotation =
+                ReadResolvedAnnotation(children[i].get().get(), *instances[i], fileNames, scalarsEvaluated);
+            if (!annotation) {
                 return std::nullopt;
             }
-            const auto file = fileNames.find(call->begin.fileID);
-            ResolvedAnnotationData item;
-            item.qualifiedClassName = QualifiedAnnotationName(*type);
-            item.declarationSymbol = type->mangledName;
-            item.sourceFile = file == fileNames.end() ? "" : file->second;
-            item.fileId = call->begin.fileID;
-            item.beginLine = call->begin.line > 0 ? static_cast<unsigned>(call->begin.line) : 0;
-            item.beginColumn = call->begin.column > 0 ? static_cast<unsigned>(call->begin.column) : 0;
-            item.endLine = call->end.line > 0 ? static_cast<unsigned>(call->end.line) : 0;
-            item.endColumn = call->end.column > 0 ? static_cast<unsigned>(call->end.column) : 0;
-            item.scalarFields = scalarsEvaluated ? TryReadAnnotationScalarFields(*instances[i]) : std::nullopt;
-            annotations.emplace_back(std::move(item));
+            annotations.emplace_back(std::move(*annotation));
         }
         if (!result.emplace(decl, std::move(annotations)).second) {
             return std::nullopt;

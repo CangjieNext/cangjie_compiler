@@ -158,6 +158,7 @@ private:
     void RunSanitizerCoverage();
     bool RulesChecking();
     void RunOptimizationPass();
+    bool RunAfterRawPhase();
     void RunUnitUnify();
     void OptimizeFuncReturnType();
     bool RunConstantEvaluation();

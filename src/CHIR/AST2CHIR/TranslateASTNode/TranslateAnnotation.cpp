@@ -184,6 +184,26 @@ static void AttachResolvedAnnotationSnapshot(
     // A declaration with annotations but no auxiliary result remains Unknown.
 }
 
+std::vector<CustomAnnoInstance> Translator::CollectLiteralAnnotationInstances(const AST::ArrayLit& annotations)
+{
+    std::vector<CustomAnnoInstance> instances;
+    for (const auto& elem : annotations.children) {
+        auto callExpr = StaticCast<AST::CallExpr*>(elem.get().get());
+        auto annoClassDecl = callExpr->resolvedFunction->funcBody->parentClassLike;
+        CJC_ASSERT(annoClassDecl);
+        std::vector<std::string> paramValues;
+        for (const auto& arg : callExpr->args) {
+            if (arg->expr->astKind != AST::ASTKind::LIT_CONST_EXPR) {
+                return {};
+            }
+            auto lit = StaticCast<AST::LitConstExpr*>(arg->expr.get().get());
+            paramValues.emplace_back(lit->rawString);
+        }
+        instances.emplace_back(annoClassDecl->identifier.GetRawText(), paramValues, TranslateLocation(*elem));
+    }
+    return instances;
+}
+
 AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeDef* parent)
 {
     // Since annotations must be consistent between common and specific sides,
@@ -229,31 +249,7 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
     // Collect annotations whose parameter values are literal constants.
     // Non-literal args leave annoInstances empty; still register the factory so
     // property getters/setters (same PropDecl) share one entry.
-    std::vector<CustomAnnoInstance> annoInstances;
-    bool allLiteralArgs = true;
-    for (auto& elem : annosArray->children) {
-        auto callExpr = StaticCast<AST::CallExpr*>(elem.get().get());
-        auto& callee = callExpr->resolvedFunction->funcBody;
-        auto annoClassDecl = callee->parentClassLike;
-        CJC_ASSERT(annoClassDecl);
-        auto annoClassDeclName = annoClassDecl->identifier.GetRawText();
-        std::vector<std::string> paramValues;
-        for (auto& arg : callExpr->args) {
-            if (auto& argVal = arg->expr; argVal->astKind == AST::ASTKind::LIT_CONST_EXPR) {
-                auto lit = StaticCast<AST::LitConstExpr*>(argVal.get().get());
-                paramValues.emplace_back(lit->rawString);
-            } else {
-                allLiteralArgs = false;
-                break;
-            }
-        }
-        if (!allLiteralArgs) {
-            annoInstances.clear();
-            break;
-        }
-        auto annoLoc = TranslateLocation(*elem);
-        annoInstances.emplace_back(annoClassDeclName, paramValues, annoLoc);
-    }
+    auto annoInstances = CollectLiteralAnnotationInstances(*annosArray);
     auto annoInfo = AnnoInfo(mangledName, std::move(annoInstances));
     AttachResolvedAnnotationSnapshot(decl, resolvedAnnotationMetadata, annoInfo);
     annotationFuncMap.emplace(&decl, annoInfo);

@@ -57,6 +57,9 @@
 #include "cangjie/Utils/ProfileRecorder.h"
 
 namespace Cangjie::CHIR {
+static constexpr size_t ANNOTATION_CONCAT_ARG_COUNT = 2;
+static constexpr size_t ANNOTATION_STRING_BYTE_LIMIT = 1048576;
+
 static const StringLiteral* AspectStringConstant(const Value* value)
 {
     auto* local = DynamicCast<LocalVar>(value);
@@ -67,34 +70,40 @@ static const StringLiteral* AspectStringConstant(const Value* value)
 // The normal const interpreter cannot execute std.core.String.+. Only fold a
 // call to that exact core method when both operands are already literals. This
 // operates on the disposable annotation-evaluation CHIR, never the final IR.
+static void TryFoldAnnotationStringConcat(Expression* expression, Block* block, CHIRBuilder& builder)
+{
+    auto* apply = DynamicCast<Apply>(expression);
+    auto* callee = apply ? DynamicCast<Function>(apply->GetCallee()) : nullptr;
+    auto* parent = callee ? callee->GetParentCustomTypeDef() : nullptr;
+    if (!parent || callee->GetPackageName() != "std.core" ||
+        parent->GetPackageName() != "std.core" || parent->GetSrcCodeIdentifier() != "String" ||
+        callee->GetSrcCodeIdentifier() != "+") {
+        return;
+    }
+    const auto args = apply->GetArgs();
+    if (args.size() != ANNOTATION_CONCAT_ARG_COUNT) {
+        return;
+    }
+    auto* lhs = AspectStringConstant(args[0]);
+    auto* rhs = AspectStringConstant(args[1]);
+    if (!lhs || !rhs || lhs->GetVal().size() > ANNOTATION_STRING_BYTE_LIMIT ||
+        rhs->GetVal().size() > ANNOTATION_STRING_BYTE_LIMIT ||
+        lhs->GetVal().size() + rhs->GetVal().size() > ANNOTATION_STRING_BYTE_LIMIT) {
+        return;
+    }
+    auto* replacement = builder.CreateConstantExpression<StringLiteral>(
+        apply->GetDebugLocation(), apply->GetResult()->GetType(), block, lhs->GetVal() + rhs->GetVal());
+    replacement->MoveBefore(apply);
+    apply->GetResult()->ReplaceWith(*replacement->GetResult(), apply->GetParentBlockGroup());
+    apply->RemoveSelfFromBlock();
+}
+
 static void FoldLiteralAnnotationStringConcat(Package& pkg, CHIRBuilder& builder)
 {
     for (auto* func : pkg.GetGlobalFuncsWithBody()) {
         for (auto* block : func->GetBody()->GetBlocks()) {
             for (auto* expression : block->GetExpressions()) {
-                auto* apply = DynamicCast<Apply>(expression);
-                auto* callee = apply ? DynamicCast<Function>(apply->GetCallee()) : nullptr;
-                auto* parent = callee ? callee->GetParentCustomTypeDef() : nullptr;
-                if (!parent || callee->GetPackageName() != "std.core" ||
-                    parent->GetPackageName() != "std.core" || parent->GetSrcCodeIdentifier() != "String" ||
-                    callee->GetSrcCodeIdentifier() != "+") {
-                    continue;
-                }
-                const auto args = apply->GetArgs();
-                if (args.size() != 2) {
-                    continue;
-                }
-                auto* lhs = AspectStringConstant(args[0]);
-                auto* rhs = AspectStringConstant(args[1]);
-                if (!lhs || !rhs || lhs->GetVal().size() > 1048576 || rhs->GetVal().size() > 1048576 ||
-                    lhs->GetVal().size() + rhs->GetVal().size() > 1048576) {
-                    continue;
-                }
-                auto* replacement = builder.CreateConstantExpression<StringLiteral>(
-                    apply->GetDebugLocation(), apply->GetResult()->GetType(), block, lhs->GetVal() + rhs->GetVal());
-                replacement->MoveBefore(apply);
-                apply->GetResult()->ReplaceWith(*replacement->GetResult(), apply->GetParentBlockGroup());
-                apply->RemoveSelfFromBlock();
+                TryFoldAnnotationStringConcat(expression, block, builder);
             }
         }
     }
@@ -1257,6 +1266,12 @@ bool ToCHIR::Run()
     if (ci.isCJLint) {
         return RunAnalysisForCJLint() && RunIRChecker(Phase::ANALYSIS_FOR_CJLINT);
     }
+    return RunAfterRawPhase() &&
+        (!sealAspectCandidates || CheckAspectCandidateSeal(*chirPkg, aspectCandidates, diag));
+}
+
+bool ToCHIR::RunAfterRawPhase()
+{
     // 5. analysis and check rules
     if (!RulesChecking()) {
         return false;
@@ -1300,7 +1315,7 @@ bool ToCHIR::Run()
             TempFileManager::Instance().CreateNewFileInfo({.fileName = chirPkg->GetName()}, TempFileKind::O_CHIR);
         CHIRSerializer::Serialize(*chirPkg, tempFileInfo.filePath, Phase::OPT);
     }
-    return !sealAspectCandidates || CheckAspectCandidateSeal(*chirPkg, aspectCandidates, diag);
+    return true;
 }
 
 bool ToCHIR::ExecuteCppPlugins()
