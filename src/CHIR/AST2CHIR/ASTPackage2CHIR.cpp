@@ -9,7 +9,6 @@
 
 #include <fstream>
 #include <cstdlib>
-#include <filesystem>
 #include <set>
 
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
@@ -23,6 +22,7 @@
 #include "cangjie/Mangle/CHIRManglingUtils.h"
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
+#include "cangjie/Utils/FileUtil.h"
 #include "cangjie/CHIR/IR/Type/PrivateTypeConverter.h"
 
 namespace Cangjie::CHIR {
@@ -588,8 +588,8 @@ void AST2CHIR::WriteAspectDependencyReport(const AST::Package& node)
     if (reportPath == nullptr) {
         return;
     }
-    const std::filesystem::path path(reportPath);
-    if (!path.is_absolute() || std::filesystem::exists(path)) {
+    const std::string path(reportPath);
+    if (!FileUtil::IsAbsolutePath(path) || FileUtil::FileExist(path)) {
         diag.DiagnoseRefactor(DiagKindRefactor::chir_aspect_build_phase_invalid,
             DEFAULT_POSITION, "dependency report path");
         failure = true;
