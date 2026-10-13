@@ -281,13 +281,13 @@ void DesugarSetForPropDecl(TypeManager& tyMgr, Expr& expr)
 
 void UpdatePosForMacroExpandedNodes(const std::vector<Ptr<AST::Package>>& pkgs)
 {
-    auto visit = [](Ptr<AST::Node> curNode) -> AST::VisitAction {
+    auto visit = [](Ptr<Node> curNode) -> VisitAction {
         if (!curNode->curMacroCall) {
-            return AST::VisitAction::WALK_CHILDREN;
+            return VisitAction::WALK_CHILDREN;
         }
         curNode->begin = curNode->GetDebugPos(curNode->begin);
         curNode->end = curNode->GetDebugPos(curNode->end);
-        return AST::VisitAction::WALK_CHILDREN;
+        return VisitAction::WALK_CHILDREN;
     };
     for (auto pkg : pkgs) {
         AST::Walker walker(pkg, visit);
@@ -295,6 +295,43 @@ void UpdatePosForMacroExpandedNodes(const std::vector<Ptr<AST::Package>>& pkgs)
     }
 }
 } // namespace
+
+/**
+ * Desugar of `foreign let` variable get is happened after typecheck well-typed.
+ * Each rvalue read is redirected to the compiler-generated getter which
+ * fetches the live value from the ArkTS side, so the CJ binding never caches.
+ */
+void TypeChecker::TypeCheckerImpl::DesugarArkTSVarGet(AST::Expr& expr)
+{
+    // 1. Do not desugar for expression which already has desugared result.
+    // 2. Do not desugar as variable get for left value.
+    // 3. Do not desugar for unreachable node.
+    // 4. Do not desugar for non-reference node.
+    bool ignored = expr.desugarExpr || !Ty::IsTyCorrect(expr.GetTy()) || expr.TestAttr(Attribute::LEFT_VALUE) ||
+        expr.TestAttr(Attribute::UNREACHABLE) || !expr.IsReferenceExpr();
+    if (ignored) {
+        return;
+    }
+    auto target = expr.GetTarget();
+    if (target == nullptr || target->astKind != ASTKind::VAR_DECL) {
+        return;
+    }
+    auto getter = GetArkTSVarGetter(*StaticCast<AST::VarDecl*>(target));
+    if (getter == nullptr) {
+        return;
+    }
+    auto baseExpr = CreateRefExpr(*getter);
+    // Function type of the generated zero-arg getter.
+    baseExpr->SetTy(typeManager.GetFunctionTy({}, expr.GetTy()));
+    CopyBasicInfo(&expr, baseExpr.get());
+    auto lastCallExpr = CreateCallExpr(std::move(baseExpr), {});
+    lastCallExpr->callKind = CallKind::CALL_DECLARED_FUNCTION;
+    lastCallExpr->resolvedFunction = getter;
+    lastCallExpr->SetTy(expr.GetTy());
+    CopyBasicInfo(&expr, lastCallExpr.get());
+    AddCurFile(*lastCallExpr, expr.curFile);
+    expr.desugarExpr = std::move(lastCallExpr);
+}
 
 void TypeChecker::PerformDesugarAfterSema(std::vector<Ptr<Package>>& pkgs) const
 {
@@ -412,6 +449,7 @@ void TypeChecker::TypeCheckerImpl::DesugarForPropDecl(Node& pkg)
             case ASTKind::REF_EXPR:
             case ASTKind::MEMBER_ACCESS:
                 DesugarGetForPropDecl(typeManager, *StaticAs<ASTKind::EXPR>(node));
+                DesugarArkTSVarGet(*StaticAs<ASTKind::EXPR>(node));
                 break;
             case ASTKind::ASSIGN_EXPR:
             case ASTKind::INC_OR_DEC_EXPR:

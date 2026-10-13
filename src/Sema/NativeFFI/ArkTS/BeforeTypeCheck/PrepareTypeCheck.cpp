@@ -78,13 +78,18 @@ bool CallsSourceEntry(const FuncDecl& wrapper, const FuncDecl& entry)
     auto restoreRef = restored ? DynamicCast<const RefExpr*>(restored->baseFunc.get()) : nullptr;
     auto restoredValue = restored && restored->args.size() == 1 ?
         DynamicCast<const RefExpr*>(restored->args.front()->expr.get()) : nullptr;
-    return enterRef && enterRef->ref.identifier == "__cj_arkts_enter" && context &&
+    // The frontend generator imports the scope guard under the alias
+    // __cj_arkts_enter_scope / __cj_arkts_restore_scope, so a reused frontend
+    // pair carries those identifiers instead of the bare SDK spellings.
+    return enterRef && (enterRef->ref.identifier == "__cj_arkts_enter" ||
+        enterRef->ref.identifier == "__cj_arkts_enter_scope") && context &&
         context->ref.identifier == contextParam->identifier &&
         (!context->ref.target || context->ref.target == contextParam) &&
         ref && (!ref->ref.target || ref->ref.target == &entry) && ref->ref.identifier == entry.identifier &&
         ref->ref.identifier.Begin() == entry.identifier.Begin() && ref->ref.identifier.End() == entry.identifier.End() &&
         guarded->tryBlock->body.back()->astKind == ASTKind::RETURN_EXPR &&
-        restoreRef && restoreRef->ref.identifier == "__cj_arkts_restore" && restoredValue &&
+        restoreRef && (restoreRef->ref.identifier == "__cj_arkts_restore" ||
+        restoreRef->ref.identifier == "__cj_arkts_restore_scope") && restoredValue &&
         restoredValue->ref.identifier == previous->identifier &&
         (!restoredValue->ref.target || restoredValue->ref.target == previous);
 }

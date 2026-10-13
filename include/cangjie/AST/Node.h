@@ -580,6 +580,7 @@ enum class AnnotationKind {
     ENSURE_PREPARED_TO_MOCK,
     NON_PRODUCT,
     ARKTS,
+    FOREIGN_VALUE,
     UNKNOWN
 };
 

@@ -1585,7 +1585,37 @@ private:
     void LowerArkTSFunctions(ASTContext& ctx);
     void PreCheckAnnoForFFI(AST::Node& root);
     void PrepareArkTSFunctions(AST::Package& pkg);
-    void LowerArkTSFunctions(ASTContext& ctx);
+    // Lower handwritten ARKTS_LOWERED functions; rebase keeps the upstream
+    // LowerArkTSFunctions (ARKTS_FUNCTION_WRAPPER wrappers) under its own name.
+    void LowerArkTSHandwrittenFunctions(ASTContext& ctx);
+    void PrepareArkTSVariables(AST::Package& pkg);
+    void LowerArkTSVariables(ASTContext& ctx);
+    void PrepareArkTSEnums(AST::Package& pkg);
+    void PrepareArkTSEnum(AST::EnumDecl& decl);
+    // Parse glue text produced by lowering and splice its statements into the
+    // (still empty) body of \p fd, collecting the new locals like PreCheck does
+    // so that references inside the generated code resolve. \p params are the
+    // function parameters bound to the synthesized `__argument_N` names.
+    bool SpliceArkTSGeneratedBody(ASTContext& ctx, AST::FuncDecl& fd, const std::string& code,
+        const std::unordered_map<std::string, std::string>& literals,
+        const std::vector<Ptr<AST::FuncParam>>& params);
+    // Getters generated for `foreign let` variables during lowering; each read of
+    // such a variable is replaced by a call to its getter to fetch a live value.
+    std::unordered_map<const AST::VarDecl*, AST::FuncDecl*> arkTSVarGetters;
+    std::unordered_map<const AST::FuncDecl*, const AST::VarDecl*> arkTSVarGetterSources;
+    AST::FuncDecl* GetArkTSVarGetter(const AST::VarDecl& varDecl) const;
+    // Replace one rvalue read of an `foreign let` variable with a call to the
+    // getter generated for it (PostTypeCheck, alongside prop decl desugaring).
+    void DesugarArkTSVarGet(AST::Expr& expr);
+    // Value mapping extracted from `@ForeignValue` annotations on members of a
+    // `foreign enum`, in declaration order. `value` is the decimal text of a
+    // numeric member or the (unescaped) string value of a string member.
+    struct ArkTSEnumMember {
+        const AST::VarDecl* ctor;
+        bool isString;
+        std::string value;
+    };
+    std::unordered_map<const AST::EnumDecl*, std::vector<ArkTSEnumMember>> arkTSEnums;
     /**
      * Set the ABI information to Foreign Modifier. By default Foreign Modifier has Attribute::C.
      */

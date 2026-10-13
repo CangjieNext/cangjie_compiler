@@ -302,6 +302,9 @@ void ParserImpl::CheckVarDeclModifiers(
                 (!diag.ignoreScopeCheck && (!HasModifier(modifiers, TokenKind::COMMON) && varDecl->type != nullptr)))) {
             DiagExpectedInitializerForToplevelVar(*varDecl);
         }
+    } else if (HasModifier(modifiers, TokenKind::FOREIGN) && varDecl->initializer != nullptr &&
+        scopeKind == ScopeKind::TOPLEVEL) {
+        ParseDiagnoseRefactor(DiagKindRefactor::parse_foreign_var_with_initializer, *varDecl->initializer);
     }
 }
 
@@ -1228,7 +1231,8 @@ OwnedPtr<Decl> ParserImpl::ParseEnumConstructor(
         DiagExpectNoModifier(firstMod);
     }
     for (auto& anno : annos) {
-        if (!(anno->kind == AnnotationKind::WHEN || anno->kind == AnnotationKind::DEPRECATED)) {
+        if (!(anno->kind == AnnotationKind::WHEN || anno->kind == AnnotationKind::DEPRECATED ||
+            anno->kind == AnnotationKind::FOREIGN_VALUE)) {
             DiagUnexpectedAnnoOn(*annos[0], caseIdentPos, annos[0]->identifier, caseIdent);
         }
     }

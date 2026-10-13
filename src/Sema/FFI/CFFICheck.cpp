@@ -121,6 +121,34 @@ void CheckAnnoArkTS(Decl& decl, const Annotation& anno, DiagnosticEngine& diag)
     diag.DiagnoseRefactor(DiagKindRefactor::sema_arkts_bridge_pending, anno);
 }
 
+void CheckAnnoForeignValue(Decl& decl, const Annotation& anno, DiagnosticEngine& diag)
+{
+    // @ForeignValue maps a constructor of an ArkTS foreign enum to its ArkTS
+    // value. Those enums are marked ARKTS_LOWERED during prepare-typecheck,
+    // which always runs before this check.
+    auto owner = decl.outerDecl;
+    if (decl.TestAttr(Attribute::ENUM_CONSTRUCTOR) && owner && owner->astKind == ASTKind::ENUM_DECL &&
+        owner->TestAttr(Attribute::ARKTS_LOWERED)) {
+        const Annotation* first = nullptr;
+        for (auto& other : decl.annotations) {
+            if (other->kind != AnnotationKind::FOREIGN_VALUE) {
+                continue;
+            }
+            if (first == nullptr) {
+                first = other.get();
+            }
+            if (other.get() == &anno) {
+                if (first != &anno) {
+                    diag.DiagnoseRefactor(DiagKindRefactor::sema_arkts_foreign_value_duplicate, anno,
+                        decl.identifier.Val());
+                }
+                return;
+            }
+        }
+    }
+    diag.DiagnoseRefactor(DiagKindRefactor::sema_arkts_foreign_value_misplaced, anno, decl.identifier.Val());
+}
+
 AnnoCheckMap& GetAnnoCheckMap()
 {
     static AnnoCheckMap annoCheckMap = {
@@ -129,6 +157,7 @@ AnnoCheckMap& GetAnnoCheckMap()
         {AnnotationKind::FASTNATIVE, CheckAnnoFastNative},
         {AnnotationKind::FROZEN, CheckAnnoFrozen},
         {AnnotationKind::ARKTS, CheckAnnoArkTS},
+        {AnnotationKind::FOREIGN_VALUE, CheckAnnoForeignValue},
     };
     return annoCheckMap;
 }

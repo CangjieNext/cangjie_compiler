@@ -1829,13 +1829,6 @@ std::vector<TAnnoOffset> ASTWriter::ASTWriterImpl::SaveAnnotations(const Decl& d
                 annotations.emplace_back(impl);
                 break;
             }
-            case AST::AnnotationKind::ARKTS: {
-                auto args = builder.CreateVector<TAnnoArgOffset>(SaveAnnotationArgs(*annotation));
-                auto arkts = PackageFormat::CreateAnno(builder, PackageFormat::AnnoKind_ArkTS,
-                    builder.CreateString(annotation->identifier.Val()), args);
-                annotations.emplace_back(arkts);
-                break;
-            }
             case AST::AnnotationKind::CUSTOM:
                 if (annotation->isCompileTimeVisible || decl.TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC)) {
                     // Save common/specific annotations for consistency checking

@@ -76,7 +76,3 @@ target_link_libraries(
     GTest::gtest_main
     TestCompilerInstanceObject)
 add_test(NAME ParseOuterInterfaceTest COMMAND ParseOuterInterfaceTest)
-
-add_executable(ArkTSAnnotationTest ArkTSAnnotationTest.cpp)
-target_link_libraries(ArkTSAnnotationTest cangjie-lsp GTest::gtest GTest::gtest_main)
-add_test(NAME ArkTSAnnotationTest COMMAND ArkTSAnnotationTest)

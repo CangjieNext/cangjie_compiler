@@ -73,6 +73,8 @@ const ConflictRule TOPLEVEL_ENUM_MODIFIERS[] = {
     CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
     CR(TokenKind::COMMON, TokenKind::PRIVATE, TokenKind::SPECIFIC),
     CR(TokenKind::SPECIFIC, TokenKind::PRIVATE, TokenKind::COMMON),
+    CR(TokenKind::FOREIGN, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED,
+        TokenKind::COMMON, TokenKind::SPECIFIC),
 };
 
 const ConflictRule CLASS_BODY_VARIABLE_MODIFIERS[] = {

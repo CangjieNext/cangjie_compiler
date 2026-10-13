@@ -31,6 +31,7 @@
 #include "cangjie/Frontend/CompileStrategy.h"
 #include "cangjie/IncrementalCompilation/ASTCacheCalculator.h"
 #include "cangjie/IncrementalCompilation/IncrementalCompilationLogger.h"
+#include "cangjie/Lex/Lexer.h"
 #include "cangjie/Macro/MacroExpansion.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
@@ -688,6 +689,50 @@ bool CompilerInstance::PerformImportPackage()
     // Generate entries before import/collection so normal semantic analysis
     // handles their SDK signatures, registration and finally blocks.
     for (auto pkg : GetSourcePackages()) {
+        if (invocation.globalOptions.scanDepPkg) {
+            // Scan mode stops parsing after imports, so no declarations are
+            // available for the detection above. Re-lex the sources and watch
+            // for the '@ArkTS' token pair; report the implicit SDK dependencies
+            // with the entry alias spellings so cjpm resolves them before
+            // compiling.
+            for (auto& file : pkg->files) {
+                std::string failedReason;
+                auto content = FileUtil::ReadFileContent(file->filePath, failedReason);
+                if (!content || content->find("@ArkTS") == std::string::npos) {
+                    continue;
+                }
+                Lexer lexer(*content, diag, GetSourceManager(), file->begin);
+                auto tokens = lexer.GetTokens();
+                bool hasArkTS = false;
+                for (size_t i = 0; i + 1 < tokens.size(); ++i) {
+                    if (tokens[i].kind == TokenKind::AT && tokens[i + 1].kind == TokenKind::IDENTIFIER &&
+                        tokens[i + 1].Value() == "ArkTS") {
+                        hasArkTS = true;
+                        break;
+                    }
+                }
+                if (!hasArkTS) {
+                    continue;
+                }
+                const std::string imports =
+                    "import ohos.ark_interop.JSContext as __cj_arkts_JSContext\n"
+                    "import ohos.ark_interop.JSCallInfo as __cj_arkts_JSCallInfo\n"
+                    "import ohos.ark_interop.JSValue as __cj_arkts_JSValue\n"
+                    "import ohos.ark_interop.JSModule as __cj_arkts_JSModule\n"
+                    "import cj_arkts_context_v1.__cj_arkts_enter as __cj_arkts_enter_scope\n"
+                    "import cj_arkts_context_v1.__cj_arkts_restore as __cj_arkts_restore_scope\n";
+                Parser parser(imports, diag, GetSourceManager(), file->begin);
+                auto generated = parser.ParseTopLevel();
+                if (generated) {
+                    for (auto& imported : generated->imports) {
+                        imported->EnableAttr(Attribute::COMPILER_ADD);
+                        imported->curFile = file.get();
+                        file->imports.emplace_back(std::move(imported));
+                    }
+                }
+            }
+            continue;
+        }
         std::unordered_map<std::string, size_t> entryNames;
         for (auto& file : pkg->files) {
             for (auto& decl : file->decls) {
@@ -707,6 +752,15 @@ bool CompilerInstance::PerformImportPackage()
                 hasArkTS = hasArkTS || (fd && fd->HasAnno(AnnotationKind::ARKTS) &&
                     fd->TestAttr(Attribute::FOREIGN) && !fd->TestAttr(Attribute::PRIVATE) &&
                     fd->funcBody && !fd->funcBody->body && !fd->GetGeneric());
+                // Foreign variables and enums need the same context/import
+                // injection as foreign functions: their generated glue calls
+                // __cj_arkts_current and ohos.ark_interop value factories.
+                auto vd = DynamicCast<VarDecl*>(decl.get());
+                hasArkTS = hasArkTS || (vd && vd->HasAnno(AnnotationKind::ARKTS) &&
+                    vd->TestAttr(Attribute::FOREIGN) && !vd->outerDecl);
+                auto ed = DynamicCast<EnumDecl*>(decl.get());
+                hasArkTS = hasArkTS || (ed && ed->HasAnno(AnnotationKind::ARKTS) &&
+                    ed->TestAttr(Attribute::FOREIGN) && !ed->outerDecl);
                 // Leave duplicate source declarations to normal conflict
                 // diagnostics; generated calls would add ambiguous-call errors.
                 if (!fd || !IsMinimalArkTSEntry(*fd) || entryNames[fd->identifier.Val()] != 1) {
@@ -745,6 +799,9 @@ bool CompilerInstance::PerformImportPackage()
                         }
                         return VisitAction::WALK_CHILDREN;
                     }).Walk();
+                    // The sema entry preparer recognizes compiler-added pairs
+                    // and reuses them instead of generating a second set.
+                    entry->EnableAttr(Attribute::COMPILER_ADD);
                     AddCurFile(*entry, file.get());
                     entries.emplace_back(std::move(entry));
                 }

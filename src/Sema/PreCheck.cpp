@@ -2021,7 +2021,8 @@ void TypeChecker::TypeCheckerImpl::PreCheck(const std::vector<Ptr<ASTContext>>& 
     Utils::ProfileRecorder::Start("PreCheck", "PreCheckUsage");
     for (auto& ctx : contexts) {
         // Phase: check annotation for FFI.
-        LowerArkTSFunctions(*ctx);
+        LowerArkTSHandwrittenFunctions(*ctx);
+        LowerArkTSVariables(*ctx);
         PreCheckAnnoForFFI(*ctx->curPackage);
         PreCheckUsage(*ctx, *ctx->curPackage);
     }

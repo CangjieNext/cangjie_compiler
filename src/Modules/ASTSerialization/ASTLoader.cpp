@@ -932,9 +932,6 @@ OwnedPtr<Annotation> ASTLoader::ASTLoaderImpl::LoadAnnotation(const PackageForma
         case PackageFormat::AnnoKind_ForeignName:
             annotation->kind = AnnotationKind::FOREIGN_NAME;
             break;
-        case PackageFormat::AnnoKind_ArkTS:
-            annotation->kind = AnnotationKind::ARKTS;
-            break;
         case PackageFormat::AnnoKind_Custom:
             annotation->kind = AnnotationKind::CUSTOM;
             annotation->isCompileTimeVisible = true;
