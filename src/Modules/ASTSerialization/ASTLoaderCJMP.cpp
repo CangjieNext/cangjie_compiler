@@ -63,6 +63,19 @@ std::set<std::string> CollectFeaturesFromPackage(AST::Package& pkg)
     return (*pkg.files.begin())->GetFeatures();
 }
 
+namespace {
+void ReportUnusableCommonPartCjo(DiagnosticEngine& diag, const std::string& cjoPath, const std::string& packageName)
+{
+    auto builder = diag.DiagnoseRefactor(
+        DiagKindRefactor::module_common_cjo_not_common_part, DEFAULT_POSITION, cjoPath, packageName);
+    builder.AddNote("this cjo was not produced by a common part compilation with '--output-type=chir'");
+    builder.AddNote("a specific part compilation writes '" + packageName +
+        ".cjo' to its output directory and may have overwritten the common part cjo");
+    builder.AddHelp(DiagHelp("recompile the common part with '--output-type=chir' and keep its '.cjo' and '.chir' "
+        "together in a separate directory, e.g. with '--output-dir'"));
+}
+} // namespace
+
 void ValidateCommonSpecificFeatureSetsRelations(
     const AST::File& commonFile,
     const std::set<std::string>& specificFeatures,
@@ -184,6 +197,7 @@ bool ASTLoader::ASTLoaderImpl::ValidateOptions()
 
 bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
 {
+    commonPartPreloaded = false;
     if (!VerifyForData("ast")) {
         return false;
     }
@@ -193,15 +207,21 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
     if (!CheckCjoVersion()) {
         return false;
     }
+    if (package->allFileInfo() == nullptr) {
+        ASTLoaderCJMP::ReportUnusableCommonPartCjo(diag, cjoPath, pkg.fullPackageName);
+        return false;
+    }
+
     CJC_NULLPTR_CHECK(package->fullPkgName());
-
-    curPackage = &pkg;
-
     auto deserializedPackageName = package->fullPkgName()->str();
     if (pkg.fullPackageName != deserializedPackageName) {
         ASTLoaderCJMP::ReportPackageMismatch(diag, pkg, pkg.fullPackageName, deserializedPackageName);
         return false;
     }
+    if (!ValidateOptions()) {
+        return false;
+    }
+    curPackage = &pkg;
     auto specificFeatures = ASTLoaderCJMP::CollectFeaturesFromPackage(pkg);
 
     allTypes.resize(package->allTypes()->size(), nullptr);
@@ -216,13 +236,6 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
         pkg.files.emplace_back(std::move(file));
     }
 
-    if (!ValidateOptions()) {
-        // options mismatch must abort compilation
-        // otherwise the difference in desugaring/chir generation
-        // may lead to a crash in subsequent compilation stages
-        return false;
-    }
-
     AddCurFile(pkg);
     auto imports = package->imports();
     CJC_NULLPTR_CHECK(imports);
@@ -232,6 +245,7 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
         importedFullPackageNames.emplace_back(importItem);
     }
 
+    commonPartPreloaded = true;
     return true;
 }
 
