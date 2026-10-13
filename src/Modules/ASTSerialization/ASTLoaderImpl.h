@@ -92,6 +92,7 @@ private:
     Ptr<AST::Package> curPackage{nullptr};
     bool importSrcCode{false};
     bool deserializingCommon{false};
+    bool commonPartPreloaded{false};
 
     // Define the context status for loading type cache of incremental compilation.
     bool isLoadCache{false};
