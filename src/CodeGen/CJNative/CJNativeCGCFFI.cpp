@@ -18,12 +18,35 @@
 #include "Utils/CGCommonDef.h"
 #include "Utils/CGUtils.h"
 #include "cangjie/CHIR/IR/Type/StructDef.h"
+#include "cangjie/Mangle/CHIRTypeManglingUtils.h"
 #include "cangjie/Utils/Casting.h"
+
+#include "llvm/Support/raw_ostream.h"
 
 using namespace Cangjie;
 using namespace CodeGen;
 
 namespace {
+// [cfunc-ext-instrument] Temporary instrumentation for the CFunc sub-word integer extension fix.
+// At every point where this fix changes the generated IR compared with the compiler before the
+// fix, print one log line tagged with the mangled name of the affected function, so the impact of
+// the fix can be checked from the compiler output. Remove this helper block and all
+// "[cfunc-ext-instrument]" marked snippets once the fix has been verified.
+bool CFuncExtLogEnabled()
+{
+    return true;
+}
+
+// [cfunc-ext-instrument] Short spelling of the extension attributes for the log lines.
+const char* ExtAttrKindName(llvm::Attribute::AttrKind attr)
+{
+    if (attr == llvm::Attribute::SExt) {
+        return "sext";
+    }
+    return attr == llvm::Attribute::ZExt ? "zext" : "noundef";
+}
+// [cfunc-ext-instrument] End of the temporary instrumentation helpers.
+
 const unsigned int BITS_PER_BYTE = 8;
 const unsigned int BYTES_PER_WORD = 8;
 
@@ -188,6 +211,7 @@ void LinuxAmd64CJNativeCGCFFI::AddFunctionAttr(const CHIR::FuncType& chirFuncTy,
     // x86-64 ELF follows the caller-extends contract that clang encodes with
     // signext/zeroext on sub-word integer parameters and returns of the same C signature.
     const unsigned int SMALL_INT_THRESHOLD = 32;
+    std::string addedAttrs; // [cfunc-ext-instrument] collects the IR-changing attrs added below
     for (auto it = kinds.begin(); it != kinds.end(); ++it, ++argIdx) {
         it = std::find_if(it, kinds.end(), [](auto kind) { return kind != ProcessKind::SKIP; });
         if (it == kinds.end()) {
@@ -195,10 +219,14 @@ void LinuxAmd64CJNativeCGCFFI::AddFunctionAttr(const CHIR::FuncType& chirFuncTy,
         }
         if (auto argType = chirFuncTy.GetParamType(it - kinds.begin()); argType->IsBoolean() || argType->IsInteger()) {
             AddParamAttr(&llvmFunc, argIdx, llvm::Attribute::NoUndef);
+            // [cfunc-ext-instrument] The compiler before the fix only set ZExt on lowered-i1 args
+            // and never set noundef here, so every attribute below changes the stub declaration IR.
+            addedAttrs += " arg" + std::to_string(argIdx) + ":noundef";
             auto intArgType = llvm::dyn_cast<llvm::IntegerType>(llvmFunc.getArg(argIdx)->getType());
             if (intArgType && intArgType->getBitWidth() < SMALL_INT_THRESHOLD) {
-                AddParamAttr(&llvmFunc, argIdx,
-                    argType->IsSignedInteger() ? llvm::Attribute::SExt : llvm::Attribute::ZExt);
+                auto extendAttr = argType->IsSignedInteger() ? llvm::Attribute::SExt : llvm::Attribute::ZExt;
+                AddParamAttr(&llvmFunc, argIdx, extendAttr);
+                addedAttrs += std::string("+") + ExtAttrKindName(extendAttr);
             }
         }
         if (*it == ProcessKind::NO_PROCESS || *it == ProcessKind::DIRECT) {
@@ -217,8 +245,23 @@ void LinuxAmd64CJNativeCGCFFI::AddFunctionAttr(const CHIR::FuncType& chirFuncTy,
     if (auto retType = chirFuncTy.GetReturnType(); retType->IsBoolean() || retType->IsInteger()) {
         auto intRetType = llvm::dyn_cast<llvm::IntegerType>(llvmFunc.getReturnType());
         if (intRetType && intRetType->getBitWidth() < SMALL_INT_THRESHOLD) {
-            AddRetAttr(&llvmFunc, retType->IsSignedInteger() ? llvm::Attribute::SExt : llvm::Attribute::ZExt);
+            auto extendAttr = retType->IsSignedInteger() ? llvm::Attribute::SExt : llvm::Attribute::ZExt;
+            AddRetAttr(&llvmFunc, extendAttr);
+            // [cfunc-ext-instrument] The compiler before the fix set a ret ZExt only when the
+            // return was not sret-indirect and the lowered return type was exactly i1, so this is
+            // an IR change unless that very same ZExt was already there.
+            const bool preFixHadSameZExt = extendAttr == llvm::Attribute::ZExt &&
+                !(found1 != typeMap.end() && found1->second.IsIndirect()) && intRetType->getBitWidth() == 1;
+            if (!preFixHadSameZExt) {
+                addedAttrs += std::string(" ret:") + ExtAttrKindName(extendAttr);
+            }
         }
+    }
+    // [cfunc-ext-instrument] The IR of the CFunc stub declaration changed: log the mangle name.
+    if (!addedAttrs.empty() && CFuncExtLogEnabled()) {
+        llvm::errs() << "[cfunc-ext-fix] IR changed: noundef/sub-word int attrs added to CFunc stub declaration '"
+                     << llvmFunc.getName() << "' (CFunc mangle name: " << MangleType(chirFuncTy)
+                     << "):" << addedAttrs << "\n";
     }
     AddFnAttr(&llvmFunc, llvm::Attribute::get(llvmFunc.getContext(), CodeGen::CFUNC_ATTR));
 }

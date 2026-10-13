@@ -21,11 +21,36 @@
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
 
+#include <cstdlib>
+
+#include "llvm/Support/raw_ostream.h"
+
 using namespace Cangjie;
 using namespace CodeGen;
 
 namespace {
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+// [cfunc-ext-instrument] Temporary instrumentation for the CFunc sub-word integer extension fix.
+// At every point where this fix changes the generated IR compared with the compiler before the
+// fix, print one log line tagged with the mangled name of the affected function, so the impact of
+// the fix can be checked from the compiler output.
+// Set the environment variable CJC_CFUNC_EXT_LOG=0 to silence these logs. Remove this helper block
+// and all "[cfunc-ext-instrument]" marked snippets once the fix has been verified.
+bool CFuncExtLogEnabled()
+{
+    return true;
+}
+
+// [cfunc-ext-instrument] Short spelling of the extension attributes for the log lines.
+const char* ExtAttrKindName(llvm::Attribute::AttrKind attr)
+{
+    if (attr == llvm::Attribute::SExt) {
+        return "sext";
+    }
+    return attr == llvm::Attribute::ZExt ? "zext" : "noundef";
+}
+// [cfunc-ext-instrument] End of the temporary instrumentation helpers.
+
 // Only integers narrower than 32 bits take part in the C signext/zeroext ABI; wider
 // integers always occupy their register as a whole.
 constexpr unsigned int SUB_WORD_INT_BIT_WIDTH = 32;
@@ -43,6 +68,7 @@ void AddSubWordIntParamAttrs(
     const CGModule& cgMod, const CHIR::FuncType& funcTy, llvm::CallBase& callInst, bool sret)
 {
     unsigned callArgIdx = sret ? 1U : 0U;
+    std::string addedAttrs; // [cfunc-ext-instrument] describes the attrs newly added below
     for (auto chirParamTy : funcTy.GetParamTypes()) {
         CJC_NULLPTR_CHECK(chirParamTy);
         if (IsZeroSizedTypeInC(cgMod, *chirParamTy)) {
@@ -55,8 +81,26 @@ void AddSubWordIntParamAttrs(
             auto extendAttr = chirParamTy->IsSignedInteger() ? llvm::Attribute::SExt : llvm::Attribute::ZExt;
             AddParamAttr(&callInst, callArgIdx, llvm::Attribute::NoUndef);
             AddParamAttr(&callInst, callArgIdx, extendAttr);
+            // [cfunc-ext-instrument] The compiler before the fix added no attribute at this call
+            // site, so this attribute pair always changes the IR of the wrapper function.
+            auto loweredTy = llvm::cast<llvm::IntegerType>(callInst.getArgOperand(callArgIdx)->getType());
+            const char* kindName = "unsigned";
+            if (chirParamTy->IsBoolean()) {
+                kindName = "bool";
+            } else if (chirParamTy->IsSignedInteger()) {
+                kindName = "signed";
+            }
+            addedAttrs += " arg" + std::to_string(callArgIdx) + "(i" +
+                std::to_string(loweredTy->getBitWidth()) + "," + kindName + "):noundef+" +
+                ExtAttrKindName(extendAttr);
         }
         callArgIdx++;
+    }
+    // [cfunc-ext-instrument] The IR of the wrapper changed: log it with the CFunc's mangle name.
+    if (!addedAttrs.empty() && CFuncExtLogEnabled()) {
+        llvm::errs() << "[cfunc-ext-fix] IR changed: sub-word int attrs added at indirect CFunc call site in '"
+                     << callInst.getFunction()->getName() << "' (CFunc mangle name: " << MangleType(funcTy)
+                     << "):" << addedAttrs << "\n";
     }
 }
 
@@ -276,9 +320,13 @@ llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, llvm::Function& call
         }
     }
     // Copy the declaration's extension attributes onto the call site on every target.
+    // [cfunc-ext-instrument] The compiler before the fix copied them on macOS x86 only, so on
+    // every other target each attribute copied below is an IR change.
+    std::string copiedAttrs; // [cfunc-ext-instrument] describes the attrs newly copied below
     for (auto ext : {llvm::Attribute::SExt, llvm::Attribute::ZExt}) {
         if (callee.hasRetAttribute(ext)) {
             callRet->addRetAttr(ext);
+            copiedAttrs += std::string(" ret:") + ExtAttrKindName(ext);
         }
     }
     // '<' means variable-length parameters exist in the function.
@@ -287,8 +335,15 @@ llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, llvm::Function& call
         for (auto attr : {llvm::Attribute::NoUndef, llvm::Attribute::SExt, llvm::Attribute::ZExt}) {
             if (callee.hasParamAttribute(i, attr)) {
                 callRet->addParamAttr(i, attr);
+                copiedAttrs += std::string(" arg") + std::to_string(i) + ":" + ExtAttrKindName(attr);
             }
         }
+    }
+    // [cfunc-ext-instrument] The IR of the caller changed: log it with the caller's mangle name.
+    if (!copiedAttrs.empty() && CFuncExtLogEnabled()) {
+        llvm::errs() << "[cfunc-ext-fix] IR changed: extension attrs copied to direct CFunc call to '"
+                     << callee.getName() << "' in function '" << callRet->getFunction()->getName()
+                     << "':" << copiedAttrs << "\n";
     }
     if (isSRet) {
         AddParamAttr(callRet, 0, llvm::Attribute::NoAlias);
