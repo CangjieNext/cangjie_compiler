@@ -1674,8 +1674,11 @@ std::string Lambda::AddExtraComment() const
     if (!srcCodeIdentifier.empty()) {
         res.emplace_back("srcCodeIdentifier: " + srcCodeIdentifier);
     }
-    if (paramDftValHostFunc != nullptr) {
-        res.emplace_back("paramDftValHostFunc: " + paramDftValHostFunc->GetIdentifier());
+    if (paramDftValHostParam != nullptr) {
+        auto owner = paramDftValHostParam->GetOwnerLambda();
+        CJC_NULLPTR_CHECK(owner);
+        res.emplace_back(
+            "paramDftValHostParam: " + owner->GetIdentifier() + "[" + paramDftValHostParam->GetIdentifier() + "]");
     }
     if (auto gStr =  GetGenericTypeConstaintsStr(genericTypeParams); !gStr.empty()) {
         res.emplace_back(gStr);
@@ -2330,14 +2333,29 @@ bool Lambda::IsLocalFunc() const
     return isLocalFunc;
 }
 
-void Lambda::SetParamDftValHostFunc(Lambda& hostFunc)
+void Lambda::SetParamDftValHostParam(Parameter& hostParam)
 {
-    paramDftValHostFunc = &hostFunc;
+    paramDftValHostParam = &hostParam;
+    CJC_NULLPTR_CHECK(GetResult());
+    hostParam.SetParamDftValFunc(*GetResult());
+}
+
+Parameter* Lambda::GetParamDftValHostParam() const
+{
+    return paramDftValHostParam;
 }
 
 Lambda* Lambda::GetParamDftValHostFunc() const
 {
-    return paramDftValHostFunc;
+    return paramDftValHostParam == nullptr ? nullptr : paramDftValHostParam->GetOwnerLambda();
+}
+
+void Lambda::ClearParamDftValHostParam()
+{
+    if (paramDftValHostParam != nullptr && paramDftValHostParam->GetParamDftValFunc() == GetResult()) {
+        paramDftValHostParam->ClearParamDftValFunc();
+    }
+    paramDftValHostParam = nullptr;
 }
 
 void Lambda::RemoveSelfFromBlock()

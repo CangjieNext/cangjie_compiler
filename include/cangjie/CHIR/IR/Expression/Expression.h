@@ -2049,18 +2049,28 @@ public:
     std::string GetSrcCodeIdentifier() const;
 
     /**
-     * @brief Sets the host function for parameter default values.
+     * @brief Sets the host Parameter whose default value is computed by this (desugared) lambda.
      *
-     * @param hostFunc The host function to set.
+     * @param hostParam The host Parameter to set.
      */
-    void SetParamDftValHostFunc(Lambda& hostFunc);
+    void SetParamDftValHostParam(Parameter& hostParam);
 
     /**
-     * @brief Retrieves the host function for parameter default values.
+     * @brief Retrieves the host Parameter whose default value is computed by this lambda.
      *
-     * @return The host function for parameter default values.
+     * @return The host Parameter, or nullptr if this is not a default-value desugar lambda.
+     */
+    Parameter* GetParamDftValHostParam() const;
+
+    /**
+     * @brief Convenience: owner Lambda of GetParamDftValHostParam(), or nullptr.
      */
     Lambda* GetParamDftValHostFunc() const;
+
+    /**
+     * @brief Clears the link to the host Parameter for default values.
+     */
+    void ClearParamDftValHostParam();
     
     // ===--------------------------------------------------------------------===//
     // Lambda Body
@@ -2193,7 +2203,7 @@ private:
     FuncType* funcTy;
     bool isLocalFunc{false};
     std::vector<GenericType*> genericTypeParams;
-    Lambda* paramDftValHostFunc = nullptr;
+    Parameter* paramDftValHostParam = nullptr;
     bool isCompileTimeValue = false;
 };
 
