@@ -38,8 +38,6 @@ public:
      */
     void Check();
 
-    std::unordered_map<Ptr<const InheritableDecl>, MemberMap> MoveStructInheritedMembers();
-
 private:
     void CheckMembersWithInheritedDecls(const InheritableDecl& decl);
     MemberMap GetAndCheckInheritedInterfaces(const InheritableDecl& decl);

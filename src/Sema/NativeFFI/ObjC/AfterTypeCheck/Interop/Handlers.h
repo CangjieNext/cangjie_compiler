@@ -200,15 +200,6 @@ public:
 };
 
 /**
- * Inserts stubs for members of mirror interface handle wrapper classes.
- */
-class GenerateInMirrorInterfaceHandleWrappers
-    : public Handler<GenerateInMirrorInterfaceHandleWrappers, InteropContext> {
-public:
-    void HandleImpl(InteropContext& ctx);
-};
-
-/**
  * Desugars all members of every @ObjCMirror declarations.
  * Methods are desugared as follows:
  * 1. If method returns @ObjCMirror/@ObjCImpl value:
