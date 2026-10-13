@@ -134,6 +134,21 @@ void SetLiftedLambdaAttr(Function& func, Lambda& lambda)
     }
 }
 
+// After lifting a default-value desugar Lambda to a global Function:
+// 1) forward: new Function needs paramDftValHostParam (Lambda's field is not shared);
+// 2) reverse: SetParamDftValHostParam also does hostParam.SetParamDftValFunc(liftedDesugar),
+//    replacing the old Lambda LocalVar so the host Parameter points at the lifted Function.
+// Reuse that Parameter object. AddParam/SetOwnerFunc may already have moved it onto the
+// lifted host Function; the link does not depend on which of host and desugar is converted first.
+void SetLiftedParamDftValHostParam(Function& liftedDesugar, const Lambda& nestedFunc)
+{
+    auto hostParam = nestedFunc.GetParamDftValHostParam();
+    if (hostParam == nullptr) {
+        return;
+    }
+    liftedDesugar.SetParamDftValHostParam(*hostParam);
+}
+
 void SetMemberMethodAttr(Function& func, bool isConst)
 {
     func.EnableAttr(Attribute::COMPILER_ADD);
@@ -2038,13 +2053,8 @@ Function* ClosureConversion::LiftLambdaToGlobalFunc(
     // 1) convert all the usage of captured variable to fields in env
     ReplaceEnvVarWithMemberVar(capturedValues, envParamDebug, *globalFunc, *thisPtr, builder);
 
-    // 2) keep relations between default's param's desugar func and the func where the param is belonged.
-    // logic below depends on the desugar func is CCed after the func where the param is belonged.
-    if (nestedFunc.GetParamDftValHostFunc()) {
-        if (auto it = convertedCache.find(nestedFunc.GetParamDftValHostFunc()); it != convertedCache.cend()) {
-            globalFunc->SetParamDftValHostFunc(*it->second);
-        }
-    }
+    // 2) keep relations between default's param's desugar func and the Parameter it belongs to.
+    SetLiftedParamDftValHostParam(*globalFunc, nestedFunc);
 
     // 3) Traverse and instantiate the original generics with the new generics of lifted func
     auto thisTyReplacement = nestedFunc.GetTopLevelFunc()->GetParentCustomTypeOrExtendedType();

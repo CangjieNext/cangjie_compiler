@@ -294,6 +294,21 @@ void Parameter::SetAnnoInfo(AnnoInfo&& info)
     annoInfo = std::move(info);
 }
 
+Value* Parameter::GetParamDftValFunc() const
+{
+    return paramDftValFunc;
+}
+
+void Parameter::SetParamDftValFunc(Value& func)
+{
+    paramDftValFunc = &func;
+}
+
+void Parameter::ClearParamDftValFunc()
+{
+    paramDftValFunc = nullptr;
+}
+
 std::string Parameter::ToString(size_t indent) const
 {
     /** @CustomAnnotation
@@ -307,7 +322,14 @@ std::string Parameter::ToString(size_t indent) const
         ss << "[" << srcCodeIdentifier << "]";
     }
     ss << ": " << ty->ToString();
-    ss << CommentToString(BaseCommentToString());
+    std::vector<std::string> comments;
+    if (auto baseComment = BaseCommentToString(); !baseComment.empty()) {
+        comments.emplace_back(baseComment);
+    }
+    if (paramDftValFunc != nullptr) {
+        comments.emplace_back("paramDftValFunc: " + paramDftValFunc->GetIdentifier());
+    }
+    ss << CommentToString(comments);
     return ss.str();
 }
 
@@ -1009,6 +1031,9 @@ Type* Function::GetReturnType() const
 
 void Function::DestroySelf()
 {
+    // Drop desugar↔host Parameter link first so a removed DEFAULT_PARAMETER_FUNC
+    // does not leave a dangling paramDftValFunc on the host Parameter.
+    ClearParamDftValHostParam();
     if (declaredParent) {
         Utils::RemoveFromVec(declaredParent->methods, this);
         declaredParent = nullptr;
@@ -1135,19 +1160,28 @@ const std::vector<GenericType*>& Function::GetGenericTypeParams() const
     return genericTypeParams;
 }
 
-void Function::SetParamDftValHostFunc(Function& hostFunc)
+void Function::SetParamDftValHostParam(Parameter& hostParam)
 {
-    paramDftValHostFunc = &hostFunc;
+    paramDftValHostParam = &hostParam;
+    hostParam.SetParamDftValFunc(*this);
+}
+
+Parameter* Function::GetParamDftValHostParam() const
+{
+    return paramDftValHostParam;
 }
 
 Function* Function::GetParamDftValHostFunc() const
 {
-    return paramDftValHostFunc;
+    return paramDftValHostParam == nullptr ? nullptr : paramDftValHostParam->GetOwnerFunc();
 }
 
-void Function::ClearParamDftValHostFunc()
+void Function::ClearParamDftValHostParam()
 {
-    paramDftValHostFunc = nullptr;
+    if (paramDftValHostParam != nullptr && paramDftValHostParam->GetParamDftValFunc() == this) {
+        paramDftValHostParam->ClearParamDftValFunc();
+    }
+    paramDftValHostParam = nullptr;
 }
 
 // Function
@@ -1360,8 +1394,11 @@ std::string Function::ToString(size_t indent) const
     if (genericDecl != nullptr) {
         comments.emplace_back("genericDecl: " + genericDecl->GetIdentifier());
     }
-    if (paramDftValHostFunc != nullptr) {
-        comments.emplace_back("paramDftValHostFunc: " + paramDftValHostFunc->GetIdentifier());
+    if (paramDftValHostParam != nullptr) {
+        auto owner = paramDftValHostParam->GetOwnerFunc();
+        CJC_NULLPTR_CHECK(owner);
+        comments.emplace_back("paramDftValHostParam: " + owner->GetIdentifier() +
+            "[" + paramDftValHostParam->GetIdentifier() + "]");
     }
     if (funcKind == FuncKind::LAMBDA) {
         comments.emplace_back("originalLambdaInfo: " + originalLambdaInfo.ToString());
