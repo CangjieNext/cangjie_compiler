@@ -341,14 +341,28 @@ private:
         } else {
             // get value
             auto it = deserializedVals.find(key);
+            // C functions with NO_MANGLE may use the implementation name from CFFI lowering.
+            if (it == deserializedVals.end() && decl.IsFunc() && decl.TestAttr(AST::Attribute::NO_MANGLE) &&
+                !decl.TestAttr(AST::Attribute::FOREIGN) && decl.GetTy()->IsCFunc()) {
+                key += CFFI_FUNC_SUFFIX;
+                it = deserializedVals.find(key);
+            }
             res = it == deserializedVals.end() ? nullptr : dynamic_cast<T*>(it->second);
+        }
+        if (!res) {
+            // Common declarations need their CHIR body.
+            // Imported declarations and new generic instantiations are exempt.
+            if (decl.TestAttr(AST::Attribute::FROM_COMMON_PART) &&
+                !decl.TestAnyAttr(AST::Attribute::GENERIC_INSTANTIATED, AST::Attribute::IMPORTED) &&
+                (!decl.outerDecl || !decl.outerDecl->TestAttr(AST::Attribute::GENERIC_INSTANTIATED))) {
+                missingCommonPartDecls.emplace(&decl);
+            }
+            return nullptr;
         }
         // When common part chir is deserialized, the list of members of imported nominal declarations
         // might be lacking new declarations, which were added when compiling specific part of multiplatform dependency
-        if (res &&
-            !decl.TestAttr(AST::Attribute::SPECIFIC) &&
-            !(decl.TestAttr(AST::Attribute::COMMON) && decl.TestAttr(AST::Attribute::IMPORTED))
-        ) {
+        if (!decl.TestAttr(AST::Attribute::SPECIFIC) &&
+            !decl.TestAttr(AST::Attribute::COMMON, AST::Attribute::IMPORTED)) {
             noNeedToTranslateDecls.insert(&decl);
         }
         return res;
@@ -365,6 +379,8 @@ private:
     }
     void ProcessCommonAndSpecificExtends();
     void ProcessClassStructVarInits(Translator& trans);
+    // Report decls of the common part which are missing in the common part chir. Return false if there are any.
+    bool CheckCommonPartDeclsDeserialized();
     const GlobalOptions& opts;
     const GenericInstantiationManager* gim;
     ImportManager& importManager;
@@ -448,6 +464,8 @@ private:
     bool outputCHIR{false}; // Output type is CHIR
     bool mergingSpecific{false}; // Merging specific part over already compiled chir
     std::unordered_set<Ptr<const AST::Decl>> noNeedToTranslateDecls;
+    // Decls of the common part which have no deserialized CHIR node, see 'TryGetDeserialized'.
+    std::unordered_set<Ptr<const AST::Decl>> missingCommonPartDecls;
     // Deserialized node cache table, key is identifier.
     std::unordered_map<std::string, CustomTypeDef*> deserializedDefs;
     std::unordered_map<std::string, Value*> deserializedVals;
