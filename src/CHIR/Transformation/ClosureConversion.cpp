@@ -134,6 +134,36 @@ void SetLiftedLambdaAttr(Function& func, Lambda& lambda)
     }
 }
 
+// Remap default-param host Parameter onto the lifted host Function.
+// Depends on the desugar Lambda being CCed after its host Lambda.
+void SetLiftedParamDftValHostParam(Function& liftedDesugar,
+    const Lambda& nestedFunc, const std::unordered_map<const Lambda*, Function*>& convertedCache)
+{
+    auto hostParam = nestedFunc.GetParamDftValHostParam();
+    if (hostParam == nullptr) {
+        return;
+    }
+    auto hostLambda = hostParam->GetOwnerLambda();
+    CJC_NULLPTR_CHECK(hostLambda);
+    auto newHostFunc = convertedCache.find(hostLambda);
+    if (newHostFunc == convertedCache.end()) {
+        return;
+    }
+    auto hostLambdaParams = hostLambda->GetParams();
+    size_t index = hostLambdaParams.size();
+    for (size_t i = 0; i < hostLambdaParams.size(); ++i) {
+        if (hostLambdaParams[i] == hostParam) {
+            index = i;
+            break;
+        }
+    }
+    CJC_ASSERT(index < hostLambdaParams.size());
+    auto newHostFuncParams = newHostFunc->second->GetParams();
+    CJC_ASSERT(newHostFuncParams.size() == hostLambdaParams.size() + 1);
+    auto newHostParam = newHostFuncParams[index + 1]; // LiftLambdaToGlobalFunc inserts $env as param 0.
+    liftedDesugar.SetParamDftValHostParam(*newHostParam);
+}
+
 void SetMemberMethodAttr(Function& func, bool isConst)
 {
     func.EnableAttr(Attribute::COMPILER_ADD);
@@ -2038,13 +2068,9 @@ Function* ClosureConversion::LiftLambdaToGlobalFunc(
     // 1) convert all the usage of captured variable to fields in env
     ReplaceEnvVarWithMemberVar(capturedValues, envParamDebug, *globalFunc, *thisPtr, builder);
 
-    // 2) keep relations between default's param's desugar func and the func where the param is belonged.
+    // 2) keep relations between default's param's desugar func and the Parameter it belongs to.
     // logic below depends on the desugar func is CCed after the func where the param is belonged.
-    if (nestedFunc.GetParamDftValHostFunc()) {
-        if (auto it = convertedCache.find(nestedFunc.GetParamDftValHostFunc()); it != convertedCache.cend()) {
-            globalFunc->SetParamDftValHostFunc(*it->second);
-        }
-    }
+    SetLiftedParamDftValHostParam(*globalFunc, nestedFunc, convertedCache);
 
     // 3) Traverse and instantiate the original generics with the new generics of lifted func
     auto thisTyReplacement = nestedFunc.GetTopLevelFunc()->GetParentCustomTypeOrExtendedType();
