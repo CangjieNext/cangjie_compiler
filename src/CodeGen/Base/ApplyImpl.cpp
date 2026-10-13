@@ -26,6 +26,40 @@ using namespace CodeGen;
 
 namespace {
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+// Only integers narrower than 32 bits take part in the C signext/zeroext ABI; wider
+// integers always occupy their register as a whole.
+constexpr unsigned int SUB_WORD_INT_BIT_WIDTH = 32;
+
+bool IsSubWordIntType(const CHIR::Type& chirTy, const llvm::Type& loweredTy)
+{
+    if (!chirTy.IsBoolean() && !chirTy.IsInteger()) {
+        return false;
+    }
+    auto intTy = llvm::dyn_cast<llvm::IntegerType>(&loweredTy);
+    return intTy != nullptr && intTy->getBitWidth() < SUB_WORD_INT_BIT_WIDTH;
+}
+
+void AddSubWordIntParamAttrs(
+    const CGModule& cgMod, const CHIR::FuncType& funcTy, llvm::CallBase& callInst, bool sret)
+{
+    unsigned callArgIdx = sret ? 1U : 0U;
+    for (auto chirParamTy : funcTy.GetParamTypes()) {
+        CJC_NULLPTR_CHECK(chirParamTy);
+        if (IsZeroSizedTypeInC(cgMod, *chirParamTy)) {
+            continue; // no register slot: GetCFuncType skipped it when building the args
+        }
+        if (callArgIdx >= callInst.arg_size()) {
+            break; // reachable only if the arg layout drifted; never index past the call
+        }
+        if (IsSubWordIntType(*chirParamTy, *callInst.getArgOperand(callArgIdx)->getType())) {
+            auto extendAttr = chirParamTy->IsSignedInteger() ? llvm::Attribute::SExt : llvm::Attribute::ZExt;
+            AddParamAttr(&callInst, callArgIdx, llvm::Attribute::NoUndef);
+            AddParamAttr(&callInst, callArgIdx, extendAttr);
+        }
+        callArgIdx++;
+    }
+}
+
 void AddAttributeForWrapper(const IRBuilder2& builder, const CHIR::FuncType& funcTy,
     const llvm::FunctionType* varFuncTy, llvm::Function* func, llvm::CallBase& callInst, const bool sret)
 {
@@ -36,6 +70,7 @@ void AddAttributeForWrapper(const IRBuilder2& builder, const CHIR::FuncType& fun
     auto& context = builder.GetCGContext();
     auto& options = context.GetCompileOptions();
     auto& cgMod = builder.GetCGModule();
+    AddSubWordIntParamAttrs(cgMod, funcTy, callInst, sret);
     if (sret) {
         callInst.addParamAttr(0, llvm::Attribute::NoAlias);
         AddSRetAttribute(func->arg_begin());
@@ -240,25 +275,21 @@ llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, llvm::Function& call
             AddParamAttr(callRet, it->getArgNo(), byValAttr);
         }
     }
-#ifdef __APPLE__
-    const bool onMacMx = !nonAarch64 && (target.os == Triple::OSType::DARWIN || target.os == Triple::OSType::IOS);
-    if (onMacMx) {
-        for (auto ext : {llvm::Attribute::SExt, llvm::Attribute::ZExt}) {
-            if (callee.hasRetAttribute(ext)) {
-                callRet->addRetAttr(ext);
-            }
+    // Copy the declaration's extension attributes onto the call site on every target.
+    for (auto ext : {llvm::Attribute::SExt, llvm::Attribute::ZExt}) {
+        if (callee.hasRetAttribute(ext)) {
+            callRet->addRetAttr(ext);
         }
-        // '<' means variable-length parameters exist in the function.
-        CJC_ASSERT(callee.arg_size() <= callRet->arg_size());
-        for (unsigned i = 0; i < callee.arg_size(); ++i) {
-            for (auto attr : {llvm::Attribute::NoUndef, llvm::Attribute::SExt, llvm::Attribute::ZExt}) {
-                if (callee.hasParamAttribute(i, attr)) {
-                    callRet->addParamAttr(i, attr);
-                }
+    }
+    // '<' means variable-length parameters exist in the function.
+    CJC_ASSERT(callee.arg_size() <= callRet->arg_size());
+    for (unsigned i = 0; i < callee.arg_size(); ++i) {
+        for (auto attr : {llvm::Attribute::NoUndef, llvm::Attribute::SExt, llvm::Attribute::ZExt}) {
+            if (callee.hasParamAttribute(i, attr)) {
+                callRet->addParamAttr(i, attr);
             }
         }
     }
-#endif
     if (isSRet) {
         AddParamAttr(callRet, 0, llvm::Attribute::NoAlias);
         AddSRetAttribute(callRet);
