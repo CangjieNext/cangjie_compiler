@@ -7,10 +7,12 @@
 #include "InheritanceChecker.h"
 
 #include "NativeFFI/Utils.h"
+#include "NativeFFI/Java/Utils.h"
 #include "cangjie/AST/Clone.h"
+#include "cangjie/AST/Match.h"
+#include "cangjie/AST/Utils.h"
 
-namespace Cangjie::Interop::Java {
-using namespace Cangjie::Native::FFI;
+namespace Cangjie::Native::FFI::Java {
 
 namespace {
 
@@ -137,4 +139,69 @@ void CheckForeignName(DiagnosticEngine& diag, TypeManager& typeManager, const Me
     }
 }
 
-} // namespace Cangjie::Interop::Java
+namespace {
+/**
+ * @brief Generates a synthetic function stub based on an existing function declaration.
+ *
+ * This function creates a clone of the provided function declaration (fd),
+ * replaces its outerDecl to synthetic class, and then inserts the
+ * modified function declaration into the specified synthetic class declaration.
+ *
+ * @param synthetic The class declaration where the cloned function stub will be inserted.
+ * @param fd The original function declaration that will be cloned and modified.
+ */
+void GenerateSyntheticClassFuncStub(const ClassDecl& synthetic, FuncDecl& fd)
+{
+    OwnedPtr<FuncDecl> funcStub = ASTCloner::Clone(Ptr(&fd));
+    funcStub->DisableAttr(Attribute::DEFAULT);
+
+    // remove foreign anno from cloned func decl
+    for (auto it = funcStub->annotations.begin(); it != funcStub->annotations.end(); ++it) {
+        if ((*it)->kind == AnnotationKind::FOREIGN_NAME) {
+            funcStub->annotations.erase(it);
+            break;
+        }
+    }
+
+    RebindClonedStubToSynthetic(*funcStub, const_cast<ClassDecl&>(synthetic));
+    synthetic.body->decls.emplace_back(std::move(funcStub));
+}
+
+void InsertSyntheticAbstractWrapperMethodStubs(const ClassDecl& wrapper,
+    const MemberMap& members)
+{
+    for (const auto& idMemberSignature : members) {
+        const auto& signature = idMemberSignature.second;
+
+        // only abstract functions must be inside synthetic class
+        if (!signature.decl->TestAttr(Attribute::ABSTRACT)) {
+            continue;
+        }
+
+        // JObject already has implementation of java ref getter
+        if (IsJavaRefGetter(*signature.decl)) {
+            continue;
+        }
+
+        switch (signature.decl->astKind) {
+            case ASTKind::FUNC_DECL:
+                GenerateSyntheticClassFuncStub(wrapper, *StaticAs<ASTKind::FUNC_DECL>(signature.decl));
+                break;
+            default:
+                continue;
+        }
+    }
+}
+} // namespace
+
+void GenerateJavaForeignAbstractStub(const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& memberMap)
+{
+    using namespace Cangjie::Interop::Java;
+    for (auto& [decl, members] : memberMap) {
+        if (auto cd = DynamicCast<ClassDecl*>(decl); cd && IsSyntheticMirrorWrapper(*decl)) {
+            InsertSyntheticAbstractWrapperMethodStubs(*cd, members);
+        }
+    }
+}
+
+} // namespace Cangjie::Native::FFI::Java
