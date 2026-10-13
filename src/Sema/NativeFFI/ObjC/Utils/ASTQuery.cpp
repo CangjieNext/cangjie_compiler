@@ -21,10 +21,11 @@ using namespace Cangjie::AST;
 
 namespace Cangjie::Interop::ObjC {
 
-bool IsObjCCompatible(const Ty& ty) noexcept
+bool IsObjCCompatible(const Ty& ty, TypePosition pos) noexcept
 {
     switch (ty.kind) {
         case TypeKind::TYPE_UNIT:
+            return pos == TypePosition::OUT;
         case TypeKind::TYPE_INT8:
         case TypeKind::TYPE_INT16:
         case TypeKind::TYPE_INT32:
@@ -54,11 +55,7 @@ bool IsObjCCompatible(const Ty& ty) noexcept
             if (IsObjCFunc(ty)) {
                 CJC_ASSERT(ty.typeArgs.size() == 1);
                 auto tyArg = ty.typeArgs[0];
-                if (!tyArg->IsFunc() || tyArg->IsCFunc()) {
-                    return false;
-                }
-                return std::all_of(std::begin(tyArg->typeArgs), std::end(tyArg->typeArgs),
-                    [](auto ty) { return IsObjCCompatible(*ty); });
+                return IsObjCCompatibleFuncTy(*tyArg);
             }
             return false;
         case TypeKind::TYPE_CLASS:
@@ -69,11 +66,7 @@ bool IsObjCCompatible(const Ty& ty) noexcept
             if (IsObjCBlock(ty)) {
                 CJC_ASSERT(ty.typeArgs.size() == 1);
                 auto tyArg = ty.typeArgs[0];
-                if (!tyArg->IsFunc() || tyArg->IsCFunc()) {
-                    return false;
-                }
-                return std::all_of(std::begin(tyArg->typeArgs), std::end(tyArg->typeArgs),
-                    [](auto ty) { return IsObjCCompatible(*ty); });
+                return IsObjCCompatibleFuncTy(*tyArg);
             }
             return false;
         case TypeKind::TYPE_ENUM:
@@ -691,11 +684,11 @@ bool IsObjCCompatibleFuncTy(const Ty& ty) noexcept
         return false;
     }
 
-    if (!IsObjCCompatible(*fTy->retTy)) {
+    if (!IsObjCCompatible(*fTy->retTy, TypePosition::OUT)) {
         return false;
     }
     for (auto argTy : fTy->paramTys) {
-        if (!IsObjCCompatible(*argTy)) {
+        if (!IsObjCCompatible(*argTy, TypePosition::IN)) {
             return false;
         }
     }

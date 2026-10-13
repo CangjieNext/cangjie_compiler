@@ -1361,7 +1361,7 @@ OwnedPtr<Expr> ASTFactory::CreateGetSuperClassExpr(OwnedPtr<Expr> objCSuper, Ptr
 OwnedPtr<Expr> ASTFactory::CreateWithObjCSuperScope(OwnedPtr<Expr> nativeHandle, ClassDecl& outerDecl,
     Ptr<Ty> retTy, std::function<std::vector<OwnedPtr<Node>>(OwnedPtr<Expr>, OwnedPtr<Expr>)> bodyFactory)
 {
-    CJC_ASSERT(IsObjCCompatible(*retTy));
+    CJC_ASSERT(IsObjCCompatible(*retTy, TypePosition::OUT));
 
     auto withObjCSuperDecl = bridge.GetWithObjCSuperDecl();
     auto unwrappedTy = typeMapper.Cj2CType(retTy);

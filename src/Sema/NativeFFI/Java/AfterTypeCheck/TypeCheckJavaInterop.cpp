@@ -85,6 +85,7 @@ struct JavaInteropTypeChecker {
 
         switch (ty.kind) {
             case TypeKind::TYPE_UNIT:
+                return pos == Position::OUT;
             case TypeKind::TYPE_BOOLEAN:
             case TypeKind::TYPE_INT8:
             case TypeKind::TYPE_UINT16:
@@ -135,7 +136,7 @@ struct JavaInteropTypeChecker {
         }
 
         if (ty.IsCoreOptionType() && !ty.typeArgs[0]->IsCoreOptionType() && !ty.typeArgs[0]->IsPrimitive()) {
-            return IsJavaCompatible(*ty.typeArgs[0]);
+            return IsJavaCompatible(*ty.typeArgs[0], pos);
         }
 
         if (auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty)) {

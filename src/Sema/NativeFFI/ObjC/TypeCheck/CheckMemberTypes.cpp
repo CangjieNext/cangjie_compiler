@@ -84,7 +84,7 @@ void CheckMemberTypes::CheckFuncTypes(FuncDecl& fd, TypeCheckContext& ctx)
 
 void CheckMemberTypes::CheckFuncRetType(FuncDecl& fd, TypeCheckContext& ctx)
 {
-    if (fd.funcBody->retType && !IsObjCCompatible(*fd.funcBody->retType->GetTy())) {
+    if (fd.funcBody->retType && !IsObjCCompatible(*fd.funcBody->retType->GetTy(), TypePosition::OUT)) {
         ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_interop_method_ret_must_be_objc_compatible,
             *fd.funcBody->retType, GetDeclInteropName());
 
@@ -101,7 +101,7 @@ void CheckMemberTypes::CheckFuncParamTypes(FuncDecl& fd, TypeCheckContext& ctx)
 
     for (auto& paramList : fd.funcBody->paramLists) {
         for (auto& param : paramList->params) {
-            if (IsObjCCompatible(*param->GetTy())) {
+            if (IsObjCCompatible(*param->GetTy(), TypePosition::IN)) {
                 continue;
             }
 
