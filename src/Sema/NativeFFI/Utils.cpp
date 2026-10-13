@@ -8,6 +8,7 @@
 #include "TypeCheckUtil.h"
 
 #include "cangjie/AST/AttributePack.h"
+#include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
@@ -478,9 +479,9 @@ bool AreParamTypeKindsValid(const FuncDecl& fd, const std::vector<TypeKind>& typ
     return true;
 }
 
-void RebindClonedStubToSynthetic(Decl& stub, ClassDecl& synthetic)
+void RebindClonedStubToSynthetic(Decl& stub, const ClassDecl& synthetic)
 {
-    stub.outerDecl = Ptr(&synthetic);
+    stub.outerDecl = Ptr(const_cast<ClassDecl*>(&synthetic));
     Walker(&stub, [&synthetic](Ptr<Node> node) {
         node->curFile = synthetic.curFile;
         if (auto decl = DynamicCast<Decl>(node)) {

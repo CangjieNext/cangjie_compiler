@@ -230,7 +230,7 @@ bool AreParamTypeKindsValid(const FuncDecl& fd, const std::vector<TypeKind>& typ
  * @param stub The cloned member declaration.
  * @param synthetic The synthetic wrapper class that owns the stub.
  */
-void RebindClonedStubToSynthetic(Decl& stub, ClassDecl& synthetic);
+void RebindClonedStubToSynthetic(Decl& stub, const ClassDecl& synthetic);
 
 OwnedPtr<Expr> CreateZeroValue(const ImportManager& importManager, TypeManager& typeManager, Ty& ty);
 

@@ -13,17 +13,22 @@
 #ifndef CANGJIE_SEMA_OBJ_C_UTILS_STRUCT_INHERITANCE_CHECKER_IMPL_H
 #define CANGJIE_SEMA_OBJ_C_UTILS_STRUCT_INHERITANCE_CHECKER_IMPL_H
 
-#include "InheritanceChecker/StructInheritanceChecker.h"
+#include "InheritanceChecker/MemberSignature.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Sema/TypeManager.h"
 
-namespace Cangjie::Interop::ObjC {
+namespace Cangjie::Native::FFI::ObjC {
 
-void CheckAnnotation(DiagnosticEngine& diag, TypeManager& typeManager, AnnotationKind annotationKind,
-    const MemberSignature& parent, const MemberSignature& child, const Decl& checkingDecl);
+void CheckAnnotation(DiagnosticEngine& diag, TypeManager& typeManager, AST::AnnotationKind annotationKind,
+    const MemberSignature& parent, const MemberSignature& child, const AST::Decl& checkingDecl);
 void CheckForeignAnnotations(DiagnosticEngine& diag, TypeManager& typeManager, const MemberSignature& parent,
     const MemberSignature& child, const AST::Decl& checkingDecl);
+
+/**
+ * Inserts stubs for members of mirror interface handle wrapper classes.
+ */
+void GenerateObjCForeignAbstractStub(const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& memberMap);
 } // namespace Cangjie::Interop::ObjC
 
 #endif // CANGJIE_SEMA_OBJ_C_UTILS_STRUCT_INHERITANCE_CHECKER_IMPL_H

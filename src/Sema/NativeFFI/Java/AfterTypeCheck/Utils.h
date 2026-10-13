@@ -217,13 +217,6 @@ OwnedPtr<CallExpr> CreateCall(Ptr<FuncDecl> fd, Ptr<File> curFile, OwnedPtr<Args
 
 Ptr<VarDecl> GetJavaRefField(ClassDecl& mirrorLike);
 
-/**
- * for interfaces and abstract classes
- */
-Ptr<FuncDecl> GetJavaRefGetter(ClassLikeDecl& mirrorLike);
-
-bool IsJavaRefGetter(const Decl& fd);
-
 template<typename MemberDecl, ASTKind MemberKind>
 Ptr<MemberDecl> FindFirstMemberDecl(
     const Decl& sourceDecl,
