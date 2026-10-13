@@ -1896,3 +1896,91 @@ TEST_F(PackageTest, TypeAliasRefExport)
         return VisitAction::WALK_CHILDREN;
     }).Walk();
 }
+
+namespace {
+// Remove a field of the root 'Package' table by clearing its vtable slot. The result stays valid for the
+// FlatBuffers verifier, since every field of the schema is optional, like a cjo corrupted or modified on purpose.
+void DropPackageField(std::vector<uint8_t>& data, flatbuffers::voffset_t field)
+{
+    auto table = data.data() + flatbuffers::ReadScalar<flatbuffers::uoffset_t>(data.data());
+    auto vtable = table - flatbuffers::ReadScalar<flatbuffers::soffset_t>(table);
+    if (field < flatbuffers::ReadScalar<flatbuffers::voffset_t>(vtable)) {
+        flatbuffers::WriteScalar<flatbuffers::voffset_t>(vtable + field, 0);
+    }
+}
+} // namespace
+
+// A cjo passed with '--common-part-cjo' is checked before any of its data is used: a cjo which is not a common
+// part or misses data used by the loader is rejected with an error instead of crashing, and the rejected loader
+// never loads its decls.
+TEST_F(PackageTest, CommonPartCjoGate)
+{
+    diag.ClearError();
+    invocation.globalOptions.outputMode = GlobalOptions::OutputMode::CHIR;
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->code = "package cmp\npublic func foo(): Int64 { 1 }\npublic struct Point { public var x: Int64 = 0 }\n";
+    instance->Compile();
+    ASSERT_FALSE(instance->GetSourcePackages().empty());
+    std::vector<uint8_t> cjoData;
+    instance->importManager->ExportAST(false, cjoData, *instance->GetSourcePackages()[0]);
+    ASSERT_FALSE(cjoData.empty());
+    auto cjoManager = instance->importManager->GetCjoManager();
+    ASSERT_NE(cjoManager, nullptr);
+
+    auto preload = [this, &cjoManager](std::vector<uint8_t> data, Package& pkg) {
+        auto loader = std::make_unique<ASTLoader>(
+            std::move(data), "cmp", *instance->typeManager, *cjoManager, instance->invocation.globalOptions);
+        loader->SetCjoPath("cmp.cjo");
+        diag.Reset();
+        bool ok = loader->PreloadCommonPartOfPackage(pkg);
+        return std::make_pair(ok, std::move(loader));
+    };
+
+    // A complete common part cjo is accepted.
+    {
+        Package pkg("cmp");
+        auto [ok, loader] = preload(cjoData, pkg);
+        EXPECT_TRUE(ok);
+        EXPECT_EQ(diag.GetErrorCount(), 0u);
+        EXPECT_TRUE(loader->IsCommonPartPreloaded());
+        EXPECT_FALSE(pkg.files.empty());
+    }
+
+    // Each field used when the common part is loaded must be present, an absent one is not an empty one.
+    for (auto field : {PackageFormat::Package::VT_ALLFILES, PackageFormat::Package::VT_ALLFILEIMPORTS,
+             PackageFormat::Package::VT_ALLFILEINFO, PackageFormat::Package::VT_ALLTYPES,
+             PackageFormat::Package::VT_ALLDECLS, PackageFormat::Package::VT_ALLEXPRS,
+             PackageFormat::Package::VT_IMPORTS, PackageFormat::Package::VT_OPTIONS}) {
+        std::vector<uint8_t> mutated = cjoData;
+        DropPackageField(mutated, field);
+        Package pkg("cmp");
+        auto [ok, loader] = preload(std::move(mutated), pkg);
+        EXPECT_FALSE(ok) << "field " << field;
+        EXPECT_EQ(diag.GetErrorCount(), 1u) << "field " << field;
+        EXPECT_FALSE(loader->IsCommonPartPreloaded());
+        EXPECT_TRUE(pkg.files.empty());
+        // A rejected common part is never used afterwards, e.g. by a later 'LoadPackageDeclsOnDemand'.
+        loader->LoadPackageDecls();
+        loader->LoadRefs();
+        EXPECT_TRUE(pkg.files.empty());
+    }
+
+    // A declaration referring to a file which is not recorded is rejected before it is loaded.
+    {
+        std::vector<uint8_t> mutated = cjoData;
+        auto decls = PackageFormat::GetPackage(mutated.data())->allDecls();
+        ASSERT_NE(decls, nullptr);
+        ASSERT_GT(decls->size(), 0u);
+        auto begin = decls->Get(0)->begin();
+        ASSERT_NE(begin, nullptr);
+        // 'file' is the first member of the 'Position' struct.
+        flatbuffers::WriteScalar<uint32_t>(const_cast<PackageFormat::Position*>(begin), 1000u);
+        Package pkg("cmp");
+        auto [ok, loader] = preload(std::move(mutated), pkg);
+        EXPECT_FALSE(ok);
+        EXPECT_EQ(diag.GetErrorCount(), 1u);
+        EXPECT_FALSE(loader->IsCommonPartPreloaded());
+    }
+    invocation.globalOptions.outputMode = GlobalOptions::OutputMode::STATIC_LIB;
+}

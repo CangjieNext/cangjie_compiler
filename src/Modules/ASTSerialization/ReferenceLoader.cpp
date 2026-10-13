@@ -245,6 +245,9 @@ void ASTLoader::LoadRefs() const
 
 void ASTLoader::ASTLoaderImpl::LoadRefs()
 {
+    if (!CanLoadDecls()) {
+        return;
+    }
     for (auto [index, decl] : allLoadedDecls) {
         auto declObj = GetFormatDeclByIndex(static_cast<FormattedIndex>(index));
         CJC_NULLPTR_CHECK(declObj);

@@ -883,11 +883,6 @@ void DiagnosticEmitterImpl::ConstructAndEmitSourceCode(std::vector<CollectedInfo
 }
 
 namespace {
-bool IsTextOnlyWarning(const WarnGroup& warnGroup)
-{
-    return (warnGroup == WarnGroup::DRIVER_ARG || warnGroup == WarnGroup::UNSUPPORT_COMPILE_SOURCE);
-}
-
 /**
  * @brief Swap error message with note for diagnostics in macro calls.
  *
@@ -966,11 +961,11 @@ bool DiagnosticEmitterImpl::Emit(bool enableOnlyHint)
     } else {
         CJC_ABORT();
     }
-    // Since some warnings are text-only, which means they do not have invalid position, so emit notes here.
-    if (IsTextOnlyWarning(diag.warnGroup)) {
-        EmitNote();
-    }
+    // A diagnostic without position has no source to show, but its notes and helps are shown in the same way as
+    // for a diagnostic with position: text ones as is, and the ones with their own position with their source.
     if (diag.mainHint.range.begin == DEFAULT_POSITION) {
+        EmitNote();
+        EmitHelp(diag.helps);
         return !rangeCheckError;
     }
     std::vector<CollectedInfo> errorInfo;
