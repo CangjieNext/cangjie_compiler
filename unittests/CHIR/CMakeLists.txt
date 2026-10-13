@@ -5,7 +5,7 @@
 # See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 if(CANGJIE_CODEGEN_CJNATIVE_BACKEND)
-    add_executable(CHIRSerialzierTest CHIRSerialzierTest.cpp CHIRDeSerialzierTest.cpp)
+    add_executable(CHIRSerialzierTest CHIRSerialzierTest.cpp CHIRDeSerialzierTest.cpp AST2CHIRTest.cpp)
     target_link_libraries(
         CHIRSerialzierTest
         cangjie-lsp
