@@ -320,6 +320,7 @@ table Parameter {
   ownedLambda: uint32;  // use exprs id
   srcCodeIdentifier: string(shared);
   annoInfo: AnnoInfo;
+  paramDftValFunc: uint32; // use values id, desugared default-value Function
 }
 
 table LocalVar {
@@ -377,7 +378,7 @@ table Function {
   isCFFIWrapper: bool;
   originalLambdaInfo: FuncSigInfo;
   genericTypeParams: [uint32]; // use types id
-  paramDftValHostFunc: uint32; // use values id
+  paramDftValHostParam: uint32; // use values id, host Parameter of default-value desugar func
   body: uint32; // use values id, 0 for imported func
   params: [uint32]; // use values id (signature params for imported func, body params for func with body)
   retVal: uint32; // use values id
@@ -1162,6 +1163,7 @@ table Lambda {
   body: uint32; // use values id
   retVal: uint32; // use values id
   isCompileTimeValue: bool = false;
+  paramDftValHostParam: uint32; // use values id, host Parameter of default-value desugar lambda
 }
 
 table GetInstantiateValue {
