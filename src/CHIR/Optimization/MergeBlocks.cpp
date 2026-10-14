@@ -123,10 +123,15 @@ void MergeBlocks::RunOnPackage(const Package& package, CHIRBuilder& builder, con
     }
 }
 
+static bool IsMergeBoundary(const Block& block)
+{
+    return block.TestAttr(Attribute::UNREACHABLE) || block.TestAttr(Attribute::MATCH_PATTERN);
+}
+
 static bool SkipMergeBlock(const Block& bl, const GlobalOptions& opts)
 {
     // Pattern blocks encode source-case boundaries consumed after ConstAnalysis; merging would erase that structure.
-    if (bl.TestAttr(Attribute::UNREACHABLE) || bl.TestAttr(Attribute::MATCH_PATTERN)) {
+    if (IsMergeBoundary(bl)) {
         return true;
     }
     if (!opts.enableCompileDebug) {
@@ -143,7 +148,8 @@ void MergeBlocks::RunOnFunc(const BlockGroup& body, CHIRBuilder& builder, const 
             return false;
         }
         auto preds = block.GetPredecessors();
-        if (preds.size() != 1) {
+        // Merging changes the predecessor as well as removing this block; preserve both source boundaries.
+        if (preds.size() != 1 || IsMergeBoundary(*preds[0])) {
             return false;
         }
         auto succs = preds[0]->GetSuccessors();
@@ -169,7 +175,13 @@ void MergeBlocks::RunOnFunc(const BlockGroup& body, CHIRBuilder& builder, const 
         if (term == nullptr || term->GetExprKind() != ExprKind::GOTO) {
             return false;
         }
-        if (auto preds = block.GetPredecessors(); std::find(preds.begin(), preds.end(), &block) != preds.end()) {
+        // Bypassing the bridge changes predecessor edges and the destination's source location.
+        auto preds = block.GetPredecessors();
+        if (IsMergeBoundary(*StaticCast<GoTo*>(term)->GetDestination()) ||
+            std::any_of(preds.begin(), preds.end(), [](auto pred) { return IsMergeBoundary(*pred); })) {
+            return false;
+        }
+        if (std::find(preds.begin(), preds.end(), &block) != preds.end()) {
             /* The following chir cannot be merged.
              *
              *  Block #1: // preds:

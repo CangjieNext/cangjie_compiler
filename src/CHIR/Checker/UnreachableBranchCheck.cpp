@@ -6,6 +6,8 @@
 
 #include "cangjie/CHIR/Checker/UnreachableBranchCheck.h"
 
+#include <map>
+
 using namespace Cangjie::CHIR;
 
 UnreachableBranchCheck::UnreachableBranchCheck(
@@ -43,16 +45,10 @@ Branch* GetElseIfBranch(const Branch& branch, Block& block)
  */
 
 // Interprets the false edge of a pattern/guard Branch according to its source-case metadata.
-std::pair<Expression*, Block*> GetNextMatchCase(
-    Branch& branch, const std::set<Block*>& constructorGroups)
+std::pair<Expression*, Block*> GetNextMatchCase(Branch& branch)
 {
     auto nextCase = branch.GetFalseBlock();
     if (branch.GetSourceExpr() == SourceExpr::MATCH_CASE) {
-        if (!constructorGroups.empty() &&
-            (!nextCase->TestAttr(Attribute::MATCH_PATTERN) || !nextCase->Get<MatchCaseId>().has_value() ||
-                constructorGroups.find(nextCase) != constructorGroups.end())) {
-            return {};
-        }
         return {&branch, nextCase};
     }
     return branch.GetSourceExpr() == SourceExpr::MATCH_EXPR
@@ -60,16 +56,10 @@ std::pair<Expression*, Block*> GetNextMatchCase(
 }
 
 // Interprets the default edge of a pattern MultiBranch, including boundaries inside an enum constructor table.
-std::pair<Expression*, Block*> GetNextMatchCase(
-    MultiBranch& branch, const std::set<Block*>& constructorGroups)
+std::pair<Expression*, Block*> GetNextMatchCase(MultiBranch& branch)
 {
     auto nextCase = branch.GetDefaultBlock();
     if (branch.GetSourceExpr() == SourceExpr::MATCH_CASE) {
-        if (!constructorGroups.empty() &&
-            (!nextCase->TestAttr(Attribute::MATCH_PATTERN) || !nextCase->Get<MatchCaseId>().has_value() ||
-                constructorGroups.find(nextCase) != constructorGroups.end())) {
-            return {};
-        }
         return {&branch, nextCase};
     }
     return branch.GetSourceExpr() == SourceExpr::MATCH_EXPR
@@ -77,22 +67,16 @@ std::pair<Expression*, Block*> GetNextMatchCase(
 }
 
 // Walks pattern blocks and GoTo bridges until a Branch/MultiBranch overload finds the next source-case boundary.
-std::pair<Expression*, Block*> GetNextMatchCase(
-    Block& caseBlock, const std::set<Block*>& constructorGroups = {})
+std::pair<Expression*, Block*> GetNextMatchCase(Block& caseBlock)
 {
     /*
      * Follow only pattern-evaluation CFG. GoTo nodes bridge one pattern corridor; MATCH_EXPR continues within a case;
-     * MATCH_CASE exposes the terminator and entry of the next source case. Stop at case bodies, nested user control
-     * flow, or another constructor-group root so diagnostics never recurse into unrelated source expressions.
+     * MATCH_CASE exposes the terminator and entry of the next source case. Stop at case bodies and nested user control
+     * flow so diagnostics never recurse into unrelated source expressions.
      */
     auto block = &caseBlock;
-    bool isFirstBlock = true;
     std::set<Block*> visited;
     while (visited.emplace(block).second && block->TestAttr(Attribute::MATCH_PATTERN)) {
-        if (!isFirstBlock && constructorGroups.find(block) != constructorGroups.end()) {
-            return {};
-        }
-        isFirstBlock = false;
         auto terminator = block->GetTerminator();
         auto goTo = Cangjie::DynamicCast<GoTo>(terminator);
         if (goTo && goTo->TestAttr(Attribute::MATCH_PATTERN)) {
@@ -104,9 +88,9 @@ std::pair<Expression*, Block*> GetNextMatchCase(
         }
         std::pair<Expression*, Block*> next;
         if (auto branch = Cangjie::DynamicCast<Branch>(terminator)) {
-            next = GetNextMatchCase(*branch, constructorGroups);
+            next = GetNextMatchCase(*branch);
         } else if (auto multiBranch = Cangjie::DynamicCast<MultiBranch>(terminator)) {
-            next = GetNextMatchCase(*multiBranch, constructorGroups);
+            next = GetNextMatchCase(*multiBranch);
         } else {
             return {};
         }
@@ -116,6 +100,62 @@ std::pair<Expression*, Block*> GetNextMatchCase(
         block = next.second;
     }
     return {};
+}
+
+template <typename TConstDomain, typename EdgePredicate>
+bool CanMatch(Results<TConstDomain>& result, Block& block, const EdgePredicate& CanTakeEdge)
+{
+    if (result.GetEntryState(block).IsBottom()) {
+        return false;
+    }
+    auto branch = Cangjie::DynamicCast<Branch*>(block.GetTerminator());
+    if (!branch) {
+        // Only reject a reachable fragment when its field-condition edges prove that matching cannot succeed.
+        return true;
+    }
+    // Enum-table payload checks are a conjunction: each failed field enters the same failure continuation.
+    // A different failure continuation belongs to the case body, not to this pattern (which may contain a nested match).
+    auto failure = GetNextMatchCase(*branch).second;
+    if (!failure) {
+        return true;
+    }
+    do {
+        auto success = branch->GetTrueBlock();
+        if (!CanTakeEdge(*branch, *success)) {
+            return false;
+        }
+        branch = Cangjie::DynamicCast<Branch*>(success->GetTerminator());
+    } while (branch && GetNextMatchCase(*branch).second == failure);
+    return true;
+}
+
+std::map<size_t, std::vector<std::pair<Block*, Block*>>> CollectEnumMatchFragments(
+    const std::set<Block*>& constructorBlocks)
+{
+    std::map<size_t, std::vector<std::pair<Block*, Block*>>> fragments;
+    for (auto constructor : constructorBlocks) {
+        std::vector<Block*> workList{constructor};
+        while (!workList.empty()) {
+            auto block = workList.back();
+            workList.pop_back();
+            auto table = Cangjie::DynamicCast<MultiBranch*>(block->GetTerminator());
+            auto normalBlocks = table ? table->GetNormalBlocks() : std::vector<Block*>{};
+            // A routing table selects source fragments; its own location identifies only the first fragment.
+            auto isRoutingTable = std::any_of(normalBlocks.begin(), normalBlocks.end(),
+                [](auto successor) { return successor->template Get<MatchCaseId>().has_value(); });
+            if (auto caseId = block->Get<MatchCaseId>(); caseId && !isRoutingTable) {
+                fragments[caseId.value()].emplace_back(block, constructor);
+            }
+            for (auto successor : block->GetTerminator()->GetSuccessors()) {
+                if (!successor->TestAttr(Attribute::MATCH_PATTERN) ||
+                    constructorBlocks.find(successor) != constructorBlocks.end()) {
+                    continue;
+                }
+                workList.emplace_back(successor);
+            }
+        }
+    }
+    return fragments;
 }
 
 } // namespace
@@ -150,7 +190,9 @@ void UnreachableBranchCheck::RunOnPackage(const Package& package, size_t threadN
     }
 }
 
-void UnreachableBranchCheck::PrintMatchSuccessors(Block& block, std::set<Block*>& hasProcessed)
+template <typename TConstDomain>
+void UnreachableBranchCheck::PrintMatchSuccessors(
+    Results<TConstDomain>& result, Block& block, std::set<Block*>& hasProcessed)
 {
     /*
      * A constant pattern or guard can make several later cases unreachable. Walk its source-case failure chain and
@@ -159,7 +201,8 @@ void UnreachableBranchCheck::PrintMatchSuccessors(Block& block, std::set<Block*>
     auto current = &block;
     while (true) {
         auto [terminator, nextCase] = GetNextMatchCase(*current);
-        if (!terminator || !nextCase || hasProcessed.find(nextCase) != hasProcessed.end()) {
+        if (!terminator || !nextCase || hasProcessed.find(nextCase) != hasProcessed.end() ||
+            !result.GetEntryState(*nextCase).IsBottom()) {
             return;
         }
         PrintWarning(*terminator, *nextCase, hasProcessed);
@@ -167,126 +210,82 @@ void UnreachableBranchCheck::PrintMatchSuccessors(Block& block, std::set<Block*>
     }
 }
 
-void UnreachableBranchCheck::PrintMatchTableSuccessors(Block& block, std::set<Block*>& hasProcessed,
-    std::set<size_t>& reportedCaseIds, const std::set<Block*>& constructorGroups)
+template <typename TConstDomain, typename EdgePredicate>
+bool UnreachableBranchCheck::TryVisitEnumMatchTable(
+    Results<TConstDomain>& result, MultiBranch& table, const EdgePredicate& CanTakeEdge)
 {
-    /*
-     * A payload table may contain several fragments of one source case. Follow its default-edge chain inside the
-     * current constructor group and use MatchCaseId to report that source case once.
-     */
-    auto current = &block;
-    std::set<Block*> visited;
-    while (visited.emplace(current).second) {
-        auto [terminator, nextCase] = GetNextMatchCase(*current, constructorGroups);
-        if (!terminator || !nextCase) {
-            return;
+    std::set<Block*> constructorBlocks;
+    for (auto block : table.GetNormalBlocks()) {
+        if (block->Get<MatchCaseId>().has_value()) {
+            constructorBlocks.emplace(block);
         }
-        auto caseId = nextCase->Get<MatchCaseId>();
-        CJC_ASSERT(caseId.has_value());
-        if (reportedCaseIds.emplace(caseId.value()).second) {
-            PrintWarning(*terminator, *nextCase, hasProcessed);
-        }
-        current = nextCase;
     }
-}
-
-void UnreachableBranchCheck::PrintMatchTableCases(MultiBranch& table, std::set<Block*>& hasProcessed,
-    std::set<size_t>& reportedCaseIds, const std::set<Block*>& constructorGroups)
-{
-    /*
-     * Report keyed payload entries, then inspect each entry's failure chain and the table default edge. The default
-     * may enter a later source case even when that case has no keyed entry in this table.
-     */
-    for (auto successor : table.GetNormalBlocks()) {
-        CJC_ASSERT(successor->TestAttr(Attribute::MATCH_PATTERN) && successor->Get<MatchCaseId>().has_value());
-        auto caseId = successor->Get<MatchCaseId>();
-        CJC_ASSERT(caseId.has_value());
-        if (reportedCaseIds.emplace(caseId.value()).second) {
-            PrintWarning(table, *successor, hasProcessed);
-        }
-        PrintMatchTableSuccessors(*successor, hasProcessed, reportedCaseIds, constructorGroups);
+    if (constructorBlocks.empty()) {
+        return false;
     }
-    PrintMatchTableSuccessors(*table.GetParentBlock(), hasProcessed, reportedCaseIds, constructorGroups);
-}
+    auto fragments = CollectEnumMatchFragments(constructorBlocks);
 
-void UnreachableBranchCheck::VisitBranch(Branch& branch, Block& target)
-{
-    /*
-     * ConstAnalysis supplies the selected successor. For a match branch, an unselected false edge can also head later
-     * source cases, so traverse it only when SourceExpr identifies a pattern/case boundary. Cases already diagnosed
-     * by Sema carry SKIP_DCE_WARNING and are filtered by PrintWarning.
-     */
-    CJC_ASSERT(!branch.GetParentBlock()->Get<MatchCaseId>().has_value());
     std::set<Block*> hasProcessed;
-    for (auto successor : branch.GetSuccessors()) {
-        if (successor == &target) {
-            continue;
-        }
-        // A marked guard follows a refutable pattern. Its false edge is not a source-case reachability decision;
-        // pattern failure independently reaches the same next case. Its true edge remains reportable when rejected.
-        if (branch.TestAttr(Attribute::MATCH_PATTERN) && successor == branch.GetFalseBlock()) {
-            continue;
-        }
-        PrintWarning(branch, *successor, hasProcessed);
-        if (successor == branch.GetFalseBlock() &&
-            (branch.GetSourceExpr() == SourceExpr::MATCH_EXPR || branch.GetSourceExpr() == SourceExpr::MATCH_CASE)) {
-            PrintMatchSuccessors(*successor, hasProcessed);
-        }
-    }
-}
-
-void UnreachableBranchCheck::VisitMultiBranch(MultiBranch& branch, Block& target)
-{
-    /*
-     * A top-level optimized enum match has constructor-group successors marked MATCH_PATTERN. Group its table entries
-     * by MatchCaseId because constructor order differs from source-case order. Other MultiBranch nodes use the normal
-     * successor path and SourceExpr only selects the diagnostic kind.
-     */
-    CJC_ASSERT(!branch.GetParentBlock()->Get<MatchCaseId>().has_value());
-    std::set<Block*> hasProcessed;
-    std::set<size_t> reportedCaseIds;
-    std::set<Block*> constructorGroups;
-    for (auto successor : branch.GetNormalBlocks()) {
-        if (successor->TestAttr(Attribute::MATCH_PATTERN)) {
-            constructorGroups.emplace(successor);
-        }
-    }
-    const bool table = !branch.GetParentBlock()->TestAttr(Attribute::MATCH_PATTERN) &&
-        !constructorGroups.empty() && branch.GetSourceExpr() == SourceExpr::MATCH_EXPR;
-    for (auto successor : branch.GetSuccessors()) {
-        if (successor == &target) {
-            continue;
-        }
-        if (table && successor->TestAttr(Attribute::MATCH_PATTERN)) {
-            auto caseId = successor->Get<MatchCaseId>();
-            CJC_ASSERT(caseId.has_value());
-            if (reportedCaseIds.emplace(caseId.value()).second) {
-                PrintWarning(branch, *successor, hasProcessed);
+    for (auto& entry : fragments) {
+        auto& blocks = entry.second;
+        std::vector<Block*> unreachable;
+        for (auto [block, constructor] : blocks) {
+            if (!CanTakeEdge(table, *constructor) || !CanMatch(result, *block, CanTakeEdge)) {
+                unreachable.emplace_back(block);
             }
-            if (auto nestedTable = DynamicCast<MultiBranch>(successor->GetTerminator())) {
-                PrintMatchTableCases(*nestedTable, hasProcessed, reportedCaseIds, constructorGroups);
-            } else {
-                PrintMatchTableSuccessors(*successor, hasProcessed, reportedCaseIds, constructorGroups);
-            }
+        }
+        if (unreachable.size() == blocks.size()) {
+            auto [first, last] = std::minmax_element(
+                unreachable.begin(), unreachable.end(), [](const Block* lhs, const Block* rhs) {
+                    auto lhsPos = lhs->GetDebugLocation().GetBeginPos();
+                    auto rhsPos = rhs->GetDebugLocation().GetBeginPos();
+                    return lhsPos.line < rhsPos.line || (lhsPos.line == rhsPos.line && lhsPos.column < rhsPos.column);
+                });
+            auto location = (*first)->GetDebugLocation();
+            location.SetEndPos((*last)->GetDebugLocation().GetEndPos());
+            (*first)->template Set<DebugLocationInfoForWarning>(location);
+            PrintWarning(table, **first, hasProcessed);
         } else {
-            PrintWarning(branch, *successor, hasProcessed);
-            if (branch.GetSourceExpr() == SourceExpr::MATCH_CASE && successor == branch.GetDefaultBlock()) {
-                PrintMatchSuccessors(*successor, hasProcessed);
+            for (auto block : unreachable) {
+                PrintWarning(table, *block, hasProcessed);
             }
         }
     }
-    if (table && target.TestAttr(Attribute::MATCH_PATTERN) && target.Get<MatchCaseId>().has_value()) {
-        auto targetCaseId = target.Get<MatchCaseId>();
-        CJC_ASSERT(targetCaseId.has_value());
-        reportedCaseIds.emplace(targetCaseId.value());
-        if (target.GetTerminator()->GetExprKind() == ExprKind::MULTIBRANCH) {
-            PrintMatchTableSuccessors(target, hasProcessed, reportedCaseIds, constructorGroups);
+    auto defaultBlock = table.GetDefaultBlock();
+    if (constructorBlocks.find(defaultBlock) == constructorBlocks.end() &&
+        result.GetEntryState(*defaultBlock).IsBottom()) {
+        PrintWarning(table, *defaultBlock, hasProcessed);
+    }
+    return true;
+}
+
+template <typename TConstDomain, typename EdgePredicate>
+void UnreachableBranchCheck::VisitTerminator(
+    Results<TConstDomain>& result, Expression& terminator, const EdgePredicate& CanTakeEdge)
+{
+    auto branch = Cangjie::DynamicCast<Branch*>(&terminator);
+    auto table = Cangjie::DynamicCast<MultiBranch*>(&terminator);
+    if (table && TryVisitEnumMatchTable(result, *table, CanTakeEdge)) {
+        return;
+    }
+    auto sourceExpr = branch ? branch->GetSourceExpr() : table->GetSourceExpr();
+    auto failure = branch ? branch->GetFalseBlock() : table->GetDefaultBlock();
+    std::set<Block*> hasProcessed;
+    for (auto successor : terminator.GetSuccessors()) {
+        // An excluded edge does not make a shared successor unreachable: another predecessor may still reach it.
+        if (CanTakeEdge(terminator, *successor) || !result.GetEntryState(*successor).IsBottom()) {
+            continue;
+        }
+        PrintWarning(terminator, *successor, hasProcessed);
+        if (successor == failure &&
+            (sourceExpr == SourceExpr::MATCH_EXPR || sourceExpr == SourceExpr::MATCH_CASE)) {
+            PrintMatchSuccessors(result, *successor, hasProcessed);
         }
     }
 }
 
-void UnreachableBranchCheck::PrintWarning(
-    const Expression& node, Block& block, std::set<Block*>& hasProcessed)
+void UnreachableBranchCheck::PrintWarning(const Expression& node, Block& block,
+    std::set<Block*>& hasProcessed)
 {
     if (hasProcessed.find(&block) != hasProcessed.end()) {
         return;
@@ -296,72 +295,62 @@ void UnreachableBranchCheck::PrintWarning(
     if (block.Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING || node.Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING) {
         return;
     }
-    auto [res, range] = ToRangeIfNotZero(block.GetDebugLocation());
+    auto [res, range] = GetDebugPos(block);
     if (!res) {
         return;
     }
     if (IsCrossPackage(range.begin, currentPackageName, diag)) {
         return;
     }
-    if (node.GetExprKind() == ExprKind::BRANCH) {
-        auto branch = StaticCast<const Branch*>(&node);
-        auto sourceExpr = branch->GetSourceExpr();
+    auto branch = Cangjie::DynamicCast<const Branch*>(&node);
+    auto sourceExpr = branch ? branch->GetSourceExpr() : StaticCast<const MultiBranch*>(&node)->GetSourceExpr();
+    if (branch) {
         if (auto nested = GetElseIfBranch(*branch, block)) {
             PrintWarning(*nested, *nested->GetTrueBlock(), hasProcessed);
             PrintWarning(*nested, *nested->GetFalseBlock(), hasProcessed);
             return;
         }
-        if (sourceExpr == SourceExpr::QUEST || sourceExpr == SourceExpr::BINARY) {
-            (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_expression, range);
-        } else if (sourceExpr == SourceExpr::MATCH_EXPR || sourceExpr == SourceExpr::MATCH_CASE) {
-            (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_unreachable_pattern, range);
-        } else {
-            auto keyWord = GetKeyWordBySourceExpr(sourceExpr);
-            auto builder =
-                diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_block_in_expression, range, keyWord);
-            builder.AddMainHintArguments(keyWord);
-        }
+    }
+    if (branch && (sourceExpr == SourceExpr::QUEST || sourceExpr == SourceExpr::BINARY)) {
+        (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_expression, range);
+    } else if (sourceExpr == SourceExpr::MATCH_EXPR || sourceExpr == SourceExpr::MATCH_CASE ||
+        (!branch && sourceExpr == SourceExpr::OTHER)) {
+        (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_unreachable_pattern, range);
     } else {
-        auto sourceExpr = StaticCast<const MultiBranch*>(&node)->GetSourceExpr();
-        if (sourceExpr == SourceExpr::MATCH_EXPR || sourceExpr == SourceExpr::MATCH_CASE ||
-            sourceExpr == SourceExpr::OTHER) {
-            (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_unreachable_pattern, range);
-        } else {
-            auto keyWord = GetKeyWordBySourceExpr(sourceExpr);
-            auto builder =
-                diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_block_in_expression, range, keyWord);
-            builder.AddMainHintArguments(keyWord);
-        }
+        auto keyWord = GetKeyWordBySourceExpr(sourceExpr);
+        auto builder =
+            diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_block_in_expression, range, keyWord);
+        builder.AddMainHintArguments(keyWord);
     }
 }
 
 template <typename TConstDomain>
 void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result)
 {
+    std::unordered_map<const Expression*, std::optional<Block*>> terminatorResults;
     const auto actionBeforeVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
     const auto actionAfterVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
-
-    const auto actionOnTerminator = [this](
-            const TConstDomain&, Expression* terminator, std::optional<Block*> targetSucc) {
-        switch (terminator->GetExprKind()) {
-            case ExprKind::BRANCH: {
-                if (targetSucc.has_value()) {
-                    auto branchNode = StaticCast<Branch*>(terminator);
-                    VisitBranch(*branchNode, *targetSucc.value());
-                }
-                break;
-            }
-            case ExprKind::MULTIBRANCH: {
-                if (targetSucc.has_value()) {
-                    VisitMultiBranch(*StaticCast<MultiBranch*>(terminator), *targetSucc.value());
-                }
-                break;
-            }
-            default:
-                break;
+    const auto actionOnTerminator = [&](const TConstDomain&, Expression* terminator, std::optional<Block*> target) {
+        if (terminator->GetExprKind() == ExprKind::BRANCH || terminator->GetExprKind() == ExprKind::MULTIBRANCH) {
+            terminatorResults.emplace(terminator, target);
         }
     };
     result.VisitWith(actionBeforeVisitExpr, actionAfterVisitExpr, actionOnTerminator);
+
+    // VisitWith skips Bottom blocks. A recorded nullopt means an unknown choice, not an unreachable terminator.
+    // Keep all choices before diagnosing: a pattern may query a later condition or share its body with another pattern.
+    const auto CanTakeEdge = [&](const Expression& terminator, const Block& successor) {
+        auto it = terminatorResults.find(&terminator);
+        return it != terminatorResults.end() && (!it->second || it->second.value() == &successor);
+    };
+    for (auto block : result.func->GetBody()->GetAllBlocks()) {
+        auto terminator = block->GetTerminator();
+        if (terminatorResults.find(terminator) == terminatorResults.end() ||
+            block->template Get<MatchCaseId>().has_value()) {
+            continue;
+        }
+        VisitTerminator(result, *terminator, CanTakeEdge);
+    }
 }
 
 void UnreachableBranchCheck::RunOnFunc(const Ptr<Function> func)
