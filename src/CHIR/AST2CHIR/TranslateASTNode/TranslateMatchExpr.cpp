@@ -268,14 +268,6 @@ void Translator::TranslatePatternGuard(
     }
     currentBlock = trueBlock;
     auto guardBlock = currentBlock;
-    /*
-     * A refutable pattern and its guard both fail into falseBlock. Record the pattern predecessors before lowering the
-     * guard so newly appended guard predecessors can be identified afterward. If the guard is constant, its failure
-     * edge may be infeasible while the pattern failure edge still reaches the next case. Only the new guard edge must
-     * stop unreachable-case traversal; pattern edges remain reportable. An irrefutable pattern has no existing failure
-     * predecessor, so a constant-true guard still makes following cases unreachable.
-     */
-    auto patternFailurePredecessors = falseBlock->GetPredecessors();
     auto newTrueBlock = CreateBlock();
     const auto& guardLoc = TranslateLocation(*matchCase.patternGuard);
     if (sourceExpr != SourceExpr::QUEST && !originLoc.IsInvalidPos()) {
@@ -288,17 +280,6 @@ void Translator::TranslatePatternGuard(
         }
     }
     TranslateMatchGuardCondition(*matchCase.patternGuard, newTrueBlock, falseBlock, sourceExpr);
-    if (!patternFailurePredecessors.empty()) {
-        // Mark only guard failure terminators added after the pattern corridor was built.
-        auto guardFailurePredecessors = falseBlock->GetPredecessors();
-        for (auto predecessor : guardFailurePredecessors) {
-            if (std::find(patternFailurePredecessors.begin(), patternFailurePredecessors.end(), predecessor) ==
-                patternFailurePredecessors.end()) {
-                // Mark a guard edge that shares its failure target with an independently refutable pattern.
-                predecessor->GetTerminator()->EnableAttr(Attribute::MATCH_PATTERN);
-            }
-        }
-    }
     trueBlock = newTrueBlock;
 }
 
@@ -921,8 +902,10 @@ void Translator::TranslateTrivialMatchAsTable(
     }
     auto [indexes, blocks] = ConvertFromMapToVectors(indexToBodies);
     if (defaultBlock == endBlock) {
-        // Exhaustive cases, default block will not be reached, just set it to first valid case block.
-        defaultBlock = blocks[0];
+        // Keep exhaustive failure separate from case entries so unreachable-edge removal can discard it.
+        defaultBlock = CreateBlock();
+        CreateAndAppendTerminator<Exit>(defaultBlock)->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+        defaultBlock->EnableAttr(Attribute::UNREACHABLE);
     }
     currentBlock = baseBlock;
     Type* targetType;
@@ -944,6 +927,7 @@ void Translator::TranslateEnumPatternMatchAsTable(const AST::MatchExpr& match, P
 {
     auto baseBlock = currentBlock;
     auto endBlock = CreateBlock();
+    endBlock->SetDebugLocation(TranslateLocation(match));
     auto firstDefaultBlock = endBlock;
     auto firstSelectorVal = GetEnumIDValue(match.selector->GetTy(), enumVal);
     EnumMatchInfo matchInfo;
@@ -974,8 +958,10 @@ void Translator::TranslateEnumPatternMatchAsTable(const AST::MatchExpr& match, P
     // Create branch to first level switch.
     auto [indexes, blocks] = ConvertFromMapToVectors(matchInfo.firstSwitchBlocks);
     if (firstDefaultBlock == endBlock) {
-        // Exhaustive cases, default block will not be reached, just set it to first valid case block.
-        firstDefaultBlock = blocks[0];
+        // Payload failures must end this exhaustive match rather than re-enter a constructor's patterns.
+        firstDefaultBlock = CreateBlock();
+        CreateAndAppendTerminator<Exit>(firstDefaultBlock)->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+        firstDefaultBlock->EnableAttr(Attribute::UNREACHABLE);
     }
     auto firstMultiBranch =
         CreateAndAppendTerminator<MultiBranch>(firstSelectorVal, firstDefaultBlock, indexes, blocks, baseBlock);
@@ -1102,6 +1088,7 @@ std::unordered_map<size_t, std::vector<Ptr<Block>>> Translator::TranslateSecondL
                 *secondSelectVar, *builder.GetUInt64Ty(), secondSelectVar->GetDebugLocation(), false),
             secondDefaultBlock, indexes, blocks, firstLevelBlock);
         multiBranch->SetSourceExpr(tableSourceExpr);
+        multiBranch->EnableAttr(Attribute::MATCH_PATTERN);
     }
     return blockBranchInfos;
 }
