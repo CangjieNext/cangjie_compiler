@@ -119,6 +119,39 @@ std::pair<Expression*, Block*> GetNextMatchCase(
 }
 
 } // namespace
+
+template <typename TConstDomain> class UnreachableBranchCheck::BranchVisitContext {
+public:
+    BranchVisitContext(UnreachableBranchCheck& check, Results<TConstDomain>& result) : check(check), result(result)
+    {
+    }
+
+    void Visit(Expression& terminator, std::optional<Block*> target)
+    {
+        if (!target.has_value()) {
+            return;
+        }
+        if (terminator.GetExprKind() == ExprKind::BRANCH) {
+            VisitBranch(*StaticCast<Branch*>(&terminator), *target.value());
+        } else if (terminator.GetExprKind() == ExprKind::MULTIBRANCH) {
+            VisitMultiBranch(*StaticCast<MultiBranch*>(&terminator), *target.value());
+        }
+    }
+
+    void VisitBranch(Branch& branch, Block& target);
+    void VisitMultiBranch(MultiBranch& branch, Block& target);
+
+private:
+    // Pattern failure and guard failure may share the next-case entry, as in `case 3 where false`.
+    bool IsReachableNextCase(Block& successor, Block& nextCase, SourceExpr sourceExpr) const
+    {
+        return &successor == &nextCase && sourceExpr == SourceExpr::MATCH_CASE && result.IsReachable(successor);
+    }
+
+    UnreachableBranchCheck& check;
+    Results<TConstDomain>& result;
+};
+
 void UnreachableBranchCheck::RunOnPackage(const Package& package, size_t threadNum)
 {
     if (threadNum == 1) {
@@ -209,7 +242,8 @@ void UnreachableBranchCheck::PrintMatchTableCases(MultiBranch& table, std::set<B
     PrintMatchTableSuccessors(*table.GetParentBlock(), hasProcessed, reportedCaseIds, constructorGroups);
 }
 
-void UnreachableBranchCheck::VisitBranch(Branch& branch, Block& target)
+template <typename TConstDomain>
+void UnreachableBranchCheck::BranchVisitContext<TConstDomain>::VisitBranch(Branch& branch, Block& target)
 {
     /*
      * ConstAnalysis supplies the selected successor. For a match branch, an unselected false edge can also head later
@@ -222,20 +256,19 @@ void UnreachableBranchCheck::VisitBranch(Branch& branch, Block& target)
         if (successor == &target) {
             continue;
         }
-        // A marked guard follows a refutable pattern. Its false edge is not a source-case reachability decision;
-        // pattern failure independently reaches the same next case. Its true edge remains reportable when rejected.
-        if (branch.TestAttr(Attribute::MATCH_PATTERN) && successor == branch.GetFalseBlock()) {
+        if (IsReachableNextCase(*successor, *branch.GetFalseBlock(), branch.GetSourceExpr())) {
             continue;
         }
-        PrintWarning(branch, *successor, hasProcessed);
+        check.PrintWarning(branch, *successor, hasProcessed);
         if (successor == branch.GetFalseBlock() &&
             (branch.GetSourceExpr() == SourceExpr::MATCH_EXPR || branch.GetSourceExpr() == SourceExpr::MATCH_CASE)) {
-            PrintMatchSuccessors(*successor, hasProcessed);
+            check.PrintMatchSuccessors(*successor, hasProcessed);
         }
     }
 }
 
-void UnreachableBranchCheck::VisitMultiBranch(MultiBranch& branch, Block& target)
+template <typename TConstDomain>
+void UnreachableBranchCheck::BranchVisitContext<TConstDomain>::VisitMultiBranch(MultiBranch& branch, Block& target)
 {
     /*
      * A top-level optimized enum match has constructor-group successors marked MATCH_PATTERN. Group its table entries
@@ -257,21 +290,24 @@ void UnreachableBranchCheck::VisitMultiBranch(MultiBranch& branch, Block& target
         if (successor == &target) {
             continue;
         }
+        if (IsReachableNextCase(*successor, *branch.GetDefaultBlock(), branch.GetSourceExpr())) {
+            continue;
+        }
         if (table && successor->TestAttr(Attribute::MATCH_PATTERN)) {
             auto caseId = successor->Get<MatchCaseId>();
             CJC_ASSERT(caseId.has_value());
             if (reportedCaseIds.emplace(caseId.value()).second) {
-                PrintWarning(branch, *successor, hasProcessed);
+                check.PrintWarning(branch, *successor, hasProcessed);
             }
             if (auto nestedTable = DynamicCast<MultiBranch>(successor->GetTerminator())) {
-                PrintMatchTableCases(*nestedTable, hasProcessed, reportedCaseIds, constructorGroups);
+                check.PrintMatchTableCases(*nestedTable, hasProcessed, reportedCaseIds, constructorGroups);
             } else {
-                PrintMatchTableSuccessors(*successor, hasProcessed, reportedCaseIds, constructorGroups);
+                check.PrintMatchTableSuccessors(*successor, hasProcessed, reportedCaseIds, constructorGroups);
             }
         } else {
-            PrintWarning(branch, *successor, hasProcessed);
+            check.PrintWarning(branch, *successor, hasProcessed);
             if (branch.GetSourceExpr() == SourceExpr::MATCH_CASE && successor == branch.GetDefaultBlock()) {
-                PrintMatchSuccessors(*successor, hasProcessed);
+                check.PrintMatchSuccessors(*successor, hasProcessed);
             }
         }
     }
@@ -280,7 +316,7 @@ void UnreachableBranchCheck::VisitMultiBranch(MultiBranch& branch, Block& target
         CJC_ASSERT(targetCaseId.has_value());
         reportedCaseIds.emplace(targetCaseId.value());
         if (target.GetTerminator()->GetExprKind() == ExprKind::MULTIBRANCH) {
-            PrintMatchTableSuccessors(target, hasProcessed, reportedCaseIds, constructorGroups);
+            check.PrintMatchTableSuccessors(target, hasProcessed, reportedCaseIds, constructorGroups);
         }
     }
 }
@@ -340,26 +376,11 @@ void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result)
 {
     const auto actionBeforeVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
     const auto actionAfterVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
+    BranchVisitContext<TConstDomain> context(*this, result);
 
-    const auto actionOnTerminator = [this](
+    const auto actionOnTerminator = [&context](
             const TConstDomain&, Expression* terminator, std::optional<Block*> targetSucc) {
-        switch (terminator->GetExprKind()) {
-            case ExprKind::BRANCH: {
-                if (targetSucc.has_value()) {
-                    auto branchNode = StaticCast<Branch*>(terminator);
-                    VisitBranch(*branchNode, *targetSucc.value());
-                }
-                break;
-            }
-            case ExprKind::MULTIBRANCH: {
-                if (targetSucc.has_value()) {
-                    VisitMultiBranch(*StaticCast<MultiBranch*>(terminator), *targetSucc.value());
-                }
-                break;
-            }
-            default:
-                break;
-        }
+        context.Visit(*terminator, targetSucc);
     };
     result.VisitWith(actionBeforeVisitExpr, actionAfterVisitExpr, actionOnTerminator);
 }
