@@ -1029,6 +1029,7 @@ private:
     Ptr<Value> HandleConstPattern(
         const AST::ConstPattern& constPattern, Ptr<Value> value, const DebugLocation& originLoc);
     // ========= helper functions for translating match as table ==========
+    Block* CreateUnreachableMatchDefaultBlock();
     void TranslateTrivialMatchAsTable(
         const AST::MatchExpr& match, Ptr<Value> selectorVal, Ptr<Value> retVal, size_t countOfPatterns);
     // Record relation of enum pattern and its matching case body's id.
