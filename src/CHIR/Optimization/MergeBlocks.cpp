@@ -143,7 +143,7 @@ void MergeBlocks::RunOnFunc(const BlockGroup& body, CHIRBuilder& builder, const 
             return false;
         }
         auto preds = block.GetPredecessors();
-        if (preds.size() != 1) {
+        if (preds.size() != 1 || preds[0]->TestAttr(Attribute::MATCH_PATTERN)) {
             return false;
         }
         auto succs = preds[0]->GetSuccessors();
