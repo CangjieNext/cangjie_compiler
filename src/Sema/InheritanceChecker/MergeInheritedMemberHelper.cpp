@@ -80,6 +80,24 @@ void SetPossibleInconsistentType(
     inconsistentTypes.emplace_back(getTy(target));
     inconsistentTypes.emplace_back(getTy(src));
 }
+
+/**
+ * Whether the type has to provide its own implementation of the merged default interface member.
+ * Merging members of different declarations may leave the order of checking the extensions undecidable, so the
+ * type is asked to implement the member itself. Merging one single declaration with itself, as happens for
+ * diamond inheritance, introduces no ambiguity and requests no implementation. eg:
+ *     interface IRoot { func foo(): Unit {} }; interface ISub <: IRoot {}; interface IOther <: IRoot {};
+ *     extend A <: IRoot {}; extend A <: ISub; extend A <: IOther; the 'foo' does not have to be implemented.
+ */
+bool NeedImplementAfterMerge(
+    const MemberSignature& member, const MemberSignature& child, const MemberSignature& parent, bool isRelationExtend)
+{
+    if (child.decl == parent.decl) {
+        return false;
+    }
+    return (member.isInheritedInterface || !isRelationExtend) && child.decl->TestAttr(Attribute::DEFAULT) &&
+        parent.decl->TestAttr(Attribute::DEFAULT);
+}
 } // namespace
 
 /**
@@ -188,8 +206,7 @@ MemberSignature StructInheritanceChecker::UpdateInheritedMemberIfNeeded(
                 auto curExtend = StaticCast<ExtendDecl*>(checkingDecls[0].get());
                 isRelationExtend = typeManager.IsExtendInheritRelation(*curExtend, *child.extendDecl).first;
             }
-            it->second.shouldBeImplemented = (it->second.isInheritedInterface || !isRelationExtend) &&
-                child.decl->TestAttr(Attribute::DEFAULT) && parent.decl->TestAttr(Attribute::DEFAULT);
+            it->second.shouldBeImplemented = NeedImplementAfterMerge(it->second, child, parent, isRelationExtend);
             return it->second;
         }
     }
