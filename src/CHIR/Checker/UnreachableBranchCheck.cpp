@@ -37,6 +37,16 @@ Branch* GetElseIfBranch(const Branch& branch, Block& block)
         ? nested : nullptr;
 }
 
+bool HasSharedGuardFailure(Block& target)
+{
+    // A marked guard-failure edge shares this next-case target with pattern failure.
+    auto predecessors = target.GetPredecessors();
+    return std::any_of(predecessors.begin(), predecessors.end(), [&target](auto predecessor) {
+        auto branch = Cangjie::DynamicCast<Branch>(predecessor->GetTerminator());
+        return branch && branch->TestAttr(Attribute::MATCH_PATTERN) && branch->GetFalseBlock() == &target;
+    });
+}
+
 /*
  * The GetNextMatchCase overloads return {boundary terminator, next source-case entry}. A null terminator with a
  * non-null block means traversal must continue inside the current case; two nulls mean this path has no case boundary.
@@ -119,6 +129,47 @@ std::pair<Expression*, Block*> GetNextMatchCase(
 }
 
 } // namespace
+
+// Collect one function's constant branch decisions before reporting, so a match failure edge can be interpreted with
+// all shared guard-failure targets that Results::VisitWith actually visits.
+class UnreachableBranchCheck::FunctionContext {
+public:
+    explicit FunctionContext(UnreachableBranchCheck& check) : check(check)
+    {
+    }
+
+    void Collect(Expression& terminator, std::optional<Block*> target)
+    {
+        auto& block = *terminator.GetParentBlock();
+        if (HasSharedGuardFailure(block)) {
+            reachableSharedGuardFailureTargets.emplace(&block);
+        }
+        if (target.has_value() &&
+            (terminator.GetExprKind() == ExprKind::BRANCH || terminator.GetExprKind() == ExprKind::MULTIBRANCH)) {
+            branchesToVisit.emplace_back(&terminator, target.value());
+        }
+    }
+
+    void VisitBranches()
+    {
+        for (auto [terminator, target] : branchesToVisit) {
+            if (terminator->GetExprKind() == ExprKind::BRANCH) {
+                VisitBranch(*StaticCast<Branch*>(terminator), *target);
+            } else {
+                VisitMultiBranch(*StaticCast<MultiBranch*>(terminator), *target);
+            }
+        }
+    }
+
+    void VisitBranch(Branch& branch, Block& target);
+    void VisitMultiBranch(MultiBranch& branch, Block& target);
+
+private:
+    UnreachableBranchCheck& check;
+    std::set<Block*> reachableSharedGuardFailureTargets;
+    std::vector<std::pair<Expression*, Block*>> branchesToVisit;
+};
+
 void UnreachableBranchCheck::RunOnPackage(const Package& package, size_t threadNum)
 {
     if (threadNum == 1) {
@@ -209,7 +260,7 @@ void UnreachableBranchCheck::PrintMatchTableCases(MultiBranch& table, std::set<B
     PrintMatchTableSuccessors(*table.GetParentBlock(), hasProcessed, reportedCaseIds, constructorGroups);
 }
 
-void UnreachableBranchCheck::VisitBranch(Branch& branch, Block& target)
+void UnreachableBranchCheck::FunctionContext::VisitBranch(Branch& branch, Block& target)
 {
     /*
      * ConstAnalysis supplies the selected successor. For a match branch, an unselected false edge can also head later
@@ -227,15 +278,20 @@ void UnreachableBranchCheck::VisitBranch(Branch& branch, Block& target)
         if (branch.TestAttr(Attribute::MATCH_PATTERN) && successor == branch.GetFalseBlock()) {
             continue;
         }
-        PrintWarning(branch, *successor, hasProcessed);
+        // In `case 3 where false`, the rejected pattern-failure edge and the guard-failure edge share the next case.
+        if (successor == branch.GetFalseBlock() && branch.GetSourceExpr() == SourceExpr::MATCH_CASE &&
+            reachableSharedGuardFailureTargets.find(successor) != reachableSharedGuardFailureTargets.end()) {
+            continue;
+        }
+        check.PrintWarning(branch, *successor, hasProcessed);
         if (successor == branch.GetFalseBlock() &&
             (branch.GetSourceExpr() == SourceExpr::MATCH_EXPR || branch.GetSourceExpr() == SourceExpr::MATCH_CASE)) {
-            PrintMatchSuccessors(*successor, hasProcessed);
+            check.PrintMatchSuccessors(*successor, hasProcessed);
         }
     }
 }
 
-void UnreachableBranchCheck::VisitMultiBranch(MultiBranch& branch, Block& target)
+void UnreachableBranchCheck::FunctionContext::VisitMultiBranch(MultiBranch& branch, Block& target)
 {
     /*
      * A top-level optimized enum match has constructor-group successors marked MATCH_PATTERN. Group its table entries
@@ -257,21 +313,26 @@ void UnreachableBranchCheck::VisitMultiBranch(MultiBranch& branch, Block& target
         if (successor == &target) {
             continue;
         }
+        // An or-pattern uses a MultiBranch whose rejected default edge may share the next case with guard failure.
+        if (successor == branch.GetDefaultBlock() && branch.GetSourceExpr() == SourceExpr::MATCH_CASE &&
+            reachableSharedGuardFailureTargets.find(successor) != reachableSharedGuardFailureTargets.end()) {
+            continue;
+        }
         if (table && successor->TestAttr(Attribute::MATCH_PATTERN)) {
             auto caseId = successor->Get<MatchCaseId>();
             CJC_ASSERT(caseId.has_value());
             if (reportedCaseIds.emplace(caseId.value()).second) {
-                PrintWarning(branch, *successor, hasProcessed);
+                check.PrintWarning(branch, *successor, hasProcessed);
             }
             if (auto nestedTable = DynamicCast<MultiBranch>(successor->GetTerminator())) {
-                PrintMatchTableCases(*nestedTable, hasProcessed, reportedCaseIds, constructorGroups);
+                check.PrintMatchTableCases(*nestedTable, hasProcessed, reportedCaseIds, constructorGroups);
             } else {
-                PrintMatchTableSuccessors(*successor, hasProcessed, reportedCaseIds, constructorGroups);
+                check.PrintMatchTableSuccessors(*successor, hasProcessed, reportedCaseIds, constructorGroups);
             }
         } else {
-            PrintWarning(branch, *successor, hasProcessed);
+            check.PrintWarning(branch, *successor, hasProcessed);
             if (branch.GetSourceExpr() == SourceExpr::MATCH_CASE && successor == branch.GetDefaultBlock()) {
-                PrintMatchSuccessors(*successor, hasProcessed);
+                check.PrintMatchSuccessors(*successor, hasProcessed);
             }
         }
     }
@@ -280,7 +341,7 @@ void UnreachableBranchCheck::VisitMultiBranch(MultiBranch& branch, Block& target
         CJC_ASSERT(targetCaseId.has_value());
         reportedCaseIds.emplace(targetCaseId.value());
         if (target.GetTerminator()->GetExprKind() == ExprKind::MULTIBRANCH) {
-            PrintMatchTableSuccessors(target, hasProcessed, reportedCaseIds, constructorGroups);
+            check.PrintMatchTableSuccessors(target, hasProcessed, reportedCaseIds, constructorGroups);
         }
     }
 }
@@ -340,28 +401,14 @@ void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result)
 {
     const auto actionBeforeVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
     const auto actionAfterVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
+    FunctionContext context(*this);
 
-    const auto actionOnTerminator = [this](
+    const auto actionOnTerminator = [&context](
             const TConstDomain&, Expression* terminator, std::optional<Block*> targetSucc) {
-        switch (terminator->GetExprKind()) {
-            case ExprKind::BRANCH: {
-                if (targetSucc.has_value()) {
-                    auto branchNode = StaticCast<Branch*>(terminator);
-                    VisitBranch(*branchNode, *targetSucc.value());
-                }
-                break;
-            }
-            case ExprKind::MULTIBRANCH: {
-                if (targetSucc.has_value()) {
-                    VisitMultiBranch(*StaticCast<MultiBranch*>(terminator), *targetSucc.value());
-                }
-                break;
-            }
-            default:
-                break;
-        }
+        context.Collect(*terminator, targetSucc);
     };
     result.VisitWith(actionBeforeVisitExpr, actionAfterVisitExpr, actionOnTerminator);
+    context.VisitBranches();
 }
 
 void UnreachableBranchCheck::RunOnFunc(const Ptr<Function> func)
