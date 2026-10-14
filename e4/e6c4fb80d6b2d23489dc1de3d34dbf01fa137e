@@ -1,0 +1,36 @@
+schema/NodeFormat.fbs
+  s_3ec84b7d0ce897::t_1556125a033ea5 70
+include/cangjie/Basic/DiagRefactor/DiagnosticSema.def
+  s_3ec84b7d0ce897::t_078a394918b09f 417,419
+  s_3ec84b7d0ce897::t_22b0d850cada94 437
+src/CHIR/AST2CHIR/TranslateASTNode/TranslateCallExpr.cpp
+  s_d4f32c57925ec7::t_7b5caa05106c44 20-21,23-24
+src/Sema/TypeCheckModal.cpp
+  s_d4f32c57925ec7::t_523aff4bc78127 1109,1139,1174,1231,1233-1236
+src/Sema/DeclAttributeChecker.cpp
+  s_3ec84b7d0ce897::t_58360d3294add0 402-403
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e4e6c4fb80d6b2d23489dc1de3d34dbf01fa137e",
+  "prompts": {},
+  "sessions": {
+    "s_3ec84b7d0ce897": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "4a8f14d8-7266-42bf-89fc-68cd132176d4",
+        "model": "default"
+      },
+      "human_author": null
+    },
+    "s_d4f32c57925ec7": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "s_d4f32c57925ec7",
+        "model": "unknown"
+      },
+      "human_author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    }
+  }
+}
