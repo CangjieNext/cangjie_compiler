@@ -3789,11 +3789,13 @@ void CHIRChecker::CheckNormalTuple(const Tuple& expr, const Function& topLevelFu
         return;
     }
 
-    // 2. operand's type must equal to element type
+    // 2. operand's type must equal to element type (modal inherited via GetFieldOfType)
     for (size_t i = 0; i < elementTypes.size(); ++i) {
-        if (!TypeIsExpected(*operands[i]->GetType(), *elementTypes[i])) {
+        auto expectedTy = GetFieldOfType(*resultTy, static_cast<uint64_t>(i), builder);
+        CJC_NULLPTR_CHECK(expectedTy);
+        if (!TypeIsExpected(*operands[i]->GetType(), *expectedTy)) {
             auto errMsg = "type mismatched, the " + std::to_string(i) + "-th element type in tuple type `" +
-                resultTy->ToString() + "` is " + elementTypes[i]->ToString() + ", but " +
+                resultTy->ToString() + "` is " + expectedTy->ToString() + ", but " +
                 operands[i]->GetIdentifier() + "'s type is " + operands[i]->GetType()->ToString() +
                 " in `" + result->ToString(0) + "`.";
             ErrorInFunc(topLevelFunc, errMsg);
@@ -3894,8 +3896,19 @@ void CHIRChecker::CheckInstanceOf(const InstanceOf& expr, const Function& topLev
         ErrorInFunc(topLevelFunc, errMsg);
     }
 }
-void CHIRChecker::CheckTypeCast([[maybe_unused]] const TypeCast& expr, [[maybe_unused]] const Function& topLevelFunc)
+void CHIRChecker::CheckTypeCast(const TypeCast& expr, const Function& topLevelFunc)
 {
+    if (!Is<ClassStaticCast>(expr)) {
+        return;
+    }
+    auto* srcTy = expr.GetSourceType()->StripAllRefs();
+    auto* dstTy = expr.GetTargetType()->StripAllRefs();
+    if (srcTy->IsCopyable() || srcTy->GetModalInfo().IsEqualOrSubModal(dstTy->GetModalInfo())) {
+        return;
+    }
+    auto errMsg = "ClassStaticCast must not change modal of non-copyable type, source is " + srcTy->ToString() +
+        ", target is " + dstTy->ToString() + ".";
+    ErrorInExpr(topLevelFunc, expr, errMsg);
 }
 
 void CHIRChecker::CheckGetException(const GetException& expr, const Function& topLevelFunc)

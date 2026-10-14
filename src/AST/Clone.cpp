@@ -757,6 +757,7 @@ OwnedPtr<CallExpr> ASTCloner::CloneCallExpr(const CallExpr& ce, const VisitFunc&
         }
     }
     expr->rightParenPos = ce.rightParenPos;
+    expr->modal = ce.modal;
     expr->resolvedFunction = ce.resolvedFunction;
     expr->callKind = ce.callKind;
     expr->sugarKind = ce.sugarKind;

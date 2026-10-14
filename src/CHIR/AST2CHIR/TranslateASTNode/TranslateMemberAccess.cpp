@@ -442,7 +442,7 @@ Ptr<Value> Translator::TranslateEnumMemberAccess(const AST::MemberAccess& member
     CJC_ASSERT(fieldIt != constructors.end());
     auto enumId = static_cast<uint64_t>(std::distance(constructors.begin(), fieldIt));
 
-    auto ty = chirTy.TranslateType(AST::ModalTy{enumTy});
+    auto ty = chirTy.TranslateType(member.GetTy());
     const auto& loc = TranslateLocation(**fieldIt);
     auto selectorTy = GetSelectorType(*enumTy);
     if (!enumTy->decl->hasArguments) {
