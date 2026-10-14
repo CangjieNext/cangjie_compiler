@@ -719,6 +719,9 @@ llvm::Constant* GetReadOnlyArrayKlassInfo(const CGModule& cgMod)
     gv->addAttribute(GC_KLASS_ATTR);
     if (cgCtx.GetCompileOptions().target.os != Triple::OSType::WINDOWS) {
         gv->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+        // Same rationale as the static GI typeInfos in CGType::GenerateTypeInfo: keep linker
+        // dedup, but do not export this GC helper typeInfo from the DSO.
+        gv->setVisibility(llvm::GlobalValue::HiddenVisibility);
     }
     AddLinkageTypeMetadata(*gv, llvm::GlobalValue::InternalLinkage, false);
 
