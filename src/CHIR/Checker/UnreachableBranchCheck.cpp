@@ -37,6 +37,26 @@ Branch* GetElseIfBranch(const Branch& branch, Block& block)
         ? nested : nullptr;
 }
 
+bool HasSharedGuardFailure(Block& target)
+{
+    /*
+     * A refutable pattern and its guard share the next-case block as a failure target:
+     *
+     *     match (3) {
+     *         case 3 where false => println("guarded")
+     *         case _ => println("fallback")
+     *     }
+     *
+     * Both "pattern != 3" and "guard == false" reach the fallback case. The guard Branch is marked MATCH_PATTERN,
+     * which lets callers distinguish this shared target from an ordinary next-case edge.
+     */
+    auto predecessors = target.GetPredecessors();
+    return std::any_of(predecessors.begin(), predecessors.end(), [&target](auto predecessor) {
+        auto branch = Cangjie::DynamicCast<Branch>(predecessor->GetTerminator());
+        return branch && branch->TestAttr(Attribute::MATCH_PATTERN) && branch->GetFalseBlock() == &target;
+    });
+}
+
 /*
  * The GetNextMatchCase overloads return {boundary terminator, next source-case entry}. A null terminator with a
  * non-null block means traversal must continue inside the current case; two nulls mean this path has no case boundary.
@@ -222,6 +242,15 @@ void UnreachableBranchCheck::VisitBranch(Branch& branch, Block& target)
         if (successor == &target) {
             continue;
         }
+        /*
+         * For `case 3 where false` followed by `case _`, ConstAnalysis rejects the `pattern != 3` edge because the
+         * subject is 3. The same fallback block is still reached when the guard is false, so report it only when its
+         * complete entry state is Bottom, rather than from this one rejected edge.
+         */
+        if (successor == branch.GetFalseBlock() && branch.GetSourceExpr() == SourceExpr::MATCH_CASE &&
+            HasSharedGuardFailure(*successor) && analysisWrapper->IsReachable(*successor)) {
+            continue;
+        }
         // A marked guard follows a refutable pattern. Its false edge is not a source-case reachability decision;
         // pattern failure independently reaches the same next case. Its true edge remains reportable when rejected.
         if (branch.TestAttr(Attribute::MATCH_PATTERN) && successor == branch.GetFalseBlock()) {
@@ -255,6 +284,15 @@ void UnreachableBranchCheck::VisitMultiBranch(MultiBranch& branch, Block& target
         !constructorGroups.empty() && branch.GetSourceExpr() == SourceExpr::MATCH_EXPR;
     for (auto successor : branch.GetSuccessors()) {
         if (successor == &target) {
+            continue;
+        }
+        /*
+         * For `case 1 | 2 where false` followed by `case _`, the pattern table's default and the guard-failure edge
+         * share the fallback block. A rejected table-default edge therefore cannot make that source case unreachable
+         * while ConstAnalysis still reaches the block through the guard.
+         */
+        if (successor == branch.GetDefaultBlock() && branch.GetParentBlock()->TestAttr(Attribute::MATCH_PATTERN) &&
+            HasSharedGuardFailure(*successor) && analysisWrapper->IsReachable(*successor)) {
             continue;
         }
         if (table && successor->TestAttr(Attribute::MATCH_PATTERN)) {

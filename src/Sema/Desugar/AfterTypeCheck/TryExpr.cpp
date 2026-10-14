@@ -96,6 +96,25 @@ OwnedPtr<CallExpr> CreateCallExpr(VarDecl& vd, Decl& func)
     return callExpr;
 }
 
+bool HasDirectFalseReturn(const Decl& isClosed)
+{
+    auto func = DynamicCast<const FuncDecl*>(&isClosed);
+    // Only remove `x.isClosed()` when lookup resolved a non-virtual function whose complete body is `false` (or
+    // `return false`). Interface default methods are virtual even with a body, so use the repository's virtual-member
+    // predicate rather than FuncDecl::IsOpen(). For example, an `A`-typed resource may dispatch A.isClosed() to a
+    // class override returning true; that call must remain in the generated cleanup.
+    if (!func || IsVirtualMember(*func) || !func->funcBody || !func->funcBody->body ||
+        func->funcBody->body->body.size() != 1) {
+        return false;
+    }
+    auto resultExpr = DynamicCast<const Expr*>(func->funcBody->body->body.front().get());
+    if (auto returnExpr = DynamicCast<const ReturnExpr*>(resultExpr)) {
+        resultExpr = returnExpr->expr.get();
+    }
+    auto result = DynamicCast<const LitConstExpr*>(resultExpr);
+    return result && result->kind == LitConstKind::BOOL && !result->constNumValue.asBoolean;
+}
+
 } // namespace
 
 /** Create the following try-catch expression.
@@ -116,8 +135,6 @@ OwnedPtr<TryExpr> TypeChecker::TypeCheckerImpl::CreateTryInFinally(
     CJC_ASSERT(Ty::IsTyCorrect(freshExc.GetTy()) && freshExc.GetTy()->typeArgs.size() == 1);
     auto vp = CreateVarPattern(V_COMPILER, freshExc.GetTy()->typeArgs.front());
     // `if`
-    std::vector<OwnedPtr<Node>> thenBlockNodes;
-
     auto findFunc = [this, &ctx, &x](const std::string& fieldName) -> Ptr<Decl> {
         LookupInfo info{x.GetTy(), x.curFile, true, true, false};
         std::vector<Ptr<Decl>> decls = FieldLookup(ctx, Ty::GetDeclPtrOfTy(x.GetTy()), fieldName, info);
@@ -134,10 +151,8 @@ OwnedPtr<TryExpr> TypeChecker::TypeCheckerImpl::CreateTryInFinally(
         return func;
     };
 
-    (void)thenBlockNodes.emplace_back(CreateCallExpr(x, *findFunc("close")));
-
-    auto ifExpr = CreateIfExpr(CreateUnaryExpr(CreateCallExpr(x, *findFunc("isClosed")), TokenKind::NOT),
-        CreateBlock(std::move(thenBlockNodes)));
+    auto isClosed = findFunc("isClosed");
+    auto close = CreateCallExpr(x, *findFunc("close"));
     // `match`
     auto matchExp = CreateMatchExpr(someTy, freshExc, CreateThrowExpr(*vp));
     // `v: Exception`
@@ -146,7 +161,15 @@ OwnedPtr<TryExpr> TypeChecker::TypeCheckerImpl::CreateTryInFinally(
     (void)exceptTypePattern->types.emplace_back(CreateRefType(exceptionDecl));
     // `try-catch`
     std::vector<OwnedPtr<Node>> tryBlockNodes;
-    (void)tryBlockNodes.emplace_back(std::move(ifExpr));
+    if (HasDirectFalseReturn(*isClosed)) {
+        (void)tryBlockNodes.emplace_back(std::move(close));
+    } else {
+        std::vector<OwnedPtr<Node>> thenBlockNodes;
+        (void)thenBlockNodes.emplace_back(std::move(close));
+        auto ifExpr = CreateIfExpr(CreateUnaryExpr(CreateCallExpr(x, *isClosed), TokenKind::NOT),
+            CreateBlock(std::move(thenBlockNodes)));
+        (void)tryBlockNodes.emplace_back(std::move(ifExpr));
+    }
     std::vector<OwnedPtr<Node>> catchBlockNodes;
     (void)catchBlockNodes.emplace_back(std::move(matchExp));
     auto tryExpr = MakeOwnedNode<TryExpr>();
