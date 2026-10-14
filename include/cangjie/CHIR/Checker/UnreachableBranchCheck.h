@@ -27,18 +27,17 @@ public:
 
 private:
     void PrintWarning(const Expression& node, Block& block, std::set<Block*>& hasProcessed);
-    /** Walks later source cases after ConstAnalysis proves a match failure edge cannot be taken. */
-    void PrintMatchSuccessors(Block& block, std::set<Block*>& hasProcessed);
-    /** Walks one unreachable enum constructor group and deduplicates fragments of the same source case. */
-    void PrintMatchTableSuccessors(Block& block, std::set<Block*>& hasProcessed,
-        std::set<size_t>& reportedCaseIds, const std::set<Block*>& constructorGroups);
-    /** Maps unreachable second-level enum table entries back to their source cases. */
-    void PrintMatchTableCases(MultiBranch& table, std::set<Block*>& hasProcessed,
-        std::set<size_t>& reportedCaseIds, const std::set<Block*>& constructorGroups);
-    /** Handles a constant Branch result and follows source match-case boundaries when present. */
-    void VisitBranch(Branch& branch, Block& target);
-    /** Handles a constant MultiBranch result while preserving enum source-case grouping. */
-    void VisitMultiBranch(MultiBranch& branch, Block& target);
+    /** Reports later cases only while their entries remain unreachable. */
+    template <typename TConstDomain>
+    void PrintMatchSuccessors(Results<TConstDomain>& result, Block& block, std::set<Block*>& hasProcessed);
+    /** Groups unreachable enum-table fragments by source case. */
+    template <typename TConstDomain>
+    bool TryVisitEnumMatchTable(
+        Results<TConstDomain>& result, MultiBranch& table, Block& target, std::set<Block*>& hasProcessed);
+    /** Diagnoses excluded successors of Branch and MultiBranch using the same edge and entry-state rules. */
+    template <typename TConstDomain>
+    void VisitTerminator(
+        Results<TConstDomain>& result, Expression& terminator, Block& target, std::set<Block*>& hasProcessed);
 
     template <typename TConstDomain>
     void VisitFunc(Results<TConstDomain>& result);
