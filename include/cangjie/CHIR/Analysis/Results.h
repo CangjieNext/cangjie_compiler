@@ -12,6 +12,7 @@
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 
+#include <algorithm>
 #include <functional>
 
 namespace Cangjie::CHIR {
@@ -67,6 +68,24 @@ public:
                     actionBeforeVisitExpr, actionAfterVisitExpr, actionOnTerminator, *bb, lambdaUnit.entrySets.get());
             }
         }
+    }
+
+    /**
+     * @brief Returns whether the analysis reached the entry of @p block.
+     *
+     * A constant terminator can exclude one edge while another predecessor still reaches the same block. Consumers
+     * that diagnose an unselected successor use this query to distinguish an unreachable edge from an unreachable
+     * block.
+     */
+    bool IsReachable(Block& block) const
+    {
+        if (block.GetParentBlockGroup() == func->GetBody()) {
+            return !entrySets->at(&block).IsBottom();
+        }
+        auto result = std::find_if(lambdaResults.begin(), lambdaResults.end(), [&block](const auto& lambdaResult) {
+            return lambdaResult.lambda->GetBody() == block.GetParentBlockGroup();
+        });
+        return !result->entrySets->at(&block).IsBottom();
     }
 
     const Function* func;
