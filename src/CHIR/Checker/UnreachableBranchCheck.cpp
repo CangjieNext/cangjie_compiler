@@ -37,6 +37,16 @@ Branch* GetElseIfBranch(const Branch& branch, Block& block)
         ? nested : nullptr;
 }
 
+bool HasSharedGuardFailure(Block& target)
+{
+    // Check whether target is shared by pattern failure and a marked guard-failure edge.
+    auto predecessors = target.GetPredecessors();
+    return std::any_of(predecessors.begin(), predecessors.end(), [&target](auto predecessor) {
+        auto branch = Cangjie::DynamicCast<Branch>(predecessor->GetTerminator());
+        return branch && branch->TestAttr(Attribute::MATCH_PATTERN) && branch->GetFalseBlock() == &target;
+    });
+}
+
 /*
  * The GetNextMatchCase overloads return {boundary terminator, next source-case entry}. A null terminator with a
  * non-null block means traversal must continue inside the current case; two nulls mean this path has no case boundary.
@@ -288,6 +298,13 @@ void UnreachableBranchCheck::VisitMultiBranch(MultiBranch& branch, Block& target
 void UnreachableBranchCheck::PrintWarning(
     const Expression& node, Block& block, std::set<Block*>& hasProcessed)
 {
+    /*
+     * In `case 3 where false`, pattern failure and guard failure share the following case block. Rejecting the
+     * pattern-failure edge does not make that block unreachable when its guard-failure predecessor still reaches it.
+     */
+    if (HasSharedGuardFailure(block) && analysisWrapper->IsReachable(block)) {
+        return;
+    }
     if (hasProcessed.find(&block) != hasProcessed.end()) {
         return;
     }

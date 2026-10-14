@@ -93,6 +93,18 @@ public:
     Results<ConstPoolDomain>* CheckFuncActiveResult(const Function& func);
 
     /**
+     * @brief Check whether a block is reachable using the constant-analysis result selected for its function.
+     *
+     * The wrapper hides whether the function used ConstDomain or ConstPoolDomain. This is needed by diagnostics that
+     * inspect one rejected CFG edge but must determine whether another predecessor still reaches the shared block.
+     * Results::HasReachableEntryState performs the domain-specific entry-state query.
+     *
+     * @param block block to check.
+     * @return true if the block entry state is reachable.
+     */
+    bool IsReachable(Block& block);
+
+    /**
      * @brief clear analysis result
      */
     void InvalidateAllAnalysisResults();
