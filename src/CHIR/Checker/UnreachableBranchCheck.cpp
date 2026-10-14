@@ -37,6 +37,15 @@ Branch* GetElseIfBranch(const Branch& branch, Block& block)
         ? nested : nullptr;
 }
 
+bool HasSharedGuardFailure(Block& target)
+{
+    auto predecessors = target.GetPredecessors();
+    return std::any_of(predecessors.begin(), predecessors.end(), [&target](auto predecessor) {
+        auto branch = Cangjie::DynamicCast<Branch>(predecessor->GetTerminator());
+        return branch && branch->TestAttr(Attribute::MATCH_PATTERN) && branch->GetFalseBlock() == &target;
+    });
+}
+
 /*
  * The GetNextMatchCase overloads return {boundary terminator, next source-case entry}. A null terminator with a
  * non-null block means traversal must continue inside the current case; two nulls mean this path has no case boundary.
@@ -222,6 +231,12 @@ void UnreachableBranchCheck::VisitBranch(Branch& branch, Block& target)
         if (successor == &target) {
             continue;
         }
+        // A refutable pattern and its guard can share the next-case entry. The rejected pattern edge does not make
+        // that source case unreachable when ConstAnalysis reaches it through the marked guard-failure edge.
+        if (successor == branch.GetFalseBlock() && branch.GetSourceExpr() == SourceExpr::MATCH_CASE &&
+            HasSharedGuardFailure(*successor) && analysisWrapper->IsReachable(*successor)) {
+            continue;
+        }
         // A marked guard follows a refutable pattern. Its false edge is not a source-case reachability decision;
         // pattern failure independently reaches the same next case. Its true edge remains reportable when rejected.
         if (branch.TestAttr(Attribute::MATCH_PATTERN) && successor == branch.GetFalseBlock()) {
@@ -255,6 +270,11 @@ void UnreachableBranchCheck::VisitMultiBranch(MultiBranch& branch, Block& target
         !constructorGroups.empty() && branch.GetSourceExpr() == SourceExpr::MATCH_EXPR;
     for (auto successor : branch.GetSuccessors()) {
         if (successor == &target) {
+            continue;
+        }
+        // An or-pattern/table default can share the next-case entry with a marked guard-failure edge.
+        if (successor == branch.GetDefaultBlock() && branch.GetParentBlock()->TestAttr(Attribute::MATCH_PATTERN) &&
+            HasSharedGuardFailure(*successor) && analysisWrapper->IsReachable(*successor)) {
             continue;
         }
         if (table && successor->TestAttr(Attribute::MATCH_PATTERN)) {

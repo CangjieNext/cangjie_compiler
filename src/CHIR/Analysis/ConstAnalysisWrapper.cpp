@@ -67,6 +67,15 @@ Results<ConstPoolDomain>* ConstAnalysisWrapper::CheckFuncActiveResult(const Func
     }
 }
 
+bool ConstAnalysisWrapper::IsReachable(Block& block)
+{
+    auto func = block.GetTopLevelFunc();
+    if (auto result = CheckFuncResult(*func)) {
+        return result->IsReachable(block);
+    }
+    return CheckFuncActiveResult(*func)->IsReachable(block);
+}
+
 void ConstAnalysisWrapper::InvalidateAllAnalysisResults()
 {
     resultsPoolMap.clear();

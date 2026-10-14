@@ -93,6 +93,13 @@ public:
     Results<ConstPoolDomain>* CheckFuncActiveResult(const Function& func);
 
     /**
+     * @brief Check whether a block is reachable according to its function's analysis result.
+     * @param block block to check.
+     * @return true if the block entry state is reachable.
+     */
+    bool IsReachable(Block& block);
+
+    /**
      * @brief clear analysis result
      */
     void InvalidateAllAnalysisResults();

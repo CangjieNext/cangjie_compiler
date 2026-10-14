@@ -69,6 +69,25 @@ public:
         }
     }
 
+    /**
+     * @brief Check whether a block has a reachable entry state.
+     *
+     * Consumers use this query when an infeasible CFG edge does not imply that its successor is unreachable. For
+     * example, two source-level conditions may share a successor reached through another predecessor. This exposes
+     * the same non-bottom entry-state rule that VisitWith uses to decide whether to visit a block.
+     *
+     * @param block block to check.
+     * @return true if the block entry state is not bottom.
+     */
+    bool IsReachable(Block& block)
+    {
+        if (auto it = entrySets->find(&block); it != entrySets->end()) {
+            return !it->second.IsBottom();
+        }
+        auto parentLambda = StaticCast<Lambda*>(block.GetParentBlockGroup()->GetOwnerExpression());
+        return !lambdaResultsMap.at(parentLambda)->at(&block).IsBottom();
+    }
+
     const Function* func;
 
 private:
