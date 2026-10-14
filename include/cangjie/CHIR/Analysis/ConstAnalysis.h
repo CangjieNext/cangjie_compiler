@@ -232,6 +232,30 @@ public:
     }
 
 private:
+    void PreHandleFieldExpr(TConstDomain& state, const Field* field) override
+    {
+        auto indexes = field->GetPath();
+        auto base = field->GetBase();
+        // Preserve a directly constructed enum payload through the cast-and-field sequence used by nested patterns.
+        if (indexes.size() == 1 && base->IsLocalVar()) {
+            auto baseExpr = StaticCast<LocalVar*>(base)->GetExpr();
+            if (baseExpr->GetExprKind() == ExprKind::CLASS_STATIC_CAST) {
+                auto cast = StaticCast<ClassStaticCast*>(baseExpr);
+                auto source = cast->GetSourceValue();
+                if (cast->GetSourceType()->IsEnum() && cast->GetTargetType()->IsTuple() && source->IsLocalVar()) {
+                    auto sourceExpr = StaticCast<LocalVar*>(source)->GetExpr();
+                    if (sourceExpr->GetExprKind() == ExprKind::TUPLE) {
+                        auto operands = StaticCast<Tuple*>(sourceExpr)->GetElementValues();
+                        CJC_ASSERT(indexes[0] < operands.size());
+                        state.Propagate(operands[indexes[0]], field->GetResult());
+                        return;
+                    }
+                }
+            }
+        }
+        ValueAnalysis<ConstValueDomain, ValueStatePool>::PreHandleFieldExpr(state, field);
+    }
+
     void PrintDebugMessage(const Expression* expr, const ConstValue* absVal) const
     {
         std::string message = "[ConstAnalysis] The const value of " + expr->GetExprKindName() +
