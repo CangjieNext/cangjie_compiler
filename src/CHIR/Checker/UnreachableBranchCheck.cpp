@@ -37,6 +37,24 @@ Branch* GetElseIfBranch(const Branch& branch, Block& block)
         ? nested : nullptr;
 }
 
+bool HasReachableGuardFailureEdge(
+    Block& target, const std::map<Expression*, std::optional<Block*>>& terminatorResults)
+{
+    for (auto predecessor : target.GetPredecessors()) {
+        auto terminator = predecessor->GetTerminator();
+        auto guard = Cangjie::DynamicCast<Branch>(terminator);
+        if (!guard || !guard->TestAttr(Attribute::MATCH_PATTERN) || guard->GetFalseBlock() != &target) {
+            continue;
+        }
+        auto result = terminatorResults.find(terminator);
+        if (result != terminatorResults.end() &&
+            (!result->second.has_value() || result->second.value() == &target)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /*
  * The GetNextMatchCase overloads return {boundary terminator, next source-case entry}. A null terminator with a
  * non-null block means traversal must continue inside the current case; two nulls mean this path has no case boundary.
@@ -209,7 +227,8 @@ void UnreachableBranchCheck::PrintMatchTableCases(MultiBranch& table, std::set<B
     PrintMatchTableSuccessors(*table.GetParentBlock(), hasProcessed, reportedCaseIds, constructorGroups);
 }
 
-void UnreachableBranchCheck::VisitBranch(Branch& branch, Block& target)
+void UnreachableBranchCheck::VisitBranch(
+    Branch& branch, Block& target, const std::map<Expression*, std::optional<Block*>>& terminatorResults)
 {
     /*
      * ConstAnalysis supplies the selected successor. For a match branch, an unselected false edge can also head later
@@ -220,6 +239,12 @@ void UnreachableBranchCheck::VisitBranch(Branch& branch, Block& target)
     std::set<Block*> hasProcessed;
     for (auto successor : branch.GetSuccessors()) {
         if (successor == &target) {
+            continue;
+        }
+        // Pattern failure and guard failure can share the next-case entry. Rejecting the pattern edge does not make
+        // that case unreachable when ConstAnalysis still reaches the entry through the guard's false edge.
+        if (successor == branch.GetFalseBlock() && branch.GetSourceExpr() == SourceExpr::MATCH_CASE &&
+            HasReachableGuardFailureEdge(*successor, terminatorResults)) {
             continue;
         }
         // A marked guard follows a refutable pattern. Its false edge is not a source-case reachability decision;
@@ -235,7 +260,8 @@ void UnreachableBranchCheck::VisitBranch(Branch& branch, Block& target)
     }
 }
 
-void UnreachableBranchCheck::VisitMultiBranch(MultiBranch& branch, Block& target)
+void UnreachableBranchCheck::VisitMultiBranch(
+    MultiBranch& branch, Block& target, const std::map<Expression*, std::optional<Block*>>& terminatorResults)
 {
     /*
      * A top-level optimized enum match has constructor-group successors marked MATCH_PATTERN. Group its table entries
@@ -255,6 +281,11 @@ void UnreachableBranchCheck::VisitMultiBranch(MultiBranch& branch, Block& target
         !constructorGroups.empty() && branch.GetSourceExpr() == SourceExpr::MATCH_EXPR;
     for (auto successor : branch.GetSuccessors()) {
         if (successor == &target) {
+            continue;
+        }
+        // An or-pattern/table default can share the next-case entry with a reachable guard-failure edge.
+        if (successor == branch.GetDefaultBlock() && branch.GetParentBlock()->TestAttr(Attribute::MATCH_PATTERN) &&
+            HasReachableGuardFailureEdge(*successor, terminatorResults)) {
             continue;
         }
         if (table && successor->TestAttr(Attribute::MATCH_PATTERN)) {
@@ -341,27 +372,35 @@ void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result)
     const auto actionBeforeVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
     const auto actionAfterVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
 
-    const auto actionOnTerminator = [this](
+    std::vector<std::pair<Expression*, std::optional<Block*>>> reachableTerminators;
+    std::map<Expression*, std::optional<Block*>> terminatorResults;
+    const auto collectAnalysisResult = [&reachableTerminators, &terminatorResults](
             const TConstDomain&, Expression* terminator, std::optional<Block*> targetSucc) {
+        reachableTerminators.emplace_back(terminator, targetSucc);
+        terminatorResults.emplace(terminator, targetSucc);
+    };
+    result.VisitWith(actionBeforeVisitExpr, actionAfterVisitExpr, collectAnalysisResult);
+
+    for (const auto& [terminator, targetSucc] : reachableTerminators) {
         switch (terminator->GetExprKind()) {
             case ExprKind::BRANCH: {
                 if (targetSucc.has_value()) {
                     auto branchNode = StaticCast<Branch*>(terminator);
-                    VisitBranch(*branchNode, *targetSucc.value());
+                    VisitBranch(*branchNode, *targetSucc.value(), terminatorResults);
                 }
                 break;
             }
             case ExprKind::MULTIBRANCH: {
                 if (targetSucc.has_value()) {
-                    VisitMultiBranch(*StaticCast<MultiBranch*>(terminator), *targetSucc.value());
+                    VisitMultiBranch(
+                        *StaticCast<MultiBranch*>(terminator), *targetSucc.value(), terminatorResults);
                 }
                 break;
             }
             default:
                 break;
         }
-    };
-    result.VisitWith(actionBeforeVisitExpr, actionAfterVisitExpr, actionOnTerminator);
+    }
 }
 
 void UnreachableBranchCheck::RunOnFunc(const Ptr<Function> func)

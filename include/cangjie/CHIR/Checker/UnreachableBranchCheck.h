@@ -14,6 +14,8 @@
 #include "cangjie/CHIR/IR/Package.h"
 #include "cangjie/Utils/TaskQueue.h"
 
+#include <map>
+
 namespace Cangjie::CHIR {
 
 class UnreachableBranchCheck {
@@ -36,9 +38,11 @@ private:
     void PrintMatchTableCases(MultiBranch& table, std::set<Block*>& hasProcessed,
         std::set<size_t>& reportedCaseIds, const std::set<Block*>& constructorGroups);
     /** Handles a constant Branch result and follows source match-case boundaries when present. */
-    void VisitBranch(Branch& branch, Block& target);
+    void VisitBranch(Branch& branch, Block& target,
+        const std::map<Expression*, std::optional<Block*>>& terminatorResults);
     /** Handles a constant MultiBranch result while preserving enum source-case grouping. */
-    void VisitMultiBranch(MultiBranch& branch, Block& target);
+    void VisitMultiBranch(MultiBranch& branch, Block& target,
+        const std::map<Expression*, std::optional<Block*>>& terminatorResults);
 
     template <typename TConstDomain>
     void VisitFunc(Results<TConstDomain>& result);
