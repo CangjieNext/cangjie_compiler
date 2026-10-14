@@ -69,6 +69,22 @@ public:
         }
     }
 
+    /**
+     * @brief Returns whether the analysis reached the entry of @p block.
+     *
+     * A constant terminator can exclude one edge while another predecessor still reaches the same block. Consumers
+     * that diagnose an unselected successor use this query to distinguish an unreachable edge from an unreachable
+     * block.
+     */
+    bool IsReachable(Block& block) const
+    {
+        if (block.GetParentBlockGroup() == func->GetBody()) {
+            return !entrySets->at(&block).IsBottom();
+        }
+        auto parentLambda = StaticCast<Lambda*>(block.GetParentBlockGroup()->GetOwnerExpression());
+        return !lambdaResultsMap.at(parentLambda)->at(&block).IsBottom();
+    }
+
     const Function* func;
 
 private:
