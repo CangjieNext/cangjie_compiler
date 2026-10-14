@@ -69,6 +69,25 @@ public:
         }
     }
 
+    /** Replays a block through the existing analysis to obtain its terminator's selected successor. */
+    std::optional<Block*> GetTerminatorResult(Block& block)
+    {
+        std::optional<Block*> target;
+        const auto action = [](const Domain&, Expression*, size_t) {};
+        VisitBlockWith(action, action,
+            [&target](const Domain&, Expression*, std::optional<Block*> successor) { target = successor; }, block);
+        return target;
+    }
+
+    const Domain& GetEntryState(Block& block) const
+    {
+        if (auto it = entrySets->find(&block); it != entrySets->end()) {
+            return it->second;
+        }
+        auto parentLambda = StaticCast<Lambda*>(block.GetParentBlockGroup()->GetOwnerExpression());
+        return lambdaResultsMap.at(parentLambda)->at(&block);
+    }
+
     const Function* func;
 
 private:
