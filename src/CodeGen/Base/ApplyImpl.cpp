@@ -240,8 +240,8 @@ inline bool HasAddrSpace(const CGValue* cgVal, unsigned int addrSpace)
     return llvmType->isPointerTy() && llvmType->getPointerAddressSpace() == addrSpace;
 }
 
-llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, llvm::Function& callee,
-    const std::vector<CGValue*>& argsVal, const CHIR::Type& chirRetTy, bool isSRet)
+std::vector<llvm::Value*> CreateCFuncCallArgs(
+    IRBuilder2& irBuilder, const std::vector<CGValue*>& argsVal, const CHIR::Type& chirRetTy, bool isSRet)
 {
     auto& cgMod = irBuilder.GetCGModule();
     std::vector<llvm::Value*> llvmArgs;
@@ -265,22 +265,31 @@ llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, llvm::Function& call
             llvmArgs.emplace_back(cgVal->GetRawValue());
         }
     }
-    auto callRet = irBuilder.CreateCallOrInvoke(callee.getFunctionType(), &callee, llvmArgs);
+    return llvmArgs;
+}
+
+void CopyCalleeDeclAttrsToCallSite(const CGModule& cgMod, llvm::Function& callee, llvm::CallBase& callRet)
+{
     const auto& target = cgMod.GetCGContext().GetCompileOptions().target;
     const bool nonAarch64 = target.arch != Triple::ArchType::AARCH64;
     for (auto it = callee.arg_begin(); it != callee.arg_end(); ++it) {
         if (nonAarch64 && it->hasByValAttr()) {
             auto byValAttr =
                 llvm::Attribute::getWithByValType(cgMod.GetLLVMContext(), GetPointerElementType(it->getType()));
-            AddParamAttr(callRet, it->getArgNo(), byValAttr);
+            AddParamAttr(&callRet, it->getArgNo(), byValAttr);
         }
     }
     // Copy the declaration's extension attributes onto the call site on every target.
     for (auto ext : {llvm::Attribute::SExt, llvm::Attribute::ZExt}) {
         if (callee.hasRetAttribute(ext)) {
-            callRet->addRetAttr(ext);
+            callRet.addRetAttr(ext);
         }
     }
+}
+
+void AddSubWordIntParamAttrsForDirectCall(const CGModule& cgMod, llvm::Function& callee, llvm::CallBase& callRet,
+    const std::vector<CGValue*>& argsVal, bool isSRet)
+{
     // Mark the sub-word integer arguments directly at the call site per the C caller-extends
     // contract, instead of copying the extension attributes from the callee declaration: the
     // attribute set is derived from the CHIR argument types, so it stays correct even when the
@@ -288,10 +297,10 @@ llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, llvm::Function& call
     // noundef; integers lowered to fewer than 32 bits also get signext/zeroext.
     // '<' means variable-length parameters exist in the function: only the fixed parameters,
     // which are the callee declaration's arguments, take the attributes.
-    CJC_ASSERT(callee.arg_size() <= callRet->arg_size());
+    CJC_ASSERT(callee.arg_size() <= callRet.arg_size());
     unsigned callArgIdx = isSRet ? 1U : 0U;
     for (auto cgVal : argsVal) {
-        if (callArgIdx >= callee.arg_size() || callArgIdx >= callRet->arg_size()) {
+        if (callArgIdx >= callee.arg_size() || callArgIdx >= callRet.arg_size()) {
             break; // past the fixed parameters: the vararg tail takes no extension attributes
         }
         auto& cgValTy = cgVal->GetCGType()->GetOriginal();
@@ -299,15 +308,25 @@ llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, llvm::Function& call
             continue; // no register slot: skipped when building llvmArgs above
         }
         if (cgValTy.IsBoolean() || cgValTy.IsInteger()) {
-            AddParamAttr(callRet, callArgIdx, llvm::Attribute::NoUndef);
-            auto intArgTy = llvm::dyn_cast<llvm::IntegerType>(callRet->getArgOperand(callArgIdx)->getType());
+            AddParamAttr(&callRet, callArgIdx, llvm::Attribute::NoUndef);
+            auto intArgTy = llvm::dyn_cast<llvm::IntegerType>(callRet.getArgOperand(callArgIdx)->getType());
             if (intArgTy != nullptr && intArgTy->getBitWidth() < SUB_WORD_INT_BIT_WIDTH) {
                 auto extendAttr = cgValTy.IsSignedInteger() ? llvm::Attribute::SExt : llvm::Attribute::ZExt;
-                AddParamAttr(callRet, callArgIdx, extendAttr);
+                AddParamAttr(&callRet, callArgIdx, extendAttr);
             }
         }
         callArgIdx++;
     }
+}
+
+llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, llvm::Function& callee,
+    const std::vector<CGValue*>& argsVal, const CHIR::Type& chirRetTy, bool isSRet)
+{
+    auto& cgMod = irBuilder.GetCGModule();
+    auto llvmArgs = CreateCFuncCallArgs(irBuilder, argsVal, chirRetTy, isSRet);
+    auto callRet = irBuilder.CreateCallOrInvoke(callee.getFunctionType(), &callee, llvmArgs);
+    CopyCalleeDeclAttrsToCallSite(cgMod, callee, *callRet);
+    AddSubWordIntParamAttrsForDirectCall(cgMod, callee, *callRet, argsVal, isSRet);
     if (isSRet) {
         AddParamAttr(callRet, 0, llvm::Attribute::NoAlias);
         AddSRetAttribute(callRet);
