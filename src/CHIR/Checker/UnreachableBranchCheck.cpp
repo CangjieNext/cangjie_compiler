@@ -6,6 +6,8 @@
 
 #include "cangjie/CHIR/Checker/UnreachableBranchCheck.h"
 
+#include <map>
+
 using namespace Cangjie::CHIR;
 
 UnreachableBranchCheck::UnreachableBranchCheck(
@@ -43,16 +45,10 @@ Branch* GetElseIfBranch(const Branch& branch, Block& block)
  */
 
 // Interprets the false edge of a pattern/guard Branch according to its source-case metadata.
-std::pair<Expression*, Block*> GetNextMatchCase(
-    Branch& branch, const std::set<Block*>& constructorGroups)
+std::pair<Expression*, Block*> GetNextMatchCase(Branch& branch)
 {
     auto nextCase = branch.GetFalseBlock();
     if (branch.GetSourceExpr() == SourceExpr::MATCH_CASE) {
-        if (!constructorGroups.empty() &&
-            (!nextCase->TestAttr(Attribute::MATCH_PATTERN) || !nextCase->Get<MatchCaseId>().has_value() ||
-                constructorGroups.find(nextCase) != constructorGroups.end())) {
-            return {};
-        }
         return {&branch, nextCase};
     }
     return branch.GetSourceExpr() == SourceExpr::MATCH_EXPR
@@ -60,16 +56,10 @@ std::pair<Expression*, Block*> GetNextMatchCase(
 }
 
 // Interprets the default edge of a pattern MultiBranch, including boundaries inside an enum constructor table.
-std::pair<Expression*, Block*> GetNextMatchCase(
-    MultiBranch& branch, const std::set<Block*>& constructorGroups)
+std::pair<Expression*, Block*> GetNextMatchCase(MultiBranch& branch)
 {
     auto nextCase = branch.GetDefaultBlock();
     if (branch.GetSourceExpr() == SourceExpr::MATCH_CASE) {
-        if (!constructorGroups.empty() &&
-            (!nextCase->TestAttr(Attribute::MATCH_PATTERN) || !nextCase->Get<MatchCaseId>().has_value() ||
-                constructorGroups.find(nextCase) != constructorGroups.end())) {
-            return {};
-        }
         return {&branch, nextCase};
     }
     return branch.GetSourceExpr() == SourceExpr::MATCH_EXPR
@@ -77,8 +67,7 @@ std::pair<Expression*, Block*> GetNextMatchCase(
 }
 
 // Walks pattern blocks and GoTo bridges until a Branch/MultiBranch overload finds the next source-case boundary.
-std::pair<Expression*, Block*> GetNextMatchCase(
-    Block& caseBlock, const std::set<Block*>& constructorGroups = {})
+std::pair<Expression*, Block*> GetNextMatchCase(Block& caseBlock)
 {
     /*
      * Follow only pattern-evaluation CFG. GoTo nodes bridge one pattern corridor; MATCH_EXPR continues within a case;
@@ -86,13 +75,8 @@ std::pair<Expression*, Block*> GetNextMatchCase(
      * flow, or another constructor-group root so diagnostics never recurse into unrelated source expressions.
      */
     auto block = &caseBlock;
-    bool isFirstBlock = true;
     std::set<Block*> visited;
     while (visited.emplace(block).second && block->TestAttr(Attribute::MATCH_PATTERN)) {
-        if (!isFirstBlock && constructorGroups.find(block) != constructorGroups.end()) {
-            return {};
-        }
-        isFirstBlock = false;
         auto terminator = block->GetTerminator();
         auto goTo = Cangjie::DynamicCast<GoTo>(terminator);
         if (goTo && goTo->TestAttr(Attribute::MATCH_PATTERN)) {
@@ -104,9 +88,9 @@ std::pair<Expression*, Block*> GetNextMatchCase(
         }
         std::pair<Expression*, Block*> next;
         if (auto branch = Cangjie::DynamicCast<Branch>(terminator)) {
-            next = GetNextMatchCase(*branch, constructorGroups);
+            next = GetNextMatchCase(*branch);
         } else if (auto multiBranch = Cangjie::DynamicCast<MultiBranch>(terminator)) {
-            next = GetNextMatchCase(*multiBranch, constructorGroups);
+            next = GetNextMatchCase(*multiBranch);
         } else {
             return {};
         }
@@ -116,6 +100,27 @@ std::pair<Expression*, Block*> GetNextMatchCase(
         block = next.second;
     }
     return {};
+}
+
+std::map<size_t, std::vector<Block*>> CollectEnumMatchFragments(
+    Block& constructor, const std::set<Block*>& constructorGroups)
+{
+    std::map<size_t, std::vector<Block*>> fragments;
+    std::vector<Block*> workList{&constructor};
+    while (!workList.empty()) {
+        auto block = workList.back();
+        workList.pop_back();
+        if (auto caseId = block->Get<MatchCaseId>()) {
+            fragments[caseId.value()].emplace_back(block);
+        }
+        for (auto successor : block->GetTerminator()->GetSuccessors()) {
+            if (successor->TestAttr(Attribute::MATCH_PATTERN) &&
+                constructorGroups.find(successor) == constructorGroups.end()) {
+                workList.emplace_back(successor);
+            }
+        }
+    }
+    return fragments;
 }
 
 } // namespace
@@ -167,49 +172,58 @@ void UnreachableBranchCheck::PrintMatchSuccessors(Block& block, std::set<Block*>
     }
 }
 
-void UnreachableBranchCheck::PrintMatchTableSuccessors(Block& block, std::set<Block*>& hasProcessed,
-    std::set<size_t>& reportedCaseIds, const std::set<Block*>& constructorGroups)
+template <typename TConstDomain>
+bool UnreachableBranchCheck::TryVisitEnumMatchTable(
+    Results<TConstDomain>& result, MultiBranch& table, Block& target)
 {
-    /*
-     * A payload table may contain several fragments of one source case. Follow its default-edge chain inside the
-     * current constructor group and use MatchCaseId to report that source case once.
-     */
-    auto current = &block;
-    std::set<Block*> visited;
-    while (visited.emplace(current).second) {
-        auto [terminator, nextCase] = GetNextMatchCase(*current, constructorGroups);
-        if (!terminator || !nextCase) {
-            return;
-        }
-        auto caseId = nextCase->Get<MatchCaseId>();
-        CJC_ASSERT(caseId.has_value());
-        if (reportedCaseIds.emplace(caseId.value()).second) {
-            PrintWarning(*terminator, *nextCase, hasProcessed);
-        }
-        current = nextCase;
+    auto constructorBlocks = table.GetNormalBlocks();
+    if (constructorBlocks.empty() || !constructorBlocks.front()->Get<MatchCaseId>().has_value()) {
+        return false;
     }
+    std::set<Block*> constructorGroups(constructorBlocks.begin(), constructorBlocks.end());
+    std::map<size_t, std::vector<std::pair<Block*, Block*>>> fragments;
+    for (auto constructor : constructorBlocks) {
+        for (auto& [caseId, blocks] : CollectEnumMatchFragments(*constructor, constructorGroups)) {
+            for (auto block : blocks) {
+                fragments[caseId].emplace_back(block, constructor);
+            }
+        }
+    }
+
+    std::set<Block*> hasProcessed;
+    for (auto& entry : fragments) {
+        auto& blocks = entry.second;
+        std::vector<Block*> unreachable;
+        for (auto [block, constructor] : blocks) {
+            auto isBottom = result.GetEntryState(*block).IsBottom();
+            if (constructor != &target || isBottom) {
+                unreachable.emplace_back(block);
+            }
+        }
+        if (unreachable.size() == blocks.size()) {
+            auto first = *std::min_element(
+                unreachable.begin(), unreachable.end(), [](const Block* lhs, const Block* rhs) {
+                    auto lhsPos = lhs->GetDebugLocation().GetBeginPos();
+                    auto rhsPos = rhs->GetDebugLocation().GetBeginPos();
+                    return lhsPos.line < rhsPos.line || (lhsPos.line == rhsPos.line && lhsPos.column < rhsPos.column);
+                });
+            PrintWarning(table, *first, hasProcessed);
+        } else {
+            for (auto block : unreachable) {
+                PrintWarning(table, *block, hasProcessed);
+            }
+        }
+    }
+    auto defaultBlock = table.GetDefaultBlock();
+    if (constructorGroups.find(defaultBlock) == constructorGroups.end() &&
+        result.GetEntryState(*defaultBlock).IsBottom()) {
+        PrintWarning(table, *defaultBlock, hasProcessed);
+    }
+    return true;
 }
 
-void UnreachableBranchCheck::PrintMatchTableCases(MultiBranch& table, std::set<Block*>& hasProcessed,
-    std::set<size_t>& reportedCaseIds, const std::set<Block*>& constructorGroups)
-{
-    /*
-     * Report keyed payload entries, then inspect each entry's failure chain and the table default edge. The default
-     * may enter a later source case even when that case has no keyed entry in this table.
-     */
-    for (auto successor : table.GetNormalBlocks()) {
-        CJC_ASSERT(successor->TestAttr(Attribute::MATCH_PATTERN) && successor->Get<MatchCaseId>().has_value());
-        auto caseId = successor->Get<MatchCaseId>();
-        CJC_ASSERT(caseId.has_value());
-        if (reportedCaseIds.emplace(caseId.value()).second) {
-            PrintWarning(table, *successor, hasProcessed);
-        }
-        PrintMatchTableSuccessors(*successor, hasProcessed, reportedCaseIds, constructorGroups);
-    }
-    PrintMatchTableSuccessors(*table.GetParentBlock(), hasProcessed, reportedCaseIds, constructorGroups);
-}
-
-void UnreachableBranchCheck::VisitBranch(Branch& branch, Block& target)
+template <typename TConstDomain>
+void UnreachableBranchCheck::VisitBranch(Results<TConstDomain>& result, Branch& branch, Block& target)
 {
     /*
      * ConstAnalysis supplies the selected successor. For a match branch, an unselected false edge can also head later
@@ -222,9 +236,7 @@ void UnreachableBranchCheck::VisitBranch(Branch& branch, Block& target)
         if (successor == &target) {
             continue;
         }
-        // A marked guard follows a refutable pattern. Its false edge is not a source-case reachability decision;
-        // pattern failure independently reaches the same next case. Its true edge remains reportable when rejected.
-        if (branch.TestAttr(Attribute::MATCH_PATTERN) && successor == branch.GetFalseBlock()) {
+        if (!result.GetEntryState(*successor).IsBottom()) {
             continue;
         }
         PrintWarning(branch, *successor, hasProcessed);
@@ -235,52 +247,24 @@ void UnreachableBranchCheck::VisitBranch(Branch& branch, Block& target)
     }
 }
 
-void UnreachableBranchCheck::VisitMultiBranch(MultiBranch& branch, Block& target)
+template <typename TConstDomain>
+void UnreachableBranchCheck::VisitMultiBranch(Results<TConstDomain>& result, MultiBranch& branch, Block& target)
 {
-    /*
-     * A top-level optimized enum match has constructor-group successors marked MATCH_PATTERN. Group its table entries
-     * by MatchCaseId because constructor order differs from source-case order. Other MultiBranch nodes use the normal
-     * successor path and SourceExpr only selects the diagnostic kind.
-     */
     CJC_ASSERT(!branch.GetParentBlock()->Get<MatchCaseId>().has_value());
-    std::set<Block*> hasProcessed;
-    std::set<size_t> reportedCaseIds;
-    std::set<Block*> constructorGroups;
-    for (auto successor : branch.GetNormalBlocks()) {
-        if (successor->TestAttr(Attribute::MATCH_PATTERN)) {
-            constructorGroups.emplace(successor);
-        }
+    if (TryVisitEnumMatchTable(result, branch, target)) {
+        return;
     }
-    const bool table = !branch.GetParentBlock()->TestAttr(Attribute::MATCH_PATTERN) &&
-        !constructorGroups.empty() && branch.GetSourceExpr() == SourceExpr::MATCH_EXPR;
+    std::set<Block*> hasProcessed;
     for (auto successor : branch.GetSuccessors()) {
         if (successor == &target) {
             continue;
         }
-        if (table && successor->TestAttr(Attribute::MATCH_PATTERN)) {
-            auto caseId = successor->Get<MatchCaseId>();
-            CJC_ASSERT(caseId.has_value());
-            if (reportedCaseIds.emplace(caseId.value()).second) {
-                PrintWarning(branch, *successor, hasProcessed);
-            }
-            if (auto nestedTable = DynamicCast<MultiBranch>(successor->GetTerminator())) {
-                PrintMatchTableCases(*nestedTable, hasProcessed, reportedCaseIds, constructorGroups);
-            } else {
-                PrintMatchTableSuccessors(*successor, hasProcessed, reportedCaseIds, constructorGroups);
-            }
-        } else {
-            PrintWarning(branch, *successor, hasProcessed);
-            if (branch.GetSourceExpr() == SourceExpr::MATCH_CASE && successor == branch.GetDefaultBlock()) {
-                PrintMatchSuccessors(*successor, hasProcessed);
-            }
+        if (!result.GetEntryState(*successor).IsBottom()) {
+            continue;
         }
-    }
-    if (table && target.TestAttr(Attribute::MATCH_PATTERN) && target.Get<MatchCaseId>().has_value()) {
-        auto targetCaseId = target.Get<MatchCaseId>();
-        CJC_ASSERT(targetCaseId.has_value());
-        reportedCaseIds.emplace(targetCaseId.value());
-        if (target.GetTerminator()->GetExprKind() == ExprKind::MULTIBRANCH) {
-            PrintMatchTableSuccessors(target, hasProcessed, reportedCaseIds, constructorGroups);
+        PrintWarning(branch, *successor, hasProcessed);
+        if (branch.GetSourceExpr() == SourceExpr::MATCH_CASE && successor == branch.GetDefaultBlock()) {
+            PrintMatchSuccessors(*successor, hasProcessed);
         }
     }
 }
@@ -341,19 +325,23 @@ void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result)
     const auto actionBeforeVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
     const auto actionAfterVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
 
-    const auto actionOnTerminator = [this](
+    const auto actionOnTerminator = [this, &result](
             const TConstDomain&, Expression* terminator, std::optional<Block*> targetSucc) {
+        // Nested enum-table fragments are diagnosed from their top-level table and source-case grouping.
+        if (terminator->GetParentBlock()->Get<MatchCaseId>().has_value()) {
+            return;
+        }
         switch (terminator->GetExprKind()) {
             case ExprKind::BRANCH: {
                 if (targetSucc.has_value()) {
                     auto branchNode = StaticCast<Branch*>(terminator);
-                    VisitBranch(*branchNode, *targetSucc.value());
+                    VisitBranch(result, *branchNode, *targetSucc.value());
                 }
                 break;
             }
             case ExprKind::MULTIBRANCH: {
                 if (targetSucc.has_value()) {
-                    VisitMultiBranch(*StaticCast<MultiBranch*>(terminator), *targetSucc.value());
+                    VisitMultiBranch(result, *StaticCast<MultiBranch*>(terminator), *targetSucc.value());
                 }
                 break;
             }
