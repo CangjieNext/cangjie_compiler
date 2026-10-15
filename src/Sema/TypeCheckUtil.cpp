@@ -1541,4 +1541,26 @@ Ptr<Decl> FindCorrespondingCommonDecl(const Decl& specificDecl)
 
     return nullptr;
 }
+
+bool IsFuncOrOptionOfFunc(const Ty& ty)
+{
+    Ptr<const Ty> realTy = &ty;
+    bool wrappedByOption = false;
+    while (realTy->IsCoreOptionType()) {
+        realTy = realTy->typeArgs[0];
+        wrappedByOption = true;
+    }
+    if (auto genericTy = DynamicCast<GenericsTy>(realTy)) {
+        if (!wrappedByOption) {
+            return false;
+        }
+        for (auto upperBound : genericTy->upperBounds) {
+            if (upperBound->IsFunc()) {
+                return true;
+            }
+        }
+        return false;
+    }
+    return realTy->IsFunc();
+}
 } // namespace Cangjie::TypeCheckUtil

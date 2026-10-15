@@ -468,6 +468,15 @@ inline Ptr<Ty> GetRealNonOptionTy(Ptr<Ty> ty)
     return ty;
 }
 
+inline bool IsFunctionalType(const Ty& ty)
+{
+    if (auto genericTy = DynamicCast<GenericsTy>(&ty)) {
+        return std::any_of(
+            genericTy->upperBounds.cbegin(), genericTy->upperBounds.cend(), [](auto ub) { return ub->IsFunc(); });
+    }
+    return ty.IsFunc();
+}
+
 std::vector<Ptr<FuncDecl>> SyntaxFilterCandidates(const CallExpr& ce, const std::vector<Ptr<FuncDecl>>& candidates)
 {
     std::vector<Ptr<FuncDecl>> definitelyMismatched;
@@ -485,7 +494,7 @@ std::vector<Ptr<FuncDecl>> SyntaxFilterCandidates(const CallExpr& ce, const std:
             } else if (ce.args[i]->TestAttr(Attribute::IMPLICIT_ADD)) {
                 // For trailing closure, checking the argument with last parameter type,
                 // ignore the mismatched size of arguments.
-                definitelyMismatch = paramTys.empty() || !paramTys.back()->IsFunc();
+                definitelyMismatch = paramTys.empty() || !IsFuncOrOptionOfFunc(*paramTys.back());
                 break;
             } else if (ce.args[i]->name.Empty() && paramTys.size() <= i) {
                 definitelyMismatch = true;
@@ -593,27 +602,31 @@ void RemoveNonAnnotationCandidates(std::vector<Ptr<FuncDecl>>& candidates)
     }
 }
 
-inline bool IsFunctionalType(const Ty& ty)
-{
-    if (auto genericTy = DynamicCast<GenericsTy>(&ty)) {
-        return std::any_of(
-            genericTy->upperBounds.cbegin(), genericTy->upperBounds.cend(), [](auto ty) { return ty->IsFunc(); });
-    }
-    return ty.IsFunc();
-}
-
 bool CheckUseTrailingClosureWithFunctionType(
     DiagnosticEngine& diag, FuncArg& arg, const Ty& originalTy, const FuncDecl& candidate)
 {
     // Implicit added func argument is added by trailing closure.
-    if (!arg.TestAttr(Attribute::IMPLICIT_ADD) || IsFunctionalType(originalTy)) {
+    if (!arg.TestAttr(Attribute::IMPLICIT_ADD) || IsFunctionalType(originalTy) ||
+        IsFuncOrOptionOfFunc(originalTy)) {
         return true;
     }
     arg.SetTy(TypeManager::GetInvalidTy());
     CJC_NULLPTR_CHECK(arg.expr);
     arg.expr->SetTy(TypeManager::GetInvalidTy());
-    std::string message =
-        originalTy.IsGeneric() ? "generic type without upper bound of function type" : "non-function type";
+    Ptr<const Ty> innerTy = &originalTy;
+    while (innerTy->IsCoreOptionType()) {
+        innerTy = innerTy->typeArgs[0];
+    }
+    std::string message;
+    if (innerTy->IsGeneric() && originalTy.IsCoreOptionType()) {
+        message = "optional type whose inner generic type has no upper bound of function type";
+    } else if (innerTy->IsGeneric()) {
+        message = "generic type without upper bound of function type";
+    } else if (originalTy.IsCoreOptionType()) {
+        message = "optional type whose inner type is not a function type";
+    } else {
+        message = "non-function type";
+    }
     auto diagBuilder = diag.DiagnoseRefactor(
         DiagKindRefactor::sema_trailing_lambda_cannot_used_for_non_function, arg, message);
     diagBuilder.AddMainHintArguments(originalTy.String());
