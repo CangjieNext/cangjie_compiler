@@ -44,7 +44,7 @@ Ptr<Decl> MatchAppendFuncByParamTy(TypeManager& t, std::vector<Ptr<Decl>> candid
     for (auto& can : candidates) {
         auto fun = StaticCast<FuncDecl>(can);
         auto funcTy = DynamicCast<FuncTy>(fun->DataTy());
-        if (t.ImplementsCopyInterface(paramTy.Ty())) {
+        if (t.IsCopyType(paramTy.Ty())) {
             paramTy = paramTy.With({});
         }
         if (funcTy && funcTy->paramTys.size() == 1 && funcTy->paramTys[0].Ty() == paramTy.Ty() &&
@@ -56,11 +56,13 @@ Ptr<Decl> MatchAppendFuncByParamTy(TypeManager& t, std::vector<Ptr<Decl>> candid
 }
 
 // Keep only append/toString whose `this` mode matches the StringBuilder receiver mode.
+// ~local (NOT) must match exactly: IsSubModal(NOT, x) is true for every x because NOT bits are 0.
 void FilterDeclsByThisMode(std::vector<Ptr<Decl>>& candidates, ModalInfo objMode)
 {
     for (auto it = candidates.begin(); it != candidates.end();) {
         auto funThisMode = TypeManager::GetThisParamMode(StaticCast<FuncDecl>(**it));
-        if (!objMode.IsSubModal(funThisMode)) {
+        auto modeMatch = objMode.local == Mode::NOT ? objMode == funThisMode : objMode.IsSubModal(funThisMode);
+        if (!modeMatch) {
             it = candidates.erase(it);
         } else {
             ++it;

@@ -100,7 +100,7 @@ std::set<DataTy> Promotion::Promote(DataTy from, DataTy target)
 
 std::set<ModalTy> Promotion::Promote(ModalTy from, ModalTy target)
 {
-    CJC_ASSERT(from.Mode() == target.Mode() || tyMgr.ImplementsCopyInterface(target.Ty()) || target.IsDataType());
+    CJC_ASSERT(from.Mode() == target.Mode() || tyMgr.IsCopyType(target.Ty()) || target.IsDataType());
     auto r = Promote(from.Ty(), target.Ty());
     std::set<ModalTy> res;
     for (auto ty : r) {
@@ -121,7 +121,7 @@ std::set<DataTy> Promotion::Downgrade(DataTy target, DataTy upfrom)
 
 std::set<ModalTy> Promotion::Downgrade(ModalTy target, ModalTy upfrom)
 {
-    CJC_ASSERT(upfrom.Mode() == target.Mode() || tyMgr.ImplementsCopyInterface(target.Ty()));
+    CJC_ASSERT(upfrom.Mode() == target.Mode() || tyMgr.IsCopyType(target.Ty()));
     auto r = Downgrade(target.Ty(), upfrom.Ty());
     std::set<ModalTy> res;
     for (auto ty : r) {

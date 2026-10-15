@@ -1196,15 +1196,20 @@ bool TypeChecker::TypeCheckerImpl::ChkCoalescingExpr(ASTContext& ctx, ModalTy tg
         return false;
     }
     CJC_ASSERT(leftTy);
-    if (tgtTy != nullptr && !typeManager.IsSubtype(leftTy->typeArgs[0], tgtTy)) {
+    // Non-copy Option payload inherits Option's modal; Copyable payload may demode freely.
+    auto payloadTy = leftTy->typeArgs[0];
+    if (!typeManager.IsCopyType(payloadTy.Ty())) {
+        payloadTy = payloadTy.With(leftTy.Mode());
+    }
+    if (tgtTy != nullptr && !typeManager.IsSubtype(payloadTy, tgtTy)) {
         // Did not report errors before. Raise a new error message.
-        if (Ty::IsTyCorrect(leftTy->typeArgs[0])) {
-            DiagMismatchedTypesWithFoundTy(diag, *be.leftExpr, tgtTy, leftTy->typeArgs[0]);
+        if (Ty::IsTyCorrect(payloadTy)) {
+            DiagMismatchedTypesWithFoundTy(diag, *be.leftExpr, tgtTy, payloadTy);
         }
         be.SetTy({TypeManager::GetInvalidTy()});
         return false;
     }
-    auto realTgtTy = (tgtTy != nullptr) ? tgtTy : leftTy->typeArgs[0];
+    auto realTgtTy = (tgtTy != nullptr) ? tgtTy : payloadTy;
     if (!CheckWithNegCache(ctx, realTgtTy, be.rightExpr.get())) {
         be.SetTy({TypeManager::GetInvalidTy()});
         DiagMismatchedTypes(diag, *be.rightExpr, realTgtTy);

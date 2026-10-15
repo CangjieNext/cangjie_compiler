@@ -112,7 +112,7 @@ static bool IsImplicitExclaveDefaultParamFunc(const AST::FuncDecl& func,
             if (!Ty::IsTyCorrect(ty)) {
                 return false;
             }
-            return !const_cast<Cangjie::TypeManager&>(typeManager).ImplementsCopyInterface(ty.Ty()) && ty.IsLocalType();
+            return !const_cast<Cangjie::TypeManager&>(typeManager).IsCopyType(ty.Ty()) && ty.IsLocalType();
         }
     }
     return false;

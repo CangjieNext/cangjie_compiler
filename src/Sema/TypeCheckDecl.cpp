@@ -402,7 +402,7 @@ void TypeChecker::TypeCheckerImpl::SynchronizeTypeAndInitializer(const CheckerCo
             vd.SetTy(vd.initializer->GetTy());
         }
         // global var cannot have local type, but for copy type we can infer it to not local to pass the check.
-        if (IsGlobalOrMember(vd) && vd.GetTy().IsCorrect() && typeManager.ImplementsCopyInterface(vd.DataTy())) {
+        if (IsGlobalOrMember(vd) && vd.GetTy().IsCorrect() && typeManager.IsCopyType(vd.DataTy())) {
             vd.SetTy(vd.GetTy().With(Mode::NOT));
         }
     }

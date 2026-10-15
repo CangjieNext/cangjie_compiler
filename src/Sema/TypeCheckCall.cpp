@@ -293,7 +293,7 @@ OverloadCmp CompareThisParamTy(
     }
     auto iThis = tyMgr.GetThisParamTy(i);
     auto jThis = tyMgr.GetThisParamTy(j);
-    if (tyMgr.ImplementsCopyInterface(iThis.Ty()) && tyMgr.ImplementsCopyInterface(jThis.Ty())) {
+    if (tyMgr.IsCopyType(iThis.Ty()) && tyMgr.IsCopyType(jThis.Ty())) {
         return OverloadCmp::EQUAL;
     }
     // ctor call has special rules for modal, because the modal can be deduced.
@@ -762,6 +762,7 @@ void FilterOverriden(
             auto& funcBody2 = candidates[j]->fd.funcBody;
             auto sameSig = instFuncTy1 == instFuncTy2;
             sameSig = sameSig && ((funcBody1->generic == nullptr) == (funcBody2->generic == nullptr));
+            sameSig = sameSig && GetThisParamModal(candidates[i]->fd) == GetThisParamModal(candidates[j]->fd);
             if (sameSig && funcBody1->generic) {
                 sameSig = funcBody1->generic->typeParameters.size() == funcBody2->generic->typeParameters.size();
                 auto mappingOf2Func = GenerateTypeMappingBetweenFuncs(tm, candidates[i]->fd, candidates[j]->fd);
@@ -924,7 +925,7 @@ bool TypeChecker::TypeCheckerImpl::CompareFuncCandidates(
         }
         for (size_t t = 0; t < argSize; ++t) { // Int64 has priority than float and other int.
             if (!i.tysInArgOrder[t].Mode().IsSubModal(j.tysInArgOrder[t].Mode()) &&
-                !typeManager.ImplementsCopyInterface(i.tysInArgOrder[t].Ty())) {
+                !typeManager.IsCopyType(i.tysInArgOrder[t].Ty())) {
                 return false;
             }
             if (!i.tysInArgOrder[t]->IsNumeric() || !j.tysInArgOrder[t]->IsNumeric()) {
@@ -1060,7 +1061,7 @@ void TypeChecker::TypeCheckerImpl::FilterBetterThisModeNonCtorCall(const ASTCont
     }
     if (!modalClass.hasExact && !modalClass.hasSubmode) {
         // only consider copy type cast when even sub modes do not match any overload, keep all.
-        if (typeManager.ImplementsCopyInterface(thisArgTy.Ty())) {
+        if (typeManager.IsCopyType(thisArgTy.Ty())) {
             return;
         }
         for (size_t i{0}; i < targetMark.size(); ++i) {
@@ -1325,10 +1326,10 @@ bool TypeChecker::TypeCheckerImpl::CheckThisParamCompatible(
     // this() or super() call, must call with the same modal
     if (auto ref = DynamicCast<RefExpr>(&*ce.baseFunc); ref && (ref->isThis || ref->isSuper)) {
         auto callArgTy = GetThisArgTy(ctx, ce);
-        return typeManager.ImplementsCopyInterface(callArgTy.Ty()) || callArgTy.Mode() == fdParamTy.Mode();
+        return typeManager.IsCopyType(callArgTy.Ty()) || callArgTy.Mode() == fdParamTy.Mode();
     }
     if (fd.TestAttr(Attribute::CONSTRUCTOR) && !fd.TestAttr(Attribute::STATIC)) {
-        if (typeManager.ImplementsCopyInterface(fdParamTy.Ty())) {
+        if (typeManager.IsCopyType(fdParamTy.Ty())) {
             return true;
         }
         if (ce.modal.HasLocal()) {
@@ -1342,7 +1343,7 @@ bool TypeChecker::TypeCheckerImpl::CheckThisParamCompatible(
     }
     // normal function call, sub modal is ok
     auto callArgTy = GetThisArgTy(ctx, ce);
-    return typeManager.ImplementsCopyInterface(callArgTy.Ty()) || callArgTy.Mode().IsSubModal(fdParamTy.Mode());
+    return typeManager.IsCopyType(callArgTy.Ty()) || callArgTy.Mode().IsSubModal(fdParamTy.Mode());
 }
 
 void TypeChecker::TypeCheckerImpl::FilterIncompatibleThisParamCandidates(
@@ -1577,7 +1578,7 @@ ModalInfo TypeChecker::TypeCheckerImpl::InferEnumCtorMode(const CallExpr& ce, Mo
     std::vector<bool> nonCopy(ce.args.size(), false);
     bool hasNonCopy{false};
     for (size_t i{0}; i < ce.args.size(); ++i) {
-        nonCopy[i] = typeManager.ImplementsCopyInterface(ce.args[i]->DataTy());
+        nonCopy[i] = typeManager.IsCopyType(ce.args[i]->DataTy());
         hasNonCopy = nonCopy[i] | hasNonCopy;
     }
     std::set<ModalTy> tys;
@@ -1788,7 +1789,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::UpdateFuncGenericType(
     ce.SetTy(typeManager.ApplySubstPack(rawTy, fmu.typeMapping));
     FillTypeArgumentsTy(fmu.fd, ce, fmu.typeMapping);
     if (auto ref = ce.baseFunc->GetTarget(); ref && ref->TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
-        ce.SetTy(ce.GetTy().With(target.Mode()));
+        ce.SetTy(ce.GetTy().With(InferEnumCtorMode(ce, target)));
     }
     return {&fmu.fd};
 }
@@ -1882,7 +1883,7 @@ OwnedPtr<FunctionMatchingUnit> TypeChecker::TypeCheckerImpl::CheckCandidate(
         if (ce.modal.HasLocal()) {
             auto ceModal = ce.modal.ToModalInfo();
             auto thisParamTy = typeManager.GetThisParamTy(fd);
-            if (thisParamTy.Mode() != ceModal && !typeManager.ImplementsCopyInterface(thisParamTy.Ty())) {
+            if (thisParamTy.Mode() != ceModal && !typeManager.IsCopyType(thisParamTy.Ty())) {
                 DiagSemaMismatchedTypes(diag, ce, thisParamTy->String(), thisParamTy.With(ceModal)->String());
                 return nullptr;
             }
@@ -1948,7 +1949,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::ReorderCallArgument(
     ce.baseFunc->SetTy({funcTy, fmu.fd.TyMode()});
     ce.SetTy(GetCallTy(ctx, ce, fmu.fd));
     if (auto ref = ce.baseFunc->GetTarget(); ref && ref->TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
-        ce.SetTy(ce.GetTy().With(target.Mode()));
+        ce.SetTy(ce.GetTy().With(InferEnumCtorMode(ce, target)));
     }
     return {&fmu.fd};
 }

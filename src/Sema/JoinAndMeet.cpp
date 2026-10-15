@@ -129,7 +129,7 @@ ModalInfo JoinAndMeet::JoinMode(TypeManager& tyMgr, const std::set<ModalTy>& tym
     bool hasIdeal = false;
     ModalInfo m{};
     for (auto ty : tyms) {
-        if (tyMgr.ImplementsCopyInterface(ty.Ty())) {
+        if (tyMgr.IsCopyType(ty.Ty())) {
             continue;
         }
         if (ty.Mode().local == Mode::IDEAL) {
@@ -173,7 +173,7 @@ ModalTy JoinAndMeet::BatchMeet(const std::set<ModalTy>& tyms)
     ModalInfo m{Mode::HALF};
     if (tyms.size() > 0) {
         for (auto ty : tyms) {
-            if (tyMgr.ImplementsCopyInterface(ty.Ty())) {
+            if (tyMgr.IsCopyType(ty.Ty())) {
                 continue;
             }
             if (ty.Mode().local == Mode::IDEAL) {

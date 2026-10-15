@@ -517,7 +517,7 @@ bool TypeChecker::TypeCheckerImpl::CheckLocalCapture(
     auto funcLocal = func.TyMode().local;
     auto receiver = GetReceiverTy(ctx, expr);
     auto varMode = receiver.Mode();
-    if (typeManager.ImplementsCopyInterface(receiver.Ty())) {
+    if (typeManager.IsCopyType(receiver.Ty())) {
         return true;
     }
     if (funcLocal == Mode::NOT && varMode.local == Mode::NOT) {

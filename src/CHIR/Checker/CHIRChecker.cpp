@@ -4021,8 +4021,8 @@ void CHIRChecker::CheckVArray(const VArray& expr, const Function& topLevelFunc)
         TypeCheckError(expr, *result, "VArray", topLevelFunc);
         return;
     }
-    // elements type check
-    auto elemType = StaticCast<VArrayType*>(result->GetType())->GetElementType();
+    auto varrayTy = StaticCast<VArrayType>(result->GetType());
+    auto elemType = builder.WithModal(varrayTy->GetElementType(), varrayTy->GetModalInfo());
     // only use VArray to be parameter type in CFunc, its element type shouldn't be normal struct,
     // must be marked with @C
     if (!IsCTypeInVArray(*elemType)) {

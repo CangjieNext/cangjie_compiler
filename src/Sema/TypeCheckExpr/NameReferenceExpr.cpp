@@ -433,7 +433,7 @@ void TypeChecker::TypeCheckerImpl::ResolveFunRefOverload(const ASTContext& ctx, 
     if (!hasExact && !hasSubmode) {
         // only consider copy type cast when even sub modes do not match any overload, keep all in this case.
         // otherwise go through normal filter by this mode
-        if (typeManager.ImplementsCopyInterface(thisArgTy.Ty())) {
+        if (typeManager.IsCopyType(thisArgTy.Ty())) {
             return;
         }
         candidates.clear();

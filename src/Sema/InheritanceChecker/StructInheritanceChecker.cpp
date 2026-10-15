@@ -1363,7 +1363,7 @@ void StructInheritanceChecker::CheckPropertyInheritance(
     auto parentProp = StaticCast<PropDecl>(parentDecl);
     auto childProp = StaticCast<PropDecl>(child.decl);
     bool sameMode = parentProp->TyMode() == childProp->TyMode();
-    if (childProp->TestAttr(Attribute::STATIC) && typeManager.ImplementsCopyInterface(childProp->DataTy())) {
+    if (childProp->TestAttr(Attribute::STATIC) && typeManager.IsCopyType(childProp->DataTy())) {
         sameMode = true;
     }
     // do not consider copy type here, because mode of prop is also mode of this param, different mode in prop type

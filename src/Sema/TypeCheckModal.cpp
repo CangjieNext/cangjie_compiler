@@ -465,7 +465,7 @@ private:
         }
         auto varTy = var->GetTy();
         // this excludes member var ref as well, because they're considered ref to this, which is a func param
-        if (!varTy.IsCorrect() || varTy.IsDataType() || type.ImplementsCopyInterface(varTy.Ty())) {
+        if (!varTy.IsCorrect() || varTy.IsDataType() || type.IsCopyType(varTy.Ty())) {
             return;
         }
         // this check is valid because exclave cannot be nested
@@ -594,7 +594,7 @@ private:
             if (IsInExclaveExpr(ctx, *e) || IsExternalLocal(ctx, *e) || retTy.IsDataType() || e->GetTy()->IsNothing()) {
                 continue;
             }
-            if (type.ImplementsCopyInterface(retTy.Ty()) && !Is<InterfaceTy>(retTy.Ty())) {
+            if (type.IsCopyType(retTy.Ty()) && !Is<InterfaceTy>(retTy.Ty())) {
                 continue;
             }
             DiagBadInternalLocalReturn(*e);
@@ -781,7 +781,7 @@ private:
         }
         // Params and `this`: only non-copy @local! enables exclave.
         auto isNonCopyLocalFull = [this](ModalTy ty) {
-            return !type.ImplementsCopyInterface(ty.Ty()) && ty.Mode().local == Mode::FULL;
+            return !type.IsCopyType(ty.Ty()) && ty.Mode().local == Mode::FULL;
         };
         for (auto& paramTy : funcTy->paramTys) {
             if (isNonCopyLocalFull(paramTy)) {
@@ -869,7 +869,7 @@ private:
         if (!Ty::IsTyCorrect(targetTy)) {
             return false;
         }
-        return !type.ImplementsCopyInterface(targetTy.Ty()) && targetTy.IsLocalType();
+        return !type.IsCopyType(targetTy.Ty()) && targetTy.IsLocalType();
     }
 
     /// Check the whole body of local?/local! constructor must be in exclave expr.
@@ -1151,7 +1151,7 @@ private:
         if (!sub->IsVArrayAccess()) {
             return;
         }
-        if (type.ImplementsCopyInterface(StaticCast<VArrayTy>(sub->baseExpr->DataTy())->TyArg(0))) {
+        if (type.IsCopyType(StaticCast<VArrayTy>(sub->baseExpr->DataTy())->TyArg(0))) {
             return;
         }
         if (lLocal == Mode::HALF) {
@@ -1184,7 +1184,7 @@ private:
         if (!right->GetTy().IsCorrect()) {
             return;
         }
-        if (type.ImplementsCopyInterface(right->DataTy())) {
+        if (type.IsCopyType(right->DataTy())) {
             return;
         }
         auto rLocal = right->TyMode().local != Mode::NOT ? right->TyMode().local : Mode::NOT;
@@ -1287,7 +1287,7 @@ private:
                 if (!var->GetTy().IsCorrect() || var->TestAttr(Attribute::STATIC)) {
                     continue;
                 }
-                if (var->initializer && (!type.ImplementsCopyInterface(var->DataTy()) &&
+                if (var->initializer && (!type.IsCopyType(var->DataTy()) &&
                     !HasModifier(var->modifiers, TokenKind::DEMODE))) {
                     DiagMemberVarInitalizerInMixedInit(*var, decl);
                 }
@@ -1467,14 +1467,14 @@ private:
         if (call.desugarArgs) {
             for (auto& arg : *call.desugarArgs) {
                 if (arg->TyMode().local == Mode::FULL && arg->expr && IsExternalLocal(ctx, *arg->expr) &&
-                    !type.ImplementsCopyInterface(arg->expr->DataTy())) {
+                    !type.IsCopyType(arg->expr->DataTy())) {
                     DiagBadExternalLocalArg(*arg->expr);
                 }
             }
         } else {
             for (auto& arg : call.args) {
                 if (arg->TyMode().local == Mode::FULL && arg->expr && IsExternalLocal(ctx, *arg->expr) &&
-                    !type.ImplementsCopyInterface(arg->expr->DataTy())) {
+                    !type.IsCopyType(arg->expr->DataTy())) {
                     DiagBadExternalLocalArg(*arg->expr);
                 }
             }
@@ -1485,7 +1485,7 @@ private:
         }
         if (TypeManager::HasThisParam(*fd)) {
             auto thisType = TypeManager::GetThisParamTy(*fd);
-            if (thisType.Mode().local != Mode::FULL || type.ImplementsCopyInterface(thisType.Ty())) {
+            if (thisType.Mode().local != Mode::FULL || type.IsCopyType(thisType.Ty())) {
                 return;
             }
             if (auto ref = DynamicCast<RefExpr>(&*call.baseFunc)) {
@@ -1532,7 +1532,7 @@ private:
     {
         for (auto member : decl.GetMemberDeclPtrs()) {
             if (auto var = DynamicCast<VarDecl>(member)) {
-                if (type.ImplementsCopyInterface(var->DataTy())) {
+                if (type.IsCopyType(var->DataTy())) {
                     continue;
                 }
                 DiagCopyStructBadField(decl, *var);

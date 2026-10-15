@@ -1097,10 +1097,10 @@ bool TypeManager::IsSubtype(
     bool modalSubtyping = false;
     switch (modalMatchMode) {
         case ModalMatchMode::SUBTYPE:
-            modalSubtyping = IsModalSubtype(leaf, root) || ImplementsCopyInterface(leaf.Ty());
+            modalSubtyping = IsModalSubtype(leaf, root) || IsCopyType(leaf.Ty());
             break;
         case ModalMatchMode::EXACT:
-            modalSubtyping = leaf.Mode() == root.Mode() || ImplementsCopyInterface(leaf.Ty());
+            modalSubtyping = leaf.Mode() == root.Mode() || IsCopyType(leaf.Ty());
             break;
         case ModalMatchMode::NON_COPY:
             modalSubtyping = IsModalSubtype(leaf.Mode(), root.Mode());
@@ -1130,7 +1130,7 @@ bool TypeManager::IsSubtype(
         return true;
     }
     /// copy type check fastpath
-    if (IsCopyInterfaceTy(root) && ImplementsCopyInterface(leaf)) {
+    if (IsCopyInterfaceTy(root) && IsCopyType(leaf)) {
         return true;
     }
     if (root->IsNothing()) {
@@ -1190,7 +1190,7 @@ bool TypeManager::IsModalSubtype(ModalTy leaf, ModalTy root)
 {
     // if T <: Copy, then it is possible to cast a T @local? to a T @local! or T@~local
     // also @local! and @~local are subtype of @local?, so all of them can be cast to one another
-    if (ImplementsCopyInterface(leaf.Ty())) {
+    if (IsCopyType(leaf.Ty())) {
         return true;
     }
     // The mode of an unsolved placeholder type variable is meaningless: it has not been bound
@@ -1211,14 +1211,14 @@ bool TypeManager::IsModalSubtype(ModalInfo leaf, ModalInfo root)
     return (l & r) == l;
 }
 
-// Whether @p ty is a copy type for modal/locality checking (spec: such types are not subject to locality
-// constraints). Copy types include.
+// Whether @p ty is a copy type for modal/locality checking. Copy types include.
 // - CType subtypes (excluding CType itself)
 // - Primitive types: Int*, Float*, Bool, Rune, Nothing, Invalid
 // - Tuple whose elements are all copy types; VArray whose element type is a copy type
 // - Generic type variable with a Copyable upper bound
 // - struct inheriting or extending Copyable
-bool TypeManager::ImplementsCopyInterface(DataTy ty)
+// Note: the Copyable interface type itself is not a copy type.
+bool TypeManager::IsCopyType(DataTy ty)
 {
     if (ty->IsMetCType()) {
         return true;
@@ -1238,21 +1238,25 @@ bool TypeManager::ImplementsCopyInterface(DataTy ty)
     }
     if (auto tuple = DynamicCast<TupleTy>(ty)) {
         return std::all_of(tuple->typeArgs.begin(), tuple->typeArgs.end(),
-            [this](ModalTy m) { return ImplementsCopyInterface(m.Ty()); });
+            [this](ModalTy m) { return IsCopyType(m.Ty()); });
     }
     if (auto g = DynamicCast<GenericsTy>(ty)) {
         if (!g->isUpperBoundLegal) {
             return false;
         }
+        // T is a copy type when some upper bound (transitively) is the Copyable interface.
+        // e.g. T <: B where B <: Copyable. Copyable itself is not a copy type.
         for (auto upper : g->upperBounds) {
-            if (ImplementsCopyInterface(upper)) {
-                return true;
+            for (auto super : GetAllSuperTys(*upper)) {
+                if (IsCopyInterfaceTy(super)) {
+                    return true;
+                }
             }
         }
         return false;
     }
     if (auto array = DynamicCast<VArrayTy>(ty)) {
-        return ImplementsCopyInterface(array->TyArg(0));
+        return IsCopyType(array->TyArg(0));
     }
     auto decl = Ty::GetDeclOfTy(ty);
     if (auto structDecl = DynamicCast<StructDecl>(decl)) {

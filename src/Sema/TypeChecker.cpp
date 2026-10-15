@@ -2338,7 +2338,7 @@ void TypeChecker::TypeCheckerImpl::AttachExclaveToDefaultParamFunctions(Package&
             return VisitAction::WALK_CHILDREN;
         }
         auto ty = fp->type->GetTy();
-        if (!Ty::IsTyCorrect(ty) || !ty.IsLocalType() || typeManager.ImplementsCopyInterface(ty.Ty())) {
+        if (!Ty::IsTyCorrect(ty) || !ty.IsLocalType() || typeManager.IsCopyType(ty.Ty())) {
             return VisitAction::WALK_CHILDREN;
         }
         fd->modifiers.emplace(TokenKind::EXCLAVE, fp->identifier.Begin());

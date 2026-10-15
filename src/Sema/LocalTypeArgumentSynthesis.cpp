@@ -243,14 +243,14 @@ bool LocalTypeArgumentSynthesis::UnifyOne(const Tracked<ModalTy>& argTTy, const 
     // constraint set records the concrete bound's modal, resolved when the placeholder
     // is solved (or defaulted to ~local by ReplaceIdealTy if never constrained).
     if (argTTy.ty.Mode().local != Mode::IDEAL && !argTTy.ty.Mode().IsSubModal(paramTTy.ty.Mode()) &&
-        !tyMgr.ImplementsCopyInterface(argTTy.ty.Ty()) && !paramTTy.ty->IsPlaceholder()) {
+        !tyMgr.IsCopyType(argTTy.ty.Ty()) && !paramTTy.ty->IsPlaceholder()) {
         return false;
     }
     // Copy fastpath, mirroring the one in IsSubtype: a copy type satisfies the Copyable interface
     // constraint without going through Promote-based nominal unification (Promote's super-type
     // walk does not cover compiler-provided interface implementations).
     if (paramTy.IsInterface() && tyMgr.IsCopyInterfaceTy(&paramTy) &&
-        tyMgr.ImplementsCopyInterface(argTTy.ty.Ty())) {
+        tyMgr.IsCopyType(argTTy.ty.Ty())) {
         return true;
     }
     // Handle the base case.

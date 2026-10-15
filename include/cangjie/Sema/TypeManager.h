@@ -189,9 +189,9 @@ public:
 
     bool IsModalSubtype(AST::ModalTy leaf, AST::ModalTy root);
     bool IsModalSubtype(ModalInfo leaf, ModalInfo root);
-    /** Copy type for modal/locality checking; see `TypeManager::ImplementsCopyInterface` in TypeManager.cpp. */
-    bool ImplementsCopyInterface(AST::DataTy ty);
-    bool NeverImplementsCopyInterface(AST::DataTy ty);
+    /** Copy type for modal/locality checking; see `TypeManager::IsCopyType` in TypeManager.cpp. */
+    bool IsCopyType(AST::DataTy ty);
+    bool NeverIsCopyType(AST::DataTy ty);
 
     /**
      * Check if two function types have the same parameter type. This is used for checking function overloading and

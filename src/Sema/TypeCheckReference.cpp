@@ -477,7 +477,7 @@ void TypeChecker::TypeCheckerImpl::FilterFuncRefByThisMode(
         }
         auto mode = TypeManager::GetThisParamMode(*target);
         // only skip this check when it is copy type method call
-        if (receiver.Mode().IsSubModal(mode) || typeManager.ImplementsCopyInterface(receiver.Ty())) {
+        if (receiver.Mode().IsSubModal(mode) || typeManager.IsCopyType(receiver.Ty())) {
             ++it;
         } else {
             it = targets.erase(it);
