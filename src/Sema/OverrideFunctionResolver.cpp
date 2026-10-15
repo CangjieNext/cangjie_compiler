@@ -218,6 +218,11 @@ bool OverrideFunctionResolver::IsImplementationFunc(const FuncDecl& srcFunc, con
     if (noRelation) {
         return false;
     }
+    // FuncTy omits this-mode; hashCode() must not implement hashCode(this @local!).
+    if (TypeManager::HasThisParam(srcFunc) && TypeManager::HasThisParam(superFunc) &&
+        TypeManager::GetThisParamMode(srcFunc) != TypeManager::GetThisParamMode(superFunc)) {
+        return false;
+    }
     if (srcFunc.TestAttr(Attribute::GENERIC) && superFunc.TestAttr(Attribute::GENERIC)) {
         TypeSubst mappingBetweenFuncs = typeManager->GenerateGenericMappingFromGeneric(srcFunc, superFunc);
         auto substSrcInstFuncTy = typeManager->GetInstantiatedTy(srcInstFuncTy, mappingBetweenFuncs);
@@ -255,6 +260,11 @@ Ptr<Ty> OverrideFunctionResolver::GetMatchedFuncInstTyByGivenTarget(
             substImplFuncTy = typeManager->GetInstantiatedTy(instTy, mappingBetweenFuncs);
             // The instantiation type of a member function must be a FuncTy.
             CJC_ASSERT(substImplFuncTy && substImplFuncTy->IsFunc());
+        }
+        // FuncTy alone cannot distinguish this @local! from ~local (e.g. hashCode).
+        if (TypeManager::HasThisParam(*implFunc) && TypeManager::HasThisParam(target) &&
+            TypeManager::GetThisParamMode(*implFunc) != TypeManager::GetThisParamMode(target)) {
+            continue;
         }
         for (auto instFuncTy : instFuncTys) {
             auto substImplFuncTyF = StaticCast<FuncTy>(substImplFuncTy);

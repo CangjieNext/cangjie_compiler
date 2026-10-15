@@ -679,6 +679,9 @@ Value* Translator::TranslateTrivialArgWithNoSugar(const AST::FuncArg& arg, const
             .args = std::vector<Value*>{argVal}
         };
         argVal = CreateAndAppendExpression<Intrinsic>(loc, ty, callContext, currentBlock)->GetResult();
+    } else if (expectedTy != nullptr) {
+        // Pass expectedTy so Unit/Nothing literals get Constant typed as Unit @local! etc., not bare + cast.
+        argVal = TranslateExprArg(*arg.expr, *expectedTy);
     } else {
         argVal = TranslateExprArg(*arg.expr);
     }

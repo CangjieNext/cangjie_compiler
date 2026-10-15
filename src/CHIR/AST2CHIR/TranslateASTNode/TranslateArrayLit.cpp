@@ -105,7 +105,7 @@ Ptr<Value> Translator::TranslateVArray(const AST::ArrayLit& array)
     auto arrayTy = chirTy.TranslateType(array.GetTy());
     auto pureArrayTy = StaticCast<VArrayType*>(arrayTy->StripAllRefs());
     CJC_ASSERT(pureArrayTy->IsVArray());
-    auto eleTy = pureArrayTy->GetElementType();
+    auto eleTy = builder.WithModal(pureArrayTy->GetElementType(), pureArrayTy->GetModalInfo());
     for (auto& child : array.children) {
         elements.push_back(TranslateExprArg(*child, *eleTy));
     }
