@@ -428,7 +428,8 @@ void TypeChecker::TypeCheckerImpl::DesugarForPropDecl(Node& pkg)
 void TypeChecker::TypeCheckerImpl::PerformDesugarAfterTypeCheck(ASTContext& ctx, Package& pkg)
 {
     Interop::Java::JavaInteropManager jim(importManager, typeManager, diag, *ci->mangler,
-        ci->invocation.globalOptions.outputJavaGenDir, ci->invocation.globalOptions.output);
+        ci->invocation.globalOptions.outputJavaGenDir, ci->invocation.globalOptions.output,
+        ci->invocation.globalOptions.target);
 
     jim.CheckImplRedefinition(pkg);
     for (auto& file : pkg.files) {

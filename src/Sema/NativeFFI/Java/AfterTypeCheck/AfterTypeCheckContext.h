@@ -22,7 +22,7 @@ namespace Cangjie::Native::FFI::Java {
 
 struct AfterTypeCheckContext {
     explicit AfterTypeCheckContext(const ImportManager& importManager, TypeManager& typeManager,
-        AST::Package& pkg, bool hasMirrorOrImpl);
+        AST::Package& pkg, bool hasMirrorOrImpl, Triple::Info target);
 
     std::vector<Ptr<AST::ClassLikeDecl>> GetJavaMirrors() const;
     std::vector<Ptr<AST::ClassDecl>> GetJavaImplReferenceWrappers() const;
@@ -53,6 +53,7 @@ struct AfterTypeCheckContext {
     const ImportManager& importManager;
     TypeManager& typeManager;
     AST::Package& pkg;
+    Triple::Info target;
 private:
     const std::vector<Ptr<AST::ClassLikeDecl>> javaMirrors;
     const std::vector<Ptr<AST::ClassDecl>> javaImplReferenceWrappers;
