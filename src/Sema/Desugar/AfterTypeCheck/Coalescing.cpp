@@ -20,7 +20,8 @@ OwnedPtr<MatchCase> GetValueMatchCase(
 {
     auto valMatchCase = MakeOwnedNode<MatchCase>();
     CJC_ASSERT(selector.GetTy()->IsCoreOptionType()); // Caller guarantees.
-    auto innerTy = selector.GetTy()->typeArgs[0];
+    // Binding inherits Option's modal (match on @local! keeps payload @local!).
+    auto innerTy = selector.GetTy()->typeArgs[0].With(selector.TyMode());
     CopyBasicInfo(&selector, valMatchCase.get());
 
     // 'x' in 'Some(x)'.
@@ -131,11 +132,12 @@ void TypeChecker::TypeCheckerImpl::DesugarForCoalescing(BinaryExpr& binaryExpr) 
     (void)wildBody->body.emplace_back(std::move(binaryExpr.rightExpr));
     wildBody->SetTy(rightTy);
 
-    auto someTy = typeManager.GetFunctionTy({leftTy->typeArgs[0]}, leftTy);
+    auto payloadTy = leftTy->typeArgs[0].With(leftTy.Mode());
+    auto someTy = typeManager.GetFunctionTy({payloadTy}, leftTy);
     auto desugarExpr = ConstructOptionMatch(
         std::move(binaryExpr.leftExpr), std::move(caseBody), std::move(wildBody), refExpr, {someTy});
     if (desugarExpr != nullptr) {
-        desugarExpr->SetTy(binaryExpr.GetTy());
+        desugarExpr->SetTy(binaryExpr.GetTy().With(leftTy.Mode()));
         binaryExpr.desugarExpr = std::move(desugarExpr);
         AddCurFile(*binaryExpr.desugarExpr, binaryExpr.curFile);
     }

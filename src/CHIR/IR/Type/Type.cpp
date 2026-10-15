@@ -13,11 +13,11 @@
 #include "cangjie/CHIR/IR/Type/Type.h"
 
 #include <iostream>
-#include <optional>
 
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
 #include "cangjie/CHIR/IR/Type/EnumDef.h"
+#include "cangjie/CHIR/IR/Type/ExtendDef.h"
 #include "cangjie/CHIR/IR/Type/StructDef.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/Utils/CheckUtils.h"
@@ -31,6 +31,29 @@ namespace {
 ModalInfo GetInstanceMemberVarAccessModal(const MemberVarInfo& member, ModalInfo receiverModal)
 {
     return member.TestAttr(Attribute::DEMODE) ? ModalInfo{} : receiverModal;
+}
+
+bool IsCopyableInterfaceDef(ClassDef& def)
+{
+    if (IsExpectedCustomType(*def.GetType(), Cangjie::CORE_PACKAGE_NAME, std::string(Cangjie::COPY_NAME))) {
+        return true;
+    }
+    for (auto parent : def.GetImplementedInterfaceDefs()) {
+        if (IsCopyableInterfaceDef(*parent)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ExtendImplementsCopyable(const ExtendDef& extend)
+{
+    for (auto iface : extend.GetImplementedInterfaceDefs()) {
+        if (IsCopyableInterfaceDef(*iface)) {
+            return true;
+        }
+    }
+    return false;
 }
 } // namespace
 
@@ -168,7 +191,16 @@ bool Type::IsCopyable() const
         return true;
     }
     if (IsStruct()) {
-        return StaticCast<const StructType*>(this)->GetStructDef()->IsCopyable();
+        auto structDef = StaticCast<StructType>(this)->GetStructDef();
+        if (structDef->IsCopyable()) {
+            return true;
+        }
+        for (auto extend : structDef->GetExtends()) {
+            if (ExtendImplementsCopyable(*extend)) {
+                return true;
+            }
+        }
+        return false;
     }
     if (IsTuple()) {
         for (auto arg : GetTypeArgs()) {
