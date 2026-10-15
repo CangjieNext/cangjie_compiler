@@ -179,6 +179,42 @@ double ConstFloatVal::GetVal() const
     return val;
 }
 
+std::optional<std::unique_ptr<ConstValue>> ConstEnumVal::Join(const ConstValue& rhs) const
+{
+    if (rhs.GetConstKind() != ConstKind::ENUM) {
+        return nullptr;
+    }
+    auto& enumVal = StaticCast<const ConstEnumVal&>(rhs);
+    if (ctorIndex != enumVal.ctorIndex) {
+        return nullptr;
+    }
+    auto joinedPayloads = payloads;
+    if (!VectorJoin(joinedPayloads, enumVal.payloads)) {
+        return std::nullopt;
+    }
+    return std::make_unique<ConstEnumVal>(ctorIndex, std::move(joinedPayloads));
+}
+
+std::string ConstEnumVal::ToString() const
+{
+    return "enum(" + std::to_string(ctorIndex) + ")";
+}
+
+std::unique_ptr<ConstValue> ConstEnumVal::Clone() const
+{
+    return std::make_unique<ConstEnumVal>(ctorIndex, payloads);
+}
+
+uint64_t ConstEnumVal::GetCtorIndex() const
+{
+    return ctorIndex;
+}
+
+const std::vector<ConstValueDomain>& ConstEnumVal::GetPayloads() const
+{
+    return payloads;
+}
+
 template <> const std::string Analysis<ConstDomain>::name = "const-analysis";
 template <> const std::optional<unsigned> Analysis<ConstDomain>::blockLimit = std::nullopt;
 template <> ConstDomain::ChildrenMap ValueAnalysis<ConstValueDomain>::globalChildrenMap{};

@@ -18,7 +18,7 @@
 namespace Cangjie::CHIR {
 
 struct ConstValue {
-    enum class ConstKind : uint8_t { UINT, INT, FLOAT, RUNE, BOOL, STRING };
+    enum class ConstKind : uint8_t { UINT, INT, FLOAT, RUNE, BOOL, STRING, ENUM };
 
     ConstValue() = delete;
 
@@ -161,6 +161,29 @@ private:
  * @brief the abstract value domain of const value
  */
 using ConstValueDomain = ValueDomain<ConstValue>;
+
+struct ConstEnumVal final : ConstValue {
+    ConstEnumVal(uint64_t ctorIndex, std::vector<ConstValueDomain> payloads)
+        : ConstValue(ConstKind::ENUM), ctorIndex(ctorIndex), payloads(std::move(payloads))
+    {
+    }
+    ~ConstEnumVal() final = default;
+
+    std::optional<std::unique_ptr<ConstValue>> Join(const ConstValue& rhs) const override;
+
+    std::string ToString() const override;
+
+    std::unique_ptr<ConstValue> Clone() const override;
+
+    uint64_t GetCtorIndex() const;
+
+    const std::vector<ConstValueDomain>& GetPayloads() const;
+
+private:
+    uint64_t ctorIndex;
+    std::vector<ConstValueDomain> payloads;
+};
+
 /**
  * @brief the state of const value domain
  */
@@ -232,6 +255,41 @@ public:
     }
 
 private:
+    void PreHandleFieldExpr(TConstDomain& state, const Field* field) override
+    {
+        auto indexes = field->GetPath();
+        auto base = field->GetBase();
+        auto enumVal = state.CheckAbstractValue(base);
+        if (indexes.size() == 1 && enumVal && enumVal->GetConstKind() == ConstValue::ConstKind::ENUM) {
+            auto& value = StaticCast<const ConstEnumVal&>(*enumVal);
+            if (indexes[0] == 0) {
+                auto dest = field->GetResult();
+                if (dest->GetType()->IsBoolean()) {
+                    state.Update(dest, std::make_unique<ConstBoolVal>(static_cast<bool>(value.GetCtorIndex())));
+                } else {
+                    state.Update(dest, std::make_unique<ConstUIntVal>(value.GetCtorIndex()));
+                }
+                return;
+            }
+            auto payloadIndex = indexes[0] - 1;
+            state.Update(field->GetResult(), value.GetPayloads()[payloadIndex]);
+            return;
+        }
+        ValueAnalysis<ConstValueDomain, ValueStatePool>::PreHandleFieldExpr(state, field);
+    }
+
+    static std::optional<uint64_t> GetEnumCtorIndex(const ConstValue* value)
+    {
+        if (!value) {
+            return std::nullopt;
+        }
+        if (value->GetConstKind() == ConstValue::ConstKind::BOOL) {
+            return static_cast<uint64_t>(StaticCast<const ConstBoolVal&>(*value).GetVal());
+        }
+        CJC_ASSERT(value->GetConstKind() == ConstValue::ConstKind::UINT);
+        return StaticCast<const ConstUIntVal&>(*value).GetVal();
+    }
+
     void PrintDebugMessage(const Expression* expr, const ConstValue* absVal) const
     {
         std::string message = "[ConstAnalysis] The const value of " + expr->GetExprKindName() +
@@ -363,6 +421,10 @@ private:
             }
             case ExprKind::CLASS_STATIC_CAST: {
                 HandleClassStaticCast(state, StaticCast<const ClassStaticCast*>(expression));
+                return;
+            }
+            case ExprKind::TUPLE: {
+                HandleTuple(state, StaticCast<const Tuple*>(expression));
                 return;
             }
             case ExprKind::INTRINSIC: {
@@ -1023,10 +1085,12 @@ private:
         auto src = cast->GetSourceValue();
         auto srcTy = cast->GetSourceType();
         auto targetTy = cast->GetTargetType();
-        if ((targetTy->IsEnum() &&
-             srcTy->GetTypeKind() == Type::TypeKind::TYPE_UINT32) ||
-            (srcTy->IsEnum() &&
-             targetTy->GetTypeKind() == Type::TypeKind::TYPE_UINT32)) {
+        if ((targetTy->IsEnum() && srcTy->GetTypeKind() == Type::TypeKind::TYPE_UINT32) ||
+            (srcTy->IsEnum() && targetTy->GetTypeKind() == Type::TypeKind::TYPE_UINT32)) {
+            state.Propagate(src, dest);
+            return;
+        }
+        if (srcTy->IsEnum() && targetTy->IsTuple()) {
             state.Propagate(src, dest);
             return;
         }
@@ -1035,6 +1099,30 @@ private:
             return;
         }
         state.SetToTopOrTopRef(dest, /* isRef = */ dest->GetType()->IsRef());
+    }
+
+    void HandleTuple(TConstDomain& state, const Tuple* tuple)
+    {
+        if (!tuple->GetResult()->GetType()->IsEnum()) {
+            return;
+        }
+        auto operands = tuple->GetElementValues();
+        auto ctorIndex = GetEnumCtorIndex(state.CheckAbstractValue(operands[0]));
+        if (!ctorIndex.has_value()) {
+            return;
+        }
+        std::vector<ConstValueDomain> payloads;
+        payloads.reserve(operands.size() - 1);
+        for (size_t i = 1; i < operands.size(); ++i) {
+            if (auto domain = state.CheckAbstractValueWithTopBottom(operands[i]); domain) {
+                payloads.emplace_back(*domain);
+            } else if (operands[i]->GetType()->IsRef() || operands[i]->GetType()->IsGeneric()) {
+                payloads.emplace_back(Ref::GetTopRefInstance());
+            } else {
+                payloads.emplace_back(/* isTop = */ true);
+            }
+        }
+        state.Update(tuple->GetResult(), std::make_unique<ConstEnumVal>(ctorIndex.value(), std::move(payloads)));
     }
 
     ExceptionKind HandleTypecastOfInt(TConstDomain& state, const NumericCastBase* cast, const ConstValue* srcAbsVal)
