@@ -468,6 +468,21 @@ inline Ptr<Ty> GetRealNonOptionTy(Ptr<Ty> ty)
     return ty;
 }
 
+// Input: a parameter type. Output: true iff trailing lambda is allowed for it.
+// Accepts FuncTy, nested Option wrapping FuncTy, or GenericsTy whose upper bounds include a FuncTy
+inline bool IsFuncAfterUnboxOption(const Ty& ty)
+{
+    Ptr<const Ty> realTy = &ty;
+    while (realTy->IsCoreOptionType()) {
+        realTy = realTy->typeArgs[0];
+    }
+    if (auto genericTy = DynamicCast<GenericsTy>(realTy)) {
+        return std::any_of(
+            genericTy->upperBounds.cbegin(), genericTy->upperBounds.cend(), [](auto ub) { return ub->IsFunc(); });
+    }
+    return realTy->IsFunc();
+}
+
 std::vector<Ptr<FuncDecl>> SyntaxFilterCandidates(const CallExpr& ce, const std::vector<Ptr<FuncDecl>>& candidates)
 {
     std::vector<Ptr<FuncDecl>> definitelyMismatched;
@@ -485,7 +500,7 @@ std::vector<Ptr<FuncDecl>> SyntaxFilterCandidates(const CallExpr& ce, const std:
             } else if (ce.args[i]->TestAttr(Attribute::IMPLICIT_ADD)) {
                 // For trailing closure, checking the argument with last parameter type,
                 // ignore the mismatched size of arguments.
-                definitelyMismatch = paramTys.empty() || !paramTys.back()->IsFunc();
+                definitelyMismatch = paramTys.empty() || !IsFuncAfterUnboxOption(*paramTys.back());
                 break;
             } else if (ce.args[i]->name.Empty() && paramTys.size() <= i) {
                 definitelyMismatch = true;
@@ -593,20 +608,11 @@ void RemoveNonAnnotationCandidates(std::vector<Ptr<FuncDecl>>& candidates)
     }
 }
 
-inline bool IsFunctionalType(const Ty& ty)
-{
-    if (auto genericTy = DynamicCast<GenericsTy>(&ty)) {
-        return std::any_of(
-            genericTy->upperBounds.cbegin(), genericTy->upperBounds.cend(), [](auto ty) { return ty->IsFunc(); });
-    }
-    return ty.IsFunc();
-}
-
 bool CheckUseTrailingClosureWithFunctionType(
     DiagnosticEngine& diag, FuncArg& arg, const Ty& originalTy, const FuncDecl& candidate)
 {
     // Implicit added func argument is added by trailing closure.
-    if (!arg.TestAttr(Attribute::IMPLICIT_ADD) || IsFunctionalType(originalTy)) {
+    if (!arg.TestAttr(Attribute::IMPLICIT_ADD) || IsFuncAfterUnboxOption(originalTy)) {
         return true;
     }
     arg.SetTy(TypeManager::GetInvalidTy());
