@@ -18,10 +18,22 @@ using namespace AST;
 
 namespace {
 
+const std::string EXCLUSIVE_SCOPE_NAME = "exclusiveScope";
+const std::string CAUSED_BY_PROPERTY_NAME = "causedBy";
+const std::string CANGJIE_EXCEPTION_CLASS_NAME = "Exception";
+const std::string EXCLUSIVE_SCOPE_EXCEPTION_CLASS_NAME = "ExclusiveScopeException";
+
 OwnedPtr<Expr> WrapWithExclusiveScopeBody(AfterTypeCheckContext& ctx, OwnedPtr<Block> body, Ptr<Ty> retTy)
 {
-    auto exclusiveDecl = ctx.importManager.GetCoreDecl<FuncDecl>("exclusiveScope");
-    CJC_NULLPTR_CHECK(exclusiveDecl);
+    auto exclusiveDecl = ctx.importManager.GetCoreDecl<FuncDecl>(EXCLUSIVE_SCOPE_NAME);
+    if (!exclusiveDecl) {
+        ctx.importManager.GetDiagnosticEngine().DiagnoseRefactor(
+            DiagKindRefactor::sema_java_interop_not_supported, DEFAULT_POSITION,
+            "target platform " + ctx.target.ToFullTripleString());
+        CJC_ASSERT_WITH_MSG(exclusiveDecl, "Java interop requires exclusiveScope in the core library");
+        return nullptr;
+    }
+
     auto exclusiveRef = CreateRefExpr(*exclusiveDecl);
 
     exclusiveRef->instTys.emplace_back(retTy);
@@ -51,7 +63,7 @@ OwnedPtr<Expr> WrapWithExclusiveScopeBody(AfterTypeCheckContext& ctx, OwnedPtr<B
 
 OwnedPtr<Expr> CreateCausedByGetterCall(AfterTypeCheckContext& ctx, VarDecl& scopeExDecl, File& curFile)
 {
-    auto causedByProp = CreateMemberAccess(WithinFile(CreateRefExpr(scopeExDecl), &curFile), "causedBy");
+    auto causedByProp = CreateMemberAccess(WithinFile(CreateRefExpr(scopeExDecl), &curFile), CAUSED_BY_PROPERTY_NAME);
     CJC_NULLPTR_CHECK(causedByProp);
     CJC_NULLPTR_CHECK(causedByProp->GetTarget());
 
@@ -84,12 +96,10 @@ OwnedPtr<Expr> CreateCausedByMatch(AfterTypeCheckContext& ctx, OwnedPtr<Expr> ca
     CJC_NULLPTR_CHECK(causedBy);
     CJC_ASSERT(causedBy->GetTy()->IsCoreOptionType());
     auto optionTy = StaticCast<EnumTy*>(causedBy->GetTy());
-    auto someDecl = StaticCast<FuncDecl*>(Sema::Desugar::AfterTypeCheck::LookupEnumMember(
-        optionTy->declPtr, OPTION_VALUE_CTOR));
-    CJC_NULLPTR_CHECK(someDecl);
-    auto noneDecl = Sema::Desugar::AfterTypeCheck::LookupEnumMember(
-        optionTy->declPtr, OPTION_NONE_CTOR);
-    CJC_NULLPTR_CHECK(noneDecl);
+
+    // Build the None case.
+    auto noneRef = WithinFile(CreateOptionNoneRef(ctx.importManager, ctx.typeManager,
+        optionTy->typeArgs[0]), &curFile);
 
     // Build the Some($cause) case.
     auto causePattern = CreateVarPattern("$cause", exceptionTy);
@@ -99,13 +109,8 @@ OwnedPtr<Expr> CreateCausedByMatch(AfterTypeCheckContext& ctx, OwnedPtr<Expr> ca
     causePattern->varDecl->curFile = &curFile;
     auto& causeDecl = *causePattern->varDecl;
 
-    auto someTy = ctx.typeManager.GetFunctionTy({exceptionTy}, optionTy);
-    CJC_NULLPTR_CHECK(someTy);
-
-    auto someRef = WithinFile(CreateRefExpr(*someDecl), &curFile);
-    someRef->SetTy(someTy);
-    someRef->instTys = optionTy->typeArgs;
-    someRef->ref.targets.emplace_back(someDecl);
+    auto someRef = WithinFile(CreateOptionSomeRef(ctx.importManager, ctx.typeManager,
+        exceptionTy), &curFile);
 
     auto somePattern = MakeOwned<EnumPattern>();
     CJC_NULLPTR_CHECK(somePattern);
@@ -119,11 +124,6 @@ OwnedPtr<Expr> CreateCausedByMatch(AfterTypeCheckContext& ctx, OwnedPtr<Expr> ca
     throwCause->expr = WithinFile(CreateRefExpr(causeDecl), &curFile);
     throwCause->SetTy(TypeManager::GetNothingTy());
     throwCause->curFile = &curFile;
-
-    // Build the None case.
-    auto noneRef = WithinFile(CreateRefExpr(*noneDecl), &curFile);
-    noneRef->SetTy(optionTy);
-    noneRef->instTys = optionTy->typeArgs;
 
     auto nonePattern = MakeOwned<EnumPattern>();
     CJC_NULLPTR_CHECK(nonePattern);
@@ -208,8 +208,8 @@ OwnedPtr<Expr> WrapWithExclusiveScopeExceptionHandling(AfterTypeCheckContext& ct
     CJC_NULLPTR_CHECK(exclusiveCall);
     auto curFile = exclusiveCall->curFile;
     CJC_NULLPTR_CHECK(curFile);
-    auto exceptionDecl = ctx.importManager.GetCoreDecl<ClassDecl>("Exception");
-    auto scopeExceptionDecl = ctx.importManager.GetCoreDecl<ClassDecl>("ExclusiveScopeException");
+    auto exceptionDecl = ctx.importManager.GetCoreDecl<ClassDecl>(CANGJIE_EXCEPTION_CLASS_NAME);
+    auto scopeExceptionDecl = ctx.importManager.GetCoreDecl<ClassDecl>(EXCLUSIVE_SCOPE_EXCEPTION_CLASS_NAME);
     CJC_NULLPTR_CHECK(exceptionDecl);
     CJC_NULLPTR_CHECK(scopeExceptionDecl);
     auto exceptionTy = ctx.typeManager.GetClassTy(*exceptionDecl, {});
@@ -262,6 +262,9 @@ OwnedPtr<Expr> WrapWithExclusiveScopeExceptionHandling(AfterTypeCheckContext& ct
 OwnedPtr<Expr> WrapWithExclusiveScope(AfterTypeCheckContext& ctx, OwnedPtr<Block> body, Ptr<Ty> retTy)
 {
     auto exclusiveCall = WrapWithExclusiveScopeBody(ctx, std::move(body), retTy);
+    if (!exclusiveCall) {
+        return nullptr;
+    }
     return WrapWithExclusiveScopeExceptionHandling(ctx, std::move(exclusiveCall), retTy);
 }
 

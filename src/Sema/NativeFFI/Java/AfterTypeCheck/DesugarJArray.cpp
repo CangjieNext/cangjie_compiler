@@ -182,6 +182,10 @@ void DesugarJArray::InsertConstructorBody(AfterTypeCheckContext& ctx, FuncDecl& 
     auto scopeBody = CreateBlock(Nodes(std::move(jniEnvVar), std::move(javaref)), ilib.GetJavaEntityTy());
     scopeBody->curFile = constr.curFile;
     auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, std::move(scopeBody), ilib.GetJavaEntityTy());
+    if (!exclusiveScopeCall) {
+        constr.EnableAttr(Attribute::IS_BROKEN);
+        return;
+    }
 
     constr.constructorCall = ConstructorCall::OTHER_INIT;
 
