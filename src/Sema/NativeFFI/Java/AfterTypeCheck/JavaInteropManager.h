@@ -23,13 +23,15 @@ using namespace AST;
 class JavaInteropManager {
 public:
     JavaInteropManager(ImportManager& importManager, TypeManager& typeManager, DiagnosticEngine& diag,
-        const BaseMangler& mangler, const std::optional<std::string>& javagenOutputPath, const std::string outputPath)
+        const BaseMangler& mangler, const std::optional<std::string>& javagenOutputPath, const std::string outputPath,
+        Triple::Info target)
         : importManager(importManager),
           typeManager(typeManager),
           diag(diag),
           mangler(mangler),
           javagenOutputPath(javagenOutputPath),
-          outputPath(outputPath)
+          outputPath(outputPath),
+          target(target)
     {
     }
 
@@ -72,6 +74,7 @@ private:
      * Flag that informs on presence of any @JavaMirror- or @JavaImpl-annotated entities in the compilation package
      */
     bool hasMirrorOrImpl = false;
+    Triple::Info target;
 };
 } // namespace Cangjie::Interop::Java
 

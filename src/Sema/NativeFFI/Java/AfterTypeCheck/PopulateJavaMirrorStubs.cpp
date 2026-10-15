@@ -47,6 +47,10 @@ void PopulateJavaMirrorStubs::PopulateUserConstructor(AfterTypeCheckContext& ctx
     }
     auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, std::move(constructorExpr),
         userCtor.funcBody->retType->GetTy());
+    if (!exclusiveScopeCall) {
+        userCtor.EnableAttr(Attribute::IS_BROKEN);
+        return;
+    }
     CJC_NULLPTR_CHECK(exclusiveScopeCall->curFile);
     thisCall->args.push_back(CreateFuncArg(std::move(exclusiveScopeCall)));
     body.push_back(std::move(thisCall));
@@ -71,7 +75,7 @@ void PopulateJavaMirrorStubs::PopulateJArrayMethod(AfterTypeCheckContext& ctx,
     CJC_ASSERT(!userMethod.funcBody->paramLists.empty());
     auto& paramList = *userMethod.funcBody->paramLists[0];
     auto jniEnvVar = CreateTmpVarDecl(nullptr, ilib.CreateGetJniEnvCall(curFile));
-    auto& jniEnv = *StaticAs<ASTKind::VAR_DECL>(jniEnvVar.get());
+    auto& jniEnv = *jniEnvVar;
 
     auto methodCall = ilib.CreateCFFICallArrayMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
         CreateJavaRefCall(jarray, curFile), paramList, genericParam, GetArrayOperationKind(userMethod));
@@ -79,6 +83,10 @@ void PopulateJavaMirrorStubs::PopulateJArrayMethod(AfterTypeCheckContext& ctx,
     auto scopeBody = CreateBlock(Nodes(std::move(jniEnvVar), std::move(methodCall)), retTy);
     scopeBody->curFile = curFile;
     auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, std::move(scopeBody), retTy);
+    if (!exclusiveScopeCall) {
+        userMethod.EnableAttr(Attribute::IS_BROKEN);
+        return;
+    }
     body.emplace_back(std::move(exclusiveScopeCall));
 }
 
@@ -117,6 +125,10 @@ void PopulateJavaMirrorStubs::PopulateUserMethod(AfterTypeCheckContext& ctx,
         return;
     }
     auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, std::move(methodCall), retTy);
+    if (!exclusiveScopeCall) {
+        userMethod.EnableAttr(Attribute::IS_BROKEN);
+        return;
+    }
     InjectNodes(body, std::move(exclusiveScopeCall));
 
     if (IsSyntheticMirrorWrapper(mirror)) {
@@ -175,6 +187,10 @@ void PopulateJavaMirrorStubs::InsertPropGetter(AfterTypeCheckContext& ctx, Class
 
     auto getterBody = std::move(getter->funcBody->body);
     auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, std::move(getterBody), prop.GetTy());
+    if (!exclusiveScopeCall) {
+        getter->EnableAttr(Attribute::IS_BROKEN);
+        return;
+    }
 
     getter->funcBody->body = CreateBlock({}, prop.GetTy());
     getter->funcBody->body->curFile = curFile;
@@ -210,6 +226,10 @@ void PopulateJavaMirrorStubs::InsertPropSetter(AfterTypeCheckContext& ctx,
             fieldSignature, *prop.GetTy(),
             std::move(paramRef));
     auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, std::move(jniSetterCall), unitTy);
+    if (!exclusiveScopeCall) {
+        setter->EnableAttr(Attribute::IS_BROKEN);
+        return;
+    }
     InjectNodes(body, std::move(exclusiveScopeCall));
 }
 
