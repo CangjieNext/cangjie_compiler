@@ -206,13 +206,16 @@ bool UnreachableBranchCheck::TryVisitEnumMatchTable(
             }
         }
         if (unreachable.size() == blocks.size()) {
-            auto first = *std::min_element(
+            auto [first, last] = std::minmax_element(
                 unreachable.begin(), unreachable.end(), [](const Block* lhs, const Block* rhs) {
                     auto lhsPos = lhs->GetDebugLocation().GetBeginPos();
                     auto rhsPos = rhs->GetDebugLocation().GetBeginPos();
                     return lhsPos.line < rhsPos.line || (lhsPos.line == rhsPos.line && lhsPos.column < rhsPos.column);
                 });
-            PrintWarning(table, *first, hasProcessed);
+            auto location = (*first)->GetDebugLocation();
+            location.SetEndPos((*last)->GetDebugLocation().GetEndPos());
+            (*first)->template Set<DebugLocationInfoForWarning>(location);
+            PrintWarning(table, **first, hasProcessed);
         } else {
             for (auto block : unreachable) {
                 PrintWarning(table, *block, hasProcessed);
@@ -274,8 +277,8 @@ void UnreachableBranchCheck::VisitMultiBranch(Results<TConstDomain>& result, Mul
     }
 }
 
-void UnreachableBranchCheck::PrintWarning(
-    const Expression& node, Block& block, std::set<Block*>& hasProcessed)
+void UnreachableBranchCheck::PrintWarning(const Expression& node, Block& block,
+    std::set<Block*>& hasProcessed)
 {
     if (hasProcessed.find(&block) != hasProcessed.end()) {
         return;
@@ -285,7 +288,7 @@ void UnreachableBranchCheck::PrintWarning(
     if (block.Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING || node.Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING) {
         return;
     }
-    auto [res, range] = ToRangeIfNotZero(block.GetDebugLocation());
+    auto [res, range] = GetDebugPos(block);
     if (!res) {
         return;
     }
