@@ -102,23 +102,25 @@ std::pair<Expression*, Block*> GetNextMatchCase(Block& caseBlock)
     return {};
 }
 
-std::map<size_t, std::vector<Block*>> CollectEnumMatchFragments(
-    Block& constructor, const std::set<Block*>& constructorBlocks)
+std::map<size_t, std::vector<std::pair<Block*, Block*>>> CollectEnumMatchFragments(
+    const std::set<Block*>& constructorBlocks)
 {
-    std::map<size_t, std::vector<Block*>> fragments;
-    std::vector<Block*> workList{&constructor};
-    while (!workList.empty()) {
-        auto block = workList.back();
-        workList.pop_back();
-        if (auto caseId = block->Get<MatchCaseId>()) {
-            fragments[caseId.value()].emplace_back(block);
-        }
-        for (auto successor : block->GetTerminator()->GetSuccessors()) {
-            if (!successor->TestAttr(Attribute::MATCH_PATTERN) ||
-                constructorBlocks.find(successor) != constructorBlocks.end()) {
-                continue;
+    std::map<size_t, std::vector<std::pair<Block*, Block*>>> fragments;
+    for (auto constructor : constructorBlocks) {
+        std::vector<Block*> workList{constructor};
+        while (!workList.empty()) {
+            auto block = workList.back();
+            workList.pop_back();
+            if (auto caseId = block->Get<MatchCaseId>()) {
+                fragments[caseId.value()].emplace_back(block, constructor);
             }
-            workList.emplace_back(successor);
+            for (auto successor : block->GetTerminator()->GetSuccessors()) {
+                if (!successor->TestAttr(Attribute::MATCH_PATTERN) ||
+                    constructorBlocks.find(successor) != constructorBlocks.end()) {
+                    continue;
+                }
+                workList.emplace_back(successor);
+            }
         }
     }
     return fragments;
@@ -186,14 +188,7 @@ bool UnreachableBranchCheck::TryVisitEnumMatchTable(
     if (constructorBlocks.empty()) {
         return false;
     }
-    std::map<size_t, std::vector<std::pair<Block*, Block*>>> fragments;
-    for (auto constructor : constructorBlocks) {
-        for (auto& [caseId, blocks] : CollectEnumMatchFragments(*constructor, constructorBlocks)) {
-            for (auto block : blocks) {
-                fragments[caseId].emplace_back(block, constructor);
-            }
-        }
-    }
+    auto fragments = CollectEnumMatchFragments(constructorBlocks);
 
     std::set<Block*> hasProcessed;
     for (auto& entry : fragments) {
@@ -206,13 +201,16 @@ bool UnreachableBranchCheck::TryVisitEnumMatchTable(
             }
         }
         if (unreachable.size() == blocks.size()) {
-            auto first = *std::min_element(
+            auto [first, last] = std::minmax_element(
                 unreachable.begin(), unreachable.end(), [](const Block* lhs, const Block* rhs) {
                     auto lhsPos = lhs->GetDebugLocation().GetBeginPos();
                     auto rhsPos = rhs->GetDebugLocation().GetBeginPos();
                     return lhsPos.line < rhsPos.line || (lhsPos.line == rhsPos.line && lhsPos.column < rhsPos.column);
                 });
-            PrintWarning(table, *first, hasProcessed);
+            auto location = (*first)->GetDebugLocation();
+            location.SetEndPos((*last)->GetDebugLocation().GetEndPos());
+            (*first)->template Set<DebugLocationInfoForWarning>(location);
+            PrintWarning(table, **first, hasProcessed);
         } else {
             for (auto block : unreachable) {
                 PrintWarning(table, *block, hasProcessed);
@@ -274,8 +272,8 @@ void UnreachableBranchCheck::VisitMultiBranch(Results<TConstDomain>& result, Mul
     }
 }
 
-void UnreachableBranchCheck::PrintWarning(
-    const Expression& node, Block& block, std::set<Block*>& hasProcessed)
+void UnreachableBranchCheck::PrintWarning(const Expression& node, Block& block,
+    std::set<Block*>& hasProcessed)
 {
     if (hasProcessed.find(&block) != hasProcessed.end()) {
         return;
@@ -285,7 +283,7 @@ void UnreachableBranchCheck::PrintWarning(
     if (block.Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING || node.Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING) {
         return;
     }
-    auto [res, range] = ToRangeIfNotZero(block.GetDebugLocation());
+    auto [res, range] = GetDebugPos(block);
     if (!res) {
         return;
     }
