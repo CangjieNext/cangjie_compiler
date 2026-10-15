@@ -1,0 +1,24 @@
+src/Sema/LocalTypeArgumentSynthesis.h
+  s_c3dcecd856bed5::t_6a55af59cb9a25 136-139,141-142
+  s_c3dcecd856bed5::t_0200685e84647c 135,140
+src/Sema/LocalTypeArgumentSynthesis.cpp
+  s_c3dcecd856bed5::t_84df31c3b2df49 824,877-880,885-886,889
+  s_c3dcecd856bed5::t_f48e1c59e84a2c 823,897-898
+  s_c3dcecd856bed5::t_6a55af59cb9a25 829,875-876,881-884,887-888,890-896
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "aff120413395d603d859fa83c59b0e497feb1621",
+  "prompts": {},
+  "sessions": {
+    "s_c3dcecd856bed5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9d7d3e87-e428-4c5a-b67c-4dfa0666515f",
+        "model": "DeepSeek-V4.1-Flash"
+      },
+      "human_author": null
+    }
+  }
+}
