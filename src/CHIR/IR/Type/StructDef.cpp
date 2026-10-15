@@ -6,7 +6,7 @@
 
 #include "cangjie/CHIR/IR/Type/StructDef.h"
 
-#include <sstream>
+#include "cangjie/CHIR/IR/Type/ExtendDef.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 
@@ -40,9 +40,23 @@ std::string StructDef::AddExtraComment() const
 
 bool StructDef::IsCopyable() const
 {
+    // @C structs are implicitly Copyable (local-mode spec).
+    if (IsCStruct()) {
+        return true;
+    }
+    auto isCopyableIface = [](ClassDef* def) {
+        return IsExpectedCustomType(*def->GetType(), CORE_PACKAGE_NAME, std::string(COPY_NAME));
+    };
     for (auto def : GetImplementedInterfaceDefs()) {
-        if (IsExpectedCustomType(*def->GetType(), CORE_PACKAGE_NAME, std::string(COPY_NAME))) {
+        if (isCopyableIface(def)) {
             return true;
+        }
+    }
+    for (auto extend : GetExtends()) {
+        for (auto def : extend->GetImplementedInterfaceDefs()) {
+            if (isCopyableIface(def)) {
+                return true;
+            }
         }
     }
     return false;

@@ -229,19 +229,31 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterInstantiation([[maybe_unus
 bool AutoBoxing::NeedBoxOption(ModalTy child, ModalTy target)
 {
     if (Ty::IsInitialTy(child.Ty()) || Ty::IsInitialTy(target.Ty()) ||
-        (typeManager.CheckTypeCompatibility(child, target, false, target->IsGeneric()) !=
-            TypeCompatibility::INCOMPATIBLE) ||
         child->kind == TypeKind::TYPE_NOTHING || target->kind != TypeKind::TYPE_ENUM) {
+        return false;
+    }
+    auto enumTy = StaticCast<EnumTy>(target.Ty());
+    if (enumTy->declPtr->fullPackageName != CORE_PACKAGE_NAME || enumTy->declPtr->identifier != STD_LIB_OPTION) {
         return false;
     }
     auto lCnt = CountOptionNestedLevel(child.Ty());
     auto rCnt = CountOptionNestedLevel(target.Ty());
-    // If type contains generic ty, current is node inside @Java class. Otherwise, incompatible types need to be boxed.
-    if (lCnt == rCnt && child->HasGeneric()) {
+    // Already enough Option nesting (e.g. recursive TryOptionBox into typeArgs[0]).
+    if (lCnt > rCnt) {
         return false;
     }
-    auto enumTy = RawStaticCast<EnumTy*>(target.Ty());
-    if (enumTy->declPtr->fullPackageName != CORE_PACKAGE_NAME || enumTy->declPtr->identifier != STD_LIB_OPTION) {
+    // Same nesting with only modal difference: adapt mode, do not wrap another Some.
+    if (lCnt == rCnt &&
+        typeManager.CheckTypeCompatibility(
+            child.With(target.Mode()), target, false, target->IsGeneric()) != TypeCompatibility::INCOMPATIBLE) {
+        return false;
+    }
+    if (typeManager.CheckTypeCompatibility(child, target, false, target->IsGeneric()) !=
+        TypeCompatibility::INCOMPATIBLE) {
+        return false;
+    }
+    // If type contains generic ty, current is node inside @Java class. Otherwise, incompatible types need to be boxed.
+    if (lCnt == rCnt && child->HasGeneric()) {
         return false;
     }
     return true;
@@ -255,6 +267,12 @@ void AutoBoxing::TryOptionBox(ModalTy target, Expr& expr)
     if (expr.GetTy() && !enumTy.typeArgs.empty() && NeedBoxOption(expr.GetTy(), enumTy.typeArgs[0])) {
         // Nested Option keeps the same modal as the outer target (e.g. ??T @local!).
         TryOptionBox(enumTy.typeArgs[0].With(target.Mode()), expr);
+    }
+    if (expr.GetTy().IsCorrect()) {
+        expr.SetTy(expr.GetTy().With(target.Mode()));
+        if (expr.desugarExpr) {
+            expr.desugarExpr->SetTy(expr.GetTy());
+        }
     }
     auto ed = enumTy.decl;
     Ptr<FuncDecl> optionDecl = nullptr;
