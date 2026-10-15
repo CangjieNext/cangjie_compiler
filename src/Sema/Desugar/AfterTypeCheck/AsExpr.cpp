@@ -66,6 +66,7 @@ void DesugarAsExpr(TypeManager& typeManager, AsExpr& ae)
     CJC_NULLPTR_CHECK(ae.asType->GetTy());
     auto optionTy = ae.GetTy();
     auto selectorTy = ae.leftExpr->GetTy();
+    ae.asType->SetTy(ae.asType->GetTy().With(ae.leftExpr->TyMode()));
     auto theAsType = ASTCloner::Clone(ae.asType.get());
     auto theAsTy = ae.asType->GetTy();
     auto optionDecl = RawStaticCast<EnumTy*>(optionTy.Ty())->decl;

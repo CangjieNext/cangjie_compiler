@@ -55,7 +55,8 @@ bool TypeChecker::TypeCheckerImpl::ChkTupleLit(ASTContext& ctx, ModalTy target, 
     // Should use SetTy(), but have bugs on ideal type, use Join() instead at current stage.
     // TupleLit allow elements been boxed by given target type.
     // Eg. Option<Int64>*Option<Int64> <=> (1,1) or I1*I1 <=> (1,1) where Int64 extends I1 allow box.
-    tl.SetTy(targetTy);
+    // UnboxOptionType drops Option's modal; restore it on the tuple (e.g. ?(K,V)@local! → Tuple@local!).
+    tl.SetTy(targetTy.With(target.Mode()));
     return true;
 }
 

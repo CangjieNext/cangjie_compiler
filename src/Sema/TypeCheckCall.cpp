@@ -762,6 +762,7 @@ void FilterOverriden(
             auto& funcBody2 = candidates[j]->fd.funcBody;
             auto sameSig = instFuncTy1 == instFuncTy2;
             sameSig = sameSig && ((funcBody1->generic == nullptr) == (funcBody2->generic == nullptr));
+            sameSig = sameSig && GetThisParamModal(candidates[i]->fd) == GetThisParamModal(candidates[j]->fd);
             if (sameSig && funcBody1->generic) {
                 sameSig = funcBody1->generic->typeParameters.size() == funcBody2->generic->typeParameters.size();
                 auto mappingOf2Func = GenerateTypeMappingBetweenFuncs(tm, candidates[i]->fd, candidates[j]->fd);
@@ -1788,7 +1789,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::UpdateFuncGenericType(
     ce.SetTy(typeManager.ApplySubstPack(rawTy, fmu.typeMapping));
     FillTypeArgumentsTy(fmu.fd, ce, fmu.typeMapping);
     if (auto ref = ce.baseFunc->GetTarget(); ref && ref->TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
-        ce.SetTy(ce.GetTy().With(target.Mode()));
+        ce.SetTy(ce.GetTy().With(InferEnumCtorMode(ce, target)));
     }
     return {&fmu.fd};
 }
@@ -1948,7 +1949,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::ReorderCallArgument(
     ce.baseFunc->SetTy({funcTy, fmu.fd.TyMode()});
     ce.SetTy(GetCallTy(ctx, ce, fmu.fd));
     if (auto ref = ce.baseFunc->GetTarget(); ref && ref->TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
-        ce.SetTy(ce.GetTy().With(target.Mode()));
+        ce.SetTy(ce.GetTy().With(InferEnumCtorMode(ce, target)));
     }
     return {&fmu.fd};
 }

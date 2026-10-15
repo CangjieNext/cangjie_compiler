@@ -218,21 +218,22 @@ Value* Translator::TranslateExprArg(const AST::Node& node, Type& targetTy, bool 
 {
     auto value = TranslateASTNode(node, *this);
     if (targetTy.IsUnit()) {
-        return CreateAndAppendConstantExpression<UnitLiteral>(builder.GetUnitTy(), *GetCurrentBlock())->GetResult();
+        return CreateAndAppendConstantExpression<UnitLiteral>(&targetTy, *GetCurrentBlock())->GetResult();
     }
     auto nodeTy = node.GetTy();
     if (auto exclave = DynamicCast<AST::ExclaveExpr>(&node)) {
         nodeTy = exclave->body->GetTy();
     }
     if (nodeTy->IsNothing() || targetTy.IsNothing()) {
-        return CreateAndAppendConstantExpression<NullLiteral>(builder.GetNothingType(),
-            *GetCurrentBlock())->GetResult();
+        // Prefer target Nothing @local!/? — same as UnitLiteral(&targetTy) above.
+        auto nothingTy = targetTy.IsNothing() ? &targetTy : builder.GetNothingType();
+        return CreateAndAppendConstantExpression<NullLiteral>(nothingTy, *GetCurrentBlock())->GetResult();
     }
     if (!value) {
         // unit can be converted to Any, or any other interface it extends
         if (node.GetTy()->IsUnit() && !targetTy.IsUnit()) {
-            value = CreateAndAppendConstantExpression<UnitLiteral>(
-                builder.GetUnitTy(), *GetCurrentBlock())->GetResult();
+            auto unitTy = builder.WithModal(builder.GetUnitTy(), targetTy.GetModalInfo());
+            value = CreateAndAppendConstantExpression<UnitLiteral>(unitTy, *GetCurrentBlock())->GetResult();
         } else {
             return CreateAndAppendConstantExpression<NullLiteral>(builder.GetNothingType(),
                 *GetCurrentBlock())->GetResult();
@@ -289,8 +290,8 @@ void Translator::TranslateSubExprToLoc(const AST::Node& node, Value* location, c
     }
     // unit can be converted to Any, or any other interface it extends
     if (node.GetTy()->IsUnit() && !targetTy->IsUnit()) {
-        value = CreateAndAppendConstantExpression<UnitLiteral>(
-            debugLoc, builder.GetUnitTy(), *currentBlock)->GetResult();
+        auto unitTy = builder.WithModal(builder.GetUnitTy(), targetTy->GetModalInfo());
+        value = CreateAndAppendConstantExpression<UnitLiteral>(debugLoc, unitTy, *currentBlock)->GetResult();
     }
     // this if never collides with the previous if, so no need to write else if
     if (targetTy->IsUnit() || !value) {
@@ -300,8 +301,8 @@ void Translator::TranslateSubExprToLoc(const AST::Node& node, Value* location, c
         // create a null/unit value if -g
         if (!value) {
             if (node.GetTy()->IsUnit()) {
-                auto unit = CreateAndAppendConstantExpression<UnitLiteral>(
-                    debugLoc, builder.GetUnitTy(), *currentBlock);
+                // Keep Constant type == store target (e.g. Unit @local!), avoid extra ClassStaticCast.
+                auto unit = CreateAndAppendConstantExpression<UnitLiteral>(debugLoc, targetTy, *currentBlock);
                 value = unit->GetResult();
             } else {
                 /// either \ref node is of Nothing type, of every branch of \ref node is of Nothing type, create a
