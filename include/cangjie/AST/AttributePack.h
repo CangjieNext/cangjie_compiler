@@ -730,6 +730,13 @@ enum class Attribute {
      */
     OBJ_C_IMPL_MOVED_MEMBER_PROXY,
 
+    /**
+     * Mark a function declared with @ArkTS, including declarations imported from CJO.
+     * W: Parser, ASTLoader.
+     * R: ArkTS entry selection, ASTWriter.
+     */
+    ARKTS,
+
     AST_ATTR_END,
 };
 

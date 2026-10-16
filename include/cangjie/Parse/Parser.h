@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -48,6 +48,7 @@ std::string ConvertToken(const Token& t);
 
 /// Record the correspondence between AnnotationKinds and identifiers.
 const std::unordered_map<std::string, AST::AnnotationKind> NAME_TO_ANNO_KIND = {
+    {"ArkTS", AST::AnnotationKind::ARKTS},
     {"JavaMirror", AST::AnnotationKind::JAVA_MIRROR}, {"JavaImpl", AST::AnnotationKind::JAVA_IMPL},
     {"JavaHasDefault", AST::AnnotationKind::JAVA_HAS_DEFAULT},
     {"ObjCMirror", AST::AnnotationKind::OBJ_C_MIRROR}, {"ObjCImpl", AST::AnnotationKind::OBJ_C_IMPL},
