@@ -81420,10 +81420,10 @@ index 000000000..cdc7e67f9
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJRewriteStatepoint.cpp b/llvm/lib/Transforms/Scalar/CJRewriteStatepoint.cpp
 new file mode 100644
-index 000000000..bedd16770
+index 000000000..4aa0d3151
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJRewriteStatepoint.cpp
-@@ -0,0 +1,3070 @@
+@@ -0,0 +1,3071 @@
 +//===- CJRewriteStatepoint.cpp - Make Cangjie GC relocations explicit -----===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -82819,8 +82819,9 @@ index 000000000..bedd16770
 +  // invalid after lowering are stripped in stripNonValidDataFromBody.
 +  for (unsigned I : llvm::seq<unsigned>(0, Call->arg_size())) {
 +    AttributeSet AS = OrigAL.getParamAttrs(I);
-+    if (AS.hasAttribute(Attribute::ByVal) ||
-+        AS.hasAttribute(Attribute::StructRet)) {
++    if (AS.hasAttribute(Attribute::ByVal) || AS.hasAttribute(Attribute::StructRet) ||
++        AS.hasAttribute(Attribute::SExt) || AS.hasAttribute(Attribute::ZExt) ||
++        AS.hasAttribute(Attribute::NoUndef)) {
 +      StatepointAL = StatepointAL.addParamAttributes(
 +          Ctx, GCStatepointInst::CallArgsBeginPos + I, AttrBuilder(Ctx, AS));
 +    }
