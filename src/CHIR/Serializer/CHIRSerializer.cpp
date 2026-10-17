@@ -57,9 +57,14 @@ std::vector<flatbuffers::Offset<CHIRFormat::AnnotationScalarField>> SerializeAnn
     for (const auto& field : *annotation.scalarFields) {
         const bool isBool = std::holds_alternative<bool>(field.value);
         const std::string* stringValue = isBool ? nullptr : &std::get<std::string>(field.value);
-        fields.push_back(CHIRFormat::CreateAnnotationScalarFieldDirect(builder, field.name.c_str(),
+        const auto name = builder.CreateString(field.name);
+        // Annotation String values can contain NUL; the Direct helper accepts
+        // C strings and would silently truncate them before plugin validation.
+        const auto value =
+            stringValue ? builder.CreateString(*stringValue) : flatbuffers::Offset<flatbuffers::String>();
+        fields.push_back(CHIRFormat::CreateAnnotationScalarField(builder, name,
             isBool ? CHIRFormat::AnnotationScalarKind_BOOL : CHIRFormat::AnnotationScalarKind_STRING,
-            stringValue ? stringValue->c_str() : nullptr,
+            value,
             isBool ? std::get<bool>(field.value) : false));
     }
     return fields;
