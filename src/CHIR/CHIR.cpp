@@ -426,7 +426,7 @@ void ToCHIR::RedundantLoadElimination()
     }
     Utils::ProfileRecorder recorder("CHIR Opt", "RedundantLoadElimination");
     auto rle = CHIR::RedundantLoadElimination();
-    rle.RunOnPackage(chirPkg, opts.chirDebugOptimizer);
+    rle.RunOnPackage(*chirPkg);
     DumpCHIRToFile("RedundantLoadElimination");
 }
 

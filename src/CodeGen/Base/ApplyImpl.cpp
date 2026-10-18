@@ -26,6 +26,40 @@ using namespace CodeGen;
 
 namespace {
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+// Only integers narrower than 32 bits take part in the C signext/zeroext ABI; wider
+// integers always occupy their register as a whole.
+constexpr unsigned int SUB_WORD_INT_BIT_WIDTH = 32;
+
+bool IsSubWordIntType(const CHIR::Type& chirTy, const llvm::Type& loweredTy)
+{
+    if (!chirTy.IsBoolean() && !chirTy.IsInteger()) {
+        return false;
+    }
+    auto intTy = llvm::dyn_cast<llvm::IntegerType>(&loweredTy);
+    return intTy != nullptr && intTy->getBitWidth() < SUB_WORD_INT_BIT_WIDTH;
+}
+
+void AddSubWordIntParamAttrs(
+    const CGModule& cgMod, const CHIR::FuncType& funcTy, llvm::CallBase& callInst, bool sret)
+{
+    unsigned callArgIdx = sret ? 1U : 0U;
+    for (auto chirParamTy : funcTy.GetParamTypes()) {
+        CJC_NULLPTR_CHECK(chirParamTy);
+        if (IsZeroSizedTypeInC(cgMod, *chirParamTy)) {
+            continue; // no register slot: GetCFuncType skipped it when building the args
+        }
+        if (callArgIdx >= callInst.arg_size()) {
+            break; // reachable only if the arg layout drifted; never index past the call
+        }
+        if (IsSubWordIntType(*chirParamTy, *callInst.getArgOperand(callArgIdx)->getType())) {
+            auto extendAttr = chirParamTy->IsSignedInteger() ? llvm::Attribute::SExt : llvm::Attribute::ZExt;
+            AddParamAttr(&callInst, callArgIdx, llvm::Attribute::NoUndef);
+            AddParamAttr(&callInst, callArgIdx, extendAttr);
+        }
+        callArgIdx++;
+    }
+}
+
 void AddAttributeForWrapper(const IRBuilder2& builder, const CHIR::FuncType& funcTy,
     const llvm::FunctionType* varFuncTy, llvm::Function* func, llvm::CallBase& callInst, const bool sret)
 {
@@ -36,6 +70,7 @@ void AddAttributeForWrapper(const IRBuilder2& builder, const CHIR::FuncType& fun
     auto& context = builder.GetCGContext();
     auto& options = context.GetCompileOptions();
     auto& cgMod = builder.GetCGModule();
+    AddSubWordIntParamAttrs(cgMod, funcTy, callInst, sret);
     if (sret) {
         callInst.addParamAttr(0, llvm::Attribute::NoAlias);
         AddSRetAttribute(func->arg_begin());
@@ -205,8 +240,8 @@ inline bool HasAddrSpace(const CGValue* cgVal, unsigned int addrSpace)
     return llvmType->isPointerTy() && llvmType->getPointerAddressSpace() == addrSpace;
 }
 
-llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, llvm::Function& callee,
-    const std::vector<CGValue*>& argsVal, const CHIR::Type& chirRetTy, bool isSRet)
+std::vector<llvm::Value*> CreateCFuncCallArgs(
+    IRBuilder2& irBuilder, const std::vector<CGValue*>& argsVal, const CHIR::Type& chirRetTy, bool isSRet)
 {
     auto& cgMod = irBuilder.GetCGModule();
     std::vector<llvm::Value*> llvmArgs;
@@ -230,35 +265,68 @@ llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, llvm::Function& call
             llvmArgs.emplace_back(cgVal->GetRawValue());
         }
     }
-    auto callRet = irBuilder.CreateCallOrInvoke(callee.getFunctionType(), &callee, llvmArgs);
+    return llvmArgs;
+}
+
+void CopyCalleeDeclAttrsToCallSite(const CGModule& cgMod, llvm::Function& callee, llvm::CallBase& callRet)
+{
     const auto& target = cgMod.GetCGContext().GetCompileOptions().target;
     const bool nonAarch64 = target.arch != Triple::ArchType::AARCH64;
     for (auto it = callee.arg_begin(); it != callee.arg_end(); ++it) {
         if (nonAarch64 && it->hasByValAttr()) {
             auto byValAttr =
                 llvm::Attribute::getWithByValType(cgMod.GetLLVMContext(), GetPointerElementType(it->getType()));
-            AddParamAttr(callRet, it->getArgNo(), byValAttr);
+            AddParamAttr(&callRet, it->getArgNo(), byValAttr);
         }
     }
-#ifdef __APPLE__
-    const bool onMacMx = !nonAarch64 && (target.os == Triple::OSType::DARWIN || target.os == Triple::OSType::IOS);
-    if (onMacMx) {
-        for (auto ext : {llvm::Attribute::SExt, llvm::Attribute::ZExt}) {
-            if (callee.hasRetAttribute(ext)) {
-                callRet->addRetAttr(ext);
-            }
-        }
-        // '<' means variable-length parameters exist in the function.
-        CJC_ASSERT(callee.arg_size() <= callRet->arg_size());
-        for (unsigned i = 0; i < callee.arg_size(); ++i) {
-            for (auto attr : {llvm::Attribute::NoUndef, llvm::Attribute::SExt, llvm::Attribute::ZExt}) {
-                if (callee.hasParamAttribute(i, attr)) {
-                    callRet->addParamAttr(i, attr);
-                }
-            }
+    // Copy the declaration's extension attributes onto the call site on every target.
+    for (auto ext : {llvm::Attribute::SExt, llvm::Attribute::ZExt}) {
+        if (callee.hasRetAttribute(ext)) {
+            callRet.addRetAttr(ext);
         }
     }
-#endif
+}
+
+void AddSubWordIntParamAttrsForDirectCall(const CGModule& cgMod, llvm::Function& callee, llvm::CallBase& callRet,
+    const std::vector<CGValue*>& argsVal, bool isSRet)
+{
+    // Mark the sub-word integer arguments directly at the call site per the C caller-extends
+    // contract, instead of copying the extension attributes from the callee declaration: the
+    // attribute set is derived from the CHIR argument types, so it stays correct even when the
+    // callee declaration carries no extension attributes. Bool and integer arguments always get
+    // noundef; integers lowered to fewer than 32 bits also get signext/zeroext.
+    // '<' means variable-length parameters exist in the function: only the fixed parameters,
+    // which are the callee declaration's arguments, take the attributes.
+    CJC_ASSERT(callee.arg_size() <= callRet.arg_size());
+    unsigned callArgIdx = isSRet ? 1U : 0U;
+    for (auto cgVal : argsVal) {
+        if (callArgIdx >= callee.arg_size() || callArgIdx >= callRet.arg_size()) {
+            break; // past the fixed parameters: the vararg tail takes no extension attributes
+        }
+        auto& cgValTy = cgVal->GetCGType()->GetOriginal();
+        if (IsZeroSizedTypeInC(cgMod, cgValTy)) {
+            continue; // no register slot: skipped when building llvmArgs above
+        }
+        if (cgValTy.IsBoolean() || cgValTy.IsInteger()) {
+            AddParamAttr(&callRet, callArgIdx, llvm::Attribute::NoUndef);
+            auto intArgTy = llvm::dyn_cast<llvm::IntegerType>(callRet.getArgOperand(callArgIdx)->getType());
+            if (intArgTy != nullptr && intArgTy->getBitWidth() < SUB_WORD_INT_BIT_WIDTH) {
+                auto extendAttr = cgValTy.IsSignedInteger() ? llvm::Attribute::SExt : llvm::Attribute::ZExt;
+                AddParamAttr(&callRet, callArgIdx, extendAttr);
+            }
+        }
+        callArgIdx++;
+    }
+}
+
+llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, llvm::Function& callee,
+    const std::vector<CGValue*>& argsVal, const CHIR::Type& chirRetTy, bool isSRet)
+{
+    auto& cgMod = irBuilder.GetCGModule();
+    auto llvmArgs = CreateCFuncCallArgs(irBuilder, argsVal, chirRetTy, isSRet);
+    auto callRet = irBuilder.CreateCallOrInvoke(callee.getFunctionType(), &callee, llvmArgs);
+    CopyCalleeDeclAttrsToCallSite(cgMod, callee, *callRet);
+    AddSubWordIntParamAttrsForDirectCall(cgMod, callee, *callRet, argsVal, isSRet);
     if (isSRet) {
         AddParamAttr(callRet, 0, llvm::Attribute::NoAlias);
         AddSRetAttribute(callRet);

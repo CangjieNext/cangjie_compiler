@@ -31,6 +31,16 @@ bool IsObjCMirror(const AST::Decl& decl) noexcept;
 bool IsObjCMirror(const AST::Ty& ty) noexcept;
 bool IsObjCMirrorSubtype(const AST::Decl& decl) noexcept;
 bool IsObjCMirrorSubtype(const AST::Ty& ty) noexcept;
+/**
+ * @returns true if @p ty is an @ObjCMirror whose whole super-type hierarchy consists of @ObjCMirror types.
+ */
+bool IsValidObjCMirror(const AST::Ty& ty) noexcept;
+/**
+ * @returns true if @p ty is a class whose super interfaces are all valid @ObjCMirror types and whose super class is
+ * either a valid @ObjCMirror or such a class itself. Unlike `IsObjCMirrorSubtype`, a single non-mirror super type
+ * makes it false.
+ */
+bool IsValidObjCMirrorSubtype(const AST::Ty& ty) noexcept;
 bool IsObjCImpl(const AST::ClassDecl& decl) noexcept;
 bool IsObjCImpl(const AST::Ty& ty) noexcept;
 bool IsObjCMirrorInterfaceHandleWrapper(const AST::ClassDecl& decl) noexcept;

@@ -38,7 +38,7 @@ void CheckImplInheritMirror::HandleImpl(TypeCheckContext& ctx)
         }
     }
 
-    if (IsObjCMirrorSubtype(*ctx.target.GetTy())) {
+    if (IsValidObjCMirrorSubtype(*ctx.target.GetTy())) {
         return;
     }
 

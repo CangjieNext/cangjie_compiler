@@ -356,6 +356,7 @@ ERROR(sema_objc_interop_field_must_be_objc_compatible, "%s field type must be Ob
 ERROR(sema_objc_mirror_decl_cannot_inherit, "Objective-C mirror cannot inherit other supertypes")
 ERROR(sema_objc_mirror_subtype_cannot_multiple_inherit, "Objective-C mirror subtype cannot inherit multiple types (only 1 interface or 1 class is allowed)")
 ERROR(sema_objc_mirror_subtype_must_be_annotated, "Objective-C mirror subtype must be annotated with @ObjCMirror or @ObjCImpl")
+ERROR(sema_objc_mirror_interface_subtype_must_be_annotated, "interface inheriting @ObjCMirror interface must be annotated with @ObjCMirror")
 ERROR(sema_objc_mirror_subtype_must_inherit_mirror, "@ObjCImpl declaration must inherit @ObjCMirror")
 ERROR(sema_objc_mirror_must_inherit_mirror, "@ObjCMirror declaration cannot inherit not @ObjCMirror declarations")
 ERROR(sema_objc_mirror_interoplib_must_be_imported, "objc.lang must be imported to use Objective-C interoperability")
