@@ -28,6 +28,9 @@ void CheckImplAttr::HandleImpl(TypeCheckContext& ctx)
         return;
     }
 
-    ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_mirror_subtype_must_be_annotated, ctx.target);
+    // An interface cannot be @ObjCImpl, so @ObjCMirror is the only annotation to suggest for it.
+    auto kind = ty.IsInterface() ? DiagKindRefactor::sema_objc_mirror_interface_subtype_must_be_annotated
+                                 : DiagKindRefactor::sema_objc_mirror_subtype_must_be_annotated;
+    ctx.diag.DiagnoseRefactor(kind, ctx.target);
     ctx.target.EnableAttr(Attribute::IS_BROKEN);
 }

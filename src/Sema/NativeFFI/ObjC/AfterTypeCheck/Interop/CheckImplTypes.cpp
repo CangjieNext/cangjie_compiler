@@ -28,4 +28,12 @@ void CheckImplTypes::HandleImpl(InteropContext& ctx)
 
         checker.Handle(typeCheckCtx);
     }
+
+    auto interfaceChecker = HandlerFactory<TypeCheckContext>::Start<CheckImplAttr>();
+
+    for (auto interface : ctx.unannotatedMirrorSubtypeInterfaces) {
+        auto typeCheckCtx = TypeCheckContext(*interface, ctx.diag, ctx.typeMapper, ctx.typeManager);
+
+        interfaceChecker.Handle(typeCheckCtx);
+    }
 }

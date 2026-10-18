@@ -33320,7 +33320,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..2ad649ef6 100644
+index b391fe1ea..4b283d311 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -33376,7 +33376,7 @@ index b391fe1ea..2ad649ef6 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.3.0-alpha.06";
++    g_version_str += "\n  cangjie 1.3.0-alpha.07";
    }
  
    return g_version_str.c_str();
@@ -34543,7 +34543,7 @@ index 04235f0fd..0bec7fbdb 100644
    // Attributes:
    kw_attributes,
 diff --git a/llvm/include/llvm/BinaryFormat/MachO.h b/llvm/include/llvm/BinaryFormat/MachO.h
-index c05e79333..86021af70 100644
+index c05e79333..fca58fe6e 100644
 --- a/llvm/include/llvm/BinaryFormat/MachO.h
 +++ b/llvm/include/llvm/BinaryFormat/MachO.h
 @@ -106,6 +106,7 @@ enum : uint32_t {
@@ -34554,6 +34554,14 @@ index c05e79333..86021af70 100644
  
    // Constant masks for the "flags" field in llvm::MachO::section and
    // llvm::MachO::section_64
+@@ -1520,6 +1521,7 @@ enum CPUSubTypeARM64 {
+   CPU_SUBTYPE_ARM64_ALL = 0,
+   CPU_SUBTYPE_ARM64_V8 = 1,
+   CPU_SUBTYPE_ARM64E = 2,
++  CPU_SUBTYPE_ARM64E_X1 = 12,
+ };
+ 
+ enum CPUSubTypeARM64_32 { CPU_SUBTYPE_ARM64_32_V8 = 1 };
 diff --git a/llvm/include/llvm/Bitcode/LLVMBitCodes.h b/llvm/include/llvm/Bitcode/LLVMBitCodes.h
 index eee4c50cc..d3dc49a5a 100644
 --- a/llvm/include/llvm/Bitcode/LLVMBitCodes.h
@@ -35183,7 +35191,7 @@ index fc1188186..36986fde7 100644
  
  //===--------------------------------------------------------------------===//
 diff --git a/llvm/include/llvm/CodeGen/MachineInstr.h b/llvm/include/llvm/CodeGen/MachineInstr.h
-index 5f483a8d0..5c8f20a3b 100644
+index 5f483a8d0..a94d06508 100644
 --- a/llvm/include/llvm/CodeGen/MachineInstr.h
 +++ b/llvm/include/llvm/CodeGen/MachineInstr.h
 @@ -114,6 +114,14 @@ public:
@@ -35257,15 +35265,6 @@ index 5f483a8d0..5c8f20a3b 100644
    /// rX, rY VMOVRRD dZ
    /// is equivalent to two EXTRACT_SUBREG:
    /// rX = EXTRACT_SUBREG dZ, ssub_0
-@@ -1156,6 +1179,8 @@ public:
-   bool isIdenticalTo(const MachineInstr &Other,
-                      MICheckType Check = CheckDefs) const;
- 
-+  bool isCalDerivedPtrInCangjieCopyGC(MachineRegisterInfo *MRI) const;
-+
-   /// Unlink 'this' from the containing basic block, and return it without
-   /// deleting it.
-   ///
 diff --git a/llvm/include/llvm/CodeGen/MachineInstrBuilder.h b/llvm/include/llvm/CodeGen/MachineInstrBuilder.h
 index 80f30231a..6dfb85ed9 100644
 --- a/llvm/include/llvm/CodeGen/MachineInstrBuilder.h
@@ -37897,6 +37896,18 @@ index c5b2462dc..f52d9e98b 100644
  def LOAD_STACK_GUARD : StandardPseudoInstruction {
    let OutOperandList = (outs ptr_rc:$dst);
    let InOperandList = (ins);
+diff --git a/llvm/include/llvm/TextAPI/Architecture.def b/llvm/include/llvm/TextAPI/Architecture.def
+index 58ef31b25..80c9868cc 100644
+--- a/llvm/include/llvm/TextAPI/Architecture.def
++++ b/llvm/include/llvm/TextAPI/Architecture.def
+@@ -37,6 +37,7 @@ ARCHINFO(armv7em, MachO::CPU_TYPE_ARM, MachO::CPU_SUBTYPE_ARM_V7EM, 32)
+ ///
+ ARCHINFO(arm64, MachO::CPU_TYPE_ARM64, MachO::CPU_SUBTYPE_ARM64_ALL, 64)
+ ARCHINFO(arm64e, MachO::CPU_TYPE_ARM64, MachO::CPU_SUBTYPE_ARM64E, 64)
++ARCHINFO(arm64e_x1, MachO::CPU_TYPE_ARM64, MachO::CPU_SUBTYPE_ARM64E_X1, 64)
+ 
+ 
+ ///
 diff --git a/llvm/include/llvm/Transforms/CJCFI/PtrAuthBackwardCFI.h b/llvm/include/llvm/Transforms/CJCFI/PtrAuthBackwardCFI.h
 new file mode 100644
 index 000000000..fd732c210
@@ -48039,30 +48050,6 @@ index 9ff5c3762..aac539e67 100644
        // If the chosen successor was duplicated into BB, don't bother laying
        // it out, just go round the loop again with BB as the chain end.
        if (!BB->isSuccessor(BestSucc))
-diff --git a/llvm/lib/CodeGen/MachineCSE.cpp b/llvm/lib/CodeGen/MachineCSE.cpp
-index c6756b1d3..963cf7978 100644
---- a/llvm/lib/CodeGen/MachineCSE.cpp
-+++ b/llvm/lib/CodeGen/MachineCSE.cpp
-@@ -427,6 +427,9 @@ bool MachineCSE::isCSECandidate(MachineInstr *MI) {
-   if (MI->getOpcode() == TargetOpcode::LOAD_STACK_GUARD)
-     return false;
- 
-+  if (MI->isCalDerivedPtrInCangjieCopyGC(MRI)) {
-+    return false;
-+  }
-   return true;
- }
- 
-@@ -797,6 +800,9 @@ bool MachineCSE::isPRECandidate(MachineInstr *MI) {
-   for (const auto &def : MI->defs())
-     if (!Register::isVirtualRegister(def.getReg()))
-       return false;
-+  if (MI->isCalDerivedPtrInCangjieCopyGC(MRI)) {
-+    return false;
-+  }
- 
-   for (const auto &use : MI->uses())
-     if (use.isReg() && !Register::isVirtualRegister(use.getReg()))
 diff --git a/llvm/lib/CodeGen/MachineFunction.cpp b/llvm/lib/CodeGen/MachineFunction.cpp
 index 6b481a374..a5f29a3b7 100644
 --- a/llvm/lib/CodeGen/MachineFunction.cpp
@@ -48076,10 +48063,18 @@ index 6b481a374..a5f29a3b7 100644
    Alignment = STI->getTargetLowering()->getMinFunctionAlignment();
  
 diff --git a/llvm/lib/CodeGen/MachineInstr.cpp b/llvm/lib/CodeGen/MachineInstr.cpp
-index e92dec5be..847112b43 100644
+index e92dec5be..84ddacc16 100644
 --- a/llvm/lib/CodeGen/MachineInstr.cpp
 +++ b/llvm/lib/CodeGen/MachineInstr.cpp
-@@ -100,7 +100,7 @@ void MachineInstr::addImplicitDefUseOperands(MachineFunction &MF) {
+@@ -31,6 +31,7 @@
+ #include "llvm/CodeGen/PseudoSourceValue.h"
+ #include "llvm/CodeGen/StackMaps.h"
+ #include "llvm/CodeGen/TargetInstrInfo.h"
++#include "llvm/CodeGen/TargetLowering.h"
+ #include "llvm/CodeGen/TargetRegisterInfo.h"
+ #include "llvm/CodeGen/TargetSubtargetInfo.h"
+ #include "llvm/IR/Constants.h"
+@@ -100,7 +101,7 @@ void MachineInstr::addImplicitDefUseOperands(MachineFunction &MF) {
  /// the MCInstrDesc.
  MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &TID,
                             DebugLoc DL, bool NoImp)
@@ -48088,7 +48083,7 @@ index e92dec5be..847112b43 100644
    assert(DbgLoc.hasTrivialDestructor() && "Expected trivial destructor");
  
    // Reserve space for the expected number of operands.
-@@ -119,7 +119,7 @@ MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &TID,
+@@ -119,7 +120,7 @@ MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &TID,
  /// uniqueness.
  MachineInstr::MachineInstr(MachineFunction &MF, const MachineInstr &MI)
      : MCID(&MI.getDesc()), Info(MI.Info), DbgLoc(MI.getDebugLoc()),
@@ -48097,7 +48092,7 @@ index e92dec5be..847112b43 100644
    assert(DbgLoc.hasTrivialDestructor() && "Expected trivial destructor");
  
    CapOperands = OperandCapacity::get(MI.getNumOperands());
-@@ -212,9 +212,13 @@ void MachineInstr::addOperand(MachineFunction &MF, const MachineOperand &Op) {
+@@ -212,9 +213,20 @@ void MachineInstr::addOperand(MachineFunction &MF, const MachineOperand &Op) {
    // OpNo now points as the desired insertion point.  Unless this is a variadic
    // instruction, only implicit regs are allowed beyond MCID->getNumOperands().
    // RegMask operands go between the explicit and implicit operands.
@@ -48105,48 +48100,23 @@ index e92dec5be..847112b43 100644
 -          Op.isValidExcessOperand()) &&
 -         "Trying to add an operand to a machine instr that is already done!");
 +  Triple ModuleTriple(MF.getFunction().getParent()->getTargetTriple());
-+  // 3750: AArch64::MRS
-+  if (!(ModuleTriple.getArch() == Triple::aarch64 && getOpcode() == 3750)) {
++  // Cangjie's MRS (cj_get_fp_state) carries extra operands/results beyond the
++  // 2-slot MCID; skip the assert for it via the target hook. The hook matches
++  // MRS at opcode level (the MI has no dedicated CJ flag), but excess explicit
++  // operands only ever come from the Cangjie lowering, so the arch+opcode
++  // gate is sufficient.
++  const TargetLowering *TLI = MF.getSubtarget().getTargetLowering();
++  assert(TLI && "Subtarget must provide a TargetLowering!");
++  if (!(ModuleTriple.getArch() == Triple::aarch64 && TLI &&
++        TLI->isCangjieGetFPStateInstr(getOpcode()))) {
 +    assert((MCID->isVariadic() || OpNo < MCID->getNumOperands() ||
 +            Op.isValidExcessOperand()) &&
-+          "Trying to add an operand to a machine instr that is already done!");
++           "Trying to add an operand to a machine instr that is already done!");
 +  }
  
    MachineRegisterInfo *MRI = getRegInfo();
  
-@@ -633,6 +637,31 @@ bool MachineInstr::isIdenticalTo(const MachineInstr &Other,
-   return true;
- }
- 
-+bool MachineInstr::isCalDerivedPtrInCangjieCopyGC(
-+    MachineRegisterInfo *MRI) const {
-+  Triple ModuleTriple(getMF()->getFunction().getParent()->getTargetTriple());
-+  // 325: X86::ADD64ri8  261: AArch64::ADDXri
-+  if ((ModuleTriple.getArch() == Triple::x86_64 && getOpcode() == 325) ||
-+      (ModuleTriple.getArch() == Triple::aarch64 && getOpcode() == 261)) {
-+    for (const MachineOperand &MO : operands()) {
-+      if (!MO.isReg()) {
-+        continue;
-+      }
-+
-+      Register Reg = MO.getReg();
-+      if (Reg == 0) {
-+        continue;
-+      }
-+      // return true if it's gep from a ref ptr
-+      for (auto &U : MRI->use_nodbg_operands(Reg)) {
-+        if (isStatepointOpcode(U.getParent()->getOpcode())) {
-+          return true;
-+        }
-+      }
-+    }
-+  }
-+  return false;
-+}
- const MachineFunction *MachineInstr::getMF() const {
-   return getParent()->getParent();
- }
-@@ -664,6 +693,7 @@ bool MachineInstr::isCandidateForCallSiteEntry(QueryType Type) const {
+@@ -664,6 +676,7 @@ bool MachineInstr::isCandidateForCallSiteEntry(QueryType Type) const {
    case TargetOpcode::PATCHPOINT:
    case TargetOpcode::STACKMAP:
    case TargetOpcode::STATEPOINT:
@@ -48154,7 +48124,7 @@ index e92dec5be..847112b43 100644
    case TargetOpcode::FENTRY_CALL:
      return false;
    }
-@@ -1064,7 +1094,7 @@ void MachineInstr::tieOperands(unsigned DefIdx, unsigned UseIdx) {
+@@ -1064,7 +1077,7 @@ void MachineInstr::tieOperands(unsigned DefIdx, unsigned UseIdx) {
      // statepoint tied operands are trivial to match (1-1 reg def with reg use),
      // but on normal instruction, the tied def must be within the first TiedMax
      // operands.
@@ -48163,7 +48133,7 @@ index e92dec5be..847112b43 100644
             "DefIdx out of range");
      UseMO.TiedTo = TiedMax;
    }
-@@ -1085,7 +1115,7 @@ unsigned MachineInstr::findTiedOperandIdx(unsigned OpIdx) const {
+@@ -1085,7 +1098,7 @@ unsigned MachineInstr::findTiedOperandIdx(unsigned OpIdx) const {
      return MO.TiedTo - 1;
  
    // Uses on normal instructions can be out of range.
@@ -48172,7 +48142,7 @@ index e92dec5be..847112b43 100644
      // Normal tied defs must be in the 0..TiedMax-1 range.
      if (MO.isUse())
        return TiedMax - 1;
-@@ -1098,7 +1128,7 @@ unsigned MachineInstr::findTiedOperandIdx(unsigned OpIdx) const {
+@@ -1098,7 +1111,7 @@ unsigned MachineInstr::findTiedOperandIdx(unsigned OpIdx) const {
      llvm_unreachable("Can't find tied use");
    }
  
@@ -48181,7 +48151,7 @@ index e92dec5be..847112b43 100644
      // In STATEPOINT defs correspond 1-1 to GC pointer operands passed
      // on registers.
      StatepointOpers SO(this);
-@@ -1441,7 +1471,7 @@ void MachineInstr::copyImplicitOps(MachineFunction &MF,
+@@ -1441,7 +1454,7 @@ void MachineInstr::copyImplicitOps(MachineFunction &MF,
  
  bool MachineInstr::hasComplexRegisterTies() const {
    const MCInstrDesc &MCID = getDesc();
@@ -48191,18 +48161,13 @@ index e92dec5be..847112b43 100644
    for (unsigned I = 0, E = getNumOperands(); I < E; ++I) {
      const auto &Operand = getOperand(I);
 diff --git a/llvm/lib/CodeGen/MachineLICM.cpp b/llvm/lib/CodeGen/MachineLICM.cpp
-index df7b6c782..abea68397 100644
+index df7b6c782..49b857cba 100644
 --- a/llvm/lib/CodeGen/MachineLICM.cpp
 +++ b/llvm/lib/CodeGen/MachineLICM.cpp
-@@ -1007,6 +1007,12 @@ bool MachineLICMBase::IsLoopInvariantInst(MachineInstr &I) {
+@@ -1007,6 +1007,7 @@ bool MachineLICMBase::IsLoopInvariantInst(MachineInstr &I) {
      LLVM_DEBUG(dbgs() << "LICM: Instruction not a LICM candidate\n");
      return false;
    }
-+
-+  // derived ptr need to be recalculated in copy gc
-+  if (I.isCalDerivedPtrInCangjieCopyGC(MRI)) {
-+    return false;
-+  }
 +
    return CurLoop->isLoopInvariant(I);
  }
@@ -56144,7 +56109,7 @@ index 6696d158b..1255795b2 100644
        .StartsWith("vertex", Triple::Vertex)
        .StartsWith("geometry", Triple::Geometry)
 diff --git a/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp b/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp
-index c568f7347..081e8446b 100644
+index c568f7347..138e5c7f0 100644
 --- a/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp
 +++ b/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp
 @@ -32,6 +32,7 @@
@@ -56948,7 +56913,7 @@ index c568f7347..081e8446b 100644
 +  emitGetCJTLSData(getCJThreadOffsetInCJTLS());
 +  // cbz x9, .L_cjthread_id_end
 +  MCInst CbzInst;
-+  CbzInst.setOpcode(AArch64::CBZW);
++  CbzInst.setOpcode(AArch64::CBZX);
 +  CbzInst.addOperand(MCOperand::createReg(AArch64::X9));
 +  CbzInst.addOperand(MCOperand::createExpr(MILabelExpr));
 +  OutStreamer->emitInstruction(CbzInst, getSubtargetInfo());
@@ -61257,6 +61222,24 @@ index 6f4fb405d..93f82a6fd 100644
    bool getRegAllocationHints(Register VirtReg, ArrayRef<MCPhysReg> Order,
                               SmallVectorImpl<MCPhysReg> &Hints,
                               const MachineFunction &MF, const VirtRegMap *VRM,
+diff --git a/llvm/lib/TextAPI/Architecture.cpp b/llvm/lib/TextAPI/Architecture.cpp
+index bb349b217..82094fb00 100644
+--- a/llvm/lib/TextAPI/Architecture.cpp
++++ b/llvm/lib/TextAPI/Architecture.cpp
+@@ -36,10 +36,13 @@ Architecture getArchitectureFromName(StringRef Name) {
+ #define ARCHINFO(Arch, Type, Subtype, NumBits) .Case(#Arch, AK_##Arch)
+ #include "llvm/TextAPI/Architecture.def"
+ #undef ARCHINFO
++      .Case("arm64e.x1", AK_arm64e_x1)
+       .Default(AK_unknown);
+ }
+ 
+ StringRef getArchitectureName(Architecture Arch) {
++  if (Arch == AK_arm64e_x1)
++    return "arm64e.x1";
+   switch (Arch) {
+ #define ARCHINFO(Arch, Type, Subtype, NumBits)                                 \
+   case AK_##Arch:                                                              \
 diff --git a/llvm/lib/Transforms/CFGuard/CFGuard.cpp b/llvm/lib/Transforms/CFGuard/CFGuard.cpp
 index 5fc529596..ab08c3595 100644
 --- a/llvm/lib/Transforms/CFGuard/CFGuard.cpp
@@ -87182,10 +87165,10 @@ index 000000000..247781471
 +                "Cangjie simple range analysis.", false, false)
 diff --git a/llvm/lib/Transforms/Scalar/CJSpecificOpt.cpp b/llvm/lib/Transforms/Scalar/CJSpecificOpt.cpp
 new file mode 100644
-index 000000000..244a28718
+index 000000000..d1b28573b
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJSpecificOpt.cpp
-@@ -0,0 +1,505 @@
+@@ -0,0 +1,640 @@
 +//===- CJSpecificOpt.cpp ----------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -87202,11 +87185,14 @@ index 000000000..244a28718
 +
 +#include "llvm/Transforms/Scalar/CJSpecificOpt.h"
 +
++#include "llvm/ADT/STLExtras.h"
++#include "llvm/ADT/Statistic.h"
 +#include "llvm/ADT/Triple.h"
 +#include "llvm/Analysis/LoopInfo.h"
 +#include "llvm/IR/DerivedTypes.h"
 +#include "llvm/IR/Dominators.h"
 +#include "llvm/IR/Function.h"
++#include "llvm/IR/GlobalAlias.h"
 +#include "llvm/IR/IRBuilder.h"
 +#include "llvm/IR/InstIterator.h"
 +#include "llvm/IR/Instructions.h"
@@ -87221,6 +87207,11 @@ index 000000000..244a28718
 +#include "llvm/Transforms/Utils/ModuleUtils.h"
 +
 +using namespace llvm;
++
++#define DEBUG_TYPE "cj-specific-opt"
++
++STATISTIC(NumLocalAliases, "Number of local ti/tt aliases created");
++STATISTIC(NumUsesRewritten, "Number of constant uses redirected to aliases");
 +
 +static cl::opt<bool>
 +    DisableDeadAllocaElimination("disable-dead-alloca-elimination", cl::Hidden,
@@ -87574,6 +87565,77 @@ index 000000000..244a28718
 +  return Changed;
 +}
 +
++// Cangjie CodeGen emits every public type's TypeInfo global ("*.ti") and
++// TypeTemplate global ("*.tt") with ExternalLinkage and default visibility,
++// because other packages may reference them by name (cross-package generic
++// instantiation, reflection). In a shared-library link, lld therefore treats
++// these symbols as preemptible, and every pointer to them inside a constant
++// initializer (.cjmetadata type-info fields arrays, super-type fields,
++// extension records, ...) becomes an ABS64 dynamic relocation; code taking
++// their address (cjc passes ti to runtime calls like GCNew as a bitcast
++// ConstantExpr) goes through the GOT.
++//
++// Most of those references are *intra-module*: a library's own metadata
++// pointing at its own ti. For those, preemption is pure overhead: the
++// runtime never interposes ti symbols and compares type identity by UUID,
++// not by pointer. This function rewrites such intra-module constant
++// references to go through an internal alias of the same global:
++//
++//   @pkg:Foo.ti     = global %TypeInfo { ..., %TypeInfo* @pkg:Bar.ti, ... }
++//   @alias_pkg:Foo.ti = internal alias %TypeInfo, %TypeInfo* @pkg:Foo.ti
++//
++// A reference to a non-preemptible (internal) alias is resolved by lld into
++// R_*_RELATIVE (RELR-packable) instead of a 24-byte ABS64/GLOB_DAT entry,
++// and code references bind locally (direct adrp+add / lea instead of a GOT
++// load). The original "*.ti" global keeps ExternalLinkage and stays
++// exported; only intra-module references stop participating in preemption.
++//
++// Escape hatch: on ELF, --cj-local-alias=false falls back to the legacy
++// generateAliasForStaticGI path (StaticGenericTI array operands only),
++// i.e. exactly the behavior before this feature.
++static cl::opt<bool>
++    EnableCJLocalAlias("cj-local-alias", cl::init(true), cl::Hidden,
++                       cl::desc("Rewrite intra-module ti/tt references via "
++                                "local aliases. When disabled on ELF, fall "
++                                "back to the legacy StaticGenericTI-only "
++                                "aliasing."));
++
++// Name suffixes of Cangjie type metadata globals emitted by CodeGen
++// (CGType::GetNameOfTypeInfoGV / GetNameOfTypeTemplate).
++static bool isTIMetadataName(StringRef name) {
++  return name.endswith(".ti") || name.endswith(".tt");
++}
++
++// A global is worth aliasing iff references to it would otherwise become
++// preemptible dynamic relocations in a -shared link: it must be defined in
++// this module, exported with default visibility, and not already dso_local.
++// Weak/LinkOnceODR definitions (static generic instances) are included: an
++// alias keeps the local definition alive, which is harmless in a
++// single-package dylib link. This drops the runtime interposition dedup of
++// identical weak ti across DSOs (first-loaded-wins); type identity stays
++// UUID-based, so this is semantically safe.
++static bool isAliasableTIMetadata(const GlobalVariable &gv) {
++  if (gv.isDeclarationForLinker() || !gv.hasInitializer())
++    return false;
++  if (gv.isDSOLocal())
++    return false;
++  // Hidden/protected symbols are already non-preemptible; aliasing them
++  // would be harmless but pointless.
++  if (!gv.hasDefaultVisibility())
++    return false;
++  const auto linkage = gv.getLinkage();
++  const bool linkageOk = linkage == GlobalValue::ExternalLinkage ||
++                         linkage == GlobalValue::WeakODRLinkage ||
++                         linkage == GlobalValue::LinkOnceODRLinkage;
++  if (!linkageOk)
++    return false;
++  return isTIMetadataName(gv.getName());
++}
++
++// Historical implementation retained for non-ELF (Mach-O) platforms, where
++// the CJLocalAlias-style rewriting is neither needed nor applicable (see the
++// ELF-only note below). Consolidating both paths onto
++// generateLocalAliasForTIMetadata is left to a follow-up change.
 +static bool generateAliasForStaticGI(Module &M) {
 +  bool Changed = false;
 +  for (GlobalVariable &GV : M.globals()) {
@@ -87619,6 +87681,57 @@ index 000000000..244a28718
 +  return Changed;
 +}
 +
++static bool generateLocalAliasForTIMetadata(Module &M) {
++  bool changed = false;
++  for (GlobalVariable &gv : M.globals()) {
++    if (!isTIMetadataName(gv.getName()))
++      continue;
++    // FullLTO: a ti whose prevailing definition lives in a static library is
++    // marked available_externally here. ElimAvailExtern keeps the body (it
++    // is referenced by the StaticGenericTI array), but the symbol would not
++    // be emitted; upgrade to internal so the local definition is kept and
++    // binds locally. No alias is needed once the symbol itself is internal.
++    // When this function is gated off (--cj-local-alias=false), the legacy
++    // generateAliasForStaticGI path performs the same upgrade for the
++    // StaticGenericTI array operands.
++    if (gv.hasAvailableExternallyLinkage() && gv.hasInitializer()) {
++      gv.setLinkage(GlobalValue::InternalLinkage);
++      changed = true;
++      continue;
++    }
++    if (!isAliasableTIMetadata(gv))
++      continue;
++    // Every remaining user is rewritten below (the alias is bit-identical
++    // to its aliasee), except GlobalAlias users: the new alias would
++    // otherwise be repointed to itself, and an old alias from a previous
++    // run would form an alias chain. If only aliases are left (e.g. a
++    // second run of this pass), there is nothing to do.
++    if (llvm::none_of(gv.users(),
++                      [](const User *u) { return !isa<GlobalAlias>(u); }))
++      continue;
++
++    auto *alias = GlobalAlias::create(gv.getValueType(), gv.getAddressSpace(),
++                                      GlobalValue::InternalLinkage,
++                                      "alias_" + gv.getName(), &gv, &M);
++    ++NumLocalAliases;
++
++    // Note that gv.users() sees a nested constant reference through its
++    // outermost ConstantExpr/aggregate; replaceUsesWithIf lets RAUW rebuild
++    // those constants (via Constant::handleOperandChange), so nesting depth
++    // is not a concern.
++    unsigned rewritten = 0;
++    gv.replaceUsesWithIf(alias, [&rewritten](Use &u) {
++      if (isa<GlobalAlias>(u.getUser()))
++        return false;
++      ++rewritten;
++      return true;
++    });
++    NumUsesRewritten += rewritten;
++    changed = true;
++  }
++  return changed;
++}
++
 +static bool processCangjieIR(Module &M, unsigned OptLevel) {
 +  bool Changed = false;
 +
@@ -87640,7 +87753,12 @@ index 000000000..244a28718
 +  }
 +
 +  llvm::Triple T(M.getTargetTriple());
-+  if (!T.isOSWindows()) {
++  if (T.isOSBinFormatELF() && EnableCJLocalAlias) {
++    Changed |= generateLocalAliasForTIMetadata(M);
++  } else if (!T.isOSWindows()) {
++    // Legacy path: on non-ELF platforms this is the only implementation;
++    // on ELF it serves as the --cj-local-alias=false escape hatch (exactly
++    // the pre-feature behavior).
 +    Changed |= generateAliasForStaticGI(M);
 +  }
 +
@@ -124309,6 +124427,180 @@ index 000000000..5864a81e2
 +
 +attributes #0 = { nofree nosync nounwind readnone willreturn}
 \ No newline at end of file
+diff --git a/llvm/test/Transforms/CJSpecificOpt/local-alias.ll b/llvm/test/Transforms/CJSpecificOpt/local-alias.ll
+new file mode 100644
+index 000000000..2dad4c1da
+--- /dev/null
++++ b/llvm/test/Transforms/CJSpecificOpt/local-alias.ll
+@@ -0,0 +1,140 @@
++; RUN: opt --cangjie-pipeline -passes=cj-specific-opt -S < %s | FileCheck %s
++; RUN: opt --cangjie-pipeline -passes=cj-specific-opt --cj-local-alias=false -S < %s | FileCheck %s --check-prefix=OFF
++; RUN: opt --cangjie-pipeline -passes='cj-specific-opt,cj-specific-opt' -S < %s | FileCheck %s --check-prefix=TWICE --allow-empty
++;
++; CJSpecificOpt rewrites intra-module references (constant initializers and
++; instruction operands) to preemptible Cangjie type metadata globals
++; (*.ti/*.tt) via internal aliases, so that lld resolves them as
++; R_*_RELATIVE instead of ABS64/GLOB_DAT in -shared links.
++;
++; The TWICE run pins idempotency: a second run must not create
++; alias-of-alias chains (aliases are excluded as rewrite targets).
++; TWICE-NOT: alias_alias
++
++target triple = "x86_64-unknown-linux-gnu"
++
++; --- case 1: external .ti referenced from another global's initializer ---
++@pkg.Foo.ti = global ptr null
++; CHECK-DAG: @pkg.Foo.ti = global ptr null
++
++@pkg.Bar.ti = global { ptr, ptr } { ptr @pkg.Foo.ti, ptr null }
++; CHECK-DAG: @pkg.Bar.ti = global { ptr, ptr } { ptr @alias_pkg.Foo.ti, ptr null }
++
++; --- case 2: .tt suffix is also aliased ---
++@pkg.Baz.tt = global ptr @pkg.Foo.ti
++@baz.user = global ptr @pkg.Baz.tt
++; CHECK-DAG: @pkg.Baz.tt = global ptr @alias_pkg.Foo.ti
++; CHECK-DAG: @baz.user = global ptr @alias_pkg.Baz.tt
++
++; --- case 3: weak/linkonce definitions (static generic instances) ---
++@weak.ti = weak_odr global i32 0
++@linkonce.ti = linkonce_odr global i32 0
++@weak.user = global [2 x ptr] [ptr @weak.ti, ptr @linkonce.ti]
++; CHECK-DAG: @weak.user = global [2 x ptr] [ptr @alias_weak.ti, ptr @alias_linkonce.ti]
++
++; --- case 4 (regression !553): ThinLTO downgrades a non-prevailing
++; linkonce_odr definition to an external declaration; it must be skipped
++; without crashing (there is no initializer to alias). ---
++@decl.ti = external global i32
++@decl.user = global ptr @decl.ti
++; CHECK-DAG: @decl.user = global ptr @decl.ti
++
++; --- case 5: dso_local symbols are already non-preemptible ---
++@local.ti = dso_local global i32 0
++@local.user = global ptr @local.ti
++; CHECK-DAG: @local.user = global ptr @local.ti
++
++; --- case 6: globals whose name does not end in .ti/.tt are untouched ---
++@pkg.Other = global i32 0
++@other.user = global ptr @pkg.Other
++; CHECK-DAG: @other.user = global ptr @pkg.Other
++
++; --- case 7 (regression !290): FullLTO keeps an available_externally ti
++; body alive (ElimAvailExtern); upgrade it to internal so the local
++; definition is emitted. No alias is needed for an internal symbol. ---
++@ae.ti = available_externally global i32 0
++@ae.user = global ptr @ae.ti
++; CHECK-DAG: @ae.ti = internal global i32 0
++; CHECK-DAG: @ae.user = global ptr @ae.ti
++
++; --- case 8: instruction operands are rewritten too (a load's address
++; operand is not a Constant user, but the alias is bit-identical) ---
++@code.ti = global i32 0
++
++; --- case 9: hidden visibility symbols are already non-preemptible ---
++@hidden.ti = hidden global i32 0
++@hidden.user = global ptr @hidden.ti
++; CHECK-DAG: @hidden.user = global ptr @hidden.ti
++
++; --- case 9b: linkage outside the whitelist (weak-any is preemptible but
++; not ODR; interposition semantics must be preserved) ---
++@weakany.ti = weak global i32 0
++@weakany.user = global ptr @weakany.ti
++; CHECK-DAG: @weakany.user = global ptr @weakany.ti
++
++; --- case 10: a StaticGenericTI array operand is aliased even with
++; --cj-local-alias=false: the switch falls back to the legacy
++; generateAliasForStaticGI path (private alias), which covers the
++; link-correctness-critical table operands. ---
++@sg.ti = linkonce_odr global i32 0
++@StaticGenericTIs = private global [1 x ptr] [ptr @sg.ti] #0
++@llvm.used = appending global [1 x ptr] [ptr @StaticGenericTIs], section "llvm.metadata"
++attributes #0 = { "CFileStaticGenericTI" }
++; CHECK-DAG: @StaticGenericTIs = private global [1 x ptr] [ptr @alias_sg.ti]
++
++; --- case 11: a direct call operand (no ConstantExpr) is rewritten ---
++@call.ti = global i32 0
++
++; Aliases are emitted after the globals, in creation (module) order.
++; Bar.ti has no users at all, so it gets no alias.
++; CHECK: @alias_pkg.Foo.ti = internal alias ptr, ptr @pkg.Foo.ti
++; CHECK: @alias_pkg.Baz.tt = internal alias ptr, ptr @pkg.Baz.tt
++; CHECK: @alias_weak.ti = internal alias i32, ptr @weak.ti
++; CHECK: @alias_linkonce.ti = internal alias i32, ptr @linkonce.ti
++; CHECK: @alias_code.ti = internal alias i32, ptr @code.ti
++; CHECK: @alias_sg.ti = internal alias i32, ptr @sg.ti
++; CHECK: @alias_call.ti = internal alias i32, ptr @call.ti
++; No aliases for the skipped cases:
++; CHECK-NOT: @alias_pkg.Bar.ti
++; CHECK-NOT: @alias_decl.ti
++; CHECK-NOT: @alias_local.ti
++; CHECK-NOT: @alias_pkg.Other
++; CHECK-NOT: @alias_ae.ti
++; CHECK-NOT: @alias_hidden.ti
++; CHECK-NOT: @alias_weakany.ti
++
++define i32 @load_code_ti() {
++  %v = load i32, ptr @code.ti
++  ret i32 %v
++}
++; CHECK-LABEL: define i32 @load_code_ti
++; CHECK: %v = load i32, ptr @alias_code.ti
++
++declare void @use_ti(ptr)
++
++define void @call_use() {
++  call void @use_ti(ptr @call.ti)
++  ret void
++}
++; CHECK-LABEL: define void @call_use
++; CHECK: call void @use_ti(ptr @alias_call.ti)
++
++; --- the escape hatch falls back to the legacy generateAliasForStaticGI
++; path: only StaticGenericTI array operands are aliased (private alias),
++; and the new path's available_externally -> internal upgrade for
++; non-array globals does not run (exactly the pre-feature behavior). ---
++; OFF: @pkg.Bar.ti = global { ptr, ptr } { ptr @pkg.Foo.ti, ptr null }
++; OFF: @weak.user = global [2 x ptr] [ptr @weak.ti, ptr @linkonce.ti]
++; OFF: @ae.ti = available_externally global i32 0
++; OFF: @StaticGenericTIs = private global [1 x ptr] [ptr @alias_sg.ti]
++; OFF-NOT: @alias_pkg
++; OFF-NOT: @alias_weak
++; OFF-NOT: @alias_linkonce
++; OFF-NOT: @alias_code
++; OFF-NOT: @alias_call
++; OFF: @alias_sg.ti = private alias i32, ptr @sg.ti
++; OFF: %v = load i32, ptr @code.ti
++; OFF: call void @use_ti(ptr @call.ti)
++; OFF-NOT: @alias_pkg
++; OFF-NOT: @alias_weak
++; OFF-NOT: @alias_code
+diff --git a/llvm/test/Transforms/CJSpecificOpt/static-gi-alias-macho.ll b/llvm/test/Transforms/CJSpecificOpt/static-gi-alias-macho.ll
+new file mode 100644
+index 000000000..95eaffb8d
+--- /dev/null
++++ b/llvm/test/Transforms/CJSpecificOpt/static-gi-alias-macho.ll
+@@ -0,0 +1,22 @@
++; RUN: opt --cangjie-pipeline -passes=cj-specific-opt -S < %s | FileCheck %s
++;
++; On non-ELF, non-Windows platforms (Mach-O) the historical
++; generateAliasForStaticGI path is preserved: operands of the
++; StaticGenericTI array are replaced by private aliases, so the 4-byte
++; relative offsets in the __cjstatic_gi table stay link-time constants.
++
++target triple = "arm64-apple-macosx13"
++
++@X.ti = linkonce_odr global i32 0
++@Y.ti = external global i32
++
++@StaticGenericTIs = private global [2 x ptr] [ptr @X.ti, ptr @Y.ti] #0
++@llvm.used = appending global [1 x ptr] [ptr @StaticGenericTIs], section "llvm.metadata"
++
++attributes #0 = { "CFileStaticGenericTI" }
++
++; weak/linkonce operand gets a private alias; external declaration is kept
++; as-is in the array (regression #553: element must not be dropped).
++; CHECK: @StaticGenericTIs = private global [2 x ptr] [ptr @alias_X.ti, ptr @Y.ti]
++; CHECK: @alias_X.ti = private alias i32, ptr @X.ti
++; CHECK-NOT: @alias_Y.ti
 diff --git a/llvm/test/Transforms/CJStringPoolMerge/arm32-layout.ll b/llvm/test/Transforms/CJStringPoolMerge/arm32-layout.ll
 new file mode 100644
 index 000000000..d53376711

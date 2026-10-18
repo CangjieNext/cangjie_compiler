@@ -81,6 +81,8 @@ struct InteropContext {
     std::vector<Ptr<AST::ClassLikeDecl>> mirrors;
     std::vector<Ptr<AST::FuncDecl>> mirrorTopLevelFuncs;
     std::vector<Ptr<AST::ClassDecl>> impls;
+    /// Interfaces that inherit an @ObjCMirror interface without being annotated themselves, to be diagnosed.
+    std::vector<Ptr<AST::InterfaceDecl>> unannotatedMirrorSubtypeInterfaces;
     std::vector<Ptr<AST::ClassDecl>> mirrorInterfaceHandleWrappers;
     std::vector<Ptr<AST::ClassDecl>> regCompanions;
     /// W: MapImplToRegCompanion

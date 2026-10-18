@@ -130,6 +130,52 @@ bool IsObjCMirrorSubtype(const Ty& ty) noexcept
     return IsObjCMirrorSubtype(*classTy->GetSuperClassTy()) || IsObjCMirror(*classTy->GetSuperClassTy());
 }
 
+bool IsValidObjCMirror(const Ty& ty) noexcept
+{
+    const auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty);
+    if (!classLikeTy || !classLikeTy->commonDecl || !IsObjCMirror(*classLikeTy->commonDecl)) {
+        return false;
+    }
+
+    for (auto superInterfaceTy : classLikeTy->GetSuperInterfaceTys()) {
+        if (!IsValidObjCMirror(*superInterfaceTy)) {
+            return false;
+        }
+    }
+
+    // The super class of an @ObjCMirror class must be an @ObjCMirror as well.
+    if (const auto classTy = DynamicCast<ClassTy*>(&ty)) {
+        // Hierarchy root @ObjCMirror class.
+        if (!classTy->GetSuperClassTy() || classTy->GetSuperClassTy()->IsObject()) {
+            return true;
+        }
+        return IsValidObjCMirror(*classTy->GetSuperClassTy());
+    }
+
+    return true;
+}
+
+bool IsValidObjCMirrorSubtype(const Ty& ty) noexcept
+{
+    const auto classTy = DynamicCast<ClassTy*>(&ty);
+    if (!classTy) {
+        return false;
+    }
+
+    auto hasMirrorSuperInterface = false;
+    for (auto superInterfaceTy : classTy->GetSuperInterfaceTys()) {
+        if (!IsValidObjCMirror(*superInterfaceTy)) {
+            return false;
+        }
+        hasMirrorSuperInterface = true;
+    }
+    if (!classTy->GetSuperClassTy() || classTy->GetSuperClassTy()->IsObject()) {
+        return hasMirrorSuperInterface;
+    }
+
+    return IsValidObjCMirrorSubtype(*classTy->GetSuperClassTy()) || IsValidObjCMirror(*classTy->GetSuperClassTy());
+}
+
 bool IsObjCImpl(const ClassDecl& decl) noexcept
 {
     return decl.TestAttr(Attribute::OBJ_C_IMPL);

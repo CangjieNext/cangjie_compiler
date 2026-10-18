@@ -18,38 +18,6 @@ namespace Cangjie::Interop::ObjC {
 
 using namespace Cangjie::AST;
 
-namespace {
-
-/**
- * @returns true if @p ty is an @ObjCMirror whose whole super-type hierarchy consists of @ObjCMirror types.
- */
-bool IsValidObjCMirror(const Ty& ty) noexcept
-{
-    const auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty);
-    if (!classLikeTy || !classLikeTy->commonDecl || !IsObjCMirror(*classLikeTy->commonDecl)) {
-        return false;
-    }
-
-    for (auto superInterfaceTy : classLikeTy->GetSuperInterfaceTys()) {
-        if (!IsValidObjCMirror(*superInterfaceTy)) {
-            return false;
-        }
-    }
-
-    // The super class of an @ObjCMirror class must be an @ObjCMirror as well.
-    if (const auto classTy = DynamicCast<ClassTy*>(&ty)) {
-        // Hierarchy root @ObjCMirror class.
-        if (!classTy->GetSuperClassTy() || classTy->GetSuperClassTy()->IsObject()) {
-            return true;
-        }
-        return IsValidObjCMirror(*classTy->GetSuperClassTy());
-    }
-
-    return true;
-}
-
-} // namespace
-
 void CheckMirrorInheritMirror::HandleImpl(TypeCheckContext& ctx)
 {
     if (IsValidObjCMirror(*ctx.target.GetTy())) {
