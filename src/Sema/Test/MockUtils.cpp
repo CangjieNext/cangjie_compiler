@@ -657,35 +657,26 @@ std::vector<TypeSubst> MockUtils::BuildGenericSubsts(const Ptr<InheritableDecl> 
     return genericSubsts;
 }
 
-int MockUtils::GetIndexOfGenericTypeParam(Ptr<Ty> ty, Ptr<Generic> generic) const
+void MockUtils::UpdateRefTypesTarget(Ptr<Type> type, const TypeSubst& typeSubst) const
 {
-    int i = 0;
-    for (auto& typeParam : generic->typeParameters) {
-        if (typeParam->GetTy() == ty) {
-            return i;
-        }
-        i++;
-    }
-    return -1;
-}
-
-void MockUtils::UpdateRefTypesTarget(Ptr<Type> type, Ptr<Generic> oldGeneric, Ptr<Generic> newGeneric) const
-{
-    auto refType = As<ASTKind::REF_TYPE>(type);
-    if (!refType) {
+    if (!type || typeSubst.empty()) {
         return;
     }
 
-    if (auto genericTy = DynamicCast<GenericsTy*>(refType->GetTy()); genericTy) {
-        auto typeParamIndex = GetIndexOfGenericTypeParam(genericTy, oldGeneric);
-        if (typeParamIndex != -1) {
-            refType->ref.target = newGeneric->typeParameters[static_cast<size_t>(typeParamIndex)].get();
+    Walker walker(type, [&typeSubst](Ptr<Node> node) {
+        auto refType = DynamicCast<RefType>(node);
+        if (!refType || !refType->ref.target) {
+            return VisitAction::WALK_CHILDREN;
         }
-    }
 
-    for (auto& typeArg : refType->typeArguments) {
-        UpdateRefTypesTarget(typeArg.get(), oldGeneric, newGeneric);
-    }
+        if (auto genericTy = DynamicCast<GenericsTy>(refType->ref.target->GetTy())) {
+            if (auto subst = typeSubst.find(genericTy); subst != typeSubst.end()) {
+                refType->ref.target = Ty::GetDeclOfTy(subst->second);
+            }
+        }
+        return VisitAction::WALK_CHILDREN;
+    });
+    walker.Walk();
 }
 
 std::vector<Ptr<Ty>> MockUtils::AddGenericIfNeeded(Decl& originalDecl, Decl& mockedDecl) const
@@ -718,7 +709,8 @@ std::vector<Ptr<Ty>> MockUtils::AddGenericIfNeeded(Decl& originalDecl, Decl& moc
     if (originalFuncDecl) {
         auto mockedFuncDecl = As<ASTKind::FUNC_DECL>(&mockedDecl);
         CJC_ASSERT(mockedFuncDecl && mockedFuncDecl->funcBody);
-        UpdateRefTypesTarget(mockedFuncDecl->funcBody->retType.get(), generic.get(), newGeneric.get());
+        UpdateRefTypesTarget(
+            mockedFuncDecl->funcBody->retType.get(), GenerateTypeMapping(originalDecl, typeParamTys));
         mockedFuncDecl->funcBody->generic = std::move(newGeneric);
     } else {
         mockedDecl.generic = std::move(newGeneric);
