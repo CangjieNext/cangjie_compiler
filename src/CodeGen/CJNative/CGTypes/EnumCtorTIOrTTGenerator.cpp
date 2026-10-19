@@ -91,13 +91,15 @@ EnumCtorLayout EnumCtorTIOrTTGenerator::GenLayoutForReferenceType(const std::str
     return layout;
 }
 
-EnumCtorLayout EnumCtorTIOrTTGenerator::GenLayoutForZeroSize()
+EnumCtorLayout EnumCtorTIOrTTGenerator::GenLayoutForZeroSize(const std::vector<CHIR::Type*>& paramTypes,
+    const std::string& tiName, const std::string& className)
 {
     EnumCtorLayout layout;
-    auto i32Ty = llvm::Type::getInt32Ty(cgMod.GetLLVMContext());
     layout.size = 0;
     layout.align = 1;
-    layout.offsets = llvm::ConstantPointerNull::get(i32Ty->getPointerTo());
+    layout.fieldTypes = paramTypes;
+    auto layoutType = GetLLVMStructType(cgMod, layout.fieldTypes, GetClassObjLayoutName(className));
+    layout.offsets = CGCustomType::GenOffsetsArray(cgMod, tiName + ".offsets", layoutType);
     return layout;
 }
 
@@ -189,13 +191,10 @@ void EnumCtorTIOrTTGenerator::GenerateNonGenericEnumCtorTypeInfo(llvm::GlobalVar
     auto cgEnumType = StaticCast<CGEnumType*>(CGType::GetOrCreate(cgMod, &chirEnumType));
     EnumCtorLayout layout;
     if (cgEnumType->IsOptionLikeRef() || cgEnumType->IsOptionLikeT()) {
-        // EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_REF || EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_T
         layout = GenLayoutForReferenceType(tiName, className);
     } else if (cgEnumType->IsZeroSizeEnum()) {
-        // EXHAUSTIVE_ZERO_SIZE
-        layout = GenLayoutForZeroSize();
+        layout = GenLayoutForZeroSize(paramTypes, tiName, className);
     } else if (cgEnumType->IsTrivial()) {
-        // NON_EXHAUSTIVE_UNASSOCIATED || EXHAUSTIVE_UNASSOCIATED
         layout = GenLayoutForTrivial(tiName);
     } else {
         // NON_EXHAUSTIVE_ASSOCIATED || EXHAUSTIVE_OTHER || EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_NONREF ||
@@ -294,13 +293,10 @@ void EnumCtorTIOrTTGenerator::GenerateGenericEnumCtorTypeTemplate(llvm::GlobalVa
     auto cgEnumType = StaticCast<CGEnumType*>(CGType::GetOrCreate(cgMod, &chirEnumType));
     EnumCtorLayout layout;
     if (cgEnumType->IsOptionLikeRef() || cgEnumType->IsOptionLikeT()) {
-        // EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_REF || EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_T
         layout = GenLayoutForReferenceType(ttName, className);
     } else if (cgEnumType->IsZeroSizeEnum()) {
-        // EXHAUSTIVE_ZERO_SIZE
-        layout = GenLayoutForZeroSize();
+        layout = GenLayoutForZeroSize(paramTypes, ttName, className);
     } else if (cgEnumType->IsTrivial()) {
-        // NON_EXHAUSTIVE_UNASSOCIATED || EXHAUSTIVE_UNASSOCIATED
         layout = GenLayoutForTrivial(ttName);
     } else {
         // NON_EXHAUSTIVE_ASSOCIATED || EXHAUSTIVE_OTHER || EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_NONREF ||
