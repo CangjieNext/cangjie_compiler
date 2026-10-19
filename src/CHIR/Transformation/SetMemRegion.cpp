@@ -63,40 +63,54 @@ bool AllReturnValuesInExclave(const LocalVar& result)
     return true;
 }
 
-Function* GetRawCallee(const Expression& expr)
+std::pair<std::vector<Parameter*>, Type*> GetParamValAndRetType(const Expression& expr)
 {
-    Function* callee = nullptr;
+    std::vector<Parameter*> params;
+    Type* retType = nullptr;
     if (auto apply = DynamicCast<const ApplyBase*>(&expr)) {
         auto f = apply->GetCallee();
-        if (!Is<Function>(f)) {
-            return nullptr;
+        if (auto func = DynamicCast<Function*>(f)) {
+            if (auto generic = func->GetGenericDecl()) {
+                func = generic;
+            }
+            params = func->GetParams();
+            retType = func->GetReturnType();
+        } else if (auto localVar = DynamicCast<LocalVar*>(f)) {
+            if (auto lambda = DynamicCast<Lambda*>(localVar->GetExpr())) {
+                if (auto generic = lambda->GetGenericDecl()) {
+                    lambda = generic;
+                }
+                params = lambda->GetParams();
+                retType = lambda->GetReturnType();
+            }
         }
-        callee = StaticCast<Function*>(f);
     } else if (auto invoke = DynamicCast<const DynamicDispatch*>(&expr)) {
-        callee = StaticCast<Function*>(invoke->GetCallee());
+        auto callee = StaticCast<Function*>(invoke->GetCallee());
+        if (auto generic = callee->GetGenericDecl()) {
+            callee = generic;
+        }
+        params = callee->GetParams();
+        retType = callee->GetReturnType();
     }
-    if (callee == nullptr) {
-        return nullptr;
-    }
-    if (auto generic = callee->GetGenericDecl()) {
-        callee = generic;
-    }
-    return callee;
+    return {params, retType};
 }
 
-bool CalleeParamTypeHasNonCopyable(const Expression& expr)
+bool CalleeParamOrReturnTypeHasNonCopyable(const Expression& expr)
 {
-    auto callee = GetRawCallee(expr);
-    if (callee == nullptr) {
+    auto [params, retType] = GetParamValAndRetType(expr);
+    if (retType == nullptr) {
         return false;
     }
-    for (auto param : callee->GetParams()) {
+    for (auto param : params) {
         if (param->GetType()->StripAllRefs()->IsMustLocalRegion()) {
             return true;
         }
         if (param->GetType()->StripAllRefs()->IsMaybeLocalRegion() && param->GetParamDftValFunc() != nullptr) {
             return true;
         }
+    }
+    if (retType->StripAllRefs()->IsLocalRegion()) {
+        return true;
     }
     return false;
 }
@@ -147,9 +161,10 @@ std::unordered_set<BlockGroup*> SetMemRegion::CollectFunctionRegionBlockGroup(co
                     }
                 }
             }
-            // 3. func call whose callee has a Parameter that is `local!`, or `local?` with a
-            // default value in parameter
-            if (CalleeParamTypeHasNonCopyable(expr)) {
+            // 3. func call whose callee declaration (follow genericDecl when present) has a Parameter that
+            // is `local!`, or `local?` with a default value, or whose return type IsLocalRegion — even if
+            // the call-site instantiation is Copyable (e.g. T @local? instantiated to Int64)
+            if (CalleeParamOrReturnTypeHasNonCopyable(expr)) {
                 auto body = expr.GetFuncOrLambdaBody();
                 CJC_NULLPTR_CHECK(body);
                 scopeNeedsRegion.emplace(body);
@@ -166,8 +181,14 @@ std::unordered_set<BlockGroup*> SetMemRegion::CollectFunctionRegionBlockGroup(co
                     }
                 }
             }
+            // 5. lambda where the function type is `local!` or `local?`
+            if (lambda->GetFuncType()->IsLocalRegion()) {
+                auto body = expr.GetResult()->GetFuncOrLambdaBody();
+                CJC_NULLPTR_CHECK(body);
+                scopeNeedsRegion.emplace(body);
+            }
         } else if (Is<AllocateBase>(expr) || Is<Tuple>(expr)) {
-            // 5. allocate (Allocate or Tuple expression) a non-trivial enum whose type has mode `local!` or `local?`
+            // 6. allocate (Allocate or Tuple expression) a non-trivial enum whose type has mode `local!` or `local?`
             auto resultType = expr.GetResult()->GetType()->StripAllRefs();
             if (resultType->IsLocalRegion() && resultType->IsEnum() &&
                 !StaticCast<EnumType*>(resultType)->GetEnumDef()->IsAllCtorsTrivial() &&
@@ -177,7 +198,7 @@ std::unordered_set<BlockGroup*> SetMemRegion::CollectFunctionRegionBlockGroup(co
                 scopeNeedsRegion.emplace(body);
             }
         } else if (Is<Constant>(expr)) {
-            // 6. a literal whose type does not implement `Copyable` and has mode `local!`.
+            // 7. a literal whose type does not implement `Copyable` and has mode `local!`.
             if (expr.GetResult()->GetType()->StripAllRefs()->IsMustLocalRegion()) {
                 auto body = expr.GetFuncOrLambdaBody();
                 CJC_NULLPTR_CHECK(body);

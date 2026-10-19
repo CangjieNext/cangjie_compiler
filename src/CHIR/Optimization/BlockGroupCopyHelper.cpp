@@ -20,6 +20,30 @@
 #include "cangjie/CHIR/IR/Type/PrivateTypeConverter.h"
 
 namespace Cangjie::CHIR {
+namespace {
+// Instantiated Lambda::genericDecl is copied as the original pointer. If that generic
+// Lambda was cloned into the same block group, retarget the copy at the cloned generic.
+void RemapLambdaGenericDecl(const std::vector<Block*>& blocks, const std::unordered_map<Value*, Value*>& valueMap)
+{
+    for (auto block : blocks) {
+        for (auto expr : block->GetExpressions()) {
+            auto lambda = DynamicCast<Lambda*>(expr);
+            if (lambda == nullptr) {
+                continue;
+            }
+            if (auto generic = lambda->GetGenericDecl()) {
+                auto it = valueMap.find(generic->GetResult());
+                if (it != valueMap.end()) {
+                    auto clonedGeneric = StaticCast<Lambda*>(StaticCast<LocalVar*>(it->second)->GetExpr());
+                    lambda->SetGenericDecl(clonedGeneric);
+                }
+            }
+            RemapLambdaGenericDecl(lambda->GetBody()->GetBlocks(), valueMap);
+        }
+    }
+}
+} // namespace
+
 std::pair<std::vector<Block*>, LocalVar*> BlockGroupCopyHelper::CloneBlockGroup(
     const BlockGroup& oldBG, BlockGroup& newBG)
 {
@@ -32,6 +56,7 @@ std::pair<std::vector<Block*>, LocalVar*> BlockGroupCopyHelper::CloneBlockGroup(
     std::unordered_map<Value*, Value*> valueMap;
     std::unordered_set<Expression*> newDebugs;
     CollectValueMap(oldBG, newBlocks, valueMap, newDebugs);
+    RemapLambdaGenericDecl(newBlocks, valueMap);
     ReplaceExprOperands(newBlocks, valueMap);
     for (auto dbg : newDebugs) {
         dbg->RemoveSelfFromBlock();

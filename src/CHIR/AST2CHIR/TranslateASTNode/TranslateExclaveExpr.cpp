@@ -26,6 +26,22 @@ Ptr<Value> Translator::Visit(const AST::ExclaveExpr& exclaveExpr)
     CJC_NULLPTR_CHECK(body);
     auto retValue = Visit(*body);
     CreateAndAppendTerminator<GoTo>(GetBlockByAST(*body), entry);
+
+    // 3. Yield body value as return of the enclosing func/lambda, then Exit.
+    if (retValue != nullptr) {
+        if (auto ret = GetOuterBlockGroupReturnValLocation()) {
+            CreateAndAppendWrappedStore(*retValue, *ret, loc);
+        }
+    }
+    auto exit = CreateAndAppendTerminator<Exit>(loc, currentBlock);
+    // Body already returned via the store above; this Exit is structural (like a
+    // compiler-added return wrapping exclave as the function's last expression).
+    exit->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+
+    // 4. Restore translation context to an unreachable outer block so subsequent
+    // statements are not emitted inside the Exclave body.
     blockGroupStack.pop_back();
-    return retValue;
+    currentBlock = CreateBlock();
+    maybeUnreachable.emplace(currentBlock, exclave);
+    return nullptr;
 }

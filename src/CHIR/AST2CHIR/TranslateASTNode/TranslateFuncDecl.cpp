@@ -576,6 +576,15 @@ Ptr<Value> Translator::TranslateNestedFunc(const AST::FuncDecl& func)
     SetSymbolTable(func, *lambda->GetResult());
     lambdaTrans.SetSymbolTable(func, *lambda->GetResult());
 
+    // Instantiated nested funcs are translated before the generic one in the same block.
+    // When translating the generic Lambda, point each instantiated Lambda back to it.
+    if (func.TestAttr(AST::Attribute::GENERIC) && gim != nullptr) {
+        for (auto instDecl : gim->GetInstantiatedDecls(func)) {
+            auto instVal = StaticCast<LocalVar*>(GetSymbolTable(*instDecl));
+            StaticCast<Lambda*>(instVal->GetExpr())->SetGenericDecl(lambda);
+        }
+    }
+
     auto& chirParams = lambda->GetParams();
     CJC_ASSERT(chirParams.size() == astParams.size());
     for (size_t i = 0; i < astParams.size(); ++i) {
