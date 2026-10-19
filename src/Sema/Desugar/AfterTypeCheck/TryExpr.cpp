@@ -120,7 +120,22 @@ OwnedPtr<TryExpr> TypeChecker::TypeCheckerImpl::CreateTryInFinally(
 
     auto findFunc = [this, &ctx, &x](const std::string& fieldName) -> Ptr<Decl> {
         LookupInfo info{x.GetTy(), x.curFile, true, true, false};
-        std::vector<Ptr<Decl>> decls = FieldLookup(ctx, Ty::GetDeclPtrOfTy(x.GetTy()), fieldName, info);
+        std::vector<Ptr<Decl>> decls;
+        // Members of a generic type parameter are inherited from its upper bounds, so it has no decl
+        // to look up the members from. Search the field in each upper bound instead, which is what
+        // member access resolution does for such a type.
+        if (auto genericTy = DynamicCast<GenericsTy*>(x.GetTy()); genericTy) {
+            for (auto& upperBound : genericTy->upperBounds) {
+                if (!Ty::IsTyCorrect(upperBound)) {
+                    continue;
+                }
+                info.baseTy = upperBound;
+                auto upperBoundDecls = FieldLookup(ctx, Ty::GetDeclPtrOfTy(upperBound), fieldName, info);
+                decls.insert(decls.end(), upperBoundDecls.begin(), upperBoundDecls.end());
+            }
+        } else {
+            decls = FieldLookup(ctx, Ty::GetDeclPtrOfTy(x.GetTy()), fieldName, info);
+        }
         Ptr<Decl> func = nullptr;
         for (auto& decl : decls) {
             if (auto funcDecl = DynamicCast<FuncDecl*>(decl); funcDecl && funcDecl->funcBody &&
@@ -129,7 +144,8 @@ OwnedPtr<TryExpr> TypeChecker::TypeCheckerImpl::CreateTryInFinally(
                 break;
             }
         }
-        // The error should have been reported in type checking phase.
+        // The type of `x` is a subtype of 'Resource' which is guaranteed before desugaring,
+        // so `close` and `isClosed` must be found.
         CJC_NULLPTR_CHECK(func);
         return func;
     };
