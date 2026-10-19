@@ -2517,8 +2517,8 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseRefExpr(
         // function call but a potential numeric type conversion via the alias.
         // Use re->ref.target (the original resolved target) rather than the `target`
         // parameter which may have been overwritten inside GetCallBaseCandidates.
-        return TryTypeAliasConvCall(ctx, ce, *re, re->ref.target && re->ref.target->astKind == ASTKind::TYPE_ALIAS_DECL &&
-            candidates.empty());
+        return TryTypeAliasConvCall(ctx, ce, *re,
+            re->ref.target && re->ref.target->astKind == ASTKind::TYPE_ALIAS_DECL && candidates.empty());
     }
     // Issue #1045: type alias to numeric/rune type is treated as a type conversion.
     return TryResolveTypeAliasNumConv(ctx, ce, *re);
