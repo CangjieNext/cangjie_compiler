@@ -906,7 +906,10 @@ private:
         std::vector<Ptr<AST::FuncDecl>>& candidates);
     bool CheckRefConstructor(const ASTContext& ctx, const AST::CallExpr& ce, const AST::RefExpr& re);
     /** Try to resolve a call to a numeric/rune type alias as a type conversion (Issue #1045). */
-    bool TryResolveTypeAliasNumConv(AST::CallExpr& ce, AST::Expr& baseExpr);
+    bool TryResolveTypeAliasNumConv(ASTContext& ctx, AST::CallExpr& ce, AST::Expr& baseExpr);
+    /** Desugar a numeric/rune type-alias conversion call into a builtin TypeConvExpr so that
+     * sema and CHIR reuse the exact machinery of primitive conversions like UInt16(1). */
+    void DesugarTypeAliasNumConvCall(ASTContext& ctx, AST::CallExpr& ce, AST::TypeKind targetKind);
     /** If the call base is a numeric/rune type alias resolved as a conversion, check its
      * single argument against the alias target type (Issue #1045). Returns true when the
      * call base is such an alias (checked or diagnosed), false when it is not one. */
@@ -914,7 +917,7 @@ private:
     /** Shared type-alias dispatch used by ChkCallBaseRefExpr/ChkCallBaseMemberAccess:
      * try the numeric-conversion path when the call base targets a type alias with no
      * function candidates; otherwise let the caller fall through to its normal path. */
-    bool TryTypeAliasConvCall(AST::CallExpr& ce, const AST::Expr& base, bool aliasCandidate);
+    bool TryTypeAliasConvCall(ASTContext& ctx, AST::CallExpr& ce, const AST::Expr& base, bool aliasCandidate);
     /**
      * Check call expression's base expression. Get current target and function candidates.
      */

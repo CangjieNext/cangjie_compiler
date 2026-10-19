@@ -2376,7 +2376,7 @@ bool TypeChecker::TypeCheckerImpl::CheckRefConstructor(const ASTContext& ctx, co
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::TryResolveTypeAliasNumConv(CallExpr& ce, Expr& baseExpr)
+bool TypeChecker::TypeCheckerImpl::TryResolveTypeAliasNumConv(ASTContext& ctx, CallExpr& ce, Expr& baseExpr)
 {
     // The base of the call must be a type alias; only a type alias can act as a numeric conversion.
     Ptr<Decl> aliasDecl = nullptr;
@@ -2404,16 +2404,28 @@ bool TypeChecker::TypeCheckerImpl::TryResolveTypeAliasNumConv(CallExpr& ce, Expr
     if (!origTy || !(origTy->IsNumeric() || origTy->kind == TypeKind::TYPE_RUNE)) {
         return false;
     }
-    ce.SetTy(origTy);
-    return true;
+    // A numeric type alias conversion takes exactly one argument.
+    if (ce.args.size() != 1) {
+        diag.Diagnose(ce, DiagKind::sema_parameters_and_arguments_mismatch);
+        ce.SetTy(TypeManager::GetInvalidTy());
+        return true;
+    }
+    // Desugar into the builtin TypeConvExpr form so that argument coercion (e.g. integer
+    // literals), diagnostics and CHIR lowering exactly mirror primitive conversions
+    // like UInt16(1) (Issue #1045).
+    DesugarTypeAliasNumConvCall(ctx, ce, origTy->kind);
+    auto convTy = SynTypeConvExpr(ctx, *RawStaticCast<TypeConvExpr*>(ce.desugarExpr.get()));
+    ce.SetTy(convTy);
+    return Ty::IsTyCorrect(convTy);
 }
 
-bool TypeChecker::TypeCheckerImpl::TryTypeAliasConvCall(CallExpr& ce, const Expr& base, bool aliasCandidate)
+bool TypeChecker::TypeCheckerImpl::TryTypeAliasConvCall(
+    ASTContext& ctx, CallExpr& ce, const Expr& base, bool aliasCandidate)
 {
     // Issue #1045: the call base targets a type alias with no function candidates — try
     // the numeric-conversion path first; a non-numeric alias falls through to the
     // caller's normal error path.
-    if (aliasCandidate && TryResolveTypeAliasNumConv(ce, const_cast<Expr&>(base))) {
+    if (aliasCandidate && TryResolveTypeAliasNumConv(ctx, ce, const_cast<Expr&>(base))) {
         return true;
     }
     return true;
@@ -2429,6 +2441,11 @@ bool TypeChecker::TypeCheckerImpl::CheckTypeAliasConvArgs(ASTContext& ctx, CallE
     // Guard with a check that the base target is indeed a type alias, so that legitimate
     // function-pointer calls returning a numeric type are not affected.
     auto ceTy = ce.GetTy();
+    if (ce.desugarExpr) {
+        // Already desugared into a builtin TypeConvExpr and checked by SynTypeConvExpr
+        // inside TryResolveTypeAliasNumConv; nothing left to do here.
+        return true;
+    }
     if (!Ty::IsTyCorrect(ceTy) || ceTy->IsNothing() ||
         !(ceTy->IsNumeric() || ceTy->kind == TypeKind::TYPE_RUNE)) {
         return false;
@@ -2500,11 +2517,11 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseRefExpr(
         // function call but a potential numeric type conversion via the alias.
         // Use re->ref.target (the original resolved target) rather than the `target`
         // parameter which may have been overwritten inside GetCallBaseCandidates.
-        return TryTypeAliasConvCall(ce, *re, re->ref.target && re->ref.target->astKind == ASTKind::TYPE_ALIAS_DECL &&
+        return TryTypeAliasConvCall(ctx, ce, *re, re->ref.target && re->ref.target->astKind == ASTKind::TYPE_ALIAS_DECL &&
             candidates.empty());
     }
     // Issue #1045: type alias to numeric/rune type is treated as a type conversion.
-    return TryResolveTypeAliasNumConv(ce, *re);
+    return TryResolveTypeAliasNumConv(ctx, ce, *re);
 }
 
 bool TypeChecker::TypeCheckerImpl::ChkCallBaseMemberAccess(
@@ -2535,10 +2552,10 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseMemberAccess(
             // function call but a potential numeric type conversion via the alias.
             // Use ma->target (the original resolved target) rather than the `target`
             // parameter which may have been overwritten inside GetCallBaseCandidates.
-            return TryTypeAliasConvCall(ce, *ma,
+            return TryTypeAliasConvCall(ctx, ce, *ma,
                 ma->target && ma->target->astKind == ASTKind::TYPE_ALIAS_DECL && candidates.empty());
         }
-        return TryResolveTypeAliasNumConv(ce, *ma);
+        return TryResolveTypeAliasNumConv(ctx, ce, *ma);
     }
 }
 
