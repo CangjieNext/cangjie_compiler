@@ -1680,6 +1680,9 @@ std::string Lambda::AddExtraComment() const
         res.emplace_back(
             "paramDftValHostParam: " + owner->GetIdentifier() + "[" + paramDftValHostParam->GetIdentifier() + "]");
     }
+    if (genericDecl != nullptr) {
+        res.emplace_back("genericDecl: " + genericDecl->GetIdentifier());
+    }
     if (auto gStr =  GetGenericTypeConstaintsStr(genericTypeParams); !gStr.empty()) {
         res.emplace_back(gStr);
     }
@@ -2158,6 +2161,7 @@ Lambda* Lambda::Clone(CHIRBuilder& builder, Block& parent) const
         GetSrcCodeIdentifier(), GetGenericTypeParams());
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
+    newNode->SetGenericDecl(genericDecl);
     auto newBody = GetBody()->Clone(builder, *newNode);
     for (auto p : GetParams()) {
         builder.CreateParameter(p->GetType(), INVALID_LOCATION, *newNode);
@@ -2343,6 +2347,16 @@ void Lambda::SetParamDftValHostParam(Parameter& hostParam)
 Parameter* Lambda::GetParamDftValHostParam() const
 {
     return paramDftValHostParam;
+}
+
+Lambda* Lambda::GetGenericDecl() const
+{
+    return genericDecl;
+}
+
+void Lambda::SetGenericDecl(Lambda* decl)
+{
+    genericDecl = decl;
 }
 
 Lambda* Lambda::GetParamDftValHostFunc() const

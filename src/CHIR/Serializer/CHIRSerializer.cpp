@@ -974,9 +974,11 @@ flatbuffers::Offset<PackageFormat::Lambda> CHIRSerializer::CHIRSerializerImpl::S
     auto retVal = GetId<Value>(obj.GetReturnValue());
     auto isConst = obj.IsCompileTimeValue();
     auto paramDftValHostParam = GetId<Value>(obj.GetParamDftValHostParam());
+    auto genericDecl = GetId<Expression>(obj.GetGenericDecl());
     return PackageFormat::CreateLambdaDirect(builder, base, funcTy, isLocalFunc, identifier.data(),
         srcCodeIdentifier.data(), params.empty() ? nullptr : &params,
-        genericTypeParams.empty() ? nullptr : &genericTypeParams, body, retVal, isConst, paramDftValHostParam);
+        genericTypeParams.empty() ? nullptr : &genericTypeParams, body, retVal, isConst, paramDftValHostParam,
+        genericDecl);
 }
 
 // ======================= Custom Type Def Serializers =========================

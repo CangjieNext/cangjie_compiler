@@ -1164,6 +1164,7 @@ table Lambda {
   retVal: uint32; // use values id
   isCompileTimeValue: bool = false;
   paramDftValHostParam: uint32; // use values id, host Parameter of default-value desugar lambda
+  genericDecl: uint32; // use exprs id, generic Lambda of an instantiated nested func
 }
 
 table GetInstantiateValue {
