@@ -16,14 +16,14 @@
 /include/cangjie/Frontend/ @wyq1213
 /include/cangjie/FrontendTool/ @wyq1213
 /include/cangjie/IncrementalCompilation/ @kkkkkkkbbbbbbb
-/include/cangjie/Lex/ @kkkkkkkbbbbbbb
+/include/cangjie/Lex/ @guan_jh
 /include/cangjie/Lex/Tokens.inc @mini-tang
 /include/cangjie/Macro/ @mini-tang
 /include/cangjie/Mangle/ @Yessy
 /include/cangjie/MetaTransformation/ @Timi3
 /include/cangjie/Modules/ @Augus_Jan
 /include/cangjie/Option/ @neilliuistaken
-/include/cangjie/Parse/ @kkkkkkkbbbbbbb
+/include/cangjie/Parse/ @guan_jh
 /include/cangjie/Sema/ @huohuixin
 /include/cangjie/Utils/ @wyq1213
 
@@ -40,13 +40,13 @@
 /src/Frontend/ @wyq1213
 /src/FrontendTool/ @wyq1213
 /src/IncrementalCompilation/ @kkkkkkkbbbbbbb
-/src/Lex/ @kkkkkkkbbbbbbb
+/src/Lex/ @guan_jh
 /src/Macro/ @mini-tang
 /src/Mangle/ @Yessy
 /src/MetaTransformation/ @Timi3
 /src/Modules/ @Augus_Jan
 /src/Option/ @neilliuistaken
-/src/Parse/ @kkkkkkkbbbbbbb
+/src/Parse/ @guan_jh
 /src/Parse/ParseQuote.cpp @mini-tang
 /src/Parse/ParseMacro.cpp @mini-tang
 /src/Sema/ @huohuixin
@@ -66,11 +66,11 @@
 /unittests/Driver/ @neilliuistaken
 /unittests/Frontend/ @wyq1213
 /unittests/IncrCompile/ @kkkkkkkbbbbbbb
-/unittests/Lex/ @kkkkkkkbbbbbbb
+/unittests/Lex/ @guan_jh
 /unittests/Macro/ @mini-tang
 /unittests/Modules/ @Augus_Jan
 /unittests/Option/ @neilliuistaken
-/unittests/Parse/ @kkkkkkkbbbbbbb
+/unittests/Parse/ @guan_jh
 /unittests/Sema/ @huohuixin
 /unittests/TestCompilerInstance/ @kkkkkkkbbbbbbb
 /unittests/Utils/ @wyq1213
