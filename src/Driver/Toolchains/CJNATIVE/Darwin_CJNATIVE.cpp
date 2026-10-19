@@ -191,6 +191,16 @@ void Darwin_CJNATIVE::GenerateLinkOptions(Tool& tool)
     auto cangjieLibPath =
         FileUtil::JoinPath(FileUtil::JoinPath(driver.cangjieHome, "lib"), driverOptions.GetCangjieLibTargetPathName());
     if (driverOptions.linkStatic) {
+        // ld64.lld extracts archive members in symbol-name order, which inverts
+        // the _CJ_Text_Start/_CJ_Text_End marker bracket embedded in the static
+        // runtime archives (see os/Macos/Section.cpp). Pin the layout with the
+        // order file generated next to the archives; fall back to archive
+        // member order when it is absent.
+        // auto orderFile = FileUtil::JoinPath(cangjieLibPath, "cangjie.order");
+        // if (FileUtil::FileExist(orderFile)) {
+        //     tool.AppendArg("-order_file", orderFile);
+        // }
+        tool.AppendArg("-archive_order");
         tool.AppendArg(FileUtil::JoinPath(cangjieLibPath, "libcangjie-runtime.a"));
         tool.AppendArg(FileUtil::JoinPath(cangjieLibPath, "libcangjie-thread.a"));
         tool.AppendArg(FileUtil::JoinPath(cangjieLibPath, "libboundscheck-static.a"));
