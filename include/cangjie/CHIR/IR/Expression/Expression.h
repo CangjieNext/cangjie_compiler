@@ -2071,7 +2071,14 @@ public:
      * @brief Clears the link to the host Parameter for default values.
      */
     void ClearParamDftValHostParam();
-    
+
+    /**
+     * @brief Instantiated nested func's generic Lambda, or nullptr.
+     *        Pass nullptr to clear the link.
+     */
+    Lambda* GetGenericDecl() const;
+    void SetGenericDecl(Lambda* decl);
+
     // ===--------------------------------------------------------------------===//
     // Lambda Body
     // ===--------------------------------------------------------------------===//
@@ -2204,6 +2211,7 @@ private:
     bool isLocalFunc{false};
     std::vector<GenericType*> genericTypeParams;
     Parameter* paramDftValHostParam = nullptr;
+    Lambda* genericDecl{nullptr};
     bool isCompileTimeValue = false;
 };
 

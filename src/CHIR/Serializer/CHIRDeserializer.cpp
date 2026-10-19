@@ -1487,6 +1487,11 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFor
         CJC_NULLPTR_CHECK(paramDftValHostParam);
         obj.SetParamDftValHostParam(*paramDftValHostParam);
     }
+    if (buffer->genericDecl() != 0) {
+        auto genericDecl = GetExpression<Lambda>(buffer->genericDecl());
+        CJC_NULLPTR_CHECK(genericDecl);
+        obj.SetGenericDecl(genericDecl);
+    }
 }
 
 template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFormat::Function* buffer, Function& obj)

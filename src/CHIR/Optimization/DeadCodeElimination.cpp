@@ -471,13 +471,27 @@ void DeadCodeElimination::UselessExprElimination(const Package& package, bool is
     }
 }
 
+namespace {
+// genericDecl is not an operand. After a generic Lambda is removed, clear it on
+// instantiated Lambdas that still point at the removed node.
+void ClearInstantiatedLambdaGenericDecl(Lambda& removed, BlockGroup& body)
+{
+    Visitor::Visit(body, [&removed](Expression& e) {
+        if (e.GetExprKind() == ExprKind::LAMBDA && StaticCast<Lambda*>(&e)->GetGenericDecl() == &removed) {
+            StaticCast<Lambda*>(&e)->SetGenericDecl(nullptr);
+        }
+        return VisitResult::CONTINUE;
+    });
+}
+} // namespace
+
 void DeadCodeElimination::UselessExprEliminationForFunc(const Function& func, bool isDebug) const
 {
     std::queue<Expression*> worklist;
     std::unordered_set<Expression*> worklistSet;
     for (auto block : func.GetBody()->GetBlocks()) {
         for (auto expr : block->GetExpressions()) {
-            if (CheckUselessExpr(*expr)) {
+            if (CheckUselessExpr(*expr) && worklistSet.find(expr) == worklistSet.end()) {
                 worklist.push(expr);
                 worklistSet.emplace(expr);
             }
@@ -490,16 +504,25 @@ void DeadCodeElimination::UselessExprEliminationForFunc(const Function& func, bo
         worklistSet.erase(expr);
 
         auto ops = expr->GetNonSuccessorOperands();
+        Function* topFunc = nullptr;
+        if (auto lambda = DynamicCast<Lambda*>(expr); lambda && !lambda->GetGenericTypeParams().empty()) {
+            topFunc = lambda->GetTopLevelFunc();
+        }
         DumpForDebug(expr, nullptr, isDebug);
         expr->RemoveSelfFromBlock();
+        if (topFunc != nullptr) {
+            CJC_NULLPTR_CHECK(topFunc->GetBody());
+            ClearInstantiatedLambdaGenericDecl(*StaticCast<Lambda*>(expr), *topFunc->GetBody());
+        }
 
         for (auto op : ops) {
-            if (op->IsLocalVar()) {
-                auto opExpr = StaticCast<LocalVar*>(op)->GetExpr();
-                if (CheckUselessExpr(*opExpr) && worklistSet.find(opExpr) == worklistSet.end()) {
-                    worklist.push(opExpr);
-                    worklistSet.emplace(opExpr);
-                }
+            if (!op->IsLocalVar()) {
+                continue;
+            }
+            auto opExpr = StaticCast<LocalVar*>(op)->GetExpr();
+            if (CheckUselessExpr(*opExpr) && worklistSet.find(opExpr) == worklistSet.end()) {
+                worklist.push(opExpr);
+                worklistSet.emplace(opExpr);
             }
         }
     }
