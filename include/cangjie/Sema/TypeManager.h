@@ -208,8 +208,6 @@ public:
     static bool HasThisParam(const AST::Decl& decl);
     static AST::ModalTy GetThisParamTy(const AST::FuncDecl& fd);
     static ModalInfo GetThisParamMode(const AST::Decl& decl);
-    /// Get modal of this param of prop accessor
-    ModalInfo GetAccessorThisModal(const AST::FuncDecl& fd);
     /// Get modal of target (i.e. ret of getter, value type of settter) of prop acessor
     AST::ModalTy GetAccessorTargetTy(const AST::FuncDecl& fd);
 
