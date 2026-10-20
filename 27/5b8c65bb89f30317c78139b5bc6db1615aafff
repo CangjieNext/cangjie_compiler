@@ -1,0 +1,20 @@
+src/Driver/Toolchains/CJNATIVE/Ohos_CJNATIVE.cpp
+  s_7848dc0e687fa7::t_566acad339c76e 67
+  s_7848dc0e687fa7::t_692608805c4c31 63-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "275b8c65bb89f30317c78139b5bc6db1615aafff",
+  "prompts": {},
+  "sessions": {
+    "s_7848dc0e687fa7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0a8d6-04dd-7f68-bd56-fc21c6ae551a",
+        "model": "k3-256k"
+      },
+      "human_author": null
+    }
+  }
+}
