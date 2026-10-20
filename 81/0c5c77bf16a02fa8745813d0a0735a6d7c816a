@@ -1,0 +1,19 @@
+src/CodeGen/Base/CGTypes/CGType.cpp
+  s_7848dc0e687fa7::t_2733422d8a55aa 671-674,676
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "810c5c77bf16a02fa8745813d0a0735a6d7c816a",
+  "prompts": {},
+  "sessions": {
+    "s_7848dc0e687fa7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0a8d6-04dd-7f68-bd56-fc21c6ae551a",
+        "model": "k3-256k"
+      },
+      "human_author": null
+    }
+  }
+}
