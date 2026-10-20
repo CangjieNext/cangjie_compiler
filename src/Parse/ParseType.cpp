@@ -407,6 +407,15 @@ bool ParserImpl::ParseModeSpecifier(ASTModalInfo& out)
         out.SetLocal(ASTMode::FULL, localBegin);
         return true;
     }
+    // Split the merged '!=' of '@local!=' into the modal '!' and an '='.
+    if (Seeing(TokenKind::NOTEQ) && IsTokenAdjacent(lastToken, Peek())) {
+        Token notEq = Peek();
+        lookahead = Token(TokenKind::NOT, "!", notEq.Begin(), notEq.Begin() + 1);
+        Next();
+        lookahead = Token(TokenKind::ASSIGN, "=", notEq.Begin() + 1, notEq.End());
+        out.SetLocal(ASTMode::FULL, localBegin);
+        return true;
+    }
     if (Seeing(TokenKind::QUEST)) {
         if (!IsTokenAdjacent(lastToken, Peek())) {
             scope.ResetParserScope();
@@ -446,7 +455,10 @@ bool ParserImpl::SeeingModalInfo()
         return IsTokenAdjacent(first, second);
     }
     if (first.kind == TokenKind::IDENTIFIER && first.Value() == LOCAL_MODE_SPECIFIER) {
-        if (second.kind != TokenKind::NOT && second.kind != TokenKind::QUEST) {
+        // NOTEQ covers '@local!=': the '!' of the modal immediately followed by
+        // '=' (e.g. an initializer); ParseModeSpecifier splits the token.
+        if (second.kind != TokenKind::NOT && second.kind != TokenKind::QUEST &&
+            second.kind != TokenKind::NOTEQ) {
             return false;
         }
         return IsTokenAdjacent(first, second);
