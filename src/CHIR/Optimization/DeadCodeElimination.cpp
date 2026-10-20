@@ -473,7 +473,7 @@ void DeadCodeElimination::UselessExprElimination(const Package& package, bool is
 
 namespace {
 // genericDecl is not an operand. After a generic Lambda is removed, clear it on
-// instantiated Lambdas that still point at the removed node.
+// instantiated Lambdas that still point to the removed node.
 void ClearInstantiatedLambdaGenericDecl(Lambda& removed, BlockGroup& body)
 {
     Visitor::Visit(body, [&removed](Expression& e) {

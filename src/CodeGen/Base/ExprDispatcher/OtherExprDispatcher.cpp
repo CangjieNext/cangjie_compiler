@@ -402,7 +402,13 @@ llvm::Value* HandleStartRegion(IRBuilder2& irBuilder, [[maybe_unused]] const CHI
 
 llvm::Value* HandleEndRegion(IRBuilder2& irBuilder, [[maybe_unused]] const CHIR::Expression& chirExpr)
 {
-    irBuilder.CallIntrinsicFunction(llvm::Type::getVoidTy(irBuilder.GetLLVMContext()), "CJ_MCC_EndLocalRegion", {});
+    auto call = irBuilder.CallIntrinsicFunction(
+        llvm::Type::getVoidTy(irBuilder.GetLLVMContext()), "CJ_MCC_EndLocalRegion", {});
+    // The local-region stub obtains the region owner from the caller's frame pointer. A tail call would tear down
+    // the current frame before entering the stub and make it close the caller's region instead.
+    if (auto callInst = llvm::dyn_cast<llvm::CallInst>(call)) {
+        callInst->setTailCallKind(llvm::CallInst::TCK_NoTail);
+    }
     return nullptr;
 }
 } // namespace

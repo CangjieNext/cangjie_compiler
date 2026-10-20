@@ -181,7 +181,8 @@ std::unordered_set<BlockGroup*> SetMemRegion::CollectFunctionRegionBlockGroup(co
                     }
                 }
             }
-            // 5. lambda where the function type is `local!` or `local?`
+            // 5. lambda where the function type is `local!` or `local?`.
+            // Although a lambda's type cannot be `local!`, still use IsLocalRegion here.
             if (lambda->GetFuncType()->IsLocalRegion()) {
                 auto body = expr.GetResult()->GetFuncOrLambdaBody();
                 CJC_NULLPTR_CHECK(body);

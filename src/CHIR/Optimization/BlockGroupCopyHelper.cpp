@@ -21,8 +21,8 @@
 
 namespace Cangjie::CHIR {
 namespace {
-// Instantiated Lambda::genericDecl is copied as the original pointer. If that generic
-// Lambda was cloned into the same block group, retarget the copy at the cloned generic.
+// Instantiated Lambda::genericDecl is copied as the original pointer. If this generic
+// Lambda and instantiated Lambda were cloned into another block group, retarget the copy at the cloned generic.
 void RemapLambdaGenericDecl(const std::vector<Block*>& blocks, const std::unordered_map<Value*, Value*>& valueMap)
 {
     for (auto block : blocks) {
