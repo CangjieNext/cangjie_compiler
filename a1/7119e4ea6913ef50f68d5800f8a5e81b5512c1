@@ -1,0 +1,73 @@
+src/CHIR/AST2CHIR/TranslateASTNode/TranslateTupleLit.cpp
+  s_b4748a4accc407::t_86ba72b00b16c9 15-18,20-22
+src/Sema/Desugar/DesugarAfterInstantiation.cpp
+  s_3a7e12ebbff7df::t_bde4672fd817fb 251,253-257,259,274,285
+  s_3a7e12ebbff7df::t_affba09358105a 432-433,443-444
+  s_3a7e12ebbff7df::t_d4b2650875ee8c 494
+  s_3a7e12ebbff7df::t_60cf3beca121f5 486
+  s_3a7e12ebbff7df::t_b4c99a49224237 379
+  s_3a7e12ebbff7df::t_a5ab97d78c41a1 407
+  s_3a7e12ebbff7df::t_91e57f6103c100 466
+  s_3a7e12ebbff7df::t_ecd9f1c9d1ddf4 325,328
+  s_3a7e12ebbff7df::t_4c32232c5bc23d 505
+  s_3a7e12ebbff7df::t_5298c5e471a047 357,361
+  s_3a7e12ebbff7df::t_50f99f10a998d6 331
+src/Sema/Desugar/AutoBoxing.h
+  s_3a7e12ebbff7df::t_a3ad088905ee8c 32
+src/AST/Clone.cpp
+  s_79dd6c8d8c88ee::t_7876fb4a7fc725 760
+src/Sema/Desugar/AfterTypeCheck/StrInterpolationExpr.cpp
+  s_79dd6c8d8c88ee::t_b6068d46dcb5a6 69
+  s_79dd6c8d8c88ee::t_9976d3c38ebf46 98-100
+  s_79dd6c8d8c88ee::t_bd8ffb5dbc8211 175,191-194,203-207,217,237-238
+  h_7fa24ec5a32f2d 62-63,96,101-102,134,220,231
+  s_79dd6c8d8c88ee::t_f241095c46fbd9 50-52,57-61,64-68
+  s_79dd6c8d8c88ee::t_e8f33685e69370 9
+src/Sema/TypeCheckExpr/NameReferenceExpr.cpp
+  s_3a7e12ebbff7df::t_9b58d13aea71d1 63-64
+src/CHIR/Checker/CHIRChecker.cpp
+  s_b4748a4accc407::t_e4a0cdb94bb6b3 3792,3794-3796,3798
+  s_b4748a4accc407::t_81cf40b0cf3794 3899,3901-3905,3907-3911
+  s_b4748a4accc407::t_802697f314fedc 3906
+src/CHIR/AST2CHIR/TranslateASTNode/TranslateMemberAccess.cpp
+  s_3a7e12ebbff7df::t_c28809e956cc0d 445
+src/CHIR/AST2CHIR/TranslateASTNode/TranslateMatchExpr.cpp
+  s_b4748a4accc407::t_b870877259d74b 535-537
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a17119e4ea6913ef50f68d5800f8a5e81b5512c1",
+  "prompts": {},
+  "humans": {
+    "h_7fa24ec5a32f2d": {
+      "author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    }
+  },
+  "sessions": {
+    "s_3a7e12ebbff7df": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "79c3bc0c-8816-4341-8f91-145a4154e2f1",
+        "model": "default"
+      },
+      "human_author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    },
+    "s_79dd6c8d8c88ee": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "42a994b6-2e71-4f0d-a714-3e5f97d01768",
+        "model": "default"
+      },
+      "human_author": null
+    },
+    "s_b4748a4accc407": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e2f6674d-8c8a-41d1-b1ef-076409be6d16",
+        "model": "default"
+      },
+      "human_author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    }
+  }
+}
