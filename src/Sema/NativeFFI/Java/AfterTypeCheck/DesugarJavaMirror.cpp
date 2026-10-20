@@ -6,6 +6,7 @@
 
 #include "TypeCheckUtil.h"
 #include "JavaDesugarManager.h"
+#include "ExclusiveScope.h"
 
 #include "NativeFFI/Utils.h"
 #include "cangjie/AST/AttributePack.h"
@@ -181,6 +182,7 @@ void JavaDesugarManager::InsertJavaRefGetterWithBody(ClassDecl& decl)
     nodes.emplace_back(std::move(ret));
 
     auto block = CreateBlock(std::move(nodes), javaEntityDecl->GetTy());
+    block->curFile = decl.curFile;
 
     auto funcBody = CreateFuncBody(
         std::move(paramLists),
@@ -203,7 +205,7 @@ void JavaDesugarManager::InsertJavaRefGetterWithBody(ClassDecl& decl)
     decl.body->decls.emplace_back(std::move(fd));
 }
 
-void JavaDesugarManager::GenerateInMirror(ClassDecl& classDecl)
+void JavaDesugarManager::GenerateInMirror(AfterTypeCheckContext& ctx, ClassDecl& classDecl)
 {
     InsertJavaMirrorWrappingConstructorBody(classDecl);
 
@@ -211,7 +213,7 @@ void JavaDesugarManager::GenerateInMirror(ClassDecl& classDecl)
     InsertJavaMirrorFinalizer(classDecl);
 
     if (&classDecl == utils.GetJStringDecl()) {
-        InsertJStringOfStringCtorBody(classDecl);
+        InsertJStringOfStringCtorBody(ctx, classDecl);
     }
 
     if (IsJArray(classDecl)) {
@@ -224,7 +226,7 @@ void JavaDesugarManager::GenerateInMirror(ClassDecl& classDecl)
     }
 }
 
-void JavaDesugarManager::GenerateInMirrors(File& file)
+void JavaDesugarManager::GenerateInMirrors(AfterTypeCheckContext& ctx, File& file)
 {
     auto pkg = file.curPackage;
 
@@ -242,13 +244,13 @@ void JavaDesugarManager::GenerateInMirrors(File& file)
                 return;
             }
             if (auto classDecl = As<ASTKind::CLASS_DECL>(cldecl)) {
-                GenerateInMirror(*classDecl);
+                GenerateInMirror(ctx, *classDecl);
             }
         }
     }
 }
 
-void JavaDesugarManager::InsertJStringOfStringCtorBody(ClassDecl& decl)
+void JavaDesugarManager::InsertJStringOfStringCtorBody(AfterTypeCheckContext& ctx, ClassDecl& decl)
 {
     CJC_ASSERT(&decl == utils.GetJStringDecl());
 
@@ -288,6 +290,7 @@ void JavaDesugarManager::InsertJStringOfStringCtorBody(ClassDecl& decl)
             ASTCloner::Clone(jniEnvPtr), WithinFile(CreateRefExpr(*param), curFile)));
 
         auto block = CreateBlock({}, lib.GetJavaEntityTy());
+        block->curFile = curFile;
         // Java_CFFI_JavaEntity($convertCall)
         auto javaEntity = lib.CreateJavaEntityJobjectCall(lib.CreateSwapLocalWithGlobalRefCall(
             ASTCloner::Clone(jniEnvPtr),
@@ -296,9 +299,13 @@ void JavaDesugarManager::InsertJStringOfStringCtorBody(ClassDecl& decl)
         return block;
    });
 
+    auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, std::move(block), lib.GetJavaEntityTy());
+    if (!exclusiveScopeCall) {
+        generatedCtor.EnableAttr(Attribute::IS_BROKEN);
+        return;
+    }
     auto superCall = CreateSuperCall(decl, *jObjectCtor, jObjectCtor->GetTy());
-    superCall->args.emplace_back(CreateFuncArg(WrapReturningLambdaCall(typeManager, std::move(block))));
-
+    superCall->args.emplace_back(CreateFuncArg(std::move(exclusiveScopeCall)));
     generatedCtor.funcBody->body->body.emplace_back(std::move(superCall));
 }
 

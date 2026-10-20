@@ -14,6 +14,7 @@
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/SafePointer.h"
+#include "ExclusiveScope.h"
 
 namespace Cangjie::Native::FFI::Java {
 
@@ -48,7 +49,7 @@ bool IsSizeJNITypeConstructor(const FuncDecl& constr, const ImportManager& impor
 
 } // namespace
 
-void DesugarJArray::GenerateJniTypeConstructor(ClassDecl& jarray) const
+void DesugarJArray::GenerateJniTypeConstructor(AfterTypeCheckContext& ctx, ClassDecl& jarray) const
 {
     CJC_ASSERT_WITH_MSG(IsJArray(jarray), "Expected JArray decl");
 
@@ -58,7 +59,7 @@ void DesugarJArray::GenerateJniTypeConstructor(ClassDecl& jarray) const
         if (const auto constr = DynamicCast<FuncDecl*>(member.get()); constr && IsSizeConstructor(*constr)) {
             newConstr = ASTCloner::Clone(Ptr(constr));
             InsertJniTypeParamIntoConstructor(*newConstr);
-            InsertConstructorBody(*newConstr);
+            InsertConstructorBody(ctx, *newConstr);
             break;
         }
     }
@@ -155,7 +156,7 @@ void DesugarJArray::InsertJniTypeParamIntoConstructor(FuncDecl& constr) const
     }
 }
 
-void DesugarJArray::InsertConstructorBody(FuncDecl& constr) const
+void DesugarJArray::InsertConstructorBody(AfterTypeCheckContext& ctx, FuncDecl& constr) const
 {
     CJC_ASSERT_WITH_MSG(IsJArray(*constr.outerDecl), "Expected JArray decl");
 
@@ -178,7 +179,13 @@ void DesugarJArray::InsertConstructorBody(FuncDecl& constr) const
 
     // Java_CFFI_JavaEntity($newObjectCall)
     auto javaref = ilib.CreateJavaEntityJobjectCall(std::move(newObjectCall));
-    std::vector<OwnedPtr<Node>> lambdaNodes = Nodes(std::move(jniEnvVar), std::move(javaref));
+    auto scopeBody = CreateBlock(Nodes(std::move(jniEnvVar), std::move(javaref)), ilib.GetJavaEntityTy());
+    scopeBody->curFile = constr.curFile;
+    auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, std::move(scopeBody), ilib.GetJavaEntityTy());
+    if (!exclusiveScopeCall) {
+        constr.EnableAttr(Attribute::IS_BROKEN);
+        return;
+    }
 
     constr.constructorCall = ConstructorCall::OTHER_INIT;
 
@@ -188,7 +195,7 @@ void DesugarJArray::InsertConstructorBody(FuncDecl& constr) const
     static auto generatedJavaRefInitConstr = GetJavaMirrorWrappingConstructor(*jarray);
     auto thisCall = CreateThisCall(
         *constr.outerDecl, *generatedJavaRefInitConstr, generatedJavaRefInitConstr->GetTy(), constr.curFile);
-    thisCall->args.push_back(CreateFuncArg(WrapReturningLambdaCall(typeManager, std::move(lambdaNodes))));
+    thisCall->args.push_back(CreateFuncArg(std::move(exclusiveScopeCall)));
     constr.funcBody->body->body.clear();
     constr.funcBody->body->body.push_back(std::move(thisCall));
 }
@@ -334,7 +341,7 @@ void DesugarJArray::Process(AfterTypeCheckContext& ctx)
             }
             InsertOriginalSizeConstructorBody(*fd);
         }
-        GenerateJniTypeConstructor(jArray);
+        GenerateJniTypeConstructor(ctx, jArray);
     }
 
     for (auto& file : ctx.pkg.files) {

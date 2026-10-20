@@ -668,7 +668,12 @@ void CGType::GenTypeInfo()
         if (cgMod.GetCGContext().GetCompileOptions().target.os == Triple::OSType::WINDOWS) {
             typeInfo->setLinkage(llvm::GlobalValue::InternalLinkage);
         } else {
+            // A static GI typeInfo has no unique owning package: every package that uses the
+            // instantiation emits its own copy, so LinkOnceODR is kept for linker dedup.
+            // It is never referenced across DSOs (each DSO has its own copy), so hide it to
+            // keep it out of .dynsym and make in-DSO references non-preemptible.
             typeInfo->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+            typeInfo->setVisibility(llvm::GlobalValue::HiddenVisibility);
         }
     } else { // For Concrete type:
         // Note: The chirType that enters this branch is expected to be of CustomType.

@@ -32,7 +32,7 @@ void JavaDesugarManager::ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx,
     Process<GenerateJavaImplApiStub>(ctx, typeManager, lib, jniBridge);
 
     for (auto& file : ctx.pkg.files) {
-        GenerateInMirrors(*file);
+        GenerateInMirrors(ctx, *file);
     }
 
     Process<GenerateInJavaImplRegistryCompanion>(ctx, typeManager, lib);
@@ -69,7 +69,7 @@ void JavaInteropManager::DesugarPackage(Package& pkg,
     JavaDesugarManager desugarer{
         importManager, typeManager, diag, mangler, javagenOutputPath, outputPath, memberMap};
 
-    AfterTypeCheckContext ctx{importManager, typeManager, pkg, hasMirrorOrImpl};
+    AfterTypeCheckContext ctx{importManager, typeManager, pkg, hasMirrorOrImpl, this->target};
     if (hasMirrorOrImpl) {
         desugarer.ProcessJavaMirrorImplStages(ctx, desugarPropRef);
     }

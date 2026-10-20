@@ -198,21 +198,21 @@ llvm::Value* GenerateArrayGetElemRef(IRBuilder2& irBuilder, const CHIR::Intrinsi
 
 /**
  * Create a memcpy or copyto by the specified ArrayCopyToInfo.
- * Since the restriction of `memcpy` and `copyto`, we have to split the array as small chunks if the array size >= 2G,
- * and `memcpy` or `copyto` each chunk.
- * var iterator = 0
- * while (iterator + 2G ) < copylen) {
- *      copyTo(src,                 // address of the source array (i8Ptr)
- *             dst,                 // address of the destination array (i8Ptr)
- *             srcArrPtr,           // address of the source array (arrayTypePtr)
- *             dstArrPtr,           // address of the destination array (arrayTypePtr)
- *             2G,                  // size to memcpy or copyto
- *             elemType,            // array element type
- *             srcIndex + iterator, // start index of source array
- *             dstIndex + iterator) // start index of destination array
- *      iterator += 2G
+ * Since a single `memcpy` / `copyto` is limited to 2G, larger arrays are copied
+ * in chunks, with the last chunk taking whatever remains:
+ * var offset = 0
+ * while (offset < copylen) {
+ *      segmentSize = min(copylen - offset, 2G)
+ *      copyTo(src,                // address of the source array (i8Ptr)
+ *             dst,                // address of the destination array (i8Ptr)
+ *             srcArrPtr,          // address of the source array (arrayTypePtr)
+ *             dstArrPtr,          // address of the destination array (arrayTypePtr)
+ *             segmentSize,        // size to memcpy or copyto
+ *             elemType,           // array element type
+ *             srcIndex + offset,  // start index of source array
+ *             dstIndex + offset)  // start index of destination array
+ *      offset += segmentSize
  * }
- * copyTo(src, dst, srcArrPtr, dstArrPtr, elemType, copylen - iterator, srcIndex + iterator ,dstIndex + iterator)
  */
 
 void ArrayMemCpyOrCopyTo(IRBuilder2& irBuilder, const ArrayCopyToInfo& arrayCopyToInfo)
@@ -225,45 +225,51 @@ void ArrayMemCpyOrCopyTo(IRBuilder2& irBuilder, const ArrayCopyToInfo& arrayCopy
         return;
     }
 
-    auto [whileLoopHeader, whileLoopBody, afterWhileLoop] = Vec2Tuple<3>(irBuilder.CreateAndInsertBasicBlocks(
-        {GenNameForBB("arr.copy.start"), GenNameForBB("arr.copy.body"), GenNameForBB("arr.copy.end")}));
+    auto [loopCond, loopBody, loopExit] = Vec2Tuple<3>(irBuilder.CreateAndInsertBasicBlocks(
+        {GenNameForBB("arr.copy.cond"), GenNameForBB("arr.copy.body"), GenNameForBB("arr.copy.exit")}));
 
     constexpr uint64_t align = 8;
     constexpr uint64_t alignDown = INT32_MAX & ~(align - 1);
     const auto SIZE_OF_SINGLE_COPY = irBuilder.getInt64(alignDown);
     auto i64Ty = irBuilder.getInt64Ty();
-    auto iterator = irBuilder.CreateEntryAlloca(i64Ty, nullptr, "iterator");
-    (void)irBuilder.CreateStore(irBuilder.getInt64(0), iterator);
-    (void)irBuilder.CreateBr(whileLoopHeader);
 
-    // generate whileLoopHeader
-    // `while(iterator + 2G) < copylen) {`
-    irBuilder.SetInsertPoint(whileLoopHeader);
-    auto cmpResult = irBuilder.CreateICmpSLT(
-        irBuilder.CreateAdd(irBuilder.CreateLoad(i64Ty, iterator), SIZE_OF_SINGLE_COPY), copylen, "max.size");
-    (void)irBuilder.CreateCondBr(cmpResult, whileLoopBody, afterWhileLoop);
+    // Optimized structure: while (remaining > 0) with dynamic segment size selection
+    // This eliminates the need for separate residual copy after the loop
+    auto* preBlock = irBuilder.GetInsertBlock();
+    irBuilder.CreateBr(loopCond);
 
-    // generate whileLoopBody
-    // `copyToFunc(src, dst, srcArrPtr, dstArrPtr, elemType, 2G, srcIndex + iterator, dstIndex + iterator)`
-    irBuilder.SetInsertPoint(whileLoopBody);
-    auto iteratorIndex = irBuilder.CreateLoad(i64Ty, iterator);
-    irBuilder.CreateCopyTo(ArrayCopyToInfo(arrayCopyToInfo.srcBP, arrayCopyToInfo.dstBP, arrayCopyToInfo.srcArrPtr,
-        arrayCopyToInfo.dstArrPtr, SIZE_OF_SINGLE_COPY, irBuilder.CreateAdd(iteratorIndex, arrayCopyToInfo.srcIndex),
-        irBuilder.CreateAdd(iteratorIndex, arrayCopyToInfo.dstIndex), arrayCopyToInfo.elemType, SIZE_OF_SINGLE_COPY));
-    // `iterator += 2G`
-    auto newIterator = irBuilder.CreateAdd(iteratorIndex, SIZE_OF_SINGLE_COPY);
-    (void)irBuilder.CreateStore(newIterator, iterator);
-    (void)irBuilder.CreateBr(whileLoopHeader);
+    // loop_cond: check if remaining > 0
+    irBuilder.SetInsertPoint(loopCond);
+    auto offsetPhi = irBuilder.CreatePHI(i64Ty, 2, "offset");
+    offsetPhi->addIncoming(irBuilder.getInt64(0), preBlock);
 
-    // generate afterWhileLoop
-    // `copyToFunc(src, dst, srcArrPtr, dstArrPtr, elemType, copylen - iterator, srcIndex + iterator ,dstIndex +
-    // iterator)`
-    irBuilder.SetInsertPoint(afterWhileLoop);
-    auto index = irBuilder.CreateLoad(i64Ty, iterator);
-    auto residualSize = irBuilder.CreateSub(copylen, index);
-    irBuilder.CreateCopyTo(ArrayCopyToInfo(arrayCopyToInfo.srcBP, arrayCopyToInfo.dstBP, arrayCopyToInfo.srcArrPtr,
-        arrayCopyToInfo.dstArrPtr, residualSize, irBuilder.CreateAdd(index, arrayCopyToInfo.srcIndex),
-        irBuilder.CreateAdd(index, arrayCopyToInfo.dstIndex), arrayCopyToInfo.elemType, residualSize));
+    auto remaining = irBuilder.CreateSub(copylen, offsetPhi, "remaining");
+    auto shouldContinue = irBuilder.CreateICmpUGT(remaining, irBuilder.getInt64(0), "should_continue");
+    irBuilder.CreateCondBr(shouldContinue, loopBody, loopExit);
+
+    // loop_body: calculate segment size and copy
+    irBuilder.SetInsertPoint(loopBody);
+
+    // Use select to choose: remaining > 2GB ? 2GB : remaining
+    auto isLarge = irBuilder.CreateICmpUGT(remaining, SIZE_OF_SINGLE_COPY, "is_large");
+    auto segmentSize = irBuilder.CreateSelect(isLarge, SIZE_OF_SINGLE_COPY, remaining, "segment_size");
+
+    // Calculate src/dst index offsets
+    auto srcIndexOffset = irBuilder.CreateAdd(arrayCopyToInfo.srcIndex, offsetPhi, "src.idx.off");
+    auto dstIndexOffset = irBuilder.CreateAdd(arrayCopyToInfo.dstIndex, offsetPhi, "dst.idx.off");
+
+    // Perform copy with calculated segment size
+    irBuilder.CreateCopyTo(ArrayCopyToInfo(arrayCopyToInfo.srcBP, arrayCopyToInfo.dstBP,
+        arrayCopyToInfo.srcArrPtr, arrayCopyToInfo.dstArrPtr, segmentSize, srcIndexOffset, dstIndexOffset,
+        arrayCopyToInfo.elemType, segmentSize));
+
+    // Update offset and loop back
+    auto nextOffset = irBuilder.CreateAdd(offsetPhi, segmentSize, "offset.next");
+    irBuilder.CreateBr(loopCond);
+    offsetPhi->addIncoming(nextOffset, loopBody);
+
+    // loop_exit: done
+    irBuilder.SetInsertPoint(loopExit);
 }
 
 struct ArrayPosition {
