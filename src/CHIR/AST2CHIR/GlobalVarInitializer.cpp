@@ -288,15 +288,13 @@ template <typename T, typename... Args>
 Ptr<Function> GlobalVarInitializer::CreateGVInitFunc(const T& node, Args&&... args) const
 {
     auto context = GVInit<T>(node, trans, std::forward<Args>(args)...);
-    bool isConst{false};
-    // No debug location generated for const var initializer func
-    // because these exprs will not be executed at runtime and falsely contribute to coverage
-    if constexpr (std::is_same_v<T, AST::VarDecl>) {
-        isConst = node.IsConst();
-    }
+    // Keep the source location for both const and non-const initializers.
+    // Locations are needed for const-analysis diagnostics and debugging. When const
+    // eval succeeds the initializer body is replaced or removed; otherwise it runs
+    // as a normal initializer at runtime, where the location remains valid.
     return trans.CreateEmptyGVInitFunc(std::move(context.mangledName), std::move(context.srcCodeIdentifier),
         std::move(context.rawMangledName), std::move(context.packageName), GVInit<T>::LINKAGE,
-        isConst ? INVALID_LOCATION : std::move(context.loc), context.isConst);
+        std::move(context.loc), context.isConst);
 }
 
 Function* GlobalVarInitializer::TranslateInitializerToFunction(const AST::VarDecl& decl)
@@ -305,17 +303,10 @@ Function* GlobalVarInitializer::TranslateInitializerToFunction(const AST::VarDec
     auto func = CreateGVInitFunc<AST::VarDecl>(decl);
     auto globalVar = StaticCast<GlobalVar*>(variable);
     globalVar->SetInitFunc(*func);
-    // No debug location generated for const var initializer
     auto initNode = trans.TranslateExprArg(
         *decl.initializer, *StaticCast<RefType*>(variable->GetType())->GetBaseType());
-    if (decl.IsConst()) {
-        for (auto expr : trans.currentBlock->GetExpressions()) {
-            expr->SetDebugLocation(INVALID_LOCATION);
-        }
-    }
-    auto loc = decl.IsConst() ? INVALID_LOCATION : trans.TranslateLocation(decl);
     CJC_ASSERT(variable->GetType()->IsRef());
-    trans.CreateAndAppendWrappedStore(*initNode, *variable, loc);
+    trans.CreateAndAppendWrappedStore(*initNode, *variable, trans.TranslateLocation(decl));
     auto curBlock = trans.GetCurrentBlock();
     if (curBlock->GetTerminator() == nullptr) {
         trans.CreateAndAppendTerminator<Exit>(curBlock);
@@ -390,18 +381,8 @@ void GlobalVarInitializer::FillGVInitFuncWithApplyAndExit(const std::vector<Ptr<
 Function* GlobalVarInitializer::TranslateTupleOrEnumPatternInitializer(const AST::VarWithPatternDecl& decl)
 {
     auto func = CreateGVInitFunc<AST::VarWithPatternDecl>(decl);
-    if (decl.IsConst()) {
-        func->SetDebugLocation(INVALID_LOCATION);
-    }
     auto initNode = Translator::TranslateASTNode(*decl.initializer, trans);
     trans.FlattenVarWithPatternDecl(*decl.irrefutablePattern, initNode, false);
-    if (decl.IsConst()) {
-        for (auto bl : func->GetBody()->GetBlocks()) {
-            for (auto expr : bl->GetExpressions()) {
-                expr->SetDebugLocation(INVALID_LOCATION);
-            }
-        }
-    }
     auto curBlock = trans.GetCurrentBlock();
     if (curBlock->GetTerminator() == nullptr) {
         trans.CreateAndAppendTerminator<Exit>(curBlock);
