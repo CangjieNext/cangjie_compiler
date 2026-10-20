@@ -12,15 +12,12 @@
 
 #include "cangjie/Macro/MacroCommon.h"
 
-#include <fstream>
 #include <string>
 #include <string_view>
 #include <vector>
 
-#include "cangjie/Basic/Print.h"
 #include "cangjie/Basic/Utils.h"
 #include "cangjie/Lex/Lexer.h"
-#include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Utils/FileUtil.h"
 #include "cangjie/Macro/TokenSerialization.h"
 #include "cangjie/Basic/DiagnosticEmitter.h"
@@ -348,7 +345,7 @@ bool HasSourceColumnGap(const Token& prev, const Token& cur)
 
 bool IsModalAfterAt(const TokenVector& tokens, size_t atIndex, bool requireAdjacent)
 {
-    // Local mode is three tokens: @ ~ local  or  @ local !/?
+    // Local mode is three tokens: @ ~ local or @ local !/?
     constexpr size_t localModeLastOffset = 2;
     constexpr std::string_view localMode{"local"};
     if (atIndex + localModeLastOffset >= tokens.size() || tokens[atIndex].Value() != "@") {
@@ -360,13 +357,13 @@ bool IsModalAfterAt(const TokenVector& tokens, size_t atIndex, bool requireAdjac
     if (t1.kind == TokenKind::BITNOT) {
         isModal = t2.kind == TokenKind::IDENTIFIER && t2.Value() == localMode;
     } else if (t1.kind == TokenKind::IDENTIFIER && t1.Value() == localMode) {
-        isModal = t2.kind == TokenKind::NOT || t2.kind == TokenKind::QUEST;
+        // include NOTEQ so @local!= is treated as mode specifier
+        isModal = t2.kind == TokenKind::NOT || t2.kind == TokenKind::QUEST || t2.kind == TokenKind::NOTEQ;
     }
     if (!isModal) {
         return false;
     }
     // Macro-emitted tokens may share a column until RefreshNewTokensPos; that is not a gap, so still glue.
-    // Skip glue only when the source already had a column gap (e.g. @local !).
     return !requireAdjacent || !HasSourceColumnGap(t1, t2);
 }
 }
