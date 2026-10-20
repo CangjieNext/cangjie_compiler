@@ -122,3 +122,145 @@ TEST(DemangleTest, CallOperatorKeepsParamList)
         std::string(di.GetPkgName().Str()) + "." + std::string(di.GetFullName(demangler.ScopeResolution()).Str());
     EXPECT_STREQ(expectedFull, full.c_str());
 }
+
+// ---------------------------------------------------------------------------
+// Modal (local-mode) demangling.
+//
+// Symbol shapes below are the exact defines emitted by
+// cjc --save-temps for a package with `class Box { mut prop pA: Int64; func touch(): Unit }`
+// compiled with modal this/param annotations, i.e. real-world linkage names.
+// ---------------------------------------------------------------------------
+
+TEST(DemangleTest, ThisModeOverloads)
+{
+    // <this-mode> ::= W<payload>E. The three this-locality overloads of one member must
+    // demangle to distinct readable names, and the W payload must not leak into the
+    // parameter list (empty `()` is rendered from `v`, not from the mode-set).
+    struct Case {
+        const char* mangled;
+        const char* expected;
+    };
+    for (auto c : {Case{"_CN7default3Box5touchHv", "default.Box.touch()"},
+           Case{"_CN7default3Box5touchHWlEv", "default.Box.touch(this @ local?)"},
+           Case{"_CN7default3Box5touchHWLEv", "default.Box.touch(this @ local!)"}}) {
+        Demangler<StdString> demangler(c.mangled, ".");
+        auto di = demangler.Demangle();
+        ASSERT_TRUE(di.IsValid()) << c.mangled;
+        std::string full =
+            std::string(di.GetPkgName().Str()) + "." + std::string(di.GetFullName(demangler.ScopeResolution()).Str());
+        EXPECT_STREQ(c.expected, full.c_str()) << c.mangled;
+    }
+}
+
+TEST(DemangleTest, ModalConstructor)
+{
+    // Init without param modes: `6<init>HWLEv` must render as `.init(this @ local!)`.
+    const char* mangled = "_CN7default3Box6<init>HWLEv";
+    Demangler<StdString> demangler(mangled, ".");
+    auto di = demangler.Demangle();
+    ASSERT_TRUE(di.IsValid());
+    std::string full =
+        std::string(di.GetPkgName().Str()) + "." + std::string(di.GetFullName(demangler.ScopeResolution()).Str());
+    EXPECT_STREQ("default.Box.init(this @ local!)", full.c_str());
+}
+
+TEST(DemangleTest, ModalPropertyAccessors)
+{
+    // Prop getter with modal this; setter additionally carries a modal value parameter.
+    // `::get` / `::set` must stay stable because obfuscation configs reference them.
+    struct Case {
+        const char* mangled;
+        const char* expected;
+    };
+    for (auto c : {Case{"_CN7default3Box2pApgHv", "default.Box.pA::get()"},
+           Case{"_CN7default3Box2pApgHWlEv", "default.Box.pA::get(this @ local?)"},
+           Case{"_CN7default3Box2pApgHWLEv", "default.Box.pA::get(this @ local!)"},
+           Case{"_CN7default3Box2pApsHWlElQlE", "default.Box.pA::set(this @ local?, Int64 @ local?)"},
+           Case{"_CN7default3Box2pApsHWLElQLE", "default.Box.pA::set(this @ local!, Int64 @ local!)"}}) {
+        Demangler<StdString> demangler(c.mangled, ".");
+        auto di = demangler.Demangle();
+        ASSERT_TRUE(di.IsValid()) << c.mangled;
+        std::string full =
+            std::string(di.GetPkgName().Str()) + "." + std::string(di.GetFullName(demangler.ScopeResolution()).Str());
+        EXPECT_STREQ(c.expected, full.c_str()) << c.mangled;
+    }
+}
+
+TEST(DemangleTest, ModalParamList)
+{
+    // Both <type-mode> encodings in one parameter list: (Int64 @local?, Int64 @local!).
+    // The arg list must render each mode in place and keep the comma separation intact.
+    const char* mangled = "_CN7default14withLocalParamHlQlElQLE";
+    Demangler<StdString> demangler(mangled, ".");
+    auto di = demangler.Demangle();
+    ASSERT_TRUE(di.IsValid());
+    EXPECT_STREQ("(Int64 @ local?, Int64 @ local!)", di.GetArgTypesName().Str());
+    std::string full =
+        std::string(di.GetPkgName().Str()) + "." + std::string(di.GetFullName(demangler.ScopeResolution()).Str());
+    EXPECT_STREQ("default.withLocalParam(Int64 @ local?, Int64 @ local!)", full.c_str());
+}
+
+TEST(DemangleTest, ModalTupleType)
+{
+    // Tuple body `T1_lE` + <type-mode> `QlE`: the mode-set must attach to the whole tuple,
+    // not be misread as a member of the tuple.
+    Demangler<StdString> demangler("T1_lEQlE", ".");
+    auto di = demangler.Demangle(true);
+    ASSERT_TRUE(di.IsValid());
+    // Unlike RawArray/VArray/CPointer, the tuple renderer attaches the mode to the whole
+    // tuple, matching the mangler's WithModal placement (round-trip consistent).
+    EXPECT_STREQ("Tuple<Int64> @ local?", di.GetFullName(demangler.ScopeResolution()).Str());
+}
+
+// NOTE (keep-watch): for RawArray/VArray/CPointer the demangler consumes a trailing
+// mode-set into the ELEMENT type (`DemangleNextUnit` appends it before the container's
+// own AppendModeTypeIfExists runs), so `A0_lEQLE` (array @ local! per the mangler's
+// WithModal placement) renders as "RawArray<Int64 @ local!>[]" and collides with the
+// element-modal encoding `A0_lQlEE`. Recorded here to pin current behavior; see the
+// summary for the round-trip asymmetry finding.
+TEST(DemangleTest, ModalRawArrayType)
+{
+    // RawArray body `A0_lE` (dims-1 = 0, element Int64) + array mode `QLE`.
+    Demangler<StdString> demangler("A0_lQLE", ".");
+    auto di = demangler.Demangle(true);
+    ASSERT_TRUE(di.IsValid());
+    EXPECT_STREQ("RawArray<Int64 @ local!>[]", di.GetFullName(demangler.ScopeResolution()).Str());
+}
+
+TEST(DemangleTest, ModalVArrayType)
+{
+    // VArray body `V3_lE` (size-1 = 3, element Int64) + array mode `QlE`.
+    Demangler<StdString> demangler("V3_lQlE", ".");
+    auto di = demangler.Demangle(true);
+    ASSERT_TRUE(di.IsValid());
+    EXPECT_STREQ("VArray<Int64 @ local?,$4>", di.GetFullName(demangler.ScopeResolution()).Str());
+}
+
+TEST(DemangleTest, ModalCPointerType)
+{
+    // CPointer body `PlE` (prefix P, element Int64) + `QLE`.
+    Demangler<StdString> demangler("PlEQLE", ".");
+    auto di = demangler.Demangle(true);
+    ASSERT_TRUE(di.IsValid());
+    // The mode-set following the element is silently dropped here (neither the element nor
+    // the pointer renders it) — see the round-trip asymmetry note above.
+    EXPECT_STREQ("CPointer<Int64>", di.GetFullName(demangler.ScopeResolution()).Str());
+}
+
+TEST(DemangleTest, InvalidModalPayloadRejected)
+{
+    // Payload letters other than L/l (U/u and I/i are reserved for future axes) must be
+    // rejected instead of being silently rendered.
+    Demangler<StdString> demangler("QxE", ".");
+    auto di = demangler.Demangle(true);
+    EXPECT_FALSE(di.IsValid());
+}
+
+TEST(DemangleTest, UnterminatedModalEncodingRejected)
+{
+    // A mode-set missing its terminating `E` must be rejected: a truncated symbol that
+    // silently demangled would make obfuscation configs and stack traces misleading.
+    Demangler<StdString> demangler("Ql", ".");
+    auto di = demangler.Demangle(true);
+    EXPECT_FALSE(di.IsValid());
+}
