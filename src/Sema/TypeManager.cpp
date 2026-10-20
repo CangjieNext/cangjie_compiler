@@ -1413,15 +1413,6 @@ ModalInfo TypeManager::GetThisParamMode(const Decl& decl)
     return {};
 }
 
-ModalInfo TypeManager::GetAccessorThisModal(const FuncDecl& fd)
-{
-    if (fd.propDecl != nullptr) {
-        auto propTy = fd.propDecl->type ? fd.propDecl->type->GetTy() : fd.propDecl->GetTy();
-        return propTy.Mode();
-    }
-    return {};
-}
-
 ModalTy TypeManager::GetAccessorTargetTy(const FuncDecl& fd)
 {
     if (fd.isGetter) {
