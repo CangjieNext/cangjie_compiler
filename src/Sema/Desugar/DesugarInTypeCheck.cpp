@@ -570,6 +570,7 @@ void TypeChecker::TypeCheckerImpl::DesugarTypeAliasNumConvCall(
     auto typeConvExpr = MakeOwnedNode<TypeConvExpr>();
     auto type = MakeOwnedNode<PrimitiveType>();
     type->kind = targetKind;
+    type->SetTy(TypeManager::GetPrimitiveTy(targetKind));
     typeConvExpr->type = std::move(type);
     if (!ce.args.empty()) {
         typeConvExpr->expr = std::move(ce.args[0]->expr);
