@@ -360,7 +360,8 @@ bool IsModalAfterAt(const TokenVector& tokens, size_t atIndex, bool requireAdjac
     if (t1.kind == TokenKind::BITNOT) {
         isModal = t2.kind == TokenKind::IDENTIFIER && t2.Value() == localMode;
     } else if (t1.kind == TokenKind::IDENTIFIER && t1.Value() == localMode) {
-        isModal = t2.kind == TokenKind::NOT || t2.kind == TokenKind::QUEST;
+        // include NOTEQ so @local!= is treated as mode specifier
+        isModal = t2.kind == TokenKind::NOT || t2.kind == TokenKind::QUEST || t2.kind == TokenKind::NOTEQ;
     }
     if (!isModal) {
         return false;

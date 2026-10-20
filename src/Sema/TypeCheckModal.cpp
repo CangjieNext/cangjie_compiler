@@ -4,7 +4,6 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-#include "Diags.h"
 #include "JoinAndMeet.h"
 #include "ScopeManager.h"
 #include "TypeCheckUtil.h"
@@ -18,7 +17,6 @@
 #include "cangjie/Sema/TypeManager.h"
 
 #include <algorithm>
-#include <optional>
 #include <string_view>
 #include <unordered_set>
 #include <vector>
@@ -219,6 +217,22 @@ private:
     TypeManager& type;
 };
 
+/// Which clause of a TryExpr a forbidden-context entry marks (NONE for non-try sites).
+enum class ForbiddenTryPart : uint8_t {
+    NONE,
+    TRY_BLOCK,
+    CATCH_BLOCK,
+    HANDLE_BLOCK,
+};
+
+/// One entry on the forbidden-context stack: an AST site where exclave is banned,
+/// plus (for a TryExpr) which clause the walk is inside, so diagnostics can name it.
+struct ForbiddenContextEntry {
+    Ptr<const Node> node;
+    ForbiddenTryPart part = ForbiddenTryPart::NONE;
+};
+
+
 /// All checks:
 /// 1. Check return expression of a function body cannot have internal @local! type
 /// 2. Check global var cannot have local type
@@ -366,13 +380,11 @@ private:
             return VisitAction::SKIP_CHILDREN;
         }
         if (auto lambda = DynamicCast<LambdaExpr>(node)) {
-            PushForbiddenFrame();
-            CheckNeedsRegion(*lambda);
+            PushForbiddenContext(lambda);
         }
         if (auto func = DynamicCast<FuncDecl>(node)) {
-            PushForbiddenFrame();
+            PushForbiddenContext(func);
             CheckAbstractExclaveFunc(*func);
-            CheckNeedsRegion(*func);
             CheckWholeBodyIsExclave(*func);
             if (func->IsFinalizer()) {
                 CheckFinalizerThisParam(*func);
@@ -388,13 +400,14 @@ private:
             CheckExclaveModifierInInvalidFunSig(*func);
         }
         if (auto spawn = DynamicCast<SpawnExpr>(node)) {
-            PushForbiddenContext("spawn expr");
+            PushForbiddenContext(spawn);
             CheckLocalVarRefOutsideSpawn(*spawn);
         }
         if (auto exclave = DynamicCast<ExclaveExpr>(node)) {
             CheckNestedExclave(ctx, *exclave);
-            CheckExclaveInForbiddenContext(ctx, *exclave);
-            CheckExclaveInInvalidFunSig(ctx, *exclave);
+            if (!CheckExclaveInForbiddenContext(ctx, *exclave)) {
+                CheckExclaveInInvalidFunSig(ctx, *exclave);
+            }
         }
         if (auto ref = DynamicCast<RefExpr>(node)) {
             CheckLocalVarRefOutsideExclave(ctx, *ref);
@@ -480,53 +493,56 @@ private:
 
     VisitAction VisitPost(Ptr<Node> node)
     {
-        if (Is<SpawnExpr>(node)) {
+        // VisitPre may return SKIP_CHILDREN before pushing (broken nodes, ill-typed func-like),
+        // while VisitPost still runs; pop only when this node is the frame on top of the stack.
+        if ((Is<SpawnExpr>(node) || Is<LambdaExpr>(node) || Is<FuncDecl>(node)) &&
+            !forbiddenContext.empty() && forbiddenContext.back().node == node) {
             PopForbiddenContext();
-        }
-        if (Is<LambdaExpr>(node) || Is<FuncDecl>(node)) {
-            PopForbiddenFrame();
         }
         return VisitAction::WALK_CHILDREN;
     }
 
-    void PushForbiddenFrame()
+    void PushForbiddenContext(Ptr<const Node> node, ForbiddenTryPart part = ForbiddenTryPart::NONE)
     {
-        forbiddenContext.push_back(std::nullopt);
-    }
-
-    // Pop until the matching func-like frame (discard any unclosed spawn/try contexts).
-    void PopForbiddenFrame()
-    {
-        while (!forbiddenContext.empty()) {
-            bool isFrame = !forbiddenContext.back().has_value();
-            forbiddenContext.pop_back();
-            if (isFrame) {
-                break;
-            }
-        }
-    }
-
-    void PushForbiddenContext(std::string_view ctxName)
-    {
-        forbiddenContext.push_back(ctxName);
+        forbiddenContext.push_back({node, part});
     }
 
     void PopForbiddenContext()
     {
-        if (!forbiddenContext.empty() && forbiddenContext.back().has_value()) {
+        if (!forbiddenContext.empty()) {
             forbiddenContext.pop_back();
         }
     }
 
-    std::optional<std::string_view> GetCurrentFrameForbiddenContext() const
+    const ForbiddenContextEntry* GetCurrentFrameForbiddenContext() const
     {
+        // Func-like frames stop the search; main/finalizer/static init frames are themselves forbidden.
+        // Skip a spawn's task lambda (and only it) so the SpawnExpr below remains visible.
         for (auto it = forbiddenContext.rbegin(); it != forbiddenContext.rend(); ++it) {
-            if (!it->has_value()) {
-                return std::nullopt;
+            auto node = it->node;
+            if (node->IsFuncLike()) {
+                auto outer = std::next(it);
+                if (outer != forbiddenContext.rend() && Is<SpawnExpr>(outer->node) &&
+                    StaticCast<SpawnExpr>(outer->node)->task.get() == node) {
+                    continue;
+                }
+                return IsForbiddenFuncLike(*node) ? &*it : nullptr;
             }
-            return *it;
+            return &*it;
         }
-        return std::nullopt;
+        return nullptr;
+    }
+
+    static bool IsForbiddenFuncLike(const Node& node)
+    {
+        auto func = DynamicCast<FuncDecl>(&node);
+        if (!func) {
+            return false;
+        }
+        if (func->TestAttr(Attribute::MAIN_ENTRY) || func->IsFinalizer()) {
+            return true;
+        }
+        return func->TestAttr(Attribute::CONSTRUCTOR) && func->TestAttr(Attribute::STATIC);
     }
 
     void WalkSubtree(const ASTContext& ctx, Ptr<Node> node)
@@ -539,9 +555,10 @@ private:
         walker.Walk();
     }
 
-    void WalkInForbiddenContext(const ASTContext& ctx, std::string_view ctxName, Ptr<Node> node)
+    void WalkInForbiddenContext(const ASTContext& ctx, Ptr<const Node> marker, Ptr<Node> node,
+        ForbiddenTryPart part = ForbiddenTryPart::NONE)
     {
-        PushForbiddenContext(ctxName);
+        PushForbiddenContext(marker, part);
         WalkSubtree(ctx, node);
         PopForbiddenContext();
     }
@@ -551,20 +568,19 @@ private:
         for (auto& resource : te.resourceSpec) {
             WalkSubtree(ctx, resource.get());
         }
-        WalkInForbiddenContext(ctx, "try block", te.tryBlock.get());
+        // The marker is the TryExpr itself; the part selects the clause name in diagnostics.
+        WalkInForbiddenContext(ctx, &te, te.tryBlock.get(), ForbiddenTryPart::TRY_BLOCK);
         for (auto& catchPattern : te.catchPatterns) {
             WalkSubtree(ctx, catchPattern.get());
         }
         for (auto& catchBlock : te.catchBlocks) {
-            WalkInForbiddenContext(ctx, "catch block", catchBlock.get());
+            WalkInForbiddenContext(ctx, &te, catchBlock.get(), ForbiddenTryPart::CATCH_BLOCK);
         }
         if (!te.desugarExpr) {
             for (const auto& handler : te.handlers) {
-                PushForbiddenContext("handle block");
-                WalkSubtree(ctx, handler.commandPattern.get());
-                WalkSubtree(ctx, handler.block.get());
-                WalkSubtree(ctx, handler.desugaredLambda.get());
-                PopForbiddenContext();
+                WalkInForbiddenContext(ctx, &te, handler.commandPattern.get(), ForbiddenTryPart::HANDLE_BLOCK);
+                WalkInForbiddenContext(ctx, &te, handler.block.get(), ForbiddenTryPart::HANDLE_BLOCK);
+                WalkInForbiddenContext(ctx, &te, handler.desugaredLambda.get(), ForbiddenTryPart::HANDLE_BLOCK);
             }
         }
         WalkSubtree(ctx, te.finallyBlock.get());
@@ -818,41 +834,48 @@ private:
         d.DiagnoseRefactor(DiagKindRefactor::sema_exclave_invalid_func_signature, expr);
     }
 
-    /// Exclave is not allowed in spawn, try/catch/handle, main, static init, or finalizer.
-    /// Uses forbiddenContext for the former; scope lookup for the latter.
-    void CheckExclaveInForbiddenContext(const ASTContext& ctx, const ExclaveExpr& expr)
+    /// Exclave is not allowed in spawn, the try/catch/handle parts of a try (incl. bare try-finally),
+    /// main, static init, or finalizer.
+    /// All sites are tracked on forbiddenContext (AST nodes); diagnose names are derived from the node.
+    /// Returns true if a forbidden-context diagnostic was emitted (caller should skip signature check).
+    bool CheckExclaveInForbiddenContext(const ASTContext& ctx, const ExclaveExpr& expr)
     {
         // if it's already in nested exclave, don't check to avoid 2 err message on once position.
         if (IsInExclaveExpr(ctx, expr)) {
-            return;
+            return false;
         }
-        if (auto ctxName = GetCurrentFrameForbiddenContext()) {
-            DiagExclaveInForbiddenContext(expr, *ctxName);
-            return;
+        if (auto ctxNode = GetCurrentFrameForbiddenContext()) {
+            DiagExclaveInForbiddenContext(expr, GetForbiddenContextName(*ctxNode));
+            return true;
         }
-        if (auto funcSym = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(ctx, expr.scopeName, [](Symbol& sym) {
-            auto func = DynamicCast<FuncDecl>(sym.node);
-            if (func == nullptr) {
-                return false;
-            }
-            if (func->TestAttr(Attribute::MAIN_ENTRY) || func->IsFinalizer()) {
-                return true;
-            }
-            return func->TestAttr(Attribute::CONSTRUCTOR) && func->TestAttr(Attribute::STATIC);
-        })) {
-            DiagExclaveInForbiddenContext(expr, GetForbiddenContextName(*funcSym->node));
-        }
+        return false;
     }
 
-    std::string_view GetForbiddenContextName(const Node& node)
+    std::string_view GetForbiddenContextName(const ForbiddenContextEntry& entry)
     {
+        const Node& node = *entry.node;
         if (auto func = DynamicCast<FuncDecl>(&node)) {
             if (func->IsFinalizer()) {
                 return "finalizer";
-            } else if (func->TestAttr(Attribute::MAIN_ENTRY)) {
+            }
+            if (func->TestAttr(Attribute::MAIN_ENTRY)) {
                 return "main";
-            } else if (func->TestAttr(Attribute::STATIC)) {
+            }
+            if (func->TestAttr(Attribute::CONSTRUCTOR) && func->TestAttr(Attribute::STATIC)) {
                 return "static init";
+            }
+        } else if (Is<SpawnExpr>(&node)) {
+            return "spawn expr";
+        } else if (auto te = DynamicCast<TryExpr>(&node)) {
+            switch (entry.part) {
+                case ForbiddenTryPart::CATCH_BLOCK:
+                    return "catch block";
+                case ForbiddenTryPart::HANDLE_BLOCK:
+                    return "handle block";
+                case ForbiddenTryPart::TRY_BLOCK:
+                    return "try block";
+                default:
+                    CJC_ABORT();
             }
         }
         CJC_ABORT();
@@ -887,12 +910,13 @@ private:
         if (!body || !Ty::IsTyCorrect(initTy) || initTy.IsDataType()) {
             return;
         }
+        if (body->body.size() == 1 && body->body[0]->astKind == ASTKind::EXCLAVE_EXPR) {
+            return;
+        }
         if (body->body.empty()) {
             DiagInitModalMustBeInExclave(*body, initTy);
         } else {
-            if (body->body[0]->astKind != ASTKind::EXCLAVE_EXPR) {
-                DiagInitModalMustBeInExclave(*body->body[0], initTy);
-            }
+            DiagInitModalMustBeInExclave(*body->body[0], initTy);
         }
     }
 
@@ -900,104 +924,6 @@ private:
     void DiagInitModalMustBeInExclave(const Node& pos, ModalTy ty)
     {
         d.DiagnoseRefactor(DiagKindRefactor::sema_init_modal_must_be_in_exclave, pos, ty.Mode().ToString());
-    }
-
-    /// The following functions need mark needsRegion:
-    /// 1. it has a call where return type is non copy local!/local? type
-    /// 2. it has a ctor call of non copy local!/local? type, to any type (struct, class, enum, literal, box, clsoure)
-    /// 3. it has a prop call where the prop type is non copy local!/local?
-    /// 4. it has a call which uses default value of a param, and the param's type is non copy local!/local? type
-    /// specifically when the whole function body is an exclave, don't generate region; otherwise the new region will
-    /// be immediately closed, so this is an optimization.
-    void CheckNeedsRegion(const Node& body, bool& needsRegion)
-    {
-        if (!body.GetTy().IsCorrect()) {
-            return;
-        }
-        ConstWalker w{&body, [this, &needsRegion](Ptr<const Node> node) {
-            if (Is<ExclaveExpr>(node)) {
-                return VisitAction::SKIP_CHILDREN;
-            }
-            if (auto ref = DynamicCast<NameReferenceExpr>(node)) {
-                if (auto target = ref->GetTarget();
-                    target && target->TestAttr(Attribute::ENUM_CONSTRUCTOR) && IsNonCopyLocalTy(ref->GetTy())) {
-                    needsRegion = true;
-                    return VisitAction::STOP_NOW;
-                }
-            }
-            if (auto call = DynamicCast<CallExpr>(node)) {
-                if (!call->baseFunc || !call->GetTy().IsCorrect()) {
-                    return VisitAction::SKIP_CHILDREN;
-                }
-                // rule 4
-                if (!call->defaultArgs.empty()) {
-                    for (auto& arg : call->defaultArgs) {
-                        if (IsNonCopyLocalTy(arg->GetTy())) {
-                            needsRegion = true;
-                            return VisitAction::STOP_NOW;
-                        }
-                    }
-                }
-                ModalTy targetTy{};
-                if (call->callKind == CallKind::CALL_FUNCTION_PTR) {
-                    // fp call, no target
-                    if (auto funcTy = DynamicCast<FuncTy>(call->baseFunc->DataTy())) {
-                        targetTy = funcTy->retTy;
-                    } else {
-                        targetTy = call->baseFunc->GetTy();
-                    }
-                    // could be a generic ty with funcTy upperbound
-                } else if (call->callKind == CallKind::CALL_OBJECT_CREATION ||
-                    call->callKind == CallKind::CALL_STRUCT_CREATION) {
-                    targetTy = call->GetTy(); // do not use retTy because only targetTy has the correct
-                        // modal type, retTy is of data type
-                    if (auto funcTy = DynamicCast<FuncTy>(targetTy.Ty())) {
-                        targetTy = funcTy->retTy;
-                    }
-                } else {
-                    targetTy = call->GetTy();
-                }
-                // IsNonCopyLocalTy already returns false for an unset/null targetTy, so no null check
-                // is needed here.
-                if (IsNonCopyLocalTy(targetTy)) {
-                    needsRegion = true;
-                    return VisitAction::STOP_NOW;
-                }
-            }
-            if (Is<FuncDecl>(node) || Is<LambdaExpr>(node)) {
-                // skip nested func
-                return VisitAction::SKIP_CHILDREN;
-            }
-            return VisitAction::WALK_CHILDREN;
-        }};
-        w.Walk();
-    }
-
-    void CheckNeedsRegion(LambdaExpr& lambda)
-    {
-        CheckNeedsRegion(*lambda.funcBody, lambda.needsRegion);
-    }
-
-    void CheckNeedsRegion(FuncDecl& func)
-    {
-        if (HasModifier(func.modifiers, TokenKind::EXCLAVE)) {
-            func.needsRegion = false;
-            return;
-        }
-        // constructor uses its caller's region implicitly
-        if (func.TestAttr(Attribute::CONSTRUCTOR)) {
-            if (auto& thisParam = func.funcBody->paramLists[0]->thisParam) {
-                if (thisParam->modal.ToModalInfo() != Mode::NOT) {
-                    func.needsRegion = false;
-                    return;
-                }
-            }
-            return;
-        }
-        if (!func.funcBody->body) {
-            return;
-        }
-        CheckNeedsRegion(*func.funcBody, func.needsRegion);
     }
 
     /// Local of lvalue: for RefExpr the referenced var's local, or (implicit this) the ref target's receiver (this)
@@ -1011,7 +937,7 @@ private:
                 return Mode::NOT;
             }
             if (target && target->IsMemberDecl()) {
-                // Implicit this access: use receiver (this param) type, same as GetThisArgTy.
+                // Implicit this access: use receiver type
                 if (auto fn = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(
                     ctx, ref->scopeName, [](const Symbol& sym) {
                     if (auto func = DynamicCast<FuncDecl>(sym.node)) {
@@ -1038,7 +964,7 @@ private:
             }
             return ma->baseExpr->GetTy().IsLocalType() ? ma->baseExpr->TyMode().local : Mode::NOT;
         }
-        // VArray member access
+        // tuple or VArray member access
         if (auto sub = DynamicCast<SubscriptExpr>(left)) {
             return sub->baseExpr->TyMode().local;
         }
@@ -1046,25 +972,19 @@ private:
         return {};
     }
 
-    /// Whether the assignment is inside an @local? constructor or any finalizer.
-    bool IsInLocalQuestCtorOrAnyFinalizer(const ASTContext& ctx, const std::string& scopeName)
+    /// Whether the current walk is inside an @local? constructor or any finalizer (from forbiddenContext).
+    bool IsInLocalQuestCtorOrAnyFinalizer() const
     {
-        auto sym = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(ctx, scopeName, [](Symbol& s) {
-            if (auto func = DynamicCast<FuncDecl>(s.node)) {
-                return func->TestAttr(Attribute::CONSTRUCTOR) || func->IsFinalizer();
+        for (auto it = forbiddenContext.rbegin(); it != forbiddenContext.rend(); ++it) {
+            auto func = DynamicCast<FuncDecl>(it->node);
+            if (!func) {
+                continue;
             }
-            return false;
-        });
-        if (!sym) {
-            return false;
-        }
-        auto func = DynamicCast<FuncDecl>(sym->node);
-        if (!func || func->IsFinalizer()) {
-            return true;
-        }
-        if (!func->funcBody->paramLists.empty()) {
-            if (auto& thisParam = func->funcBody->paramLists[0]->thisParam) {
-                return thisParam->TyMode().local == Mode::HALF;
+            if (func->IsFinalizer()) {
+                return true;
+            }
+            if (func->TestAttr(Attribute::CONSTRUCTOR) && !func->TestAttr(Attribute::STATIC)) {
+                return type.HasThisParam(*func) && type.GetThisParamMode(*func).local == Mode::HALF;
             }
         }
         return false;
@@ -1088,7 +1008,7 @@ private:
             if (!target || !target->IsMemberDecl()) {
                 return; // whole var assignment: rule does not apply
             }
-            if (IsInLocalQuestCtorOrAnyFinalizer(ctx, assign.scopeName)) {
+            if (IsInLocalQuestCtorOrAnyFinalizer()) {
                 return;
             }
             DiagBadAssigmentToLocalHalf(assign);
@@ -1126,7 +1046,7 @@ private:
         }
         // @local? member assignment is allowed only in @local? ctor or finalizer and the ref is this
         if (lLocal == Mode::HALF) {
-            if (IsThisOrSuper(*ma->baseExpr) && IsInLocalQuestCtorOrAnyFinalizer(ctx, assign.scopeName)) {
+            if (IsThisOrSuper(*ma->baseExpr) && IsInLocalQuestCtorOrAnyFinalizer()) {
                 return;
             }
             DiagBadAssigmentToLocalHalf(assign);
@@ -1308,9 +1228,9 @@ private:
             if (member->TestAttr(Attribute::CONSTRUCTOR) && !member->TestAttr(Attribute::STATIC) &&
                 !Is<PrimaryCtorDecl>(member)) {
                 // primary ctor is already desugared
-                auto& init = *StaticCast<FuncDecl>(member)->funcBody->paramLists[0];
-                auto thisLocal =
-                    static_cast<int>(init.thisParam ? init.thisParam->TyMode().local : Mode::NOT);
+                auto fd = StaticCast<FuncDecl>(member);
+                auto thisLocal = static_cast<int>(
+                    type.HasThisParam(*fd) ? type.GetThisParamMode(*fd).local : Mode::NOT);
                 if (lastUsedLocal == -1) {
                     lastUsedLocal = thisLocal;
                 } else if (lastUsedLocal != thisLocal) {
@@ -1424,17 +1344,14 @@ private:
 
     bool IsInExclaveExpr(const ASTContext& ctx, const Node& node)
     {
-        auto sym = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(
-            ctx, node.scopeName, [](Symbol& sym) { return sym.node->astKind == ASTKind::EXCLAVE_EXPR; });
-        if (sym && sym->node) {
+        if (ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(
+            ctx, node.scopeName, [](Symbol& sym) { return sym.node->astKind == ASTKind::EXCLAVE_EXPR; })) {
             return true;
         }
         if (auto fun = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, node.scopeName)) {
-            if (auto fd = DynamicCast<FuncDecl>(fun->node)) {
-                if (std::any_of(fd->modifiers.begin(), fd->modifiers.end(),
-                    [](const Modifier& m) { return m.modifier == TokenKind::EXCLAVE; })) {
-                    return true;
-                }
+            if (auto fd = DynamicCast<FuncDecl>(fun->node);
+                fd && HasModifier(fd->modifiers, TokenKind::EXCLAVE)) {
+                return true;
             }
         }
         return false;
@@ -1564,13 +1481,10 @@ private:
 
     DiagnosticEngine& d;
     TypeManager& type;
-    // Stack of forbidden-context markers for sema_invalid_exclave (%s).
-    // - nullopt: boundary of a func-like body (FuncDecl / LambdaExpr). Exclave checks only
-    //   consider entries above the innermost frame, so outer try/catch/spawn do not apply
-    //   inside nested functions or lambdas.
-    // - string: human-readable site name, e.g. "spawn expr", "try block", "catch block",
-    //   "handle block" (finally is intentionally not pushed).
-    std::vector<std::optional<std::string_view>> forbiddenContext;
+    // FuncDecl/LambdaExpr: frame boundary (also forbidden if main/finalizer/static init).
+    // SpawnExpr / TryExpr: nested sites; a TryExpr entry records which clause the walk is in
+    // (a bare try-finally reports "try block"; finally itself is not pushed).
+    std::vector<ForbiddenContextEntry> forbiddenContext;
 };
 
 ModalTypeChecker* TypeChecker::TypeCheckerImpl::NewModalTypeChecker()
