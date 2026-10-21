@@ -707,10 +707,6 @@ bool IsGeneratedMember(const Decl& decl) noexcept
         return true;
     }
 
-    if (decl.TestAttr(Attribute::HAS_INITED_FIELD)) {
-        return true;
-    }
-
     const auto fd = DynamicCast<FuncDecl*>(&decl);
     return fd && (IsBaseCtor(*fd) || IsObjCExportRegDataCtor(*fd) || IsGeneratedStringConversion(*fd));
 }
