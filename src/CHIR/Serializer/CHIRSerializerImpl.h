@@ -36,7 +36,7 @@ public:
     explicit CHIRSerializerImpl(const Package& package) : package(package){};
 
     // Utility
-    void Save(const std::string& filename, ToCHIR::Phase phase);
+    std::optional<uint64_t> Save(const std::string& filename, ToCHIR::Phase phase);
     flatbuffers::DetachedBuffer ConvertToMemoryData();
     void Initialize();
     void Dispatch();

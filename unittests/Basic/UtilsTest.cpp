@@ -20,6 +20,15 @@ TEST(UtilsTest, GetHashTest)
     EXPECT_EQ(h1, fnv1a);
 }
 
+// Reference values of 64 bit FNV-1a. A byte above 0x7f must not depend on the signedness of 'char'.
+TEST(UtilsTest, GetBufferHashTest)
+{
+    EXPECT_EQ(Utils::GetBufferHash(nullptr, 0), 0xcbf29ce484222325ull);
+    const uint8_t hello[] = {'h', 'e', 'l', 'l', 'o'};
+    EXPECT_EQ(Utils::GetBufferHash(hello, sizeof(hello)), 0xa430d84680aabd0bull);
+    const uint8_t high[] = {0xff};
+    EXPECT_EQ(Utils::GetBufferHash(high, sizeof(high)), 0xaf64724c8602eb6eull);
+}
 
 TEST(UtilsTest, JoinStringsTest)
 {

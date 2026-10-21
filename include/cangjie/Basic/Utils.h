@@ -30,6 +30,11 @@ const uint8_t WINDOWS_LINE_TERMINATOR_LENGTH = 2;
 ///
 /// If you don't need platform independent hashes, use `std::hash`
 uint64_t GetHash(const std::string& content);
+/// 64 bit FNV-1a algorithm over raw bytes, e.g. the content of a serialized file.
+///
+/// Unlike \ref GetHash, every byte is taken as unsigned, so the result does not depend on the
+/// signedness of 'char' of the platform.
+uint64_t GetBufferHash(const uint8_t* data, size_t size);
 /// Split a string by '\r\n' and '\n' to form a vector of strings.
 std::vector<std::string> SplitLines(const std::string& str);
 /// Split a string by customised \ref delimiter. Typically used in command line arguments parsing.

@@ -20,6 +20,7 @@
 #include "cangjie/CodeGen/EmitPackageIR.h"
 #include "cangjie/Driver/StdlibMap.h"
 #include "cangjie/Driver/TempFileManager.h"
+#include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/PackageManager.h"
 #include "cangjie/Utils/FileUtil.h"
 #include "cangjie/Utils/ProfileRecorder.h"
@@ -174,6 +175,31 @@ bool DefaultCIImpl::SaveCjo(const std::vector<Ptr<Package>>& pkgs)
     return ret;
 }
 
+namespace {
+void WarnIfOverwritingCommonPartCjo(const GlobalOptions& opts, DiagnosticEngine& diag, const std::string& cjoPath)
+{
+    // An intermediate CHIR compilation replaces both files with a new matching pair.
+    if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
+        return;
+    }
+    auto cjoAbsPath = FileUtil::GetAbsPath(cjoPath);
+    if (!cjoAbsPath) {
+        return;
+    }
+    for (const auto& commonPartCjo : opts.commonPartCjos) {
+        if (FileUtil::GetAbsPath(commonPartCjo) == cjoAbsPath) {
+            auto builder = diag.DiagnoseRefactor(
+                DiagKindRefactor::module_output_overwrites_common_part_cjo, DEFAULT_POSITION, cjoPath);
+            builder.AddNote("the overwritten cjo is no longer a common part and cannot be passed with "
+                            "'--common-part-cjo' again");
+            builder.AddHelp(DiagHelp("write the output to a different directory with '--output-dir' to keep the "
+                                     "common part"));
+            return;
+        }
+    }
+}
+} // namespace
+
 bool DefaultCIImpl::SaveCjo(const AST::Package& pkg)
 {
     if (pkg.IsEmpty()) {
@@ -190,12 +216,15 @@ bool DefaultCIImpl::SaveCjo(const AST::Package& pkg)
     }
     std::vector<uint8_t> astData;
     Utils::ProfileRecorder::Start("Save cjo", "Serialize ast");
-    ci.importManager->ExportAST(saveFileWithAbsPath, astData, pkg);
+    ci.importManager->ExportAST(saveFileWithAbsPath, astData, pkg, [this](ASTWriter& writer) {
+        writer.SetCommonPartChirDigest(ci.chirData ? ci.chirData->GetCommonPartChirDigest() : std::nullopt);
+    });
     Utils::ProfileRecorder::Stop("Save cjo", "Serialize ast");
     // Write astData into file according to given package name by '--output' opt.
     TempFileInfo astFileInfo =
         TempFileManager::Instance().CreateNewFileInfo(TempFileInfo{pkgName, ""}, TempFileKind::O_CJO);
     std::string astFileName = astFileInfo.filePath;
+    WarnIfOverwritingCommonPartCjo(ci.invocation.globalOptions, ci.diag, astFileName);
     Utils::ProfileRecorder::Start("Save cjo", "Save ast");
     bool res = FileUtil::WriteBufferToASTFile(astFileName, astData);
     Utils::ProfileRecorder::Stop("Save cjo", "Save ast");
