@@ -40,6 +40,11 @@
  * registration, and it requires a minor bump. Every change to the CJO schema
  * or to the CJO serialization algorithm requires at least a patch bump.
  *
+ * CJMP exception (format 0.1.1): '--common-part-cjo' requires 'isCommonPart'.
+ * If CHIR inputs are supplied, 'commonPartChirDigest' must match one of them.
+ * LSP may load a marked CJO without CHIR inputs or a digest. Older common
+ * parts must be rebuilt. Ordinary imports retain the compatibility rules above.
+ *
  * Detailed bump rules for schema changes:
  *
  * - table:
@@ -150,7 +155,7 @@
 namespace Cangjie {
 constexpr uint8_t CJO_MAJOR_VERSION = 0;
 constexpr uint8_t CJO_MINOR_VERSION = 1;
-constexpr uint8_t CJO_PATCH_VERSION = 0;
+constexpr uint8_t CJO_PATCH_VERSION = 1;
 } // namespace Cangjie
 
 #endif // CANGJIE_MODULES_CJO_VERSION_H

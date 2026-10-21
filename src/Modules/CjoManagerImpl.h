@@ -165,6 +165,8 @@ public:
         hasBuildIndex = value;
     }
     std::vector<OwnedPtr<ASTLoader>>& GetCommonPartCjos(std::string expectedName, const CjoManager& cjoManager);
+    bool ReadCommonPartChirDigests();
+    bool ClaimCommonPartChir(std::optional<uint64_t> chirDigest);
     const GlobalOptions& GetGlobalOptions()
     {
         return globalOptions;
@@ -221,6 +223,8 @@ private:
     std::unordered_set<std::string> loadedPackages;
     // common part loader also stored in `packageNameMap`.
     std::vector<OwnedPtr<ASTLoader>> commonPartLoaders;
+    // Unclaimed digests, reset by LoadFilesOfCommonPart for each preload.
+    std::vector<uint64_t> commonPartChirDigests;
     bool canInline{false};
 
     // cache cjo file path result for skip FindSerializationFile call, key is possible cjo name without extension, value

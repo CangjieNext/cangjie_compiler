@@ -6,6 +6,7 @@
 
 #include "cangjie/CHIR/Serializer/CHIRSerializer.h"
 #include "CHIRSerializerImpl.h"
+#include "cangjie/Basic/Utils.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/Annotation.h"
@@ -48,13 +49,14 @@ CHIRFormat::OverflowStrategy SerializeOverflowStrategy(Cangjie::OverflowStrategy
 }
 } // namespace
 
-void CHIRSerializer::Serialize(const Package& package, const std::string filename, ToCHIR::Phase phase)
+std::optional<uint64_t> CHIRSerializer::Serialize(
+    const Package& package, const std::string& filename, ToCHIR::Phase phase)
 {
     Utils::ProfileRecorder recorder("CHIR", "serialization: " + PhaseToString(phase));
     CHIRSerializerImpl serializer(package);
     serializer.Initialize();
     serializer.Dispatch();
-    serializer.Save(filename, phase);
+    return serializer.Save(filename, phase);
 }
 
 flatbuffers::DetachedBuffer CHIRSerializer::Serialize(const Package& package)
@@ -1392,7 +1394,7 @@ void CHIRSerializer::CHIRSerializerImpl::Dispatch()
 
 // ========================== Utilities ==========================================
 
-void CHIRSerializer::CHIRSerializerImpl::Save(const std::string& filename, ToCHIR::Phase phase)
+std::optional<uint64_t> CHIRSerializer::CHIRSerializerImpl::Save(const std::string& filename, ToCHIR::Phase phase)
 {
     auto accesslevel = package.GetPackageAccessLevel();
     auto packageName = package.GetName();
@@ -1405,9 +1407,15 @@ void CHIRSerializer::CHIRSerializerImpl::Save(const std::string& filename, ToCHI
     const uint8_t* buf = builder.GetBufferPointer();
     auto size = builder.GetSize();
     std::ofstream output(filename, std::ios::out | std::ofstream::binary);
-    CJC_ASSERT(output.is_open());
-    output.write(reinterpret_cast<const char*>(buf), static_cast<long>(size));
+    if (!output.is_open()) {
+        return std::nullopt;
+    }
+    output.write(reinterpret_cast<const char*>(buf), static_cast<std::streamsize>(size));
     output.close();
+    if (output.fail()) {
+        return std::nullopt;
+    }
+    return Utils::GetBufferHash(buf, static_cast<size_t>(size));
 }
 
 void CHIRSerializer::CHIRSerializerImpl::Initialize()

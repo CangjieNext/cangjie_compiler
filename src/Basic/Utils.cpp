@@ -23,18 +23,29 @@ using namespace Cangjie;
 
 namespace Cangjie {
 
-uint64_t Utils::GetHash(const std::string& content)
+namespace {
+// Preserve the byte type: existing string hashes depend on the signedness of char.
+template <typename Byte> uint64_t GetFnv1aHash(const Byte* data, size_t size)
 {
-    // special fnv prime from the spec of 64-bit FNV-1a  
-    uint64_t constexpr fnv_prime = 1099511628211ull;
-    // offset basis from the spec of 64-bit FNV-1a  
-    uint64_t constexpr fnv_offset_basis = 14695981039346656037ull;
-    uint64_t hash = fnv_offset_basis;
-    for (char c : content) {
-        hash ^= static_cast<uint64_t>(c);
-        hash *= fnv_prime;
+    constexpr uint64_t fnvPrime = 1099511628211ull;
+    constexpr uint64_t fnvOffsetBasis = 14695981039346656037ull;
+    uint64_t hash = fnvOffsetBasis;
+    for (size_t i = 0; i < size; ++i) {
+        hash ^= static_cast<uint64_t>(data[i]);
+        hash *= fnvPrime;
     }
     return hash;
+}
+} // namespace
+
+uint64_t Utils::GetHash(const std::string& content)
+{
+    return GetFnv1aHash(content.data(), content.size());
+}
+
+uint64_t Utils::GetBufferHash(const uint8_t* data, size_t size)
+{
+    return GetFnv1aHash(data, size);
 }
 
 std::vector<std::string> Utils::SplitLines(const std::string& str)
