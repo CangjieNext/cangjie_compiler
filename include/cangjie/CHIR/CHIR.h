@@ -155,6 +155,7 @@ private:
     void OptimizeFuncReturnType();
     bool RunConstantEvaluation();
     bool RunIRChecker(const Phase& phase);
+    bool SaveCommonPartCHIR();
     void RecordCodeInfoAtTheBegin();
     void RecordCodeInfoAtTheEnd();
     void RecordCHIRExprNum(const std::string& suffix);

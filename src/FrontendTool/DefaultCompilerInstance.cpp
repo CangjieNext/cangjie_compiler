@@ -20,9 +20,12 @@
 #include "cangjie/CodeGen/EmitPackageIR.h"
 #include "cangjie/Driver/StdlibMap.h"
 #include "cangjie/Driver/TempFileManager.h"
+#include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/PackageManager.h"
 #include "cangjie/Utils/FileUtil.h"
 #include "cangjie/Utils/ProfileRecorder.h"
+
+#include <filesystem>
 
 #if (defined RELEASE)
 #include "cangjie/Utils/Signal.h"
@@ -50,6 +53,8 @@ public:
 
 private:
     DefaultCompilerInstance& ci;
+
+    void WarnIfOverwritingCommonPartCjo(const std::string& cjoPath) const;
 
     bool EmitLLVMSimilarBytecode(bool enableIncrement);
     std::string GenerateFileName(const std::string& fullPackageName, const std::string& idx) const;
@@ -174,6 +179,27 @@ bool DefaultCIImpl::SaveCjo(const std::vector<Ptr<Package>>& pkgs)
     return ret;
 }
 
+void DefaultCIImpl::WarnIfOverwritingCommonPartCjo(const std::string& cjoPath) const
+{
+    const auto& opts = ci.invocation.globalOptions;
+    // An intermediate CHIR compilation replaces both files with a new matching pair.
+    if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
+        return;
+    }
+    for (const auto& commonPartCjo : opts.commonPartCjos) {
+        std::error_code error;
+        if (std::filesystem::equivalent(cjoPath, commonPartCjo, error)) {
+            auto builder = ci.diag.DiagnoseRefactor(
+                DiagKindRefactor::module_output_overwrites_common_part_cjo, DEFAULT_POSITION, cjoPath);
+            builder.AddNote("the overwritten cjo is no longer a common part and cannot be passed with "
+                            "'--common-part-cjo' again");
+            builder.AddHelp(DiagHelp("write the output to a different directory with '--output-dir' to keep the "
+                                     "common part"));
+            return;
+        }
+    }
+}
+
 bool DefaultCIImpl::SaveCjo(const AST::Package& pkg)
 {
     if (pkg.IsEmpty()) {
@@ -188,14 +214,21 @@ bool DefaultCIImpl::SaveCjo(const AST::Package& pkg)
     if ((STANDARD_LIBS.find(pkg.fullPackageName) != STANDARD_LIBS.end())) {
         saveFileWithAbsPath = ci.invocation.globalOptions.enableCoverage;
     }
+    bool isCommonPart = ci.invocation.globalOptions.outputMode == GlobalOptions::OutputMode::CHIR;
     std::vector<uint8_t> astData;
     Utils::ProfileRecorder::Start("Save cjo", "Serialize ast");
-    ci.importManager->ExportAST(saveFileWithAbsPath, astData, pkg);
+    ci.importManager->ExportAST(saveFileWithAbsPath, astData, pkg, [this, isCommonPart](ASTWriter& writer) {
+        auto digest = isCommonPart && ci.chirData ? ci.chirData->GetCommonPartChirDigest() : std::nullopt;
+        if (digest) {
+            writer.SetCommonPartChirDigest(*digest);
+        }
+    });
     Utils::ProfileRecorder::Stop("Save cjo", "Serialize ast");
     // Write astData into file according to given package name by '--output' opt.
     TempFileInfo astFileInfo =
         TempFileManager::Instance().CreateNewFileInfo(TempFileInfo{pkgName, ""}, TempFileKind::O_CJO);
     std::string astFileName = astFileInfo.filePath;
+    WarnIfOverwritingCommonPartCjo(astFileName);
     Utils::ProfileRecorder::Start("Save cjo", "Save ast");
     bool res = FileUtil::WriteBufferToASTFile(astFileName, astData);
     Utils::ProfileRecorder::Stop("Save cjo", "Save ast");

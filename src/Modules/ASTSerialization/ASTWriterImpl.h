@@ -67,6 +67,10 @@ public:
     void SetSerializingCommon();
     void PreSaveFullExportDecls(AST::Package& package);
     void SaveOptions(bool debug, GlobalOptions::OptimizationLevel level);
+    void SetCommonPartChirDigest(uint64_t digest)
+    {
+        commonPartChirDigest = digest;
+    }
     inline bool NeedToExportDecl(Ptr<const AST::Decl> decl);
     void DFSCollectFilesDeclarations(Ptr<AST::File> file,
         std::unordered_set<AST::File*>& alreadyVisitedFiles,
@@ -86,6 +90,7 @@ private:
     ExportConfig config;
     bool exportFuncBody = true;
     bool serializingCommon = false;
+    std::optional<uint64_t> commonPartChirDigest;
     flatbuffers::FlatBufferBuilder builder{INITIAL_FILE_SIZE};
     std::string packageDepInfo;
     const CjoManager& cjoManager;

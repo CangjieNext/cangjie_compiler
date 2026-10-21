@@ -12,11 +12,13 @@
 
 #include "cangjie/Modules/CjoManager.h"
 
+#include <algorithm>
 #include <queue>
 
 #include "CjoManagerImpl.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
+#include "cangjie/Basic/Utils.h"
 #include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/ModulesUtils.h"
 #include "cangjie/Utils/ProfileRecorder.h"
@@ -310,11 +312,52 @@ bool CjoManager::LoadFilesOfCommonPart(Ptr<Package> pkg)
     CJC_NULLPTR_CHECK(pkg);
     // Remove existing isCommon files from pkg before loading new common part for lsp incremental compilation.
     Utils::EraseIf(pkg->files, [](const auto& file) { return file->TestAttr(Attribute::FROM_COMMON_PART); });
+    if (!impl->ReadCommonPartChirDigests()) {
+        return false;
+    }
     for (Ptr<ASTLoader> commonLoader : GetCommonPartCjos(pkg->fullPackageName)) {
-        if (!commonLoader->PreloadCommonPartOfPackage(*pkg)) {
+        // The loader is null if the cjo can not be read, which has been reported.
+        if (commonLoader == nullptr || !commonLoader->PreloadCommonPartOfPackage(*pkg)) {
             return false;
         }
     }
+    return true;
+}
+
+bool CjoManager::ClaimCommonPartChir(std::optional<uint64_t> chirDigest) const
+{
+    return impl->ClaimCommonPartChir(chirDigest);
+}
+
+bool CjoManagerImpl::ReadCommonPartChirDigests()
+{
+    commonPartChirDigests.clear();
+    for (auto& chirPath : globalOptions.commonPartChirs) {
+        std::vector<uint8_t> buffer;
+        std::string failedReason;
+        if (!FileUtil::ReadBinaryFileToBuffer(chirPath, buffer, failedReason)) {
+            diag.DiagnoseRefactor(
+                DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, chirPath, failedReason);
+            return false;
+        }
+        commonPartChirDigests.emplace_back(Utils::GetBufferHash(buffer.data(), buffer.size()));
+    }
+    return true;
+}
+
+bool CjoManagerImpl::ClaimCommonPartChir(std::optional<uint64_t> chirDigest)
+{
+    if (globalOptions.commonPartChirs.empty()) {
+        return true;
+    }
+    if (!chirDigest.has_value()) {
+        return false;
+    }
+    auto match = std::find(commonPartChirDigests.begin(), commonPartChirDigests.end(), *chirDigest);
+    if (match == commonPartChirDigests.end()) {
+        return false;
+    }
+    commonPartChirDigests.erase(match);
     return true;
 }
 
@@ -344,6 +387,9 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
         if (impl->GetGlobalOptions().IsCompilingCJMPSpecific() || !impl->GetGlobalOptions().commonPartCjos.empty()) {
             std::string expectedPackageName = pkg->fullPackageName;
             for (Ptr<ASTLoader> commonLoader : GetCommonPartCjos(expectedPackageName)) {
+                if (commonLoader == nullptr || !commonLoader->IsCommonPartPreloaded()) {
+                    continue;
+                }
                 commonLoader->LoadPackageDecls();
                 loaders.emplace_back(commonLoader);
             }

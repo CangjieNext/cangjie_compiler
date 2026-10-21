@@ -21,6 +21,8 @@
 #include "cangjie/Option/Option.h"
 #include "flatbuffers/CjoFormat_generated.h"
 
+#include <tuple>
+
 namespace Cangjie {
 
 namespace ASTLoaderCJMP {
@@ -62,6 +64,37 @@ std::set<std::string> CollectFeaturesFromPackage(AST::Package& pkg)
 {
     return (*pkg.files.begin())->GetFeatures();
 }
+
+namespace {
+void ReportUnusableCommonPartCjo(DiagnosticEngine& diag, const std::string& cjoPath, const std::string& packageName,
+    const PackageFormat::Package& package)
+{
+    auto builder = diag.DiagnoseRefactor(
+        DiagKindRefactor::module_common_cjo_not_common_part, DEFAULT_POSITION, cjoPath, packageName);
+    const auto& version = *package.cjoVersion();
+    constexpr std::tuple<uint8_t, uint8_t, uint8_t> markerVersion{0, 1, 1};
+    if (std::tuple{version.major_num(), version.minor_num(), version.patch_num()} < markerVersion) {
+        builder.AddNote("it has cjo format " + std::to_string(version.major_num()) + "." +
+            std::to_string(version.minor_num()) + "." + std::to_string(version.patch_num()) +
+            ", which does not mark common part cjo files. Recompile the common part with this cjc");
+    } else {
+        builder.AddNote("this cjo was not produced by a common part compilation with '--output-type=chir'");
+        builder.AddNote("a specific part compilation writes '" + packageName +
+            ".cjo' to its output directory and may have overwritten the common part cjo");
+    }
+    builder.AddHelp(DiagHelp("recompile the common part with '--output-type=chir' and keep its '.cjo' and '.chir' "
+        "together in a separate directory, e.g. with '--output-dir'"));
+}
+
+void ReportCommonPartChirMismatch(DiagnosticEngine& diag, const std::string& cjoPath, bool hasDigest)
+{
+    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_chir_mismatch, DEFAULT_POSITION, cjoPath);
+    builder.AddNote(hasDigest
+        ? "the '.cjo' and '.chir' must come from the same common part compilation"
+        : "the cjo does not record the digest of its common part '.chir'");
+    builder.AddHelp(DiagHelp("recompile the common part with '--output-type=chir' and pass both its '.cjo' and '.chir'"));
+}
+} // namespace
 
 void ValidateCommonSpecificFeatureSetsRelations(
     const AST::File& commonFile,
@@ -184,6 +217,7 @@ bool ASTLoader::ASTLoaderImpl::ValidateOptions()
 
 bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
 {
+    commonPartPreloaded = false;
     if (!VerifyForData("ast")) {
         return false;
     }
@@ -193,15 +227,26 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
     if (!CheckCjoVersion()) {
         return false;
     }
+    if (!package->isCommonPart() || package->allFileInfo() == nullptr) {
+        ASTLoaderCJMP::ReportUnusableCommonPartCjo(diag, cjoPath, pkg.fullPackageName, *package);
+        return false;
+    }
+
     CJC_NULLPTR_CHECK(package->fullPkgName());
-
-    curPackage = &pkg;
-
     auto deserializedPackageName = package->fullPkgName()->str();
     if (pkg.fullPackageName != deserializedPackageName) {
         ASTLoaderCJMP::ReportPackageMismatch(diag, pkg, pkg.fullPackageName, deserializedPackageName);
         return false;
     }
+    if (!ValidateOptions()) {
+        return false;
+    }
+    auto chirDigest = package->commonPartChirDigest();
+    if (!cjoManager.ClaimCommonPartChir(chirDigest)) {
+        ASTLoaderCJMP::ReportCommonPartChirMismatch(diag, cjoPath, chirDigest.has_value());
+        return false;
+    }
+    curPackage = &pkg;
     auto specificFeatures = ASTLoaderCJMP::CollectFeaturesFromPackage(pkg);
 
     allTypes.resize(package->allTypes()->size(), nullptr);
@@ -216,13 +261,6 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
         pkg.files.emplace_back(std::move(file));
     }
 
-    if (!ValidateOptions()) {
-        // options mismatch must abort compilation
-        // otherwise the difference in desugaring/chir generation
-        // may lead to a crash in subsequent compilation stages
-        return false;
-    }
-
     AddCurFile(pkg);
     auto imports = package->imports();
     CJC_NULLPTR_CHECK(imports);
@@ -232,6 +270,7 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
         importedFullPackageNames.emplace_back(importItem);
     }
 
+    commonPartPreloaded = true;
     return true;
 }
 

@@ -307,6 +307,7 @@ void ImportManager::ExportAST(bool saveFileWithAbsPath, std::vector<uint8_t>& as
             .exportForTest = opts.exportForTest,
             .needAbsPath = saveFileWithAbsPath,
             .compileCjd = opts.compileCjd,
+            .exportCommonPart = opts.outputMode == GlobalOptions::OutputMode::CHIR,
         },
         *cjoManager, typeManager);
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
@@ -360,6 +361,7 @@ void ImportManager::ExportDeclsWithContent(bool saveFileWithAbsPath, Package& pa
             .exportForTest = opts.exportForTest,
             .needAbsPath = saveFileWithAbsPath,
             .compileCjd = opts.compileCjd,
+            .exportCommonPart = opts.outputMode == GlobalOptions::OutputMode::CHIR,
         },
         *cjoManager, typeManager);
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {

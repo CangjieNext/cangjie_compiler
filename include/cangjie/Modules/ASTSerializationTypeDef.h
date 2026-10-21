@@ -29,6 +29,8 @@ struct ExportConfig {
     // Used when compiled with the `--coverage` option.
     bool needAbsPath{false};
     bool compileCjd{false};
+    // Set by '--output-type=chir', independently of common declarations in the package.
+    bool exportCommonPart{false};
 };
 } // namespace Cangjie
 

@@ -14,6 +14,7 @@
 #define CANGJIE_FRONTEND_COMPILERINSTANCE_H
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -84,6 +85,16 @@ public:
      */
     void FreeConstAnalysisWrapper();
 
+    // Digest of the common part CHIR, saved in the CJO of the same compilation.
+    void SetCommonPartChirDigest(std::optional<uint64_t> digest)
+    {
+        commonPartChirDigest = digest;
+    }
+    std::optional<uint64_t> GetCommonPartChirDigest() const
+    {
+        return commonPartChirDigest;
+    }
+
 private:
     CHIR::CHIRContext cctx;
     std::vector<CHIR::Package*> chirPkgs;
@@ -93,6 +104,7 @@ private:
     CHIR::CHIRBuilder builder{cctx, 0};
     // provide the capability and results of constant analysis, used by cjlint
     std::unique_ptr<CHIR::ConstAnalysisWrapper> constAnalysisWrapper;
+    std::optional<uint64_t> commonPartChirDigest;
 };
 #endif
 
