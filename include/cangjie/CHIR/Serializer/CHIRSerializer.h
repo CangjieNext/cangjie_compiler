@@ -10,6 +10,8 @@
 #include "cangjie/CHIR/CHIR.h"
 #include "cangjie/CHIR/IR/Package.h"
 
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <flatbuffers/detached_buffer.h>
 
@@ -18,7 +20,8 @@ namespace Cangjie::CHIR {
 class CHIRSerializer {
     class CHIRSerializerImpl;
 public:
-    static void Serialize(const Package& package, const std::string filename, ToCHIR::Phase phase);
+    // Return the digest of the written bytes, or nullopt if the file cannot be written.
+    static std::optional<uint64_t> Serialize(const Package& package, const std::string& filename, ToCHIR::Phase phase);
     static flatbuffers::DetachedBuffer Serialize(const Package& package);
 };
 

@@ -637,6 +637,7 @@ void DiagnosticEmitterImpl::EmitSingleNoteWithSource(SubDiagnostic& note)
 
     SortAndCheck(errorInfo);
 
+    const auto mainMaxLineNum = maxLineNum;
     maxLineNum = GetMaxLineColumn(errorInfo);
 
     if (note.mainHint.range.begin != DEFAULT_POSITION) {
@@ -649,6 +650,7 @@ void DiagnosticEmitterImpl::EmitSingleNoteWithSource(SubDiagnostic& note)
     if (!GetSourceCode(errorInfo).empty() && !note.help.IsDefault()) {
         EmitHelp(hs);
     }
+    maxLineNum = mainMaxLineNum;
 }
 
 SubstitutionMap DiagnosticEmitterImpl::HelpSubstitutionToMap(DiagHelp& help) const
@@ -883,11 +885,6 @@ void DiagnosticEmitterImpl::ConstructAndEmitSourceCode(std::vector<CollectedInfo
 }
 
 namespace {
-bool IsTextOnlyWarning(const WarnGroup& warnGroup)
-{
-    return (warnGroup == WarnGroup::DRIVER_ARG || warnGroup == WarnGroup::UNSUPPORT_COMPILE_SOURCE);
-}
-
 /**
  * @brief Swap error message with note for diagnostics in macro calls.
  *
@@ -966,11 +963,9 @@ bool DiagnosticEmitterImpl::Emit(bool enableOnlyHint)
     } else {
         CJC_ABORT();
     }
-    // Since some warnings are text-only, which means they do not have invalid position, so emit notes here.
-    if (IsTextOnlyWarning(diag.warnGroup)) {
-        EmitNote();
-    }
     if (diag.mainHint.range.begin == DEFAULT_POSITION) {
+        EmitNote();
+        EmitHelp(diag.helps);
         return !rangeCheckError;
     }
     std::vector<CollectedInfo> errorInfo;

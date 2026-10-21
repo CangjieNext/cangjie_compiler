@@ -1031,7 +1031,19 @@ template <typename T> bool ToCHIR::IsAllApply(const T* curFunc)
 }
 
 namespace {
-void EmitCHIR(const std::string& outputPath, const CHIR::Package& package, ToCHIR::Phase phase, bool dump)
+std::optional<uint64_t> WriteCHIR(DiagnosticEngine& diag, const std::string& path, const CHIR::Package& package,
+    ToCHIR::Phase phase)
+{
+    auto digest = CHIRSerializer::Serialize(package, path, phase);
+    if (!digest) {
+        diag.DiagnoseRefactor(DiagKindRefactor::frontend_invalid_output_path, DEFAULT_POSITION, path);
+    }
+    return digest;
+}
+
+// Write the serialization file of 'package'. Report a diagnostic and return no digest if the write fails.
+std::optional<uint64_t> EmitCHIR(DiagnosticEngine& diag, const std::string& outputPath, const CHIR::Package& package,
+    ToCHIR::Phase phase, bool dump)
 {
     std::string path;
     if (FileUtil::IsDir(outputPath)) {
@@ -1039,7 +1051,10 @@ void EmitCHIR(const std::string& outputPath, const CHIR::Package& package, ToCHI
     } else {
         path = outputPath;
     }
-    CHIRSerializer::Serialize(package, path, phase);
+    auto digest = WriteCHIR(diag, path, package, phase);
+    if (!digest) {
+        return std::nullopt;
+    }
     if (dump) {
         const std::string dumpFileName =
             FileUtil::GetFileNameWithoutExtension(path) + "_Emit_Debug" + CHIR_READABLE_FILE_EXTENSION;
@@ -1048,8 +1063,16 @@ void EmitCHIR(const std::string& outputPath, const CHIR::Package& package, ToCHI
         // print package
         CHIRPrinter::PrintPackage(package, dumpFileName);
     }
+    return digest;
 }
 } // namespace
+
+bool ToCHIR::SaveCommonPartCHIR()
+{
+    auto digest = EmitCHIR(diag, outputPath, *chirPkg, Phase::RAW, opts.NeedDumpCHIR());
+    ci.chirData->SetCommonPartChirDigest(digest);
+    return digest.has_value();
+}
 
 bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
 {
@@ -1059,8 +1082,7 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
     }
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
-        EmitCHIR(outputPath, *chirPkg, Phase::RAW, opts.NeedDumpCHIR());
-        return true;
+        return SaveCommonPartCHIR();
     }
 #endif
     Canonicalization();
@@ -1129,8 +1151,7 @@ bool ToCHIR::Run()
     }
     // 2. for cjmp, while compiling common package, just be here and save CHIR to file.
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
-        EmitCHIR(outputPath, *chirPkg, Phase::RAW, opts.NeedDumpCHIR());
-        return true;
+        return SaveCommonPartCHIR();
     }
     // 3. run plugin for CHIR
     if (!PerformPlugin()) {
@@ -1142,8 +1163,7 @@ bool ToCHIR::Run()
         return false;
     }
     if (opts.emitCHIRPhase == GlobalOptions::CandidateEmitCHIRPhase::RAW) {
-        EmitCHIR(outputPath, *chirPkg, Phase::RAW, opts.NeedDumpCHIR());
-        return true;
+        return EmitCHIR(diag, outputPath, *chirPkg, Phase::RAW, opts.NeedDumpCHIR()).has_value();
     }
     RecordCHIRExprNum("trans");
 
@@ -1187,11 +1207,11 @@ bool ToCHIR::Run()
         return false;
     }
     if (opts.emitCHIRPhase == GlobalOptions::CandidateEmitCHIRPhase::OPT) {
-        EmitCHIR(outputPath, *chirPkg, Phase::OPT, opts.NeedDumpCHIR());
+        return EmitCHIR(diag, outputPath, *chirPkg, Phase::OPT, opts.NeedDumpCHIR()).has_value();
     } else if (opts.saveTemps) {
         auto tempFileInfo =
             TempFileManager::Instance().CreateNewFileInfo({.fileName = chirPkg->GetName()}, TempFileKind::O_CHIR);
-        CHIRSerializer::Serialize(*chirPkg, tempFileInfo.filePath, Phase::OPT);
+        return WriteCHIR(diag, tempFileInfo.filePath, *chirPkg, Phase::OPT).has_value();
     }
     return true;
 }

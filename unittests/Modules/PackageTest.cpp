@@ -1896,3 +1896,108 @@ TEST_F(PackageTest, TypeAliasRefExport)
         return VisitAction::WALK_CHILDREN;
     }).Walk();
 }
+
+TEST_F(PackageTest, CommonPartMarkerFollowsOutputMode)
+{
+    for (auto mode : {GlobalOptions::OutputMode::CHIR, GlobalOptions::OutputMode::STATIC_LIB}) {
+        diag.ClearError();
+        invocation.globalOptions.outputMode = mode;
+        instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+        instance->invocation.globalOptions.implicitPrelude = true;
+        instance->code = "package cmp\npublic func foo(): Int64 { 1 }\n";
+        ASSERT_TRUE(instance->Compile());
+        ASSERT_FALSE(instance->GetSourcePackages().empty());
+        std::vector<uint8_t> data;
+        instance->importManager->ExportAST(false, data, *instance->GetSourcePackages()[0]);
+        ASSERT_FALSE(data.empty());
+        EXPECT_EQ(PackageFormat::GetPackage(data.data())->isCommonPart(), mode == GlobalOptions::OutputMode::CHIR);
+        auto cjoManager = instance->importManager->GetCjoManager();
+        ASSERT_NE(cjoManager, nullptr);
+        Package pkg("cmp");
+        pkg.files.emplace_back(MakeOwned<File>());
+        auto cjoData = data;
+        ASTLoader loader(
+            std::move(cjoData), "cmp", *instance->typeManager, *cjoManager, instance->invocation.globalOptions);
+        loader.SetCjoPath("cmp.cjo");
+        EXPECT_EQ(loader.PreloadCommonPartOfPackage(pkg), mode == GlobalOptions::OutputMode::CHIR);
+    }
+}
+
+TEST_F(PackageTest, CommonPartPreloadFailureCanBeReloaded)
+{
+    diag.ClearError();
+    invocation.globalOptions.outputMode = GlobalOptions::OutputMode::CHIR;
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->code = "package cmp\npublic func foo(): Int64 { 1 }\n";
+    ASSERT_TRUE(instance->Compile());
+    ASSERT_FALSE(instance->GetSourcePackages().empty());
+    std::vector<uint8_t> data;
+    instance->importManager->ExportAST(false, data, *instance->GetSourcePackages()[0]);
+    ASSERT_FALSE(data.empty());
+    EXPECT_FALSE(PackageFormat::GetPackage(data.data())->commonPartChirDigest().has_value());
+    auto cjoManager = instance->importManager->GetCjoManager();
+    ASSERT_NE(cjoManager, nullptr);
+
+    // LSP supplies CJO data from its cache without CHIR inputs.
+    auto& opts = instance->invocation.globalOptions;
+    opts.commonPartCjos = {"cmp.cjo"};
+    instance->importManager->SetPackageCjoCache("cmp", data);
+    opts.enableCompileDebug = true;
+    Package pkg("cmp");
+    pkg.files.emplace_back(MakeOwned<File>());
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        EXPECT_FALSE(cjoManager->LoadFilesOfCommonPart(&pkg));
+        auto& loaders = cjoManager->GetCommonPartCjos("cmp");
+        ASSERT_EQ(loaders.size(), 1u);
+        ASSERT_NE(loaders[0], nullptr);
+        EXPECT_FALSE(loaders[0]->IsCommonPartPreloaded());
+        cjoManager->LoadPackageDeclsOnDemand({&pkg}, true);
+        EXPECT_EQ(pkg.files.size(), 1u);
+        EXPECT_TRUE(pkg.files[0]->decls.empty());
+    }
+    // The diagnostic engine deduplicates the identical diagnostics of the two attempts.
+    EXPECT_EQ(diag.GetErrorCount(), 1u);
+
+    // Correct the options and retry with the same compiler instance, manager and package.
+    diag.Reset();
+    opts.enableCompileDebug = false;
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        ASSERT_TRUE(cjoManager->LoadFilesOfCommonPart(&pkg));
+        EXPECT_TRUE(cjoManager->GetCommonPartCjos("cmp")[0]->IsCommonPartPreloaded());
+        cjoManager->LoadPackageDeclsOnDemand({&pkg}, true);
+        ASSERT_EQ(pkg.files.size(), 2u);
+        ASSERT_EQ(pkg.files.back()->decls.size(), 1u);
+        EXPECT_EQ(pkg.files.back()->decls[0]->identifier, "foo");
+        EXPECT_EQ(pkg.files.back()->decls[0]->curFile, pkg.files.back().get());
+        EXPECT_EQ(diag.GetErrorCount(), 0u);
+    }
+
+    // An unreadable CHIR must invalidate every loader before declarations can be requested.
+    opts.commonPartChirs = {"testTempFiles/missing.chir"};
+    EXPECT_FALSE(cjoManager->LoadFilesOfCommonPart(&pkg));
+    EXPECT_FALSE(cjoManager->GetCommonPartCjos("cmp")[0]->IsCommonPartPreloaded());
+    cjoManager->LoadPackageDeclsOnDemand({&pkg}, true);
+    EXPECT_EQ(pkg.files.size(), 1u);
+    EXPECT_TRUE(pkg.files[0]->decls.empty());
+    EXPECT_EQ(diag.GetErrorCount(), 1u);
+
+    // Failure of the first loader must also invalidate a later, previously successful loader.
+    diag.Reset();
+    opts.commonPartChirs.clear();
+    opts.commonPartCjos.push_back("cmp.cjo");
+    ASSERT_TRUE(cjoManager->LoadFilesOfCommonPart(&pkg));
+    ASSERT_EQ(cjoManager->GetCommonPartCjos("cmp").size(), 2u);
+    for (auto& loader : cjoManager->GetCommonPartCjos("cmp")) {
+        ASSERT_TRUE(loader->IsCommonPartPreloaded());
+    }
+    opts.enableCompileDebug = true;
+    EXPECT_FALSE(cjoManager->LoadFilesOfCommonPart(&pkg));
+    for (auto& loader : cjoManager->GetCommonPartCjos("cmp")) {
+        EXPECT_FALSE(loader->IsCommonPartPreloaded());
+    }
+    cjoManager->LoadPackageDeclsOnDemand({&pkg}, true);
+    EXPECT_EQ(pkg.files.size(), 1u);
+    EXPECT_TRUE(pkg.files[0]->decls.empty());
+    EXPECT_EQ(diag.GetErrorCount(), 1u);
+}

@@ -37,6 +37,17 @@ uint64_t Utils::GetHash(const std::string& content)
     return hash;
 }
 
+uint64_t Utils::GetBufferHash(const uint8_t* data, size_t size)
+{
+    constexpr uint64_t fnvPrime = 1099511628211ull;
+    uint64_t hash = 14695981039346656037ull;
+    for (size_t i = 0; i < size; ++i) {
+        hash ^= static_cast<uint64_t>(data[i]);
+        hash *= fnvPrime;
+    }
+    return hash;
+}
+
 std::vector<std::string> Utils::SplitLines(const std::string& str)
 {
     std::vector<std::string> res;

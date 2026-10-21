@@ -17,6 +17,8 @@
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Sema/TypeManager.h"
 
+#include <optional>
+
 namespace Cangjie {
 class ASTLoader;
 
@@ -65,6 +67,8 @@ public:
      */
     bool LoadFilesOfCommonPart(Ptr<AST::Package> pkg);
     std::vector<OwnedPtr<ASTLoader>>& GetCommonPartCjos(std::string expectedName) const;
+    // Consume one matching CHIR digest. LSP may load common CJO files without CHIR inputs.
+    bool ClaimCommonPartChir(std::optional<uint64_t> chirDigest) const;
     Ptr<AST::Package> GetPackage(const std::string& fullPackageName) const;
     std::vector<Ptr<AST::PackageDecl>> GetAllPackageDecls(bool includeMacroPkg = false) const;
 
