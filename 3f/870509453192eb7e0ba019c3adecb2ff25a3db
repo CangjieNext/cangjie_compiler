@@ -1,0 +1,21 @@
+src/Sema/Desugar/AfterTypeCheck/TryExpr.cpp
+  s_482f90e573753f::t_6fec40547c1fe4 130,134,138
+  s_482f90e573753f::t_d12c410ea44e4a 121-124,126-129,131-133,135-137,139-142,144
+  s_482f90e573753f::t_9a8db6d49f37f4 151-152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "3f870509453192eb7e0ba019c3adecb2ff25a3db",
+  "prompts": {},
+  "sessions": {
+    "s_482f90e573753f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f12ae262-55a6-47df-8219-cc8037a4ee77",
+        "model": "DeepSeek-V4.1-Flash"
+      },
+      "human_author": null
+    }
+  }
+}
