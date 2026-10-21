@@ -123,7 +123,7 @@ const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
      */
     {AST::Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD, "CJ_MIRROR_JAVA_INTERFACE_FWD(deprecated)"},
     {AST::Attribute::DESUGARED_FOREIGN_FIELD, "DESUGARED_FOREIGN_FIELD"},
-    {AST::Attribute::HAS_INITED_FIELD, "HAS_INITED_FIELD"},
+    {AST::Attribute::HAS_INITED_FIELD, "HAS_INITED_FIELD(deprecated)"},
     {AST::Attribute::OBJ_C_FOREIGN_INTERFACE_HANDLE_WRAPPER, "OBJ_C_FOREIGN_INTERFACE_HANDLE_WRAPPER"},
     /*
      * deprecated: reverse-direction interop has been removed.
