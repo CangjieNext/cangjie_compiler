@@ -1059,9 +1059,7 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
     }
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
-        auto fileName =
-            FileUtil::JoinPath(opts.output, chirPkg->GetName()) + std::string(CHIR_SERIALIZATION_FILE_EXTENSION);
-        CHIRSerializer::Serialize(*chirPkg, fileName, CHIR::ToCHIR::RAW);
+        EmitCHIR(outputPath, *chirPkg, Phase::RAW, opts.NeedDumpCHIR());
         return true;
     }
 #endif
@@ -1131,9 +1129,7 @@ bool ToCHIR::Run()
     }
     // 2. for cjmp, while compiling common package, just be here and save CHIR to file.
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
-        auto fileName =
-            FileUtil::JoinPath(opts.output, chirPkg->GetName()) + std::string(CHIR_SERIALIZATION_FILE_EXTENSION);
-        CHIRSerializer::Serialize(*chirPkg, fileName, CHIR::ToCHIR::RAW);
+        EmitCHIR(outputPath, *chirPkg, Phase::RAW, opts.NeedDumpCHIR());
         return true;
     }
     // 3. run plugin for CHIR

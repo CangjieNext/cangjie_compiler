@@ -659,11 +659,13 @@ enum class Attribute {
 
     /**
      * Mark whether a node is a special flag, which marks the class instance as initialized.
-     * Necessary for finalizer implementation on CHIR.
-     * W: Sema.
-     * R: AST2CHIR.
+     * Attribute is deprecated since `$hasInited` is generated in CHIR and recognized by name.
+     * Could be considered for removal with any other compatibility-breaking changes in the attributes structure.
+     * W: - (before deprecation: Sema).
+     * R: - (before deprecation: AST2CHIR).
      */
-    HAS_INITED_FIELD,
+    HAS_INITED_FIELD [[deprecated("$hasInited field generation has moved to CHIR. "
+        "This attribute exists for compatibility persistance only and could be considered for removal")]],
 
     /**
      * Mark whether a class is a handle wrapper class generated for each foreign Objective-C interface.
