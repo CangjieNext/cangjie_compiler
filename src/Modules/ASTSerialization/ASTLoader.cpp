@@ -484,11 +484,17 @@ OwnedPtr<Package> ASTLoader::ASTLoaderImpl::LoadPackageDependencies()
 }
 
 // Deserialize common part of package into already existing Package node
-bool ASTLoader::PreloadCommonPartOfPackage(AST::Package& pkg) const
+bool ASTLoader::PreloadCommonPartOfPackage(AST::Package& pkg, std::vector<uint64_t>* unclaimedChirDigests) const
 {
     CJC_NULLPTR_CHECK(pImpl);
     pImpl->deserializingCommon = true;
-    return pImpl->PreloadCommonPartOfPackage(pkg);
+    return pImpl->PreloadCommonPartOfPackage(pkg, unclaimedChirDigests);
+}
+
+bool ASTLoader::IsCommonPartPreloaded() const
+{
+    CJC_NULLPTR_CHECK(pImpl);
+    return pImpl->commonPartPreloaded;
 }
 
 std::vector<OwnedPtr<ImportSpec>> ASTLoader::ASTLoaderImpl::LoadImportSpecs(const PackageFormat::Imports* imports)

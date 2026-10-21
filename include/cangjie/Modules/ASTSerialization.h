@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <flatbuffers/flatbuffers.h>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -49,6 +50,8 @@ public:
     // Add for cjmp
     void SetSerializingCommon();
     void SaveOptions(bool debug, GlobalOptions::OptimizationLevel level);
+    // Digest of the '.chir' written by the same common part compilation.
+    void SetCommonPartChirDigest(std::optional<uint64_t> digest);
 
     /** Export external decls of a package AST to a buffer. */
     void ExportAST(const AST::PackageDecl& package) const;
@@ -121,7 +124,10 @@ public:
     /** @brief Whether the loaded cjo's version is exactly @p requiredMajor.@p requiredMinor. */
     bool IsCjoVersionExactly(uint8_t requiredMajor, uint8_t requiredMinor) const;
     // Add for cjmp
-    bool PreloadCommonPartOfPackage(AST::Package& pkg) const;
+    // Claim the digest of the cjo in 'unclaimedChirDigests'. Null skips the check (LSP without CHIR inputs).
+    bool PreloadCommonPartOfPackage(AST::Package& pkg, std::vector<uint64_t>* unclaimedChirDigests) const;
+    // Decls of a common part cjo can be loaded only after its files are preloaded successfully.
+    bool IsCommonPartPreloaded() const;
     std::vector<std::string> ReadFileNames() const;
 
     Ptr<AST::Ty> LoadType(FormattedIndex type) const;

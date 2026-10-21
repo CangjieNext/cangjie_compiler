@@ -362,3 +362,39 @@ TEST(EngineTest, OldDiagKindDefGuard)
     ASSERT_FALSE(oldDiagKindBeModified)
         << "Old diag kind be modified, please adpate case or def according the above hints.";
 }
+
+namespace {
+std::string EmitDiagnostic(Diagnostic& diagnostic, SourceManager& sm, bool onlyHint = false)
+{
+    std::ostringstream out;
+    DiagnosticEmitter(diagnostic, true, true, out, sm).Emit(onlyHint);
+    return out.str();
+}
+} // namespace
+
+TEST(EngineTest, PositionlessDiagnosticNotesAndHelps)
+{
+    DiagnosticEngine diag;
+    SourceManager sm;
+    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_debug_mismatch, DEFAULT_POSITION,
+        "enabled", "disabled");
+    builder.AddNote("text note");
+    builder.AddHelp(DiagHelp{"text help"});
+    EXPECT_EQ(EmitDiagnostic(builder.diagnostic, sm),
+        R"(error: common part is compiled with different debug mode: enabled in common and disabled in current
+ # note: text note
+ # help: text help
+)");
+    EXPECT_EQ(EmitDiagnostic(builder.diagnostic, sm, true), R"( # note: text note
+ # help: text help
+)");
+
+    // Text-only warnings emitted only notes before, now they emit notes and helps once.
+    auto warning = diag.DiagnoseRefactor(DiagKindRefactor::driver_warning_argument_unused, DEFAULT_POSITION, "--foo");
+    warning.AddNote("text note");
+    warning.AddHelp(DiagHelp{"text help"});
+    EXPECT_EQ(EmitDiagnostic(warning.diagnostic, sm), R"(warning: the arg '--foo' may be unused
+ # note: text note
+ # help: text help
+)");
+}

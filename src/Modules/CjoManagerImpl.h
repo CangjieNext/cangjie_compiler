@@ -165,6 +165,8 @@ public:
         hasBuildIndex = value;
     }
     std::vector<OwnedPtr<ASTLoader>>& GetCommonPartCjos(std::string expectedName, const CjoManager& cjoManager);
+    void ResetCommonPartLoaders();
+    bool ReadCommonPartChirDigests(std::vector<uint64_t>& digests);
     const GlobalOptions& GetGlobalOptions()
     {
         return globalOptions;

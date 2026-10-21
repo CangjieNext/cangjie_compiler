@@ -43,7 +43,8 @@ public:
     OwnedPtr<AST::Package> LoadPackageDependencies();
     void LoadPackageDecls();
     // Add for CJMP
-    bool PreloadCommonPartOfPackage(AST::Package& pkg);
+    bool PreloadCommonPartOfPackage(AST::Package& pkg, std::vector<uint64_t>* unclaimedChirDigests);
+    bool CheckCommonPartChirDigest(std::vector<uint64_t>* unclaimedChirDigests);
     bool ValidateOptions();
     std::vector<OwnedPtr<AST::ImportSpec>> LoadImportSpecs(const PackageFormat::Imports* imports);
     std::vector<std::string> ReadFileNames() const;
@@ -92,6 +93,7 @@ private:
     Ptr<AST::Package> curPackage{nullptr};
     bool importSrcCode{false};
     bool deserializingCommon{false};
+    bool commonPartPreloaded{false};
 
     // Define the context status for loading type cache of incremental compilation.
     bool isLoadCache{false};

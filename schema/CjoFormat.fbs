@@ -710,6 +710,11 @@ table Package {
   // record all std full package name dependencies.
   allDependentStdPkgs:[string];
   options: CompilationOptions;
+  // Set by '--output-type=chir'. Required for '--common-part-cjo', including LSP.
+  isCommonPart: bool = false;
+  // GetBufferHash of the CHIR bytes. If '--common-part-chir' is passed, it must match one of them.
+  // LSP may load a marked cjo without CHIR inputs and then does not check it.
+  commonPartChirDigest: uint64 = null;
 }
 
 root_type Package;

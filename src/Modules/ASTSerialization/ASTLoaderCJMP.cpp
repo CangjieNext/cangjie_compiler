@@ -63,6 +63,30 @@ std::set<std::string> CollectFeaturesFromPackage(AST::Package& pkg)
     return (*pkg.files.begin())->GetFeatures();
 }
 
+namespace {
+void ReportUnusableCommonPartCjo(DiagnosticEngine& diag, const std::string& cjoPath, const std::string& packageName)
+{
+    auto builder = diag.DiagnoseRefactor(
+        DiagKindRefactor::module_common_cjo_not_common_part, DEFAULT_POSITION, cjoPath, packageName);
+    builder.AddNote("this cjo was not produced by a common part compilation with '--output-type=chir' "
+        "of this cjc version");
+    builder.AddNote("a specific part compilation writes '" + packageName +
+        ".cjo' to its output directory and may have overwritten the common part cjo");
+    builder.AddHelp(DiagHelp("recompile the common part with '--output-type=chir' and keep its '.cjo' and '.chir' "
+        "together in a separate directory, e.g. with '--output-dir'"));
+}
+
+void ReportCommonPartChirMismatch(DiagnosticEngine& diag, const std::string& cjoPath, bool hasDigest)
+{
+    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_chir_mismatch, DEFAULT_POSITION, cjoPath);
+    builder.AddNote(hasDigest
+        ? "the '.cjo' and '.chir' must come from the same common part compilation"
+        : "the cjo does not record the digest of its common part '.chir'");
+    builder.AddHelp(
+        DiagHelp("recompile the common part with '--output-type=chir' and pass both its '.cjo' and '.chir'"));
+}
+} // namespace
+
 void ValidateCommonSpecificFeatureSetsRelations(
     const AST::File& commonFile,
     const std::set<std::string>& specificFeatures,
@@ -182,7 +206,8 @@ bool ASTLoader::ASTLoaderImpl::ValidateOptions()
     return !failed;
 }
 
-bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
+bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(
+    AST::Package& pkg, std::vector<uint64_t>* unclaimedChirDigests)
 {
     if (!VerifyForData("ast")) {
         return false;
@@ -193,15 +218,24 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
     if (!CheckCjoVersion()) {
         return false;
     }
+    if (!package->isCommonPart() || package->allFileInfo() == nullptr) {
+        ASTLoaderCJMP::ReportUnusableCommonPartCjo(diag, cjoPath, pkg.fullPackageName);
+        return false;
+    }
+
     CJC_NULLPTR_CHECK(package->fullPkgName());
-
-    curPackage = &pkg;
-
     auto deserializedPackageName = package->fullPkgName()->str();
     if (pkg.fullPackageName != deserializedPackageName) {
         ASTLoaderCJMP::ReportPackageMismatch(diag, pkg, pkg.fullPackageName, deserializedPackageName);
         return false;
     }
+    if (!ValidateOptions()) {
+        return false;
+    }
+    if (unclaimedChirDigests && !CheckCommonPartChirDigest(unclaimedChirDigests)) {
+        return false;
+    }
+    curPackage = &pkg;
     auto specificFeatures = ASTLoaderCJMP::CollectFeaturesFromPackage(pkg);
 
     allTypes.resize(package->allTypes()->size(), nullptr);
@@ -216,13 +250,6 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
         pkg.files.emplace_back(std::move(file));
     }
 
-    if (!ValidateOptions()) {
-        // options mismatch must abort compilation
-        // otherwise the difference in desugaring/chir generation
-        // may lead to a crash in subsequent compilation stages
-        return false;
-    }
-
     AddCurFile(pkg);
     auto imports = package->imports();
     CJC_NULLPTR_CHECK(imports);
@@ -232,6 +259,20 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
         importedFullPackageNames.emplace_back(importItem);
     }
 
+    commonPartPreloaded = true;
+    return true;
+}
+
+bool ASTLoader::ASTLoaderImpl::CheckCommonPartChirDigest(std::vector<uint64_t>* unclaimedChirDigests)
+{
+    auto chirDigest = package->commonPartChirDigest();
+    auto match = chirDigest ? std::find(unclaimedChirDigests->begin(), unclaimedChirDigests->end(), *chirDigest)
+                            : unclaimedChirDigests->end();
+    if (match == unclaimedChirDigests->end()) {
+        ASTLoaderCJMP::ReportCommonPartChirMismatch(diag, cjoPath, chirDigest.has_value());
+        return false;
+    }
+    unclaimedChirDigests->erase(match);
     return true;
 }
 
