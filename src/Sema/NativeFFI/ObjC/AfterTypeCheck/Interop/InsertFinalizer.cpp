@@ -11,23 +11,14 @@
  */
 
 #include "Handlers.h"
-#include <cstdint>
 
 namespace Cangjie::Interop::ObjC {
 using namespace Cangjie::AST;
 using namespace Cangjie::Native::FFI;
 
 namespace {
-enum class NeedsHasInitedField : uint8_t { NO, YES };
-
-void CreateAndInsertFinalizer(
-    ASTFactory& factory, ClassDecl& cd, NeedsHasInitedField needsHasInitedField)
+void CreateAndInsertFinalizer(ASTFactory& factory, ClassDecl& cd)
 {
-    if (needsHasInitedField == NeedsHasInitedField::YES) {
-        auto hasInitedField = factory.CreateHasInitedField(cd);
-        cd.body->decls.push_back(std::move(hasInitedField));
-    }
-
     auto finalizer = factory.CreateFinalizer(cd);
     cd.body->decls.push_back(std::move(finalizer));
 }
@@ -44,14 +35,11 @@ void InsertFinalizer::HandleImpl(InteropContext& ctx)
             continue;
         }
 
-        // Actually, only @ObjCMirror open class needs `$hasInited: Bool` field, but CHIR checks only
-        // OBJ_C_MIRROR attribute and not class openness, so we have to insert it for
-        // each @ObjCMirror class
-        CreateAndInsertFinalizer(ctx.factory, *mirrorClass, NeedsHasInitedField::YES);
+        CreateAndInsertFinalizer(ctx.factory, *mirrorClass);
     }
 
     for (auto& wrapper : ctx.mirrorInterfaceHandleWrappers) {
-        CreateAndInsertFinalizer(ctx.factory, *wrapper, NeedsHasInitedField::NO);
+        CreateAndInsertFinalizer(ctx.factory, *wrapper);
     }
 
     for (auto& impl : ctx.impls) {
@@ -59,10 +47,7 @@ void InsertFinalizer::HandleImpl(InteropContext& ctx)
             continue;
         }
 
-        // Actually, only @ObjCImpl open class needs `$hasInited: Bool` field, but CHIR checks only
-        // OBJ_C_IMPL attribute and not class openness, so we have to insert it for
-        // each @ObjCImpl class
-        CreateAndInsertFinalizer(ctx.factory, *impl, NeedsHasInitedField::YES);
+        CreateAndInsertFinalizer(ctx.factory, *impl);
     }
 }
 } // namespace Cangjie::Interop::ObjC

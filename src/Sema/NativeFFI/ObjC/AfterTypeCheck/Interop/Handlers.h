@@ -177,13 +177,13 @@ public:
 };
 
 /**
- * Creates and inserts finalizers (with special private field $hasInited) for each @ObjCMirror class:
+ * Creates and inserts finalizers for each @ObjCMirror class:
  * ```cangjie
- * private var $hasInited: Bool = false
  * ~init() {
  *     unsafe { objCRelease($obj) }
  * }
  * ```
+ * `$hasInited` is added later in CHIR.
  */
 class InsertFinalizer : public Handler<InsertFinalizer, InteropContext> {
 public:

@@ -64,7 +64,6 @@ enum class Attribute {
     JAVA_MIRROR,      ///< Mark whether it's @JavaMirror declaration (binding for a java type).
     JAVA_IMPL,        ///< Mark whether it's @JavaImpl declaration.
     OBJ_C_MIRROR,     ///< Mark whether it's @ObjCMirror declaration (binding for an Objective-C type).
-    HAS_INITED_FIELD, ///< Mark whether a node is a special flag, which marks the class instance as initialized.
     JAVA_HAS_DEFAULT, ///< Mark whether JAVA_MIRROR interface has default method.
     PREVIOUSLY_DESERIALIZED, /// Mark that deserialization occurs not in the newly created node, but in an existing one.
     DOES_NOT_THROW,   ///< Mark that the function does not throw any exceptions by construction.
@@ -90,7 +89,7 @@ const std::unordered_map<Attribute, std::string> ATTR_TO_STRING{{Attribute::STAT
     {Attribute::SKIP_ANALYSIS, "skip_analysis"}, {Attribute::DESERIALIZED, "deserialized"},
     {Attribute::INITIALIZER, "initializer"},
     {Attribute::UNSAFE, "unsafe"}, {Attribute::JAVA_MIRROR, "javaMirror"}, {Attribute::JAVA_IMPL, "javaImpl"},
-    {Attribute::OBJ_C_MIRROR, "objCMirror"}, {Attribute::HAS_INITED_FIELD, "hasInitedField"},
+    {Attribute::OBJ_C_MIRROR, "objCMirror"},
     {Attribute::JAVA_HAS_DEFAULT, "javaHasDefault"}, {Attribute::PREVIOUSLY_DESERIALIZED, "previouslyDeserialized"},
     {Attribute::DOES_NOT_THROW, "doesNotThrow"}, {Attribute::OBJ_C_IMPL, "objCImpl"},
     {Attribute::MATCH_PATTERN, "matchPattern"},

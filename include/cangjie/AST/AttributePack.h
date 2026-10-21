@@ -655,10 +655,8 @@ enum class Attribute {
     DESUGARED_MIRROR_FIELD,
 
     /**
-     * Mark whether a node is a special flag, which marks the class instance as initialized.
-     * Necessary for finalizer implementation on CHIR.
-     * W: Sema.
-     * R: AST2CHIR.
+     * Kept so cjo attribute bitsets stay compatible. Nothing reads this attribute anymore.
+     * `$hasInited` is recognized by name.
      */
     HAS_INITED_FIELD,
 

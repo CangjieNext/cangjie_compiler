@@ -106,11 +106,6 @@ private:
     void InsertJavaMirrorWrappingConstructorBody(ClassDecl& decl);
 
     /**
-     * var $hasInited: Bool = false
-     */
-    void InsertJavaMirrorHasInited(ClassDecl& mirror);
-
-    /**
      * ~init() {
      *     Java_CFFI_deleteGlobalReference($jnienv, this.javaref)
      * }

@@ -1712,18 +1712,6 @@ OwnedPtr<FuncDecl> ASTFactory::CreateFinalizer(ClassDecl& target)
     return fd;
 }
 
-OwnedPtr<VarDecl> ASTFactory::CreateHasInitedField(ClassDecl& target)
-{
-    static auto boolTy = typeManager.GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
-    auto initializer = CreateLitConstExpr(LitConstKind::BOOL, "false", boolTy);
-    auto ret = CreateVarDecl(HAS_INITED_IDENT, std::move(initializer));
-    ret->isVar = true;
-    PutDeclToClassLikeBody(*ret, target);
-    ret->EnableAttr(Attribute::PRIVATE, Attribute::NO_REFLECT_INFO, Attribute::HAS_INITED_FIELD);
-
-    return ret;
-}
-
 OwnedPtr<FuncDecl> ASTFactory::CreateNativeHandleGetterDecl(ClassLikeDecl& target)
 {
     static auto nativeObjCIdTy = bridge.GetNativeObjCIdTy();
