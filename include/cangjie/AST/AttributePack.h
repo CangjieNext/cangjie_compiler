@@ -658,12 +658,11 @@ enum class Attribute {
     DESUGARED_FOREIGN_FIELD,
 
     /**
-     * Mark whether a node is a special flag, which marks the class instance as initialized.
-     * Necessary for finalizer implementation on CHIR.
-     * W: Sema.
-     * R: AST2CHIR.
+     * Kept so cjo attribute bitsets stay compatible. Nothing reads this attribute anymore.
+     * `$hasInited` is recognized by name.
      */
-    HAS_INITED_FIELD,
+    HAS_INITED_FIELD [[deprecated("reverse-direction interop has been removed. "
+        "This attribute exists for compatibility persistance only and could be considered for removal")]],
 
     /**
      * Mark whether a class is a handle wrapper class generated for each foreign Objective-C interface.

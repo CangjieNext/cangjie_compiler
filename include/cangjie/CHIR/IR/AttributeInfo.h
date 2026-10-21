@@ -64,7 +64,6 @@ enum class Attribute {
     JAVA_FOREIGN,     ///< Mark whether it's java foreign declaration.
     JAVA_EXPORT,    ///< Mark whether it's a declaration exported to java.
     OBJ_C_FOREIGN,    ///< Mark whether it's Objective-C foreign declaration.
-    HAS_INITED_FIELD, ///< Mark whether a node is a special flag, which marks the class instance as initialized.
     JAVA_HAS_DEFAULT, ///< Mark whether `@Java` foreign interface has default method.
     PREVIOUSLY_DESERIALIZED, /// Mark that deserialization occurs not in the newly created node, but in an existing one.
     DOES_NOT_THROW,   ///< Mark that the function does not throw any exceptions by construction.
@@ -90,7 +89,7 @@ const std::unordered_map<Attribute, std::string> ATTR_TO_STRING{{Attribute::STAT
     {Attribute::SKIP_ANALYSIS, "skip_analysis"}, {Attribute::DESERIALIZED, "deserialized"},
     {Attribute::INITIALIZER, "initializer"},
     {Attribute::UNSAFE, "unsafe"}, {Attribute::JAVA_FOREIGN, "javaForeign"}, {Attribute::JAVA_EXPORT, "javaExport"},
-    {Attribute::OBJ_C_FOREIGN, "objCForeign"}, {Attribute::HAS_INITED_FIELD, "hasInitedField"},
+    {Attribute::OBJ_C_FOREIGN, "objCForeign"},
     {Attribute::JAVA_HAS_DEFAULT, "javaHasDefault"}, {Attribute::PREVIOUSLY_DESERIALIZED, "previouslyDeserialized"},
     {Attribute::DOES_NOT_THROW, "doesNotThrow"}, {Attribute::OBJ_C_EXPORT, "objCExport"},
     {Attribute::MATCH_PATTERN, "matchPattern"},
