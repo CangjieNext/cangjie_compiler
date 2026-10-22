@@ -1,0 +1,20 @@
+src/Option/Option.cpp
+  s_20e59cdcc36361::t_46b67ea2cb25cb 644
+  s_20e59cdcc36361::t_eb4cd6a5497196 645-646
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "a3793918dda3c5fe136f3d19e9afa30cbb6bfc0f",
+  "prompts": {},
+  "sessions": {
+    "s_20e59cdcc36361": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_fe7df3a41ffez5I9HYZNGC4ncv",
+        "model": "GLM-5.2"
+      },
+      "human_author": null
+    }
+  }
+}
