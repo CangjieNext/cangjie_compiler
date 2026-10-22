@@ -179,6 +179,12 @@ void TypeChecker::TypeCheckerImpl::CanTargetOfRefBeCapturedCaseMutFunc(
             diag.Diagnose(nre, DiagKind::sema_capture_this_or_instance_field_in_func, decl.identifier.Val(),
                 "mutable function '" + fd->identifier + "'");
         }
+        if (nre.astKind == ASTKind::REF_EXPR && fd->TestAttr(AST::Attribute::MUT) &&
+            curFuncBody.funcDecl != fd && (decl.astKind == ASTKind::FUNC_DECL || decl.astKind == ASTKind::PROP_DECL) &&
+            decl.TestAnyAttr(AST::Attribute::IN_STRUCT) && !decl.TestAttr(AST::Attribute::STATIC)) {
+            diag.Diagnose(nre, DiagKind::sema_capture_this_or_instance_field_in_func, decl.identifier.Val(),
+                "mutable function '" + fd->identifier + "'");
+        }
         if (fd->IsFinalizer() &&
             decl.TestAnyAttr(AST::Attribute::IN_CLASSLIKE, AST::Attribute::IN_EXTEND) &&
             !decl.TestAttr(AST::Attribute::CONSTRUCTOR) &&
