@@ -1,0 +1,23 @@
+unittests/Basic/MacroCallDiagInfoTest.cpp
+  s_994e4339c69d1b::t_53e0798e909d07 1-90
+unittests/Basic/CMakeLists.txt
+  s_994e4339c69d1b::t_30493b200fea0b 57-65
+src/Basic/MacroCallDiagInfo.cpp
+  s_994e4339c69d1b::t_cd04d051a58ed3 77-86,107-112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0407d74e2ad7d44c99963f65c5581984fb1e52c6",
+  "prompts": {},
+  "sessions": {
+    "s_994e4339c69d1b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d0078850-d8e6-4b83-bb6e-518b9fdd8202",
+        "model": "GLM-5.3-Flash"
+      },
+      "human_author": "lixin <lixin656@huawei.com>"
+    }
+  }
+}
