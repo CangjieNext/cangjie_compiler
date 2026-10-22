@@ -1,0 +1,50 @@
+src/CodeGen/CJNative/CJNativeIntrinsicsCall.cpp
+  s_b5f35266f8d135::t_5b7cdc8d0e8f05 1410-1411
+src/CodeGen/Base/VArrayExprImpl.cpp
+  s_b5f35266f8d135::t_ef123437c37561 65
+include/cangjie/CHIR/Analysis/ConstAnalysis.h
+  s_b5f35266f8d135::t_18d36f950752ff 1411,1433
+src/CHIR/AST2CHIR/TranslateASTNode/TranslateArrayExpr.cpp
+  s_b5f35266f8d135::t_85315b45c7f585 284,286,302,304
+unittests/CHIR/VArrayTypeTest.cpp
+  s_61e348f61694d3::t_c0e22d58da61e4 1-39
+src/CHIR/Optimization/RangePropagation.cpp
+  s_b5f35266f8d135::t_fb311012d8dac7 240
+src/CodeGen/Base/CGTypes/CGVArrayType.cpp
+  s_b5f35266f8d135::t_1218944e14d2ab 29,31-32
+  s_b5f35266f8d135::t_65037224c0f38b 83
+src/CHIR/AST2CHIR/AST2CHIRChecker.cpp
+  s_b5f35266f8d135::t_85bd0b060a89f9 180
+unittests/CHIR/CMakeLists.txt
+  s_61e348f61694d3::t_2480b509065ae3 22
+include/cangjie/CHIR/IR/Type/Type.h
+  s_b5f35266f8d135::t_ef2c4c6cac70a7 988
+  s_61e348f61694d3::t_dcf8d89915701e 990
+  s_61e348f61694d3::t_8caf55f5d8c85c 991
+include/cangjie/CHIR/IR/CHIRBuilder.h
+  s_b5f35266f8d135::t_f607e6db56cd72 58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "d9599e1f5894abc3ad03becd6ed9f3c7a04e5b22",
+  "prompts": {},
+  "sessions": {
+    "s_61e348f61694d3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fd0a4-dd56-7b90-abe7-d4e80a725fe8",
+        "model": "Deepseek-V4-Flash-0731"
+      },
+      "human_author": null
+    },
+    "s_b5f35266f8d135": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fcb8f-4fbf-7ff0-8460-51c831fdb0ca",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}
