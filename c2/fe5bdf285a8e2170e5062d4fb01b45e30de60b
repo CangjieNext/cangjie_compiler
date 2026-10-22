@@ -1,0 +1,19 @@
+unittests/Utils/ProfileRecorderTests.cpp
+  s_803ffa700f2a64::t_2dfc58538d68b6 14,107-113,117-123,125-127,228,260
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c2fe5bdf285a8e2170e5062d4fb01b45e30de60b",
+  "prompts": {},
+  "sessions": {
+    "s_803ffa700f2a64": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f9fe1d98-505f-4831-95e2-2273606cfd5d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "wyq1213 <wangyinqiang2@huawei.com>"
+    }
+  }
+}

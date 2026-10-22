@@ -1,0 +1,23 @@
+unittests/Utils/FileUtilTests.cpp
+  s_803ffa700f2a64::t_307c0bd633359b 319-324
+unittests/Utils/ProfileRecorderTests.cpp
+  s_803ffa700f2a64::t_307c0bd633359b 108-109,118-120
+unittests/Frontend/FrontendEntryTest.cpp
+  s_803ffa700f2a64::t_2caffd3a12f79e 84-86,88-92,101-105,112-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "2a7634a332090b1b2cd4163e8f560106695e17d5",
+  "prompts": {},
+  "sessions": {
+    "s_803ffa700f2a64": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f9fe1d98-505f-4831-95e2-2273606cfd5d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "wyq1213 <wangyinqiang2@huawei.com>"
+    }
+  }
+}

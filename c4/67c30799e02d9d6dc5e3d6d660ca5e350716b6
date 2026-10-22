@@ -1,0 +1,35 @@
+unittests/Utils/CMakeLists.txt
+  s_803ffa700f2a64::t_d4dd10b1c8ea93 22-25
+unittests/Frontend/FrontendEntryTest.cpp
+  s_803ffa700f2a64::t_63910e37621c17 83-91,104-107
+unittests/Utils/SemaphoreTests.cpp
+  s_803ffa700f2a64::t_17c5922acfc069 1-17,21-70
+  s_803ffa700f2a64::t_184e1a256b611f 18-20
+unittests/Frontend/ExtendMemberTest.cpp
+  s_803ffa700f2a64::t_a22265dbd3d475 1-202
+unittests/Utils/SafePointerTests.cpp
+  s_803ffa700f2a64::t_17c5922acfc069 1-201
+unittests/Utils/FileUtilTests.cpp
+  s_803ffa700f2a64::t_3d87782c0f4f47 319-321,335-349
+  s_803ffa700f2a64::t_de2712577befc6 350-352
+unittests/Utils/TaskQueueTests.cpp
+  s_803ffa700f2a64::t_17c5922acfc069 1-109
+unittests/Frontend/CMakeLists.txt
+  s_803ffa700f2a64::t_d4dd10b1c8ea93 7-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c467c30799e02d9d6dc5e3d6d660ca5e350716b6",
+  "prompts": {},
+  "sessions": {
+    "s_803ffa700f2a64": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f9fe1d98-505f-4831-95e2-2273606cfd5d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "wyq1213 <wangyinqiang2@huawei.com>"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+unittests/Utils/FileUtilTests.cpp
+  s_803ffa700f2a64::t_9b868639ff78cb 356-372
+unittests/Utils/StdUtilsTests.cpp
+  s_803ffa700f2a64::t_d58e91db6dd4e3 75-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "a2ed421dc2f529d65e49a459f0aef9d215085a2c",
+  "prompts": {},
+  "sessions": {
+    "s_803ffa700f2a64": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f9fe1d98-505f-4831-95e2-2273606cfd5d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "wyq1213 <wangyinqiang2@huawei.com>"
+    }
+  }
+}
