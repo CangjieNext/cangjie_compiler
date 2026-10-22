@@ -25641,7 +25641,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..e4c7ce235 100644
+index b391fe1ea..866e49a55 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -25697,7 +25697,7 @@ index b391fe1ea..e4c7ce235 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.1.3";
++    g_version_str += "\n  cangjie 1.1.4";
    }
  
    return g_version_str.c_str();
@@ -26774,7 +26774,7 @@ index 04235f0fd..0bec7fbdb 100644
    // Attributes:
    kw_attributes,
 diff --git a/llvm/include/llvm/BinaryFormat/MachO.h b/llvm/include/llvm/BinaryFormat/MachO.h
-index c05e79333..86021af70 100644
+index c05e79333..fca58fe6e 100644
 --- a/llvm/include/llvm/BinaryFormat/MachO.h
 +++ b/llvm/include/llvm/BinaryFormat/MachO.h
 @@ -106,6 +106,7 @@ enum : uint32_t {
@@ -26785,6 +26785,14 @@ index c05e79333..86021af70 100644
  
    // Constant masks for the "flags" field in llvm::MachO::section and
    // llvm::MachO::section_64
+@@ -1520,6 +1521,7 @@ enum CPUSubTypeARM64 {
+   CPU_SUBTYPE_ARM64_ALL = 0,
+   CPU_SUBTYPE_ARM64_V8 = 1,
+   CPU_SUBTYPE_ARM64E = 2,
++  CPU_SUBTYPE_ARM64E_X1 = 12,
+ };
+ 
+ enum CPUSubTypeARM64_32 { CPU_SUBTYPE_ARM64_32_V8 = 1 };
 diff --git a/llvm/include/llvm/Bitcode/LLVMBitCodes.h b/llvm/include/llvm/Bitcode/LLVMBitCodes.h
 index eee4c50cc..d3dc49a5a 100644
 --- a/llvm/include/llvm/Bitcode/LLVMBitCodes.h
@@ -29920,6 +29928,18 @@ index 61e400fe9..b67537510 100644
    static SectionKind getReadOnlyWithRel() { return get(ReadOnlyWithRel); }
  };
  
+diff --git a/llvm/include/llvm/TextAPI/Architecture.def b/llvm/include/llvm/TextAPI/Architecture.def
+index 58ef31b25..80c9868cc 100644
+--- a/llvm/include/llvm/TextAPI/Architecture.def
++++ b/llvm/include/llvm/TextAPI/Architecture.def
+@@ -37,6 +37,7 @@ ARCHINFO(armv7em, MachO::CPU_TYPE_ARM, MachO::CPU_SUBTYPE_ARM_V7EM, 32)
+ ///
+ ARCHINFO(arm64, MachO::CPU_TYPE_ARM64, MachO::CPU_SUBTYPE_ARM64_ALL, 64)
+ ARCHINFO(arm64e, MachO::CPU_TYPE_ARM64, MachO::CPU_SUBTYPE_ARM64E, 64)
++ARCHINFO(arm64e_x1, MachO::CPU_TYPE_ARM64, MachO::CPU_SUBTYPE_ARM64E_X1, 64)
+ 
+ 
+ ///
 diff --git a/llvm/include/llvm/Transforms/CJCFI/PtrAuthBackwardCFI.h b/llvm/include/llvm/Transforms/CJCFI/PtrAuthBackwardCFI.h
 new file mode 100644
 index 000000000..fd732c210
@@ -51701,6 +51721,24 @@ index 6f4fb405d..93f82a6fd 100644
    bool getRegAllocationHints(Register VirtReg, ArrayRef<MCPhysReg> Order,
                               SmallVectorImpl<MCPhysReg> &Hints,
                               const MachineFunction &MF, const VirtRegMap *VRM,
+diff --git a/llvm/lib/TextAPI/Architecture.cpp b/llvm/lib/TextAPI/Architecture.cpp
+index bb349b217..82094fb00 100644
+--- a/llvm/lib/TextAPI/Architecture.cpp
++++ b/llvm/lib/TextAPI/Architecture.cpp
+@@ -36,10 +36,13 @@ Architecture getArchitectureFromName(StringRef Name) {
+ #define ARCHINFO(Arch, Type, Subtype, NumBits) .Case(#Arch, AK_##Arch)
+ #include "llvm/TextAPI/Architecture.def"
+ #undef ARCHINFO
++      .Case("arm64e.x1", AK_arm64e_x1)
+       .Default(AK_unknown);
+ }
+ 
+ StringRef getArchitectureName(Architecture Arch) {
++  if (Arch == AK_arm64e_x1)
++    return "arm64e.x1";
+   switch (Arch) {
+ #define ARCHINFO(Arch, Type, Subtype, NumBits)                                 \
+   case AK_##Arch:                                                              \
 diff --git a/llvm/lib/Transforms/CFGuard/CFGuard.cpp b/llvm/lib/Transforms/CFGuard/CFGuard.cpp
 index 5fc529596..ab08c3595 100644
 --- a/llvm/lib/Transforms/CFGuard/CFGuard.cpp
@@ -61995,10 +62033,10 @@ index 000000000..f55d9b667
 +                "Cangjie Barriers Split", false, false)
 diff --git a/llvm/lib/Transforms/Scalar/CJDevirtualOpt.cpp b/llvm/lib/Transforms/Scalar/CJDevirtualOpt.cpp
 new file mode 100644
-index 000000000..c385f341b
+index 000000000..9b2a99555
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJDevirtualOpt.cpp
-@@ -0,0 +1,486 @@
+@@ -0,0 +1,497 @@
 +//===- CJDevirtualOpt.cpp - -------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -62219,7 +62257,12 @@ index 000000000..c385f341b
 +      return false;
 +
 +    for (unsigned i = ReturnTypeIdx + 1; i < TypeArgNum; ++i) {
-+      if (!isSubType(K1.getTypeArg(i), K0.getTypeArg(i))) {
++      GlobalVariable *Arg1 = K1.getTypeArg(i);
++      GlobalVariable *Arg0 = K0.getTypeArg(i);
++      if (!Arg1->hasInitializer() || !Arg0->hasInitializer()) {
++        return false;
++      }
++      if (!isSubType(Arg1, Arg0)) {
 +        return false;
 +      }
 +    }
@@ -62308,8 +62351,14 @@ index 000000000..c385f341b
 +    if (K0.isInterface() || K1.isInterface()) {
 +      // If it find the extensionDef of klass, the subType is true.
 +      // Otherwise, the subtype is unknown.
-+      if (getExtensionDef(Klass0, Klass1) == nullptr)
++      // Only fold when the interface type is concrete and has no where-cond.
++      GlobalVariable *EDGV = getExtensionDef(Klass0, Klass1);
++      if (EDGV == nullptr || !EDGV->hasInitializer())
 +        continue;
++      ExtensionDefData ED(EDGV);
++      if (ED.WhereCondFn != nullptr) {
++        continue;
++      }
 +    } else if (K1.isFunction()) {
 +      Result = isFunctionSubType(K0, K1);
 +    } else {
@@ -76555,10 +76604,10 @@ index 328615011..98d07b460 100644
      auto PrintConstrainedLoopInfo = [L]() {
 diff --git a/llvm/lib/Transforms/Scalar/InsertCJTBAA.cpp b/llvm/lib/Transforms/Scalar/InsertCJTBAA.cpp
 new file mode 100644
-index 000000000..1c7ee123c
+index 000000000..f8d12c0aa
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/InsertCJTBAA.cpp
-@@ -0,0 +1,938 @@
+@@ -0,0 +1,949 @@
 +//===- InsertCJTBAA.cpp - Insert Cangjie TBAA Metadata ----------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -77143,13 +77192,24 @@ index 000000000..1c7ee123c
 +  if (!CheckGEPGEP())
 +    return false;
 +
++  auto *OuterIdx = cast<ConstantInt>(GEP->getOperand(1));
++  if (OuterIdx->isZero())
++    return prepareCJTBAA(TBAAUnit.DL, TBAAUnit.I, GEPGEP, TBAAUnit.DstTy,
++                         false, 0);
++
++  // If a scalar-typed pointer is advanced again, the final access may land in
++  // the middle of a scalar or in struct padding. We cannot reconstruct a
++  // verifier-safe scalar TBAA path from the parent struct in that case, so
++  // conservatively omit TBAA.
++  if (GEP->getSourceElementType()->isSingleValueType())
++    return false;
++
 +  // %1 = gep %"ArrayLayout.xxx" addrspace(1)* %0, 0, 1, %x, 1
 +  // %2 = gep i64 addrspace(1)* %1, i64 1
 +  // load %2
 +  uint64_t Size =
 +      TBAAUnit.DL.getTypeSizeInBits(GEP->getSourceElementType()) / 8;
-+  uint64_t OriginOff =
-+      cast<ConstantInt>(GEP->getOperand(1))->getZExtValue() * Size;
++  uint64_t OriginOff = OuterIdx->getZExtValue() * Size;
 +  return prepareCJTBAA(TBAAUnit.DL, TBAAUnit.I, GEPGEP, TBAAUnit.DstTy, false,
 +                       OriginOff);
 +}
