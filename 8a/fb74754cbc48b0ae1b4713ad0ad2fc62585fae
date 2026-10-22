@@ -1,0 +1,12 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "8afb74754cbc48b0ae1b4713ad0ad2fc62585fae",
+  "prompts": {},
+  "humans": {
+    "h_6aa1082f789501": {
+      "author": "jinbohang <jinbohang1@huawei.com>"
+    }
+  }
+}
