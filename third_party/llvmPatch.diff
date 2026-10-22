@@ -23952,19 +23952,6 @@ index 000000000..54f7715af
 +
 +#endif
 \ No newline at end of file
-diff --git a/llvm/include/llvm/Analysis/InlineCost.h b/llvm/include/llvm/Analysis/InlineCost.h
-index 756f1fb61..82bdb975c 100644
---- a/llvm/include/llvm/Analysis/InlineCost.h
-+++ b/llvm/include/llvm/Analysis/InlineCost.h
-@@ -246,6 +246,8 @@ InlineParams getInlineParams(unsigned OptLevel, unsigned SizeOptLevel);
- /// and the call/return instruction.
- int getCallsiteCost(CallBase &Call, const DataLayout &DL);
- 
-+bool checkCJStackMapThreshold(CallBase &Call, Function &F);
-+
- /// Get an InlineCost object representing the cost of inlining this
- /// callsite.
- ///
 diff --git a/llvm/include/llvm/Analysis/LoopAccessAnalysis.h b/llvm/include/llvm/Analysis/LoopAccessAnalysis.h
 index af8e8d222..71a90f476 100644
 --- a/llvm/include/llvm/Analysis/LoopAccessAnalysis.h
@@ -24271,7 +24258,7 @@ index 04235f0fd..0bec7fbdb 100644
    // Attributes:
    kw_attributes,
 diff --git a/llvm/include/llvm/BinaryFormat/MachO.h b/llvm/include/llvm/BinaryFormat/MachO.h
-index c05e79333..86021af70 100644
+index c05e79333..fca58fe6e 100644
 --- a/llvm/include/llvm/BinaryFormat/MachO.h
 +++ b/llvm/include/llvm/BinaryFormat/MachO.h
 @@ -106,6 +106,7 @@ enum : uint32_t {
@@ -24282,6 +24269,14 @@ index c05e79333..86021af70 100644
  
    // Constant masks for the "flags" field in llvm::MachO::section and
    // llvm::MachO::section_64
+@@ -1520,6 +1521,7 @@ enum CPUSubTypeARM64 {
+   CPU_SUBTYPE_ARM64_ALL = 0,
+   CPU_SUBTYPE_ARM64_V8 = 1,
+   CPU_SUBTYPE_ARM64E = 2,
++  CPU_SUBTYPE_ARM64E_X1 = 12,
+ };
+ 
+ enum CPUSubTypeARM64_32 { CPU_SUBTYPE_ARM64_32_V8 = 1 };
 diff --git a/llvm/include/llvm/Bitcode/LLVMBitCodes.h b/llvm/include/llvm/Bitcode/LLVMBitCodes.h
 index eee4c50cc..d3dc49a5a 100644
 --- a/llvm/include/llvm/Bitcode/LLVMBitCodes.h
@@ -27402,6 +27397,18 @@ index 61e400fe9..b67537510 100644
    static SectionKind getReadOnlyWithRel() { return get(ReadOnlyWithRel); }
  };
  
+diff --git a/llvm/include/llvm/TextAPI/Architecture.def b/llvm/include/llvm/TextAPI/Architecture.def
+index 58ef31b25..80c9868cc 100644
+--- a/llvm/include/llvm/TextAPI/Architecture.def
++++ b/llvm/include/llvm/TextAPI/Architecture.def
+@@ -37,6 +37,7 @@ ARCHINFO(armv7em, MachO::CPU_TYPE_ARM, MachO::CPU_SUBTYPE_ARM_V7EM, 32)
+ ///
+ ARCHINFO(arm64, MachO::CPU_TYPE_ARM64, MachO::CPU_SUBTYPE_ARM64_ALL, 64)
+ ARCHINFO(arm64e, MachO::CPU_TYPE_ARM64, MachO::CPU_SUBTYPE_ARM64E, 64)
++ARCHINFO(arm64e_x1, MachO::CPU_TYPE_ARM64, MachO::CPU_SUBTYPE_ARM64E_X1, 64)
+ 
+ 
+ ///
 diff --git a/llvm/include/llvm/Transforms/CJCFI/PtrAuthBackwardCFI.h b/llvm/include/llvm/Transforms/CJCFI/PtrAuthBackwardCFI.h
 new file mode 100644
 index 000000000..fd732c210
@@ -28337,10 +28344,10 @@ index 000000000..8431ff969
 +#endif // LLVM_TRANSFORMS_SCALAR_FILL_CJ_METADATA_H
 diff --git a/llvm/include/llvm/Transforms/Scalar/CJGCLiveAnalysis.h b/llvm/include/llvm/Transforms/Scalar/CJGCLiveAnalysis.h
 new file mode 100644
-index 000000000..f547203ef
+index 000000000..a0f3bb93a
 --- /dev/null
 +++ b/llvm/include/llvm/Transforms/Scalar/CJGCLiveAnalysis.h
-@@ -0,0 +1,375 @@
+@@ -0,0 +1,372 @@
 +//===- CJGCLiveAnalysis.h - -------------------------------------*- C++ -*-===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -28643,7 +28650,6 @@ index 000000000..f547203ef
 +
 +  void clear() {
 +    StackContainGCPtrMap.clear();
-+    FieldToGEPMap.clear();
 +    for (auto *Field : AllFields) {
 +      delete Field;
 +    }
@@ -28663,8 +28669,6 @@ index 000000000..f547203ef
 +  // Mapping whether a V is a stack pointer that contains gcptr, and clear it
 +  // after active variable analysis.
 +  MapVector<Value *, bool> StackContainGCPtrMap;
-+  // Caches all newly generated GEP fields.
-+  MapVector<FieldInfo *, Value *> FieldToGEPMap;
 +  // Avoid duplicate liveness analysis in the BB.
 +  MapVector<BasicBlock *, std::pair<Instruction *, StructLiveSetTy>>
 +      InstLiveSetCache;
@@ -30549,7 +30553,7 @@ index a51e97400..53e928443 100644
  
    if (!FoundStartPHI || !FoundReduxOp || !ExitInstruction)
 diff --git a/llvm/lib/Analysis/InlineCost.cpp b/llvm/lib/Analysis/InlineCost.cpp
-index 8192ed56c..f2f7050a4 100644
+index 8192ed56c..fa50603bd 100644
 --- a/llvm/lib/Analysis/InlineCost.cpp
 +++ b/llvm/lib/Analysis/InlineCost.cpp
 @@ -34,6 +34,7 @@
@@ -30655,17 +30659,7 @@ index 8192ed56c..f2f7050a4 100644
      // If we have a constant that we are calling as a function, we can peer
      // through it and see the function target. This happens not infrequently
      // during devirtualization and so we want to give it a hefty bonus for
-@@ -992,6 +1056,9 @@ class InlineCostCallAnalyzer final : public CallAnalyzer {
-     if (Cost >= Threshold && !ComputeFullInlineCost)
-       return InlineResult::failure("high cost");
- 
-+    if (CJPipeline && !checkCJStackMapThreshold(CandidateCall, F))
-+      return InlineResult::failure("high stackmap cost");
-+
-     return InlineResult::success();
-   }
- 
-@@ -2113,6 +2180,8 @@ bool CallAnalyzer::simplifyCallSite(Function *F, CallBase &Call) {
+@@ -2113,6 +2177,8 @@ bool CallAnalyzer::simplifyCallSite(Function *F, CallBase &Call) {
  }
  
  bool CallAnalyzer::visitCallBase(CallBase &Call) {
@@ -30674,7 +30668,7 @@ index 8192ed56c..f2f7050a4 100644
    if (!onCallBaseVisitStart(Call))
      return true;
  
-@@ -2183,7 +2252,7 @@ bool CallAnalyzer::visitCallBase(CallBase &Call) {
+@@ -2183,7 +2249,7 @@ bool CallAnalyzer::visitCallBase(CallBase &Call) {
      }
    }
  
@@ -30683,7 +30677,7 @@ index 8192ed56c..f2f7050a4 100644
      // This flag will fully abort the analysis, so don't bother with anything
      // else.
      IsRecursiveCall = true;
-@@ -2620,6 +2689,8 @@ InlineResult CallAnalyzer::analyze() {
+@@ -2620,6 +2686,8 @@ InlineResult CallAnalyzer::analyze() {
    BBSetVector BBWorklist;
    BBWorklist.insert(&F.getEntryBlock());
  
@@ -30692,7 +30686,7 @@ index 8192ed56c..f2f7050a4 100644
    // Note that we *must not* cache the size, this loop grows the worklist.
    for (unsigned Idx = 0; Idx != BBWorklist.size(); ++Idx) {
      if (shouldStop())
-@@ -2678,11 +2749,40 @@ InlineResult CallAnalyzer::analyze() {
+@@ -2678,11 +2746,40 @@ InlineResult CallAnalyzer::analyze() {
        }
      }
  
@@ -30738,54 +30732,6 @@ index 8192ed56c..f2f7050a4 100644
  
      onBlockAnalyzed(BB);
    }
-@@ -2778,6 +2878,47 @@ int llvm::getCallsiteCost(CallBase &Call, const DataLayout &DL) {
-   return Cost;
- }
- 
-+// Calculate the cost of the stackmap based on the number of callsites. This
-+// check is not precises.
-+bool llvm::checkCJStackMapThreshold(CallBase &Call, Function &F) {
-+  Function *Caller = Call.getCaller();
-+  Function *Callee = &F;
-+  int CallSiteNum1 = 0;
-+  int CallSiteNum2 = 0;
-+  for (auto &I : instructions(Caller)) {
-+    CallBase *CB = dyn_cast<CallBase>(&I);
-+    if (CB && !isa<IntrinsicInst>(&I)) {
-+      Function *F = CB->getCalledFunction();
-+      // Functions has cj-runtime, gc-leaf-function and gc-safepoint does not
-+      // need relocate
-+      if (!F || F->hasFnAttribute("cj-runtime") ||
-+          F->hasFnAttribute("gc-leaf-function") ||
-+          F->hasFnAttribute("gc-safepoint"))
-+        continue;
-+      ++CallSiteNum1;
-+    }
-+  }
-+
-+  for (auto &I : instructions(Callee)) {
-+    CallBase *CB = dyn_cast<CallBase>(&I);
-+    if (CB && !isa<IntrinsicInst>(&I)) {
-+      Function *F = CB->getCalledFunction();
-+      // Functions has cj-runtime, gc-leaf-function and gc-safepoint does not
-+      // need relocate
-+      if (!F || F->hasFnAttribute("cj-runtime") ||
-+          F->hasFnAttribute("gc-leaf-function") ||
-+          F->hasFnAttribute("gc-safepoint"))
-+        continue;
-+      ++CallSiteNum2;
-+    }
-+  }
-+  if (CallSiteNum1 == 0 || CallSiteNum2 <= CJInlineStackMapCalleecallnumThreshold)
-+    return true;
-+  // 100: percentage
-+  return CallSiteNum2 * 1.0 / CallSiteNum1 <=
-+         CJInlinePerStackMapThreshold * 1.0 / 100;
-+}
-+
- InlineCost llvm::getInlineCost(
-     CallBase &Call, const InlineParams &Params, TargetTransformInfo &CalleeTTI,
-     function_ref<AssumptionCache &(Function &)> GetAssumptionCache,
 diff --git a/llvm/lib/Analysis/LazyCallGraph.cpp b/llvm/lib/Analysis/LazyCallGraph.cpp
 index 20a905e04..6f4257364 100644
 --- a/llvm/lib/Analysis/LazyCallGraph.cpp
@@ -48480,6 +48426,24 @@ index 6f4fb405d..93f82a6fd 100644
    bool getRegAllocationHints(Register VirtReg, ArrayRef<MCPhysReg> Order,
                               SmallVectorImpl<MCPhysReg> &Hints,
                               const MachineFunction &MF, const VirtRegMap *VRM,
+diff --git a/llvm/lib/TextAPI/Architecture.cpp b/llvm/lib/TextAPI/Architecture.cpp
+index bb349b217..82094fb00 100644
+--- a/llvm/lib/TextAPI/Architecture.cpp
++++ b/llvm/lib/TextAPI/Architecture.cpp
+@@ -36,10 +36,13 @@ Architecture getArchitectureFromName(StringRef Name) {
+ #define ARCHINFO(Arch, Type, Subtype, NumBits) .Case(#Arch, AK_##Arch)
+ #include "llvm/TextAPI/Architecture.def"
+ #undef ARCHINFO
++      .Case("arm64e.x1", AK_arm64e_x1)
+       .Default(AK_unknown);
+ }
+ 
+ StringRef getArchitectureName(Architecture Arch) {
++  if (Arch == AK_arm64e_x1)
++    return "arm64e.x1";
+   switch (Arch) {
+ #define ARCHINFO(Arch, Type, Subtype, NumBits)                                 \
+   case AK_##Arch:                                                              \
 diff --git a/llvm/lib/Transforms/CFGuard/CFGuard.cpp b/llvm/lib/Transforms/CFGuard/CFGuard.cpp
 index 5fc529596..ab08c3595 100644
 --- a/llvm/lib/Transforms/CFGuard/CFGuard.cpp
@@ -48606,10 +48570,10 @@ index 8c77b6937..4e65ed2e2 100644
        F->addParamAttr(ArgNo, Attribute::NoAlias);
 diff --git a/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
 new file mode 100644
-index 000000000..40bd54af8
+index 000000000..1681820be
 --- /dev/null
 +++ b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
-@@ -0,0 +1,3320 @@
+@@ -0,0 +1,3340 @@
 +//===- CJPartialEscapeAnalysis.cpp - escape analysis for Cangjie ----------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -49267,32 +49231,45 @@ index 000000000..40bd54af8
 +    return OldSize != InfoEscapeLoc.size();
 +  }
 +
-+  void passEdges(bool DoClear) {
-+    for (unsigned i = 0; i < EdgesSet.size(); i++) {
++  void passEdges(bool ShouldClear) {
++    struct EdgeInfo {
++      ObjectLocation *Loc;
++      int Path;
++      int PathFromThis;
++      int PathMax;
++      int PathMin;
++    };
++    const size_t EdgeCount = EdgesSet.size();
++    SmallVector<EdgeInfo, 8> EdgeInfos;
++    EdgeInfos.reserve(EdgeCount);
++    for (unsigned i = 0; i < EdgeCount; i++) {
 +      ObjectLocation *IL = EdgesSet[i];
 +      assert(EdgesMap.count(IL) && "The EdgesMap and EdgesSet do not match.");
-+
-+      if (EscapeDepth != INT32_MAX) {
++      if (EscapeDepth != INT32_MAX)
 +        IL->setInfoEscaped(EscapeDepth + EdgesMap[IL]);
-+      }
++      int ILPath = EdgesMap[IL];
++      int ILPathFromThis = IL->EdgesMap[this];
++      int ILPathMax = std::max(ILPath, -ILPathFromThis);
++      int ILPathMin = std::min(ILPath, -ILPathFromThis);
++      EdgeInfos.push_back({IL, ILPath, ILPathFromThis, ILPathMax, ILPathMin});
++    }
 +
-+      for (unsigned j = i + 1; j < EdgesSet.size(); j++) {
-+        ObjectLocation *JL = EdgesSet[j];
-+        assert(EdgesMap.count(JL) && "The EdgesMap and EdgesSet do not match.");
-+        int I2J = std::min(EdgesMap[JL], - JL->EdgesMap[this]) -
-+                  std::max(EdgesMap[IL], - IL->EdgesMap[this]);
-+        int J2I = std::min(EdgesMap[IL], - IL->EdgesMap[this]) -
-+                  std::max(EdgesMap[JL], - JL->EdgesMap[this]);
++    for (unsigned i = 0; i < EdgeCount; i++) {
++      EdgeInfo &ILInfo = EdgeInfos[i];
++      ObjectLocation *IL = ILInfo.Loc;
++      for (unsigned j = i + 1; j < EdgeCount; j++) {
++        EdgeInfo &JLInfo = EdgeInfos[j];
++        ObjectLocation *JL = JLInfo.Loc;
++        int I2J = JLInfo.PathMin - ILInfo.PathMax;
++        int J2I = ILInfo.PathMin - JLInfo.PathMax;
 +        IL->insertEdge(JL, I2J);
 +        JL->insertEdge(IL, J2I);
 +      }
-+      if (DoClear) {
++      if (ShouldClear)
 +        IL->removeEdge(this);
-+      }
 +    }
-+    if (DoClear) {
++    if (ShouldClear)
 +      clearEdges();
-+    }
 +  }
 +
 +protected:
@@ -50239,6 +50216,13 @@ index 000000000..40bd54af8
 +        AllLocations[Index]->passEdges(false);
 +      }
 +    }
++    // These locations may have interdependent relationships. To minimize
++    // compilation time as much as possible, nodes with fewer reachable edges
++    // need to be processed first
++    llvm::sort(AllLocations.begin() + ArgsObjectNum + MayReplaceObjectNum,
++               AllLocations.end(), [](ObjectLocation *L, ObjectLocation *R) {
++                 return L->EdgesSet.size() < R->EdgesSet.size();
++               });
 +    for (unsigned Index = ArgsObjectNum + MayReplaceObjectNum;
 +         Index < AllLocations.size(); Index++) {
 +      ObjectLocation *CurLoc = AllLocations[Index];
@@ -50515,7 +50499,7 @@ index 000000000..40bd54af8
 +    for (unsigned It = 0; It < MPs.size(); ++It) {
 +      if (!SuccBBInfo.count(MPs[It]) || SuccBBInfo[MPs[It]] < ES) {
 +        SuccBBInfo[MPs[It]] = ES;
-+        MPs[It]->spreadEscape(BB, Escaped, SuccBBInfo, true);
++        MPs[It]->spreadEscape(BB, ES, SuccBBInfo, true);
 +      }
 +    }
 +    // is direct escape
@@ -51070,13 +51054,13 @@ index 000000000..40bd54af8
 +    bool Changed = true;
 +    for (auto &BB : *Func) {
 +      auto &BBInfo = EscapeBBInfo[&BB];
-+      SmallSetVector<GCPtr *, 8> EscapedValues;
-+      SmallSetVector<GCPtr *, 8> InfoEscapedValues;
++      SmallVector<GCPtr *, 8> EscapedValues;
++      SmallVector<GCPtr *, 8> InfoEscapedValues;
 +      for (auto EscapeInfo : BBInfo) {
 +        if (EscapeInfo.second == Escaped) {
-+          EscapedValues.insert(EscapeInfo.first);
++          EscapedValues.push_back(EscapeInfo.first);
 +        } else if (EscapeInfo.first->isInfoEscaped()) {
-+          InfoEscapedValues.insert(EscapeInfo.first);
++          InfoEscapedValues.push_back(EscapeInfo.first);
 +        }
 +      }
 +      for (unsigned Index = 0; Index < EscapedValues.size(); Index++) {
@@ -60170,10 +60154,10 @@ index 000000000..f527f64da
 +                false)
 diff --git a/llvm/lib/Transforms/Scalar/CJGCLiveAnalysis.cpp b/llvm/lib/Transforms/Scalar/CJGCLiveAnalysis.cpp
 new file mode 100644
-index 000000000..04731126d
+index 000000000..51e8f13b3
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJGCLiveAnalysis.cpp
-@@ -0,0 +1,1468 @@
+@@ -0,0 +1,1459 @@
 +//===- CJGCLiveAnalysis.cpp - GC Live Analysis For Cangjie ------*- C++ -*-===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -61522,20 +61506,11 @@ index 000000000..04731126d
 +      assert(AllocaData.StructLayoutGCPtrMap[AI][Offset] &&
 +             "FieldInfos contains incorrect value.");
 +
-+      if (FieldToGEPMap.count(FI)) {
-+        Value *GEP = FieldToGEPMap[FI];
-+        if (DT.dominates(GEP, Call)) {
-+          FieldSet.insert(GEP);
-+          continue;
-+        }
-+      }
-+
 +      Value *Int8Ptr = Builder.CreateBitCast(Base, Builder.getInt8PtrTy());
 +      cast<Instruction>(Int8Ptr)->setMetadata(
 +          "noreloc", MDNode::get(Builder.getContext(), {}));
 +      Value *GEP = Builder.CreateGEP(Builder.getInt8Ty(), Int8Ptr,
 +                                     Builder.getInt64(Offset), "field", true);
-+      FieldToGEPMap[FI] = GEP;
 +      FieldSet.insert(GEP);
 +    } else {
 +      checkFailed("Unexpected type in insertGEPForField", AI);
