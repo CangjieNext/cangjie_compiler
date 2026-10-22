@@ -1,0 +1,14 @@
+doc/Standalone_Build_Guide.md
+  h_29ddb209eb2bc7 124-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "7a96c39d6730a99a0e20527b2c95a70e837b7595",
+  "prompts": {},
+  "humans": {
+    "h_29ddb209eb2bc7": {
+      "author": "neilliuistaken <liujiajie12@huawei.com>"
+    }
+  }
+}
