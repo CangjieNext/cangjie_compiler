@@ -264,6 +264,11 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::InferAssignExprCheckCaseOve
             ae.SetTy(ae.desugarExpr->GetTy());
             CJC_ASSERT(ae.desugarExpr->astKind == ASTKind::CALL_EXPR);
             ReplaceTarget(&ae, StaticCast<CallExpr*>(ae.desugarExpr.get())->resolvedFunction);
+            if (!ae.isCompound) {
+                // A compound assignment reads the left value first, a plain one evaluates the right
+                // value first, so the latter needs the right value to be moved ahead of the call.
+                DesugarSubscriptAssignRightValue(ctx, ae);
+            }
             return {ae.GetTy()};
         }
         RecoverToAssignExpr(ae);
