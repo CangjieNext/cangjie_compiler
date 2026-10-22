@@ -1,0 +1,26 @@
+doc/Standalone_Build_Guide_EN.md
+  s_767b80ff1c971f::t_c7d659ef48553c 193
+doc/Standalone_Build_Guide.md
+  s_767b80ff1c971f::t_c3e694bc13218b 194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "348b8d1ddb2c0ad6c57c42e79968b4a5f06255c3",
+  "prompts": {},
+  "humans": {
+    "h_29ddb209eb2bc7": {
+      "author": "neilliuistaken <liujiajie12@huawei.com>"
+    }
+  },
+  "sessions": {
+    "s_767b80ff1c971f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf8533a8-496a-43f4-8922-6eb3ffa5dacb",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": null
+    }
+  }
+}
