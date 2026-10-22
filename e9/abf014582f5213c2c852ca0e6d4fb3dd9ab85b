@@ -1,0 +1,24 @@
+src/Parse/ParseMacro.cpp
+  s_a38b643d99210e::t_37aabd9b52e4c7 120
+  s_a38b643d99210e::t_e55c9a48af9e8f 119
+  s_a38b643d99210e::t_3892cd6cdf4a59 121
+  s_a38b643d99210e::t_0a8e0c652104dc 46-61
+src/Parse/ParserImpl.h
+  s_a38b643d99210e::t_161700c1b0889d 493-494
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e9abf014582f5213c2c852ca0e6d4fb3dd9ab85b",
+  "prompts": {},
+  "sessions": {
+    "s_a38b643d99210e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "319bcaa9-5c8c-4db6-8bc0-992b6953308f",
+        "model": "glm-5.3-flash"
+      },
+      "human_author": null
+    }
+  }
+}
