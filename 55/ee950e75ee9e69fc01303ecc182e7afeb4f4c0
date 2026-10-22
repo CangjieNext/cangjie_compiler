@@ -1,0 +1,19 @@
+src/CHIR/AST2CHIR/TranslateASTNode/TranslateAssignExpr.cpp
+  s_84ba753b385e08::t_76dfb9fe616ed6 86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "55ee950e75ee9e69fc01303ecc182e7afeb4f4c0",
+  "prompts": {},
+  "sessions": {
+    "s_84ba753b385e08": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_09b06cb5affepQL3O70VKj9Jd9",
+        "model": "GLM-5.2"
+      },
+      "human_author": "wyq1213 <wangyinqiang2@huawei.com>"
+    }
+  }
+}
