@@ -23,6 +23,13 @@ void DesugarOperatorOverloadExpr(ASTContext& ctx, SubscriptExpr& se);
 void DesugarOperatorOverloadExpr(ASTContext& ctx, AssignExpr& ae);
 void DesugarSubscriptOverloadExpr(ASTContext& ctx, AssignExpr& ae);
 
+/**
+ * Move the type checked right value of a desugared subscript assignment into a temporary variable,
+ * so that it is evaluated before the base and the index expressions:
+ * `a[i] = v` ==> `{ var $tmpN = v; a.[](i, $tmpN) }`
+ */
+void DesugarSubscriptAssignRightValue(ASTContext& ctx, AssignExpr& ae);
+
 void DesugarFlowExpr(ASTContext& ctx, BinaryExpr& fe);
 void DesugarCallExpr(ASTContext& ctx, CallExpr& ce);
 

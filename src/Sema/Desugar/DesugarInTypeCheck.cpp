@@ -437,6 +437,53 @@ void DesugarSubscriptOverloadExpr(ASTContext& ctx, AssignExpr& ae)
     AddCurFile(ae, ae.curFile);
 }
 
+/**
+ * The desugar of a subscript assignment passes the right value as the last argument of the created
+ * '[]' call: `a[i] = v` ==> `a.[](i, v)`. The base and the arguments of a call are evaluated in
+ * order, so the right value would be evaluated after the base and the index expressions, while the
+ * right value of an assignment should be evaluated first.
+ * Move the right value into a temporary variable to keep that order:
+ * `a[i] = v` ==> `{ var $tmpN = v; a.[](i, $tmpN) }`
+ * NOTE: this function should be called after the desugar is type checked.
+ */
+void DesugarSubscriptAssignRightValue(ASTContext& ctx, AssignExpr& ae)
+{
+    if (ae.desugarExpr == nullptr || ae.desugarExpr->astKind != ASTKind::CALL_EXPR) {
+        return;
+    }
+    auto callExpr = StaticAs<ASTKind::CALL_EXPR>(ae.desugarExpr.get());
+    if (callExpr->args.empty()) {
+        return;
+    }
+    auto valueArg = callExpr->args.back().get();
+    if (valueArg == nullptr || valueArg->expr == nullptr) {
+        return;
+    }
+    auto callTy = callExpr->GetTy();
+    // The right value is moved instead of cloned, since it is already type checked against the type
+    // of the 'value' parameter.
+    auto rightValue = std::move(valueArg->expr);
+    auto rightValueTy = rightValue->GetTy();
+    auto tmpVar = CreateTmpVarDecl();
+    CopyBasicInfo(rightValue.get(), tmpVar.get());
+    tmpVar->EnableAttr(Attribute::NO_MANGLE);
+    tmpVar->initializer = std::move(rightValue);
+    tmpVar->SetTy(rightValueTy);
+    ctx.RemoveTypeCheckCache(*tmpVar);
+    auto tmpRef = CreateRefExpr(*tmpVar);
+    CopyBasicInfo(valueArg, tmpRef.get());
+    ctx.RemoveTypeCheckCache(*tmpRef);
+    valueArg->expr = std::move(tmpRef);
+    std::vector<OwnedPtr<Node>> nodes;
+    nodes.emplace_back(std::move(tmpVar));
+    nodes.emplace_back(std::move(ae.desugarExpr));
+    auto blk = CreateBlock(std::move(nodes), callTy);
+    CopyBasicInfo(&ae, blk.get());
+    ctx.RemoveTypeCheckCache(*blk);
+    AddCurFile(*blk, ae.curFile);
+    ae.desugarExpr = std::move(blk);
+}
+
 void DesugarOperatorOverloadExpr(ASTContext& ctx, AssignExpr& ae)
 {
     if (ae.leftValue == nullptr || ae.rightExpr == nullptr) {

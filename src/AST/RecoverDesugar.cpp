@@ -33,6 +33,29 @@ OwnedPtr<Expr> TryRecoverFunctionCallExpr(OwnedPtr<Expr> base)
     return base;
 }
 
+/**
+ * Recover the right value of a subscript assignment which was moved into a temporary variable to
+ * keep the evaluation order of an assignment:
+ * `{ var $tmpN = v; a.[](i, $tmpN) }` ==> `a.[](i, v)`
+ */
+OwnedPtr<Expr> RecoverSubscriptAssignRightValue(Block& blk)
+{
+    // The block of the desugar has one statement for the temporary variable and one for the call.
+    constexpr size_t bodySize = 2;
+    if (blk.body.size() != bodySize) {
+        return OwnedPtr<Expr>();
+    }
+    auto tmpVar = DynamicCast<VarDecl*>(blk.body.front().get());
+    auto call = DynamicCast<CallExpr*>(blk.body.back().get());
+    if (tmpVar == nullptr || tmpVar->initializer == nullptr || call == nullptr || call->args.empty()) {
+        return OwnedPtr<Expr>();
+    }
+    call->args.back()->expr = std::move(tmpVar->initializer);
+    auto callExpr = OwnedPtr<Expr>(RawStaticCast<Expr*>(blk.body.back().release()));
+    blk.body.clear();
+    return callExpr;
+}
+
 void RecoverToPipelineExpr(BinaryExpr& be)
 {
     CJC_NULLPTR_CHECK(be.desugarExpr);
@@ -139,6 +162,15 @@ void RecoverToAssignExpr(AssignExpr& ae)
 {
     if (ae.desugarExpr == nullptr) {
         return;
+    }
+    if (ae.desugarExpr->astKind == AST::ASTKind::BLOCK && ae.leftValue != nullptr &&
+        ae.leftValue->astKind == AST::ASTKind::SUBSCRIPT_EXPR) {
+        // Move the right value back as the last argument of the created call.
+        auto callExpr = RecoverSubscriptAssignRightValue(StaticCast<Block&>(*ae.desugarExpr));
+        if (callExpr == nullptr) {
+            return;
+        }
+        ae.desugarExpr = std::move(callExpr);
     }
     if (ae.desugarExpr->astKind == AST::ASTKind::CALL_EXPR && ae.leftValue->astKind == AST::ASTKind::SUBSCRIPT_EXPR) {
         // Recover to AssignExpr.
