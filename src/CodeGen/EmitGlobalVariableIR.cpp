@@ -18,8 +18,8 @@ namespace Cangjie {
 namespace CodeGen {
 class GlobalVariableGeneratorImpl : public IRGeneratorImpl {
 public:
-    GlobalVariableGeneratorImpl(CGModule& cgMod, const std::vector<CHIR::GlobalVar*>& chirGVs)
-        : cgMod(cgMod), chirGVs(chirGVs)
+    GlobalVariableGeneratorImpl(CGModule& cgMod, const std::vector<CHIR::GlobalVar*>& chirGVs, std::size_t splitNum)
+        : cgMod(cgMod), chirGVs(chirGVs), splitNum(splitNum)
     {
     }
 
@@ -28,21 +28,44 @@ public:
 private:
     CGModule& cgMod;
     const std::vector<CHIR::GlobalVar*> chirGVs;
+    std::size_t splitNum;
 };
 
 template <> class IRGenerator<GlobalVariableGeneratorImpl> : public IRGenerator<> {
 public:
-    IRGenerator(CGModule& cgMod, const std::vector<CHIR::GlobalVar*>& chirGVs)
-        : IRGenerator<>(std::make_unique<GlobalVariableGeneratorImpl>(cgMod, chirGVs))
+    IRGenerator(CGModule& cgMod, const std::vector<CHIR::GlobalVar*>& chirGVs, std::size_t splitNum)
+        : IRGenerator<>(std::make_unique<GlobalVariableGeneratorImpl>(cgMod, chirGVs, splitNum))
     {
     }
 };
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+namespace {
+// Zero-sized globals (e.g. Unit-typed ones) occupy no storage at all. When such
+// a global happens to be the last .bss fragment after linking, its symbol
+// address equals the end of the output section, so no section covers it any
+// more. The debugger then cannot map the DW_OP_addr file address to a load
+// address (PIE bias is applied per section) and inspecting the variable fails
+// with "read memory failed".
+// One 1-byte .bss guard per module is enough to fix it. The guard is internal
+// and registered as llvm.used so no pass erases it.
+void AppendZeroSizeGVGuard(CGModule& cgMod)
+{
+    auto* module = cgMod.GetLLVMModule();
+    auto* guardTy = llvm::Type::getInt8Ty(cgMod.GetLLVMContext());
+    auto* guard = llvm::cast<llvm::GlobalVariable>(module->getOrInsertGlobal(".cjzsguard", guardTy));
+    guard->setLinkage(llvm::GlobalValue::InternalLinkage);
+    guard->setAlignment(llvm::Align(1));
+    guard->setInitializer(llvm::Constant::getNullValue(guardTy));
+    cgMod.GetCGContext().AddLLVMUsedVars(guard->getName().str());
+}
+}
+
 void GlobalVariableGeneratorImpl::EmitIR()
 {
     IRBuilder2 irBuilder(cgMod);
     std::set<CHIR::GlobalVar*> quickGVs(chirGVs.begin(), chirGVs.end());
+    bool needZeroSizeGuard = false;
     for (auto chirGV : cgMod.GetCGContext().GetCHIRPackage().GetGlobalVarsWithInit()) {
         auto rawGV = llvm::cast<llvm::GlobalVariable>(cgMod.GetOrInsertGlobalVariable(chirGV)->GetRawValue());
         cgMod.diBuilder->CreateGlobalVar(*chirGV);
@@ -80,13 +103,23 @@ void GlobalVariableGeneratorImpl::EmitIR()
                 cgMod.GetLLVMContext(), {llvm::MDString::get(cgMod.GetLLVMContext(), MangleType(*chirGV->GetType()))});
             rawGV->setMetadata(GC_GLOBAL_VAR_TYPE, fieldMeta);
         }
+        const auto& dl = cgMod.GetLLVMModule()->getDataLayout();
+        // Latch semantics: once the module has contained any zero-sized
+        // zero-initialized (i.e. .bss) global, a guard is wanted for the rest
+        // of the module.
+        if (!rawGV->isConstant() && rawGV->hasInitializer() && rawGV->getInitializer()->isZeroValue()) {
+            needZeroSizeGuard = needZeroSizeGuard || dl.getTypeAllocSize(rawGV->getValueType()) == 0;
+        }
+    }
+    if (splitNum > 1 && needZeroSizeGuard) {
+        AppendZeroSizeGVGuard(cgMod);
     }
 }
 #endif
 
-void EmitGlobalVariableIR(CGModule& cgMod, const std::vector<CHIR::GlobalVar*>& chirGVs)
+void EmitGlobalVariableIR(CGModule& cgMod, const std::vector<CHIR::GlobalVar*>& chirGVs, std::size_t splitNum)
 {
-    IRGenerator<GlobalVariableGeneratorImpl>(cgMod, chirGVs).EmitIR();
+    IRGenerator<GlobalVariableGeneratorImpl>(cgMod, chirGVs, splitNum).EmitIR();
 }
 } // namespace CodeGen
 } // namespace Cangjie
