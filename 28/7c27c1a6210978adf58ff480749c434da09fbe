@@ -1,0 +1,45 @@
+unittests/Macro/LSPDeserGuardTest.cpp
+  h_6a43e5c473a09a 7,26-57,59-86,92-129,222-443
+unittests/ConditionalCompilation/srcFiles/version.cj
+  h_6a43e5c473a09a 1-27
+unittests/ConditionalCompilation/CMakeLists.txt
+  h_6a43e5c473a09a 7-13
+unittests/Macro/CMakeLists.txt
+  h_6a43e5c473a09a 14,55-61,70-73,79
+unittests/Macro/MacroProcIpcTest.cpp
+  s_29cef077c8c27c::t_f3bf6c31dcc50e 396
+  s_29cef077c8c27c::t_ef75f13e04c5f7 531
+  s_29cef077c8c27c::t_ee3d79d035dc3e 371
+  s_29cef077c8c27c::t_2141665e999ec5 554
+  s_29cef077c8c27c::t_72e6d662c566a3 73-86
+  s_29cef077c8c27c::t_92ca79e2d602cf 668
+  h_6a43e5c473a09a 1-72,87-370,372-395,397-530,532-553,555-667,669-712
+unittests/ConditionalCompilation/ConditionalCompilationImplTest.cpp
+  s_29cef077c8c27c::t_291abfbd274dad 22-25,31-32
+  h_6a43e5c473a09a 1-21,26-30,33-615
+unittests/ConditionalCompilation/ConditionalCompilationTest.cpp
+  h_6a43e5c473a09a 1,7,13,271-335
+unittests/ConditionalCompilation/srcFiles/container_kinds.cj
+  h_6a43e5c473a09a 1-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "287c27c1a6210978adf58ff480749c434da09fbe",
+  "prompts": {},
+  "humans": {
+    "h_6a43e5c473a09a": {
+      "author": "Xu Zhaoheng <xuzhaoheng1@huawei.com>"
+    }
+  },
+  "sessions": {
+    "s_29cef077c8c27c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0975536e-0032-41a9-b304-16e10aafe475",
+        "model": "deepseek-v4-flash-0731"
+      },
+      "human_author": null
+    }
+  }
+}
