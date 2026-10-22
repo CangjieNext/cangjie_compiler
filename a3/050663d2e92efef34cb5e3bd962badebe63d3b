@@ -1,0 +1,19 @@
+third_party/README.md
+  s_a9b0b91b98419b::t_ae34b92a7f0a90 71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "a3050663d2e92efef34cb5e3bd962badebe63d3b",
+  "prompts": {},
+  "sessions": {
+    "s_a9b0b91b98419b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa272-8ee6-7e3d-b207-0ef1bffc262e",
+        "model": "GLM-5.2"
+      },
+      "human_author": "yanjs <yejiasheng3@huawei.com>"
+    }
+  }
+}

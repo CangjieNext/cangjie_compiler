@@ -1,0 +1,19 @@
+third_party/cmake/CompileRTLib.cmake
+  s_a9b0b91b98419b::t_3f2f039a36a413 147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "f893260052bc24ff3ea699b316d57d710c3ac80e",
+  "prompts": {},
+  "sessions": {
+    "s_a9b0b91b98419b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa272-8ee6-7e3d-b207-0ef1bffc262e",
+        "model": "GLM-5.2"
+      },
+      "human_author": "yanjs <yejiasheng3@huawei.com>"
+    }
+  }
+}
