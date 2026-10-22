@@ -1,0 +1,21 @@
+unittests/Frontend/FrontendEntryTest.cpp
+  s_803ffa700f2a64::t_c9499992467faf 149-150,152,163,165-171,174-180
+  s_803ffa700f2a64::t_52a224c159b509 151,153-162,164,172-173
+  s_803ffa700f2a64::t_28454bcdf92700 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "da01788e70f442ffe39a67328ed06c31fb633be6",
+  "prompts": {},
+  "sessions": {
+    "s_803ffa700f2a64": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f9fe1d98-505f-4831-95e2-2273606cfd5d",
+        "model": "claude-opus-5"
+      },
+      "human_author": null
+    }
+  }
+}
