@@ -1,0 +1,19 @@
+third_party/CMakeLists.txt
+  s_a8686ecdb934d6::t_5826a8a7c1a8bd 310,345
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "da68cc5ae3028c724da470b703eff757402cba44",
+  "prompts": {},
+  "sessions": {
+    "s_a8686ecdb934d6": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f13b82a54ffegmzxST9ydyOcXl",
+        "model": "GLM-5.3-Flash"
+      },
+      "human_author": "jinbohang <jinbohang1@huawei.com>"
+    }
+  }
+}
