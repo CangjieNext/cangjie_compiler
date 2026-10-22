@@ -1102,7 +1102,20 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
         chirType.SetGlobalNominalCache(*uniqueDecl, *customTypeDef);
     }
     if (decl.TestAttr(AST::Attribute::COMMON) && !decl.TestAttr(AST::Attribute::FROM_COMMON_PART)) {
-        customTypeDef->EnableAttr(Attribute::COMMON);
+        // A `specific` decl written into a CJO is serialized as `COMMON` + `COMMON_WITH_DEFAULT`
+        // (see ASTWriter: `specific` is cleared, `common` and `common_with_default` are set). For an
+        // imported extend this hides the fact that the decl is the platform-side variant, so
+        // `ProcessExtends` can not tell it apart from a real common extend and keeps both ExtendDefs,
+        // leaving the merged member function owned by two of them. Restore `SPECIFIC` for such
+        // imported extends. Note: only extends are re-classified, class-like defs keep `COMMON` so
+        // that `IsVirtualFuncCall`/`InheritedChainHasCommon` are not affected.
+        if (isImported && decl.astKind == AST::ASTKind::EXTEND_DECL &&
+            decl.TestAttr(AST::Attribute::COMMON_WITH_DEFAULT)) {
+            customTypeDef->EnableAttr(Attribute::SPECIFIC);
+            customTypeDef->DisableAttr(Attribute::COMMON);
+        } else {
+            customTypeDef->EnableAttr(Attribute::COMMON);
+        }
     }
     if (decl.TestAttr(AST::Attribute::SPECIFIC)) {
         customTypeDef->EnableAttr(Attribute::SPECIFIC);
