@@ -439,13 +439,16 @@ llvm::Value* CGModule::GenerateUnitTypeValue()
         CJC_NULLPTR_CHECK(unitVal);
         unitVal->addAttribute(CJGLOBAL_VALUE_ATTR);
         unitVal->setInitializer(llvm::UndefValue::get(unitType));
-        AddLinkageTypeMetadata(*unitVal,
-            cgCtx->GetCompileOptions().target.IsMinGW() ? llvm::GlobalValue::PrivateLinkage
-                                                        : llvm::GlobalValue::WeakODRLinkage,
-            false);
-        // Every module using the unit value emits its own copy and never references it across
-        // DSOs, so keep it out of .dynsym, same as hidden TypeInfo metadata.
-        unitVal->setVisibility(llvm::GlobalValue::HiddenVisibility);
+        if (cgCtx->GetCompileOptions().target.IsMinGW()) {
+            AddLinkageTypeMetadata(*unitVal, llvm::GlobalValue::PrivateLinkage, false);
+        } else {
+            AddLinkageTypeMetadata(*unitVal, llvm::GlobalValue::WeakODRLinkage, false);
+            // Every module using the unit value emits its own copy and never references it across
+            // DSOs, so keep it out of .dynsym, same as hidden TypeInfo metadata. Visibility must
+            // stay in this branch: local linkage (the MinGW branch above) requires default
+            // visibility, and GlobalValue::setVisibility asserts on the combination.
+            unitVal->setVisibility(llvm::GlobalValue::HiddenVisibility);
+        }
     }
     return unitVal;
 }
