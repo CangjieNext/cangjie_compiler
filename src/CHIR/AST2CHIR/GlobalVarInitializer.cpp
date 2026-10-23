@@ -277,6 +277,7 @@ inline Ptr<Block> DropExitNodeOfInitializer(const Function& packageInit)
 
     return blockWithInitializers;
 }
+
 } // namespace
 
 Ptr<Value> GlobalVarInitializer::GetGlobalVariable(const AST::VarDecl& decl)
@@ -503,7 +504,14 @@ Ptr<Function> GlobalVarInitializer::TranslateFileInitializer(
     if (fileInit) {
         CJC_ASSERT(fileInit->TestAttr(Attribute::INITIALIZER));
 
-        RemoveCommonInitializersReplacedWithSpecific(*fileInit, decls);
+        // Single-parent common→specific: drop the matched common's Apply so the
+        // specific's init owns the slot. Multi-parent relative-common merge wires
+        // loser.specificImplementation → winner for CJO export; those losers share
+        // the winner's GLOBALVAR_INIT mangling, so RemoveInitializerForVarDecl would
+        // strip the Apply from the canon fileInit as well. Skip in that mode.
+        if (opts.commonPartChirs.size() <= 1) {
+            RemoveCommonInitializersReplacedWithSpecific(*fileInit, decls);
+        }
 
         return fileInit;
     }
@@ -865,6 +873,23 @@ void GlobalVarInitializer::CreatePackageInit(const AST::Package& curPackage, con
     auto [packageInit, curBlock] = PreparePackageInit(curPackage);
     InsertAnnoFactoryInitsIntoPackageInit(*packageInit);
 
+    // Multi-parent: InitOrder is file-topo'd on §3.2-canon vars; drop stale fileInit
+    // Applies inherited from parent packageInit bodies before inserting in that order.
+    if (trans.mergingSpecific && opts.commonPartChirs.size() > 1) {
+        Ptr<Block> pkgInitBlock = GetBlockWithInitializers(*packageInit->GetBody());
+        for (auto* expr : pkgInitBlock->GetExpressions()) {
+            auto* apply = DynamicCast<Apply>(expr);
+            if (apply == nullptr) {
+                continue;
+            }
+            auto* callee = DynamicCast<Function>(apply->GetCallee());
+            if (callee && callee->TestAttr(Attribute::INITIALIZER) &&
+                callee->GetPackageName() == curPackage.fullPackageName &&
+                callee->GetIdentifier().find("_CGF") != std::string::npos) {
+                apply->RemoveSelfFromBlock();
+            }
+        }
+    }
     for (auto& fileAndVars : initOrder) {
         // maybe there isn't global var decl in one file, in this case, we don't generate file init func
         if (!fileAndVars.second.empty() || enableIncre) {

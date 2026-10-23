@@ -38,6 +38,13 @@ inline bool IsSameDeserializedFunction(const Decl& left, const Decl& right)
         (left.TestAttr(Attribute::ALREADY_LOADED) || right.TestAttr(Attribute::ALREADY_LOADED));
 }
 
+/// True when `candidate` feature set is a strict superset of `existing` (CJMP §3.2 rule 4).
+bool IsStrictFeatureSuperset(const Decl& candidate, const Decl& existing);
+
+/// Nested relative-common: two FROM_COMMON_PART decls where one feature set strictly
+/// contains the other are not overload/redefinition conflicts — the superset wins.
+bool IsCJMPFeatureDominatedPair(const Decl& left, const Decl& right);
+
 Range MakeRangeForDeclIdentifier(const AST::Decl& decl);
 void DiagRedefinitionWithFoundNode(DiagnosticEngine& diag, const Decl& current, const Decl& previous);
 void DiagOverloadConflict(DiagnosticEngine& diag, const std::vector<Ptr<FuncDecl>>& sameSigFuncs);

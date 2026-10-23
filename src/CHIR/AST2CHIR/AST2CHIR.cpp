@@ -170,8 +170,9 @@ std::pair<InitOrder, bool> AST2CHIR::SortGlobalVarDecl(const AST::Package& pkg)
         nodesWithDeps.AddElement(element);
     }
 
-    auto analysis = GlobalDeclAnalysis(
-        diag, gim, kind, funcsAndVars, localConstVars, staticInitFuncInfoMap, outputCHIR, mergingSpecific);
+    const bool multiParentMerge = mergingSpecific && opts.commonPartChirs.size() > 1;
+    auto analysis = GlobalDeclAnalysis(diag, gim, kind, funcsAndVars, localConstVars, staticInitFuncInfoMap,
+        outputCHIR, mergingSpecific, multiParentMerge, &pkg.canonicalCommonDecls);
     auto initOrder = analysis.Run(nodesWithDeps, fileAndVarMap, cachedInfo);
 
     // Speically, now we want to flattern the local const VarWithPattern decl which will be useful in translation later.
@@ -426,6 +427,10 @@ void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initO
             Translator::TranslateASTNode(*decl, trans);
         }
         for (auto decl : std::as_const(localConstFuncs.stableOrderValue)) {
+            // CJMP: parent-adopted lifts are in noNeedToTranslateDecls (TryGetDeserialized).
+            if (!NeedTranslate(*decl)) {
+                continue;
+            }
             auto trans = CreateTranslator();
             trans.SetTopLevel(*decl);
             Translator::TranslateASTNode(*decl, trans);
@@ -466,6 +471,9 @@ void AST2CHIR::TranslateTopLevelDeclsInParallel()
     std::vector<Ptr<const AST::Decl>> localFuncsGeneric; // generic decls
     std::vector<Ptr<const AST::Decl>> localFuncsOther; // instantiated or non-generic decls
     for (auto func : std::as_const(localConstFuncs.stableOrderValue)) {
+        if (!NeedTranslate(*func)) {
+            continue;
+        }
         if (func->TestAttr(AST::Attribute::GENERIC)) {
             localFuncsGeneric.push_back(func);
         } else {
@@ -516,7 +524,7 @@ void AST2CHIR::AST2CHIRCheck()
 }
 
 /// Return true if chir was deserialized
-bool AST2CHIR::TryToDeserializeCHIR()
+bool AST2CHIR::TryToDeserializeCHIR(AST::Package& astPkg)
 {
     Utils::ProfileRecorder recorder("AST to CHIR Translation", "TryToDeserializeCHIR");
     auto& chirFiles = opts.commonPartChirs;
@@ -524,7 +532,8 @@ bool AST2CHIR::TryToDeserializeCHIR()
     ToCHIR::Phase phase;
     bool success = true;
     for (auto chirFile : chirFiles) {
-        success &= CHIRDeserializer::Deserialize(chirFile, builder, phase, true);
+        success &= CHIRDeserializer::Deserialize(
+            chirFile, builder, phase, true, &astPkg.canonicalCommonDecls);
         mergingSpecific = true;
     }
     return success;
@@ -550,14 +559,14 @@ bool AST2CHIR::ToCHIRPackage(AST::Package& node)
     if (!needDesCHIR) {
         package = builder.CreatePackage(node.fullPackageName);
         outputCHIR = opts.outputMode == GlobalOptions::OutputMode::CHIR;
-    } else if (TryToDeserializeCHIR()) {
+    } else if (TryToDeserializeCHIR(node)) {
         package = builder.GetCurPackage();
         BuildDeserializedTable();
+        // Relative common: merge parent parts and still emit CHIR for the next stage.
+        outputCHIR = opts.outputMode == GlobalOptions::OutputMode::CHIR;
     } else {
         return false;
     }
-    // Translating common alongside with merging specific is not supported
-    CJC_ASSERT(!(outputCHIR && mergingSpecific));
     package->SetPackageAccessLevel(BuildPackageAccessLevel(node.accessible));
     RegisterAllSources();
     CJC_NULLPTR_CHECK(package);

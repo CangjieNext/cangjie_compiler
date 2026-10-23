@@ -60,7 +60,8 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const CHIRFormat
 // =========================== Generic Deserializer ==============================
 
 bool CHIRDeserializer::Deserialize(const std::string& fileName, Cangjie::CHIR::CHIRBuilder& chirBuilder,
-    Cangjie::CHIR::ToCHIR::Phase& phase, bool compilePlatform)
+    Cangjie::CHIR::ToCHIR::Phase& phase, bool compilePlatform,
+    const std::unordered_map<std::string, Ptr<AST::Decl>>* canonicalCommonDecls)
 {
     if (FileUtil::IsDir(fileName)) {
         Errorln(fileName, " is a directory.");
@@ -70,7 +71,7 @@ bool CHIRDeserializer::Deserialize(const std::string& fileName, Cangjie::CHIR::C
         Errorln(fileName, " not exist.");
         return false;
     }
-    CHIRDeserializerImpl deserializer(chirBuilder, compilePlatform);
+    CHIRDeserializerImpl deserializer(chirBuilder, compilePlatform, canonicalCommonDecls);
     std::vector<uint8_t> serializationInfo;
     std::string failedReason;
     if (!FileUtil::ReadBinaryFileToBuffer(fileName, serializationInfo, failedReason)) {
@@ -222,7 +223,77 @@ std::set<std::string> GetFeatures(const CHIRFormat::GlobalValue* val)
     
     return features;
 }
+
+// Attr-only: SPECIFIC covers COMMON (never demote SPECIFIC). Used when (1) GlobalVar/Func already
+// holds same-features IR and a later parent is attr-stronger, or (2) non-CJMP globals merge.
+bool ShouldOverrideDeserializedGlobalValue(const GlobalValue& existing, const AttributeInfo& newAttrs)
+{
+    if (existing.TestAttr(Attribute::SPECIFIC) && !newAttrs.TestAttr(Attribute::SPECIFIC)) {
+        return false;
+    }
+    return newAttrs.TestAttr(Attribute::SPECIFIC) && existing.TestAttr(Attribute::COMMON) &&
+        !existing.TestAttr(Attribute::SPECIFIC);
+}
+
+// Feature-set strict superset (HandleExisting keep/replace when same raw identity).
+bool IsStrictFeatureSuperset(
+    const std::set<std::string>& candidate, const std::set<std::string>& existing)
+{
+    if (candidate == existing) {
+        return false;
+    }
+    return std::includes(candidate.begin(), candidate.end(), existing.begin(), existing.end());
+}
 } // namespace
+
+bool CHIRDeserializer::CHIRDeserializerImpl::ShouldAdoptParentGlobalVarIR(
+    const CHIRFormat::GlobalValue* globalValue) const
+{
+    CJC_NULLPTR_CHECK(globalValue);
+    CJC_NULLPTR_CHECK(canonicalCommonDecls);
+    auto newAttrs = CreateAttr(globalValue->base()->base()->attributes());
+    auto rawMangled = globalValue->rawMangledName() ? globalValue->rawMangledName()->str() : std::string{};
+    const bool isCjmpMergeAttr =
+        newAttrs.TestAttr(Attribute::COMMON) || newAttrs.TestAttr(Attribute::SPECIFIC);
+    auto hostKey = globalValue->hostRawMangledName() ? globalValue->hostRawMangledName()->str() : std::string{};
+    // Lifted local const: follow enclosing host's §3.2 winner (hostRawMangledName on chir).
+    // No lift entry in the canon map; no mid-stage CJO body export required (§8).
+    if (!hostKey.empty()) {
+        auto hostIt = canonicalCommonDecls->find(hostKey);
+        if (hostIt == canonicalCommonDecls->end() || hostIt->second == nullptr) {
+            return false;
+        }
+        const AST::Decl& hostCanon = *hostIt->second;
+        if (!hostCanon.TestAttr(AST::Attribute::FROM_COMMON_PART)) {
+            return false;
+        }
+        auto hostFeats = hostCanon.curFile ? hostCanon.curFile->GetFeatures() : std::set<std::string>{};
+        return hostFeats == GetFeatures(globalValue);
+    }
+    auto it = rawMangled.empty() ? canonicalCommonDecls->end() : canonicalCommonDecls->find(rawMangled);
+    const bool inCanonMap = it != canonicalCommonDecls->end() && it->second != nullptr;
+    // Ordinary (non-CJMP) globals: not map-managed — first-wins.
+    if (!isCjmpMergeAttr && !inCanonMap) {
+        return true;
+    }
+    if (rawMangled.empty()) {
+        return false;
+    }
+    if (!inCanonMap) {
+        // CJMP COMMON/SPECIFIC top-level vars/funcs must appear in AST §3.2 map.
+        InternalError("CJMP GlobalValue missing from canonicalCommonDecls: ", rawMangled);
+        return false;
+    }
+    const AST::Decl& canon = *it->second;
+    // Canon from current source set: skip all parent chir; AST→CHIR will translate.
+    // (Default-param desugar is not in the map — !inCanonMap above → first-wins adopt.)
+    if (!canon.TestAttr(AST::Attribute::FROM_COMMON_PART)) {
+        return false;
+    }
+    auto canonFeats = canon.curFile ? canon.curFile->GetFeatures() : std::set<std::string>{};
+    auto chirFeats = GetFeatures(globalValue);
+    return canonFeats == chirFeats;
+}
 
 template <> Position CHIRDeserializer::CHIRDeserializerImpl::Create(const CHIRFormat::Pos* obj)
 {
@@ -404,6 +475,10 @@ template <> ExtendDef* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const
     auto srcCodeIdentifier = obj->base()->srcCodeIdentifier()->str();
     auto packageName = obj->base()->packageName()->str();
     auto attrs = CreateAttr(obj->base()->base()->attributes());
+    // Nested multi-parent merges may serialize PREVIOUSLY_DESERIALIZED on ExtendDef (set when a
+    // later parent skipped Config). Restoring it here would make Config() bail out before
+    // SetExtendedType, leaving a hollow ExtendDef that crashes in SetExtendInfo.
+    attrs.SetAttr(Attribute::PREVIOUSLY_DESERIALIZED, false);
     auto imported = attrs.TestAttr(CHIR::Attribute::IMPORTED);
     auto genericParams = GetType<GenericType>(obj->genericParams());
     auto result = builder.CreateExtend(
@@ -647,6 +722,72 @@ template <> LocalVar* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const 
     return result;
 }
 
+GlobalVar* CHIRDeserializer::CHIRDeserializerImpl::HandleExistingDeserializedGlobalVar(
+    GlobalVar& exist, const CHIRFormat::GlobalValue* globalValue)
+{
+    auto newFeatures = GetFeatures(globalValue);
+    auto newAttrs = CreateAttr(globalValue->base()->base()->attributes());
+    // compilePlatform deserialize always passes Package::canonicalCommonDecls.
+    CJC_NULLPTR_CHECK(canonicalCommonDecls);
+    bool adopt = ShouldAdoptParentGlobalVarIR(globalValue);
+    // Already-configured: keep unless attr-stronger. Non-CJMP / lift: same-features
+    // first-wins; feature-superset replace only for non-map ordinary globals (lifts
+    // under losing hosts never ShouldAdopt).
+    if (adopt && !exist.TestAttr(Attribute::PREVIOUSLY_DESERIALIZED) &&
+        !ShouldOverrideDeserializedGlobalValue(exist, newAttrs)) {
+        if (exist.GetFeatures() == newFeatures) {
+            adopt = false;
+        } else if (!newAttrs.TestAttr(Attribute::COMMON) && !newAttrs.TestAttr(Attribute::SPECIFIC) &&
+            !exist.TestAttr(Attribute::COMMON) && !exist.TestAttr(Attribute::SPECIFIC) &&
+            !IsStrictFeatureSuperset(newFeatures, exist.GetFeatures())) {
+            adopt = false;
+        }
+    }
+    if (!adopt) {
+        exist.EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+        return &exist;
+    }
+    // Allow Config() to replace initializer / attrs from the canonical parent IR.
+    exist.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+    exist.SetFeatures(newFeatures);
+    if (globalValue->hostRawMangledName()) {
+        exist.SetHostRawMangledName(globalValue->hostRawMangledName()->str());
+    }
+    if (newAttrs.TestAttr(Attribute::SPECIFIC)) {
+        exist.DisableAttr(Attribute::COMMON);
+        exist.EnableAttr(Attribute::SPECIFIC);
+    } else if (newAttrs.TestAttr(Attribute::COMMON)) {
+        exist.EnableAttr(Attribute::COMMON);
+        exist.DisableAttr(Attribute::SPECIFIC);
+    }
+    // Common/specific lets use GLOBALVAR_INIT funcs; those must be replaced too.
+    auto rawMangled = globalValue->rawMangledName() ? globalValue->rawMangledName()->str() : std::string{};
+    if (auto* initFunc = exist.GetInitFunc()) {
+        initFunc->DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+        pendingInitFuncReplace.insert(initFunc);
+        // Drop Apply(initFunc) from earlier parents' file inits; the overriding
+        // parent's file init will own the call (avoids double-init / wrong order).
+        for (auto* func : builder.GetCurPackage()->GetGlobalFunctions()) {
+            if (!func->TestAttr(Attribute::INITIALIZER) || func->GetBody() == nullptr) {
+                continue;
+            }
+            for (auto* block : func->GetBody()->GetBlocks()) {
+                auto exprs = block->GetExpressions();
+                for (auto* expr : exprs) {
+                    if (auto* apply = DynamicCast<Apply>(expr); apply && apply->GetCallee() == initFunc) {
+                        apply->RemoveSelfFromBlock();
+                    }
+                }
+            }
+        }
+    } else if (!rawMangled.empty()) {
+        // First parents left a PREVIOUSLY_DESERIALIZED GV shell (no Config → no
+        // initFunc link). Still need the winning parent's GLOBALVAR_INIT body.
+        pendingInitFuncReplaceByRawMangle.insert(rawMangled);
+    }
+    return &exist;
+}
+
 template <> GlobalVar* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const CHIRFormat::GlobalVar* obj)
 {
     auto globalValue = obj->base();
@@ -654,8 +795,7 @@ template <> GlobalVar* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const
     auto identifier = valueBase->identifier()->str();
     if (compilePlatform) {
         if (auto exist = builder.GetCurPackage()->TryGetGlobalVar(identifier)) {
-            exist->EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
-            return exist;
+            return HandleExistingDeserializedGlobalVar(*exist, globalValue);
         }
     }
     auto type = GetType<RefType>(valueBase->type());
@@ -665,10 +805,83 @@ template <> GlobalVar* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const
     auto result = builder.CreateGlobalVar(
         type, GetMangleNameFromIdentifier(identifier), srcCodeIdentifier, rawMangledName, packageName);
     result->SetFeatures(GetFeatures(globalValue));
+    if (globalValue->hostRawMangledName()) {
+        result->SetHostRawMangledName(globalValue->hostRawMangledName()->str());
+    }
     if (compilePlatform) {
         result->EnableAttr(Attribute::DESERIALIZED);
+        CJC_NULLPTR_CHECK(canonicalCommonDecls);
+        // First sight of this var from a parent chir: skip Config when not the AST canon IR.
+        if (!ShouldAdoptParentGlobalVarIR(globalValue)) {
+            result->EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+        }
     }
     return result;
+}
+
+Function* CHIRDeserializer::CHIRDeserializerImpl::HandleExistingDeserializedGlobalFunc(
+    Function& exist, const CHIRFormat::GlobalValue* globalValue)
+{
+    auto newFeatures = GetFeatures(globalValue);
+    auto newAttrs = CreateAttr(globalValue->base()->base()->attributes());
+    // GLOBALVAR_INIT: follow the GlobalVar adopt decision (pendingInitFuncReplace).
+    bool overrideInitBody = pendingInitFuncReplace.erase(&exist) > 0;
+    if (!overrideInitBody) {
+        auto raw = globalValue->rawMangledName() ? globalValue->rawMangledName()->str() : std::string{};
+        if (!raw.empty()) {
+            overrideInitBody = pendingInitFuncReplaceByRawMangle.erase(raw) > 0;
+        }
+    }
+    bool adopt = overrideInitBody;
+    if (!overrideInitBody) {
+        if (exist.GetFuncKind() == FuncKind::GLOBALVAR_INIT) {
+            // Body replacement is driven only by the owning GlobalVar adopt.
+            adopt = false;
+        } else if (newAttrs.TestAttr(Attribute::COMMON) || newAttrs.TestAttr(Attribute::SPECIFIC)) {
+            // Same invariant as GlobalVar: CJMP COMMON/SPECIFIC must be in the canon map
+            // (ShouldAdopt ICE on missing key). No attr-only fallback.
+            adopt = ShouldAdoptParentGlobalVarIR(globalValue);
+            if (adopt && !exist.TestAttr(Attribute::PREVIOUSLY_DESERIALIZED)) {
+                // Keep an already-configured body when it is a feature-superset of the new
+                // IR (e.g. p2 `{p1,p2}` body must not be replaced by p3's transmitted `{p1}`
+                // copy when raw mangles differ by default-in-sig `=$$`).
+                if (IsStrictFeatureSuperset(exist.GetFeatures(), newFeatures) ||
+                    (exist.GetFeatures() == newFeatures &&
+                        !ShouldOverrideDeserializedGlobalValue(exist, newAttrs))) {
+                    adopt = false;
+                }
+            }
+        } else if (exist.GetFuncKind() == FuncKind::DEFAULT_PARAMETER_FUNC) {
+            // Not in canon map; first sight always Configs (no COMMON/SPECIFIC skip).
+            // Keep that copy — do not fall into the lift / hostRaw ShouldAdopt branch below.
+            adopt = false;
+        } else {
+            // Lifted local const: follow hostRawMangledName via ShouldAdopt (§8).
+            adopt = ShouldAdoptParentGlobalVarIR(globalValue);
+            if (adopt && !exist.TestAttr(Attribute::PREVIOUSLY_DESERIALIZED) &&
+                exist.GetFeatures() == newFeatures &&
+                !ShouldOverrideDeserializedGlobalValue(exist, newAttrs)) {
+                adopt = false;
+            }
+        }
+    }
+    if (adopt) {
+        exist.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+        exist.SetFeatures(newFeatures);
+        if (globalValue->hostRawMangledName()) {
+            exist.SetHostRawMangledName(globalValue->hostRawMangledName()->str());
+        }
+        if (newAttrs.TestAttr(Attribute::SPECIFIC)) {
+            exist.DisableAttr(Attribute::COMMON);
+            exist.EnableAttr(Attribute::SPECIFIC);
+        } else if (newAttrs.TestAttr(Attribute::COMMON)) {
+            exist.EnableAttr(Attribute::COMMON);
+            exist.DisableAttr(Attribute::SPECIFIC);
+        }
+        return &exist;
+    }
+    exist.EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+    return &exist;
 }
 
 template <> Function* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const CHIRFormat::Function* obj)
@@ -679,8 +892,7 @@ template <> Function* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const 
     auto identifier = valueBase->identifier()->str();
     if (compilePlatform) {
         if (auto exist = builder.GetCurPackage()->TryGetGlobalFunc(identifier)) {
-            exist->EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
-            return exist;
+            return HandleExistingDeserializedGlobalFunc(*exist, globalValue);
         }
     }
     auto srcCodeIdentifier = globalValue->srcCodeIdentifier()->str();
@@ -690,11 +902,22 @@ template <> Function* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const 
     auto result = builder.CreateFunction(type, GetMangleNameFromIdentifier(identifier),
         srcCodeIdentifier, rawMangledName, packageName, genericTypeParams);
     result->SetFeatures(GetFeatures(globalValue));
+    if (globalValue->hostRawMangledName()) {
+        result->SetHostRawMangledName(globalValue->hostRawMangledName()->str());
+    }
     result->SetFastNative(obj->isFastNative());
     result->SetCFFIWrapper(obj->isCFFIWrapper());
-    result->SetFuncKind(static_cast<FuncKind>(obj->funcKind()));
+    auto funcKind = static_cast<FuncKind>(obj->funcKind());
+    result->SetFuncKind(funcKind);
     if (compilePlatform) {
         result->EnableAttr(Attribute::DESERIALIZED);
+        // Skip Config when ShouldAdopt says no (non-canon COMMON/SPECIFIC, or lift whose
+        // host is not the canon winner / wrong features). DEFAULT_PARAMETER_FUNC /
+        // GLOBALVAR_INIT: always Config on first sight.
+        if (funcKind != FuncKind::GLOBALVAR_INIT && funcKind != FuncKind::DEFAULT_PARAMETER_FUNC &&
+            !ShouldAdoptParentGlobalVarIR(globalValue)) {
+            result->EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+        }
     }
     return result;
 }
@@ -1469,6 +1692,11 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const CHIRFormat
         return;
     }
     ConfigBase(buffer->base()->base()->base(), obj);
+    // Serialized parents may carry PREVIOUSLY_DESERIALIZED; drop it after a real Config.
+    obj.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+    if (obj.TestAttr(Attribute::SPECIFIC)) {
+        obj.DisableAttr(Attribute::COMMON);
+    }
     if (buffer->paramDftValHostFunc() != 0) {
         auto paramDftValHostFunc = GetValue<Function>(buffer->paramDftValHostFunc());
         CJC_NULLPTR_CHECK(paramDftValHostFunc);
@@ -1493,7 +1721,11 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const CHIRFormat
         // func with body
         auto body = GetValue<BlockGroup>(buffer->body());
         if (body) {
-            obj.InitBody(*body);
+            if (obj.GetBody() != nullptr) {
+                obj.ReplaceBody(*body);
+            } else {
+                obj.InitBody(*body);
+            }
         } else {
             CJC_ASSERT(obj.TestAttr(Attribute::COMMON));
         }
@@ -1546,9 +1778,19 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const CHIRFormat
 template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const CHIRFormat::GlobalVar* buffer, GlobalVar& obj)
 {
     if (obj.TestAttr(Attribute::PREVIOUSLY_DESERIALIZED)) {
+        // Skip this parent's fill. If an earlier parent already configured the var, drop the
+        // skip mark so we do not leave a sticky shell on the kept IR.
+        if (obj.GetInitFunc() != nullptr || obj.GetInitializer() != nullptr) {
+            obj.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+        }
         return;
     }
     ConfigBase(buffer->base()->base()->base(), obj);
+    // Serialized parents may carry PREVIOUSLY_DESERIALIZED; drop it after a real Config.
+    obj.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+    if (obj.TestAttr(Attribute::SPECIFIC)) {
+        obj.DisableAttr(Attribute::COMMON);
+    }
     if (buffer->base()->annoInfo()) {
         obj.SetAnnoInfo(Create<AnnoInfo>(buffer->base()->annoInfo()));
     }
@@ -1568,6 +1810,8 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const CHIRFormat
         return;
     }
     ConfigCustomTypeDef(buffer->base(), obj);
+    // Serialized parents may carry PREVIOUSLY_DESERIALIZED; drop it after a real Config.
+    obj.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
     for (auto info : Create<EnumCtorInfo>(buffer->ctors())) {
         obj.AddCtor(info);
     }
@@ -1579,6 +1823,7 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const CHIRFormat
         return;
     }
     ConfigCustomTypeDef(buffer->base(), obj);
+    obj.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
     obj.SetCStruct(buffer->isCStruct());
 }
 
@@ -1588,6 +1833,7 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const CHIRFormat
         return;
     }
     ConfigCustomTypeDef(buffer->base(), obj);
+    obj.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
     if (buffer->isAnnotation()) {
         auto targets = GetValue<GlobalVar>(buffer->annotationTargets());
         obj.SetAnnotationTargets(std::move(targets));
@@ -1604,6 +1850,7 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const CHIRFormat
         return;
     }
     ConfigCustomTypeDef(buffer->base(), obj);
+    obj.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
     auto info = GetType<Type>(buffer->extendedType());
     if (info) {
         obj.SetExtendedType(*info);

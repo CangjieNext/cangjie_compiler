@@ -18,8 +18,10 @@
 #endif
 #include <fstream>
 #include <iostream>
+#include <unordered_set>
 #include <utility>
 
+#include "cangjie/AST/Node.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/CHIRContext.h"
 #include "cangjie/CHIR/IR/Package.h"
@@ -55,15 +57,26 @@ public:
     template <typename T, typename FBT> void Config(const FBT* buffer, T& obj);
 
     void Run(const CHIRFormat::CHIRPackage* package);
-    explicit CHIRDeserializerImpl(CHIRBuilder& chirBuilder, bool compilePlatform = false)
-        : builder(chirBuilder), compilePlatform(compilePlatform){};
+    explicit CHIRDeserializerImpl(CHIRBuilder& chirBuilder, bool compilePlatform = false,
+        const std::unordered_map<std::string, Ptr<AST::Decl>>* canonicalCommonDecls = nullptr)
+        : builder(chirBuilder), compilePlatform(compilePlatform), canonicalCommonDecls(canonicalCommonDecls){};
 
 private:
     Constant* DeserializeConstant(Type& resultTy, LiteralValue& val, Block& parent);
+    // Multi-parent chir: reuse or override an already-deserialized GlobalVar via AST canon + features.
+    GlobalVar* HandleExistingDeserializedGlobalVar(
+        GlobalVar& exist, const CHIRFormat::GlobalValue* globalValue);
+    // Multi-parent chir: reuse or override an already-deserialized Function (attrs / pending init body).
+    Function* HandleExistingDeserializedGlobalFunc(
+        Function& exist, const CHIRFormat::GlobalValue* globalValue);
+    /// True when this parent chir IR should Config into the package GlobalVar
+    /// (canon map hit + features equal, including both empty).
+    bool ShouldAdoptParentGlobalVarIR(const CHIRFormat::GlobalValue* globalValue) const;
 
 private:
     Cangjie::CHIR::CHIRBuilder& builder;
     bool compilePlatform = false;
+    const std::unordered_map<std::string, Ptr<AST::Decl>>* canonicalCommonDecls{nullptr};
     const CHIRFormat::CHIRPackage* pool{};
 
     // Package object maps
@@ -71,6 +84,13 @@ private:
     std::unordered_map<uint32_t, Value*> id2Value{{0, nullptr}};
     std::unordered_map<uint32_t, Expression*> id2Expression{{0, nullptr}};
     std::unordered_map<uint32_t, CustomTypeDef*> id2CustomTypeDef{{0, nullptr}};
+
+    // When a later parent overrides a GlobalVar, its existing init Function must also
+    // accept Config() (ReplaceBody). Track those funcs across Deserialize of the same chir.
+    std::unordered_set<Function*> pendingInitFuncReplace;
+    // If the GV shell skipped Config, GetInitFunc() is still null at adopt time — remember
+    // the var's rawMangle so the GLOBALVAR_INIT Function can still replace its body.
+    std::unordered_set<std::string> pendingInitFuncReplaceByRawMangle;
 
     // lazy GenericType config
     std::vector<std::pair<GenericType*, const CHIRFormat::GenericType*>> genericTypeConfig;

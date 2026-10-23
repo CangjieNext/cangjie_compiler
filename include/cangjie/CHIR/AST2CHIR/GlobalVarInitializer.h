@@ -12,9 +12,6 @@
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 
 namespace Cangjie::CHIR {
-//                           ordered file                 ordered var decl
-using OrderedDecl = std::pair<std::vector<Ptr<AST::File>>, std::vector<Ptr<AST::Decl>>>;
-
 class GlobalVarInitializer {
 public:
     explicit GlobalVarInitializer(Translator& trans, const ImportManager& importManager,

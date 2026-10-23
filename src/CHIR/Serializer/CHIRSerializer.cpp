@@ -487,7 +487,8 @@ flatbuffers::Offset<CHIRFormat::GlobalValue> CHIRSerializer::CHIRSerializerImpl:
     auto annoInfo = Serialize<CHIRFormat::AnnoInfo>(obj.GetAnnoInfo());
     return CHIRFormat::CreateGlobalValueDirect(builder, valueOffset,
         obj.GetSrcCodeIdentifier().data(), obj.GetRawMangledName().data(), obj.GetPackageName().data(),
-        declaredParent, features.empty() ? nullptr : &features, annoInfo);
+        declaredParent, features.empty() ? nullptr : &features, annoInfo,
+        obj.GetHostRawMangledName().empty() ? nullptr : obj.GetHostRawMangledName().data());
 }
 
 template <>

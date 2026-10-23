@@ -39,6 +39,11 @@ Linkage GetFuncLinkage(const GlobalOptions& opts, const AST::FuncDecl& func)
     return func.linkage;
 }
 
+bool IsLiftedLocalConstFunc(const AST::FuncDecl& fd)
+{
+    return fd.IsConst() && AST::IsNestedFunc(fd);
+}
+
 bool IsLocalConstFuncInStaticMember(const AST::FuncDecl& astFunc)
 {
     if (!astFunc.isConst) {
@@ -61,18 +66,24 @@ void SetGlobalVarLinkageType(Value& var, const AST::VarDecl& decl, bool isLifted
     var.Set<LinkTypeInfo>(decl.linkage);
 }
 
-void TryUpdateExistingValue(GlobalValue& existing, const std::set<std::string>& newFeatures)
+void TryUpdateExistingValue(GlobalValue& existing, const std::set<std::string>& newFeatures,
+    bool newIsSpecific = false)
 {
-    auto oldFeatures = existing.GetFeatures();
-    bool newIsSuperSet = std::includes(newFeatures.begin(), newFeatures.end(),
-        oldFeatures.begin(), oldFeatures.end()) && newFeatures.size() > oldFeatures.size();
-    if (!newIsSuperSet) {
-        // already existed value more specific, so no need to update
-        existing.EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+    // SPECIFIC covers COMMON, and also covers a parent-chir shell that skipped Config
+    // (PREVIOUSLY_DESERIALIZED / no COMMON bit yet) when the AST canon is current-source.
+    bool specificOverrides = newIsSpecific && !existing.TestAttr(Attribute::SPECIFIC) &&
+        (existing.TestAttr(Attribute::COMMON) || existing.TestAttr(Attribute::PREVIOUSLY_DESERIALIZED) ||
+            existing.TestAttr(Attribute::DESERIALIZED));
+    if (!specificOverrides) {
+        // Do not stamp PREVIOUSLY_DESERIALIZED when a COMMON/less-specific decl is seen after SPECIFIC.
+        if (!(existing.TestAttr(Attribute::SPECIFIC) && !newIsSpecific)) {
+            existing.EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+        }
     } else {
-        // will be updated as it is loaded first time
         existing.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
         existing.SetFeatures(newFeatures);
+        existing.DisableAttr(Attribute::COMMON);
+        existing.EnableAttr(Attribute::SPECIFIC);
     }
 }
 } // namespace
@@ -591,17 +602,35 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
         return;
     }
     auto features = funcDecl.curFile->GetFeatures();
+    const bool currentSourceLiftedLocalConst =
+        IsLiftedLocalConstFunc(funcDecl) && !funcDecl.TestAttr(AST::Attribute::FROM_COMMON_PART);
     // Try get deserialized func.
     Function* fn = TryGetDeserialized<Function>(funcDecl);
     if (fn) {
         if (funcDecl.TestAttr(AST::Attribute::SPECIFIC)) {
             ResetSpecificFunc(funcDecl, *fn);
+            // Specific must stamp the current source-set features (may deepen relative common).
+            fn->SetFeatures(features);
+            // Parent chir skipped Config when AST canon is current-source (PREVIOUSLY_DESERIALIZED
+            // shell): no params. Instance members need `this` before TranslateFuncDecl.
+            if (fn->GetNumOfParams() == 0) {
+                TranslateFuncParams(funcDecl, *fn);
+            }
+        } else if (currentSourceLiftedLocalConst) {
+            (void)ResetCurrentSourceLiftedLocalConstFunc(funcDecl, *fn, features);
+            SetFuncAttributeAndLinkageType(funcDecl, *fn);
+            if (fn->GetNumOfParams() == 0) {
+                TranslateFuncParams(funcDecl, *fn);
+            }
+        } else {
+            // A later common / transmitted copy must not shrink features already set by specific.
+            // (Same mangled func is visited twice: specific first, then matched common.)
+            TryUpdateExistingValue(*fn, features, false);
         }
         globalCache.Set(funcDecl, *fn);
         if (IsSrcCodeImportedGlobalDecl(funcDecl, opts)) {
             srcCodeImportedFuncs.emplace(fn);
         }
-        fn->SetFeatures(features);
         return;
     }
     auto fnTy = chirType.TranslateType(*funcDecl.GetTy());
@@ -623,18 +652,38 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
         mangledName += CFFI_FUNC_SUFFIX;
     }
     auto srcCodeName = funcDecl.identifier;
-    auto rawMangledName = funcDecl.rawMangleName;
+    // Lifted local const has empty rawMangleName; chir raw uses mangledName. Host
+    // for ShouldAdopt is written via hostRawMangledName (§8).
+    auto rawMangledName = funcDecl.rawMangleName.empty() && IsLiftedLocalConstFunc(funcDecl)
+        ? mangledName
+        : funcDecl.rawMangleName;
+    bool bodyAlreadyInited = false;
     if (opts.IsCompilingCJMP()) {
         if (auto exist = package->TryGetGlobalFunc(GLOBAL_VALUE_PREFIX + mangledName)) {
             fn = exist;
-            // Update features set
-            TryUpdateExistingValue(*fn, features);
+            if (currentSourceLiftedLocalConst) {
+                bodyAlreadyInited = ResetCurrentSourceLiftedLocalConstFunc(funcDecl, *fn, features);
+            } else if (IsLiftedLocalConstFunc(funcDecl)) {
+                // Keep parent-adopted body; skip AST→CHIR retranslate into that body.
+                TryUpdateExistingValue(*fn, features, false);
+                noNeedToTranslateDecls.insert(&funcDecl);
+                globalCache.Set(funcDecl, *fn);
+                if (IsSrcCodeImportedGlobalDecl(funcDecl, opts)) {
+                    srcCodeImportedFuncs.emplace(fn);
+                }
+                return;
+            } else {
+                TryUpdateExistingValue(*fn, features, funcDecl.TestAttr(AST::Attribute::SPECIFIC));
+            }
         }
     }
     if (fn == nullptr) {
         fn = builder.CreateFunction(funcTy, mangledName, srcCodeName, rawMangledName, pkgName, genericParamTy);
         fn->SetDebugLocation(loc);
         fn->SetFeatures(features);
+    }
+    if (IsLiftedLocalConstFunc(funcDecl) && fn->GetHostRawMangledName().empty()) {
+        fn->SetHostRawMangledName(GetCjmpMergeHostRawMangleKey(funcDecl));
     }
     // This is the logic that applied when compiling common part of package
     // Ideally such logic should be be visually discernible
@@ -644,7 +693,7 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
             fn->EnableAttr(Attribute::SKIP_ANALYSIS);
         }
     }
-    if (!funcDecl.TestAttr(AST::Attribute::ABSTRACT)) {
+    if (!bodyAlreadyInited && !funcDecl.TestAttr(AST::Attribute::ABSTRACT)) {
         fn->InitBody(*builder.CreateBlockGroup(*fn));
     }
 
@@ -779,7 +828,38 @@ void AST2CHIR::CreateImportedValueSignatureAndSetGlobalCache(const AST::VarDecl&
 
 GlobalVar* AST2CHIR::CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLocalConst)
 {
+    const bool currentSourceLiftedLocalConst =
+        isLocalConst && !decl.TestAttr(AST::Attribute::FROM_COMMON_PART);
+    auto bindExistingLocalConst = [this, &decl, isLocalConst, currentSourceLiftedLocalConst](
+                                      GlobalVar& globalVar) -> GlobalVar* {
+        auto features = decl.curFile ? decl.curFile->GetFeatures() : std::set<std::string>{};
+        // Never pass lifted-local "current source" as newIsSpecific — that stamps SPECIFIC
+        // onto COMPILER_ADD GV and forces ShouldAdopt map lookup (empty-body mid-stages ICE).
+        TryUpdateExistingValue(globalVar, features, decl.TestAttr(AST::Attribute::SPECIFIC) && !isLocalConst);
+        if (decl.TestAttr(AST::Attribute::SPECIFIC) || currentSourceLiftedLocalConst) {
+            globalVar.AppendAttributeInfo(BuildVarDeclAttr(decl));
+            globalVar.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+            globalVar.SetFeatures(features);
+            if (decl.TestAttr(AST::Attribute::SPECIFIC) && !isLocalConst) {
+                globalVar.EnableAttr(Attribute::SPECIFIC);
+                globalVar.DisableAttr(Attribute::COMMON);
+            }
+            if (decl.IsConst()) {
+                globalVar.EnableAttr(Attribute::CONST);
+            }
+        }
+        globalCache.Set(decl, globalVar);
+        if (IsSrcCodeImportedGlobalDecl(decl, opts)) {
+            srcCodeImportedVars.emplace(&globalVar);
+        }
+        const auto& loc = GetDeclLoc(builder.GetChirContext(), decl);
+        globalVar.SetDebugLocation(loc);
+        return &globalVar;
+    };
     if (auto gv = TryGetDeserialized<Value>(decl); gv) {
+        if (mergingSpecific) {
+            return bindExistingLocalConst(*StaticCast<GlobalVar*>(gv));
+        }
         globalCache.Set(decl, *gv);
         // for cjmp, want to serializer whole decl, it is a temp solution
         if (IsSrcCodeImportedGlobalDecl(decl, opts)) {
@@ -792,10 +872,18 @@ GlobalVar* AST2CHIR::CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLo
     auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), decl.begin, decl.end);
     auto mangledName = decl.mangledName;
     auto srcCodeName = decl.identifier;
-    auto rawMangledName = decl.rawMangleName;
+    // Lifted local const: empty rawMangleName; chir raw uses mangledName. Host for
+    // ShouldAdopt is hostRawMangledName (§8).
+    auto rawMangledName = (isLocalConst && decl.rawMangleName.empty()) ? mangledName : decl.rawMangleName;
     auto packageName = decl.fullPackageName;
     auto ty = builder.GetType<RefType>(chirType.TranslateType(*decl.GetTy()));
     auto warnPos = GetDeclLoc(builder.GetChirContext(), decl);
+    // Parent chir already created the lifted symbol; reuse by mangled name (same as funcs).
+    if (opts.IsCompilingCJMP() && isLocalConst) {
+        if (auto* exist = package->TryGetGlobalVar(GLOBAL_VALUE_PREFIX + mangledName)) {
+            return bindExistingLocalConst(*exist);
+        }
+    }
     GlobalVar* gv = nullptr;
     if (kind == IncreKind::INCR && !decl.toBeCompiled && !IsSrcCodeImportedGlobalDecl(decl, opts)) {
         gv = builder.CreateGlobalVar(ty, mangledName, srcCodeName, rawMangledName, packageName);
@@ -807,6 +895,9 @@ GlobalVar* AST2CHIR::CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLo
             // use COMPILER_ADD to mark this global const var as lifted
             gv->EnableAttr(Attribute::COMPILER_ADD);
         }
+    }
+    if (isLocalConst && gv->GetHostRawMangledName().empty()) {
+        gv->SetHostRawMangledName(GetCjmpMergeHostRawMangleKey(decl));
     }
     if (kind == IncreKind::INCR && !decl.toBeCompiled) {
         gv->EnableAttr(Attribute::NON_RECOMPILE);
@@ -822,6 +913,14 @@ GlobalVar* AST2CHIR::CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLo
     }
     if (decl.TestAttr(AST::Attribute::COMMON)) {
         gv->EnableAttr(Attribute::COMMON);
+    }
+    if (decl.TestAttr(AST::Attribute::SPECIFIC)) {
+        gv->EnableAttr(Attribute::SPECIFIC);
+        gv->DisableAttr(Attribute::COMMON);
+    }
+    // Persist source-set feature header for CJMP parent-IR selection (features equality).
+    if (decl.curFile) {
+        gv->SetFeatures(decl.curFile->GetFeatures());
     }
     globalCache.Set(decl, *gv);
     return gv;
@@ -1586,6 +1685,25 @@ void AST2CHIR::BuildDeserializedTable()
 }
 
 // Reset specific func for CJMP.
+bool AST2CHIR::ResetCurrentSourceLiftedLocalConstFunc(
+    const AST::FuncDecl& funcDecl, Function& fn, const std::set<std::string>& features)
+{
+    // Rebuild from current AST. TryGetDeserialized may have marked noNeedToTranslate.
+    noNeedToTranslateDecls.erase(&funcDecl);
+    fn.DestroyFuncBody();
+    bool bodyInited = false;
+    if (!funcDecl.TestAttr(AST::Attribute::ABSTRACT)) {
+        fn.InitBody(*builder.CreateBlockGroup(fn));
+        bodyInited = true;
+    }
+    fn.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+    fn.DisableAttr(Attribute::DESERIALIZED);
+    fn.DisableAttr(Attribute::SPECIFIC);
+    fn.DisableAttr(Attribute::COMMON);
+    fn.SetFeatures(features);
+    return bodyInited;
+}
+
 void AST2CHIR::ResetSpecificFunc(const AST::FuncDecl& funcDecl, Function& func)
 {
     // Reset body
@@ -1604,6 +1722,7 @@ void AST2CHIR::ResetSpecificFunc(const AST::FuncDecl& funcDecl, Function& func)
     func.EnableAttr(Attribute::SPECIFIC);
     func.DisableAttr(Attribute::COMMON);
     func.DisableAttr(Attribute::SKIP_ANALYSIS);
+    func.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
 
     // Reset TypeArguments if has TypeArguments.
     auto newGenericParamTys = GetGenericParamType(funcDecl, chirType);

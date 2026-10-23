@@ -228,6 +228,25 @@ AST::Decl* GetOuterDecl(const AST::Decl& decl)
     return outerDecl;
 }
 
+std::string GetCjmpMergeHostRawMangleKey(const AST::Decl& decl)
+{
+    for (auto outer = decl.outerDecl; outer != nullptr; outer = outer->outerDecl) {
+        auto* fd = DynamicCast<AST::FuncDecl>(outer);
+        if (fd == nullptr || fd->ownerFunc != nullptr) {
+            continue;
+        }
+        if (!fd->TestAnyAttr(AST::Attribute::COMMON, AST::Attribute::SPECIFIC) &&
+            !fd->TestAttr(AST::Attribute::FROM_COMMON_PART)) {
+            continue;
+        }
+        if (!fd->rawMangleName.empty()) {
+            return fd->rawMangleName;
+        }
+        return fd->mangledName;
+    }
+    return {};
+}
+
 bool IsLocalFunc(const AST::FuncDecl& func)
 {
     auto outerDecl = GetOuterDecl(func);

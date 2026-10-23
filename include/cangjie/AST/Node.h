@@ -3083,6 +3083,12 @@ struct Package : Node {
     std::vector<Ptr<Decl>> srcImportedNonGenericDecls;
     // Following three members are used after sema.
     std::vector<Ptr<FuncDecl>> inlineFuncDecls; /**< Imported inline functions. */
+    /**
+     * CJMP multi-parent: winner per rawMangleName (global/static vars and
+     * functions including nominal members). CHIR deserialize adopts parent IR only
+     * when GlobalValue.features matches this Decl.
+     */
+    std::unordered_map<std::string, Ptr<Decl>> canonicalCommonDecls;
     AccessLevel accessible{AccessLevel::PUBLIC};
     bool hasSourceImportedDecl{false};
     bool isMacroPackage{false};

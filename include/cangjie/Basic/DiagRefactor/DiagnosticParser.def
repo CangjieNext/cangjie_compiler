@@ -265,7 +265,6 @@ ERROR(parse_fail_expected_annotation, "expected annotation '%s'", {
 // common/specific
 ERROR(parse_common_function_must_have_return_type, "'common' function return type must be specified")
 ERROR(parse_specific_function_must_have_return_type, "'specific' function return type must be specified")
-ERROR(parse_specific_function_parameter_cannot_have_default_value, "'specific' %s parameter can not have default value")
 ERROR(parse_specific_member_must_have_implementation, "the member %s must have body in 'specific' %s")
 ERROR(parse_expected_type_with_cjmp_var, "'%s' %s type must be specified")
 ERROR(parse_cjmp_outdecl_miss_match, "%s is %s, but %s is not %s")

@@ -132,6 +132,12 @@ bool IsLocalFunc(const AST::FuncDecl& func);
 AST::Decl* GetOuterDecl(const AST::Decl& decl);
 
 /**
+ * Raw/mangled key of the enclosing CJMP COMMON/SPECIFIC (or FROM_COMMON_PART) FuncDecl
+ * for a lifted local const. Empty if none. Written to GlobalValue.hostRawMangledName.
+ */
+std::string GetCjmpMergeHostRawMangleKey(const AST::Decl& decl);
+
+/**
  * @brief Checks if an operator is an overflow operator.
  *
  * @param name The name of the operator.

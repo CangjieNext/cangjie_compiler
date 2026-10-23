@@ -333,6 +333,10 @@ table GlobalValue {
   declaredParent: uint32; // use defs id
   features: [string]; // features set to which declaration belongs
   annoInfo: AnnoInfo;
+  // Enclosing CJMP COMMON/SPECIFIC host raw/mangled key for lifted local const
+  // (GlobalVar / Function). Empty for ordinary globals. Used by ShouldAdopt to
+  // follow the host canon.
+  hostRawMangledName: string(shared);
 }
 
 table GlobalVar {

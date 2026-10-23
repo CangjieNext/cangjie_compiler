@@ -362,9 +362,15 @@ static void SaveCJMPDependencies(Ptr<const AST::Decl> decl, std::vector<Ptr<cons
 
 static void RestoreCJMPDependencies(Ptr<const AST::Decl> decl, std::vector<Ptr<const AST::Decl>>& dependencies)
 {
+    // Matched common: its initializer is not emitted. Drop deps scanned from the old
+    // initializer and do not restore edges saved on this decl.
+    if (decl->specificImplementation) {
+        dependencies.clear();
+        return;
+    }
     for (auto dependency : decl->dependencies) {
+        // Prefer the specific side only; common initializer may be removed later.
         if (dependency->specificImplementation) {
-            dependencies.emplace_back(dependency);
             dependencies.emplace_back(dependency->specificImplementation);
         } else {
             dependencies.emplace_back(dependency);
@@ -397,8 +403,13 @@ void GlobalDeclAnalysis::AnalysisDependency(const ElementList<Ptr<const AST::Dec
         if (mergingSpecific) {
             ReplaceCommonDependenciesWithSpecific(dependencies);
             RestoreCJMPDependencies(node, dependencies);
-        }
-        if (outputChir) {
+            // Persist onto the decl for multi-parent package-init ordering. Parents already
+            // saved edges when emitting CHIR; newly introduced specific vars (e.g. child
+            // `let d = c + 1000` with --output-type=dylib) only exist in this analysis
+            // result and would otherwise be invisible to CreatePackageInit.
+            node->dependencies.clear();
+            SaveCJMPDependencies(node, dependencies);
+        } else if (outputChir) {
             SaveCJMPDependencies(node, dependencies);
         }
         (void)std::remove_if(dependencies.begin(), dependencies.end(),
@@ -408,6 +419,59 @@ void GlobalDeclAnalysis::AnalysisDependency(const ElementList<Ptr<const AST::Dec
             localConstVarsDepMap.emplace(node, std::move(localConstVarDeps));
         }
     }
+}
+
+Ptr<const AST::Decl> GlobalDeclAnalysis::LookupCanonicalCommonDecl(const AST::Decl& decl) const
+{
+    if (canonicalCommonDecls == nullptr) {
+        return nullptr;
+    }
+    auto lookup = [this](const std::string& key) -> Ptr<const AST::Decl> {
+        if (key.empty()) {
+            return nullptr;
+        }
+        auto it = canonicalCommonDecls->find(key);
+        return it == canonicalCommonDecls->end() ? nullptr : it->second.get();
+    };
+    if (auto canon = lookup(decl.rawMangleName)) {
+        return canon;
+    }
+    return lookup(decl.mangledName);
+}
+
+Ptr<const AST::Decl> GlobalDeclAnalysis::EffectiveInitVar(Ptr<const AST::Decl> d) const
+{
+    CJC_NULLPTR_CHECK(d);
+    if (d->specificImplementation) {
+        d = d->specificImplementation;
+    }
+    if (!multiParentMerge) {
+        return d;
+    }
+    if (auto canon = LookupCanonicalCommonDecl(*d)) {
+        return canon;
+    }
+    return d;
+}
+
+bool GlobalDeclAnalysis::ParticipatesInFileInitOrder(const AST::Decl& decl) const
+{
+    if (!multiParentMerge) {
+        return true;
+    }
+    if (decl.astKind != AST::ASTKind::VAR_DECL && decl.astKind != AST::ASTKind::VAR_WITH_PATTERN_DECL) {
+        return true;
+    }
+    // Matched common does not emit GLOBALVAR_INIT; the specific does.
+    if (decl.specificImplementation) {
+        return false;
+    }
+    auto canon = LookupCanonicalCommonDecl(decl);
+    if (canon == nullptr) {
+        // Not in map (ordinary global / stdlib) — keep.
+        return true;
+    }
+    return canon == &decl;
 }
 
 void GlobalDeclAnalysis::AnalysisFileDependencyImpl(const Ptr<const AST::Decl>& rootDecl,
@@ -428,10 +492,14 @@ void GlobalDeclAnalysis::AnalysisFileDependencyImpl(const Ptr<const AST::Decl>& 
         // Generate file dependency if the `dep` is a variable, otherwise, we need to further traverse the decl
         // dependency to search
         if ((dep->astKind == AST::ASTKind::VAR_DECL || dep->astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL)) {
-            if (rootDecl->curFile == dep->curFile) {
-                var2varDepsInFile[rootDecl].emplace(dep);
+            auto effectiveDep = EffectiveInitVar(dep);
+            if (!ParticipatesInFileInitOrder(*effectiveDep)) {
+                continue;
+            }
+            if (rootDecl->curFile == effectiveDep->curFile) {
+                var2varDepsInFile[rootDecl].emplace(effectiveDep);
             } else {
-                fileDependencyMap.AddDep(rootDecl->curFile, dep->curFile);
+                fileDependencyMap.AddDep(rootDecl->curFile, effectiveDep->curFile);
             }
         } else {
             AnalysisFileDependencyImpl(rootDecl, dep, visited);
@@ -446,8 +514,13 @@ void GlobalDeclAnalysis::AnalysisFileDependency()
         if (srcDecl->astKind != AST::ASTKind::VAR_DECL && srcDecl->astKind != AST::ASTKind::VAR_WITH_PATTERN_DECL) {
             continue;
         }
+        auto effectiveRoot = EffectiveInitVar(srcDecl);
+        if (!ParticipatesInFileInitOrder(*effectiveRoot) || effectiveRoot != srcDecl) {
+            // Skip losers / matched commons; walk only from the init-emitting Decl.
+            continue;
+        }
         std::unordered_set<Ptr<const AST::Decl>> visited;
-        AnalysisFileDependencyImpl(srcDecl, srcDecl, visited);
+        AnalysisFileDependencyImpl(effectiveRoot, srcDecl, visited);
     }
 }
 
@@ -492,10 +565,26 @@ std::vector<Ptr<const AST::File>> GlobalDeclAnalysis::SortGlobalVarDep(
     cachedInfo.varAndFuncDep = funcsAndVarsDepMap.stableOrderValue;
 
     // 3) Map the decl dependencies into file dependencies
-    // Init file dependency map, note that we will have files from upstream package included here
+    // Init file dependency map, note that we will have files from upstream package included here.
+    // Multi-parent: only files that own a canon init var (loser File* copies stay out).
     for (auto& decl : funcsAndVars.stableOrderValue) {
-        if (fileDependencyMap.randomOrderValue.find(decl->curFile) == fileDependencyMap.randomOrderValue.end()) {
-            fileDependencyMap.InitDeps(decl->curFile);
+        if (decl->astKind != AST::ASTKind::VAR_DECL && decl->astKind != AST::ASTKind::VAR_WITH_PATTERN_DECL) {
+            continue;
+        }
+        auto effective = EffectiveInitVar(decl);
+        if (!ParticipatesInFileInitOrder(*effective)) {
+            continue;
+        }
+        if (fileDependencyMap.randomOrderValue.find(effective->curFile) == fileDependencyMap.randomOrderValue.end()) {
+            fileDependencyMap.InitDeps(effective->curFile);
+        }
+    }
+    // Non-var nodes still need a slot if they somehow appear alone (keep prior behavior for funcs).
+    if (!multiParentMerge) {
+        for (auto& decl : funcsAndVars.stableOrderValue) {
+            if (fileDependencyMap.randomOrderValue.find(decl->curFile) == fileDependencyMap.randomOrderValue.end()) {
+                fileDependencyMap.InitDeps(decl->curFile);
+            }
         }
     }
     AnalysisFileDependency();
@@ -675,8 +764,14 @@ InitOrder GlobalDeclAnalysis::Run(const ElementList<Ptr<const AST::Decl>>& nodes
     for (auto file : orderedFiles) {
         auto pos = fileAndVarMap.find(file);
         if (pos != fileAndVarMap.end()) {
-            auto vars = pos->second;
-            initOrder.emplace_back(file, vars);
+            std::vector<Ptr<const AST::Decl>> vars;
+            vars.reserve(pos->second.size());
+            for (auto decl : pos->second) {
+                if (ParticipatesInFileInitOrder(*decl)) {
+                    vars.emplace_back(decl);
+                }
+            }
+            initOrder.emplace_back(file, std::move(vars));
         } else {
             initOrder.emplace_back(file, std::vector<Ptr<const AST::Decl>>{});
         }

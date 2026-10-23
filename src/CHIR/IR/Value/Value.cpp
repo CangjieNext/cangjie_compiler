@@ -1400,6 +1400,16 @@ void GlobalValue::SetRawMangledName(const std::string& name)
     rawMangledName = name;
 }
 
+const std::string& GlobalValue::GetHostRawMangledName() const
+{
+    return hostRawMangledName;
+}
+
+void GlobalValue::SetHostRawMangledName(const std::string& name)
+{
+    hostRawMangledName = name;
+}
+
 const std::set<std::string>& GlobalValue::GetFeatures() const
 {
     return features;
@@ -1434,6 +1444,9 @@ std::string GlobalValue::GlobalValueCommentToString() const
     }
     if (!rawMangledName.empty()) {
         result.emplace_back("rawMangledName: " + rawMangledName);
+    }
+    if (!hostRawMangledName.empty()) {
+        result.emplace_back("hostRawMangledName: " + hostRawMangledName);
     }
     if (!packageName.empty()) {
         result.emplace_back("packageName: " + packageName);

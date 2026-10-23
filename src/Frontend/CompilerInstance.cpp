@@ -33,6 +33,7 @@
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Modules/PackageManager.h"
 #include "cangjie/Parse/ASTHasher.h"
+#include "cangjie/Sema/CJMPUtils.h"
 #include "cangjie/Sema/GenericInstantiationManager.h"
 #include "cangjie/Sema/TestManager.h"
 #include "cangjie/Sema/TypeChecker.h"
@@ -954,6 +955,14 @@ bool CompilerInstance::PerformMangling()
     mangler->lambdaCounter = cachedInfo.lambdaCounter;
     ManglingHelpFunction(*mangler);
     cachedInfo.lambdaCounter = mangler->lambdaCounter;
+    // canon map after mangling (hosts need stable raw/mangled / exportId keys).
+    if (!invocation.globalOptions.commonPartCjos.empty()) {
+        for (auto& pkg : GetSourcePackages()) {
+            if (pkg != nullptr) {
+                Sema::BuildCanonicalCommonDeclMap(*pkg);
+            }
+        }
+    }
     // when dump to screen, only dump once and dump the ast immediately after mangling
     if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpAST()) {
         DumpAST(GetSourcePackages(), invocation.globalOptions.output, "mangle", invocation.globalOptions.dumpToScreen);

@@ -23,6 +23,7 @@
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Option/Option.h"
+#include "cangjie/Sema/CJMPUtils.h"
 #include "cangjie/Sema/CommonTypeAlias.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CastingTemplate.h"
@@ -31,6 +32,7 @@
 #include "cangjie/Utils/Utils.h"
 #include <algorithm>
 #include <unordered_map>
+#include <unordered_set>
 
 using namespace Cangjie;
 using namespace AST;
@@ -465,6 +467,35 @@ bool HasGeneralSubClass(const AST::ClassDecl& cls)
     }
     return false;
 }
+
+/// Drop FROM_COMMON_PART funcs dominated by a strict feature-superset sibling
+/// (e.g. keep {p1,p2}, drop transmitted {p1}). When \p markExportLosers, also set
+/// doNotExport / specificImplementation for mid-stage CJO (same as §3.2 losers).
+void EraseFeatureDominatedRelativeCommons(std::vector<Ptr<FuncDecl>>& funcs, bool markExportLosers)
+{
+    Utils::EraseIf(funcs, [&funcs, markExportLosers](Ptr<FuncDecl> decl) {
+        if (!decl->TestAttr(Attribute::FROM_COMMON_PART)) {
+            return false;
+        }
+        for (auto other : funcs) {
+            if (other == decl) {
+                continue;
+            }
+            if (!other->TestAttr(Attribute::FROM_COMMON_PART) ||
+                !Sema::IsStrictFeatureSuperset(*other, *decl)) {
+                continue;
+            }
+            if (markExportLosers) {
+                decl->doNotExport = true;
+                if (decl->IsMemberDecl() && other->IsMemberDecl() && !decl->specificImplementation) {
+                    decl->specificImplementation = other;
+                }
+            }
+            return true;
+        }
+        return false;
+    });
+}
 }
 
 // Precheck for CJMP
@@ -501,7 +532,8 @@ void MPTypeCheckerImpl::PreCheckCJMPClass(const ClassDecl& cls)
 void MPTypeCheckerImpl::FilterOutCommonCandidatesIfSpecificExist(
     std::map<Names, std::vector<Ptr<FuncDecl>>>& candidates)
 {
-    for (auto& [names, funcs] : candidates) {
+    for (auto& entry : candidates) {
+        auto& funcs = entry.second;
         bool hasSpecificCandidates = false;
 
         for (auto& func : funcs) {
@@ -519,6 +551,8 @@ void MPTypeCheckerImpl::FilterOutCommonCandidatesIfSpecificExist(
                     }),
                 funcs.end());
         }
+
+        EraseFeatureDominatedRelativeCommons(funcs, /*markExportLosers=*/true);
     }
 }
 
@@ -533,6 +567,7 @@ void MPTypeCheckerImpl::RemoveCommonCandidatesIfHasSpecific(std::vector<Ptr<Func
         }
         return false;
     });
+    EraseFeatureDominatedRelativeCommons(candidates, /*markExportLosers=*/false);
 }
 
 static Ptr<Ty> CheckFuncReturnType(Ptr<Ty> ty)
@@ -849,6 +884,203 @@ bool NeedToReportMissingBody(const Decl& common, const Decl& specific)
     }
 
     return false;
+}
+
+int CanonicalAttrTier(const Decl& d)
+{
+    if (d.TestAttr(Attribute::SPECIFIC)) {
+        return 3;
+    }
+    if (d.TestAttr(Attribute::COMMON_WITH_DEFAULT)) {
+        return 2;
+    }
+    if (d.TestAttr(Attribute::COMMON)) {
+        return 1;
+    }
+    return 0;
+}
+
+// CJMP design §3.2: whether `candidate` should replace `existing` as the canonical Decl.
+bool ShouldReplaceCanonicalDecl(const Decl& existing, const Decl& candidate)
+{
+    // 1. Winning SPECIFIC is never demoted by a later common.
+    if (existing.TestAttr(Attribute::SPECIFIC) && !candidate.TestAttr(Attribute::SPECIFIC)) {
+        return false;
+    }
+    // 2. SPECIFIC covers any common (including COMMON_WITH_DEFAULT).
+    if (candidate.TestAttr(Attribute::SPECIFIC) && !existing.TestAttr(Attribute::SPECIFIC)) {
+        return true;
+    }
+    // 3. COMMON_WITH_DEFAULT covers bare COMMON.
+    if (candidate.TestAttr(Attribute::COMMON_WITH_DEFAULT) && existing.TestAttr(Attribute::COMMON) &&
+        !existing.TestAttr(Attribute::COMMON_WITH_DEFAULT) && !existing.TestAttr(Attribute::SPECIFIC)) {
+        return true;
+    }
+    // 4. Same tier: strict feature superset wins.
+    if (CanonicalAttrTier(existing) == CanonicalAttrTier(candidate) &&
+        Sema::IsStrictFeatureSuperset(candidate, existing)) {
+        return true;
+    }
+    // 5. Otherwise keep existing.
+    return false;
+}
+
+static void CollectCanonicalCandidate(std::unordered_map<std::string, std::vector<Ptr<Decl>>>& byRawMangle, Decl& decl)
+{
+    // CJMP merge targets only (COMMON/SPECIFIC). Lifted local const is not map-managed:
+    // chir carries hostRawMangledName and ShouldAdopt follows the host canon (§8).
+    // Default-param desugar is not map-managed (Sema unique body; CHIR first-Config).
+    // Ordinary members of a common type (e.g. user init) carry FROM_COMMON_PART alone
+    // after CJO load — must not enter the map or doNotExport may drop the constructor.
+    if (!decl.TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC)) {
+        return;
+    }
+    // Default-param thunk (ownerFunc set) must not compete as a merge host even if it
+    // inherited COMMON/SPECIFIC bits through CJO / attr copy.
+    if (auto* fd = DynamicCast<FuncDecl>(&decl); fd && fd->ownerFunc != nullptr) {
+        return;
+    }
+    if (!decl.rawMangleName.empty()) {
+        byRawMangle[decl.rawMangleName].emplace_back(&decl);
+    }
+    if (!decl.mangledName.empty() && decl.mangledName != decl.rawMangleName) {
+        byRawMangle[decl.mangledName].emplace_back(&decl);
+    }
+}
+
+} // namespace (helpers for BuildCanonicalCommonDeclMap)
+
+namespace Cangjie::Sema {
+/**
+ * Build Package::canonicalCommonDecls for global/static vars, functions, and
+ * properties (PropDecl + getter/setter FuncDecls; rawMangle → winner Decl).
+ * Losers get doNotExport so mid-stage CJO export drops them.
+ * Call after mangling.
+ * Default-param desugar is omitted: unique body (Sema); CHIR first-Configs.
+ * Local-const lifts are omitted: chir hostRawMangledName follows host canon (§8).
+ */
+void BuildCanonicalCommonDeclMap(Package& pkg)
+{
+    pkg.canonicalCommonDecls.clear();
+    std::unordered_map<std::string, std::vector<Ptr<Decl>>> byRawMangle;
+    // Same descent rule as CollectCJMPDecls: ClassBody/StructBody/InterfaceBody are not
+    // Decl nodes, so they must be allowed to WALK_CHILDREN or member funcs/vars are skipped.
+    // PropDecl must also WALK_CHILDREN so getters/setters are visited for the CHIR map.
+    std::function<VisitAction(Ptr<Node>)> visitor = [&byRawMangle](const Ptr<Node>& node) {
+        if (node->IsDecl()) {
+            auto* decl = StaticAs<ASTKind::DECL>(node);
+            if (auto* vd = DynamicCast<VarDecl>(decl); vd && vd->IsStaticOrGlobal()) {
+                CollectCanonicalCandidate(byRawMangle, *vd);
+            } else if (DynamicCast<PropDecl>(decl)) {
+                // PropDecl itself for CJO member export; accessors collected when walked.
+                CollectCanonicalCandidate(byRawMangle, *decl);
+            } else if (auto* fd = DynamicCast<FuncDecl>(decl)) {
+                // Top-level, nominal members, and property getters/setters share the
+                // CHIR Function merge path (ShouldAdopt on COMMON/SPECIFIC Functions).
+                CollectCanonicalCandidate(byRawMangle, *fd);
+            }
+        }
+        if (node->astKind == ASTKind::PACKAGE || node->astKind == ASTKind::FILE ||
+            node->astKind == ASTKind::PROP_DECL || node->IsNominalDecl() || node->IsNominalDeclBody()) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        return VisitAction::SKIP_CHILDREN;
+    };
+    Walker(&pkg, visitor).Walk();
+
+    std::unordered_set<Ptr<Decl>> markedLosers;
+    // exportId / mangledName → feature winner (for redirecting loser-only rawMangle keys).
+    std::unordered_map<std::string, Ptr<Decl>> winnerByExportKey;
+    auto markCanonicalLoser = [&markedLosers](Decl& loser, Decl& winner) {
+        loser.doNotExport = true;
+        markedLosers.emplace(&loser);
+        // Multi-parent member merge: the surviving ClassDecl is the first-loaded one;
+        // the feature-winner may live under an ALREADY_LOADED (doNotExport) class.
+        // Wire specificImplementation so ASTWriter exports the winner via the kept class body
+        // (same path as common → specific member replacement).
+        if (loser.IsMemberDecl() && winner.IsMemberDecl() && !loser.specificImplementation) {
+            loser.specificImplementation = &winner;
+        }
+    };
+    auto exportKey = [](const Decl& d) {
+        if (!d.exportId.empty()) {
+            return d.exportId;
+        }
+        return d.mangledName.empty() ? d.rawMangleName : d.mangledName;
+    };
+    for (auto& [rawMangle, decls] : byRawMangle) {
+        Ptr<Decl> canon = nullptr;
+        for (auto d : decls) {
+            // Prefer the matched specific implementation when present.
+            Ptr<Decl> candidate = d;
+            if (d->specificImplementation &&
+                d->specificImplementation->TestAttr(Attribute::SPECIFIC)) {
+                candidate = d->specificImplementation;
+            }
+            if (canon == nullptr) {
+                canon = candidate;
+                continue;
+            }
+            if (ShouldReplaceCanonicalDecl(*canon, *candidate)) {
+                markCanonicalLoser(*canon, *candidate);
+                canon = candidate;
+            } else if (canon != candidate) {
+                markCanonicalLoser(*candidate, *canon);
+            }
+        }
+        CJC_NULLPTR_CHECK(canon);
+        // A decl may be sole entry under one rawMangle key but a feature-loser under
+        // mangledName (e.g. host raw `…x=$$` vs `…x$$` share exportId). Do not
+        // clear doNotExport for decls already marked as losers.
+        if (markedLosers.count(canon) == 0) {
+            canon->doNotExport = false;
+        }
+        pkg.canonicalCommonDecls[rawMangle] = canon;
+    }
+    // Build exportId → best Decl. Hosts that gained/lost a default change rawMangle
+    // (`…x=$$` vs `…x$$`) but keep the same exportId — pick one winner across buckets.
+    auto rawHasDefaultSig = [](const Decl& d) {
+        return d.rawMangleName.find("=$$") != std::string::npos;
+    };
+    for (auto& [rawMangle, canon] : pkg.canonicalCommonDecls) {
+        if (markedLosers.count(canon) != 0) {
+            continue;
+        }
+        auto key = exportKey(*canon);
+        if (key.empty()) {
+            continue;
+        }
+        auto wit = winnerByExportKey.find(key);
+        if (wit == winnerByExportKey.end() || wit->second == nullptr) {
+            winnerByExportKey[key] = canon;
+            continue;
+        }
+        if (ShouldReplaceCanonicalDecl(*wit->second, *canon)) {
+            winnerByExportKey[key] = canon;
+            continue;
+        }
+        if (wit->second != canon && CanonicalAttrTier(*wit->second) == CanonicalAttrTier(*canon) &&
+            !Sema::IsStrictFeatureSuperset(*wit->second, *canon) &&
+            !Sema::IsStrictFeatureSuperset(*canon, *wit->second)) {
+            // Tie: prefer the host whose raw mangle has no default-in-sig (`=$$`) — that is
+            // the body-deepening specific (p2) over the stage that introduced the default (p1).
+            if (rawHasDefaultSig(*wit->second) && !rawHasDefaultSig(*canon)) {
+                winnerByExportKey[key] = canon;
+            }
+        }
+    }
+    // Redirect every host rawMangle key to the exportId winner.
+    for (auto& [rawMangle, canon] : pkg.canonicalCommonDecls) {
+        auto key = exportKey(*canon);
+        if (key.empty()) {
+            continue;
+        }
+        auto it = winnerByExportKey.find(key);
+        if (it == winnerByExportKey.end() || it->second == nullptr || it->second == canon) {
+            continue;
+        }
+        canon = it->second;
+    }
 }
 } // namespace
 

@@ -320,7 +320,7 @@ private:
 
     /* Add methods for CJMP. */
     // Try to deserialize common part for CJMP.
-    bool TryToDeserializeCHIR();
+    bool TryToDeserializeCHIR(AST::Package& astPkg);
     // Check whether the decl is deserialized for CJMP.
     bool MaybeDeserialized(const AST::Decl& decl) const;
     // Try to get deserialized node from package including CustomTypeDef (excluding Extend), Function, GlobalVar.
@@ -358,6 +358,10 @@ private:
 
     // Reset specific func for CJMP.
     void ResetSpecificFunc(const AST::FuncDecl& funcDecl, Function& func);
+    /// Clear parent-chir shell for a current-source lifted local const; InitBody if non-abstract.
+    /// Returns whether a new empty body was created (caller must not InitBody again).
+    bool ResetCurrentSourceLiftedLocalConstFunc(
+        const AST::FuncDecl& funcDecl, Function& fn, const std::set<std::string>& features);
     // Check whether the decl need be translated for CJMP.
     inline bool NeedTranslate(const AST::Decl& decl) const
     {

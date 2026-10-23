@@ -10,6 +10,7 @@
 #include <list>
 #include <queue>
 #include <stack>
+#include <unordered_map>
 
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Walker.h"
@@ -21,7 +22,9 @@ class GlobalDeclAnalysis {
 public:
     GlobalDeclAnalysis(DiagnosticEngine& ciDiag, const GenericInstantiationManager* gim, IncreKind kind,
         const ElementList<Ptr<const AST::Decl>>& funcsAndVars, const ElementList<Ptr<const AST::Decl>>& localConstVars,
-        const StaticInitInfoMap& staticInitFuncInfoMap, bool outputChir = false, bool mergingSpecific = false)
+        const StaticInitInfoMap& staticInitFuncInfoMap, bool outputChir = false, bool mergingSpecific = false,
+        bool multiParentMerge = false,
+        const std::unordered_map<std::string, Ptr<AST::Decl>>* canonicalCommonDecls = nullptr)
         : diag(ciDiag),
           gim(gim),
           kind(kind),
@@ -29,7 +32,9 @@ public:
           localConstVars(localConstVars),
           staticInitFuncInfoMap(staticInitFuncInfoMap),
           outputChir(outputChir),
-          mergingSpecific(mergingSpecific)
+          mergingSpecific(mergingSpecific),
+          multiParentMerge(multiParentMerge),
+          canonicalCommonDecls(canonicalCommonDecls)
     {
     }
 
@@ -49,6 +54,12 @@ private:
     bool SkipDependencyTo(const AST::Decl& decl);
 
     void CheckUseBeforeInit(const std::vector<Ptr<const AST::Decl>>& vars);
+
+    Ptr<const AST::Decl> LookupCanonicalCommonDecl(const AST::Decl& decl) const;
+    /// Multi-parent: resolve to Canonical Decl (or specificImplementation).
+    Ptr<const AST::Decl> EffectiveInitVar(Ptr<const AST::Decl> d) const;
+    /// Whether this decl should drive file-init ordering / appear in InitOrder var lists.
+    bool ParticipatesInFileInitOrder(const AST::Decl& decl) const;
 
     void AnalysisFileDependencyImpl(const Ptr<const AST::Decl>& rootDecl, const Ptr<const AST::Decl>& curDecl,
         std::unordered_set<Ptr<const AST::Decl>>& visited);
@@ -113,6 +124,9 @@ private:
     DeclDepMap globalVarsAndLocalConstVarsDepMap;
     bool outputChir = false;
     bool mergingSpecific = false;
+    /// True when mergingSpecific && more than one --common-part-chir (diamond).
+    bool multiParentMerge = false;
+    const std::unordered_map<std::string, Ptr<AST::Decl>>* canonicalCommonDecls{nullptr};
 };
 
 template <class T> class DepsUnit {

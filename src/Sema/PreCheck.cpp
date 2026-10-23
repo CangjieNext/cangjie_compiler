@@ -1610,7 +1610,9 @@ bool TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionWithSameSignature(
                 fd->TestAttr(Attribute::STATIC) == (*it)->TestAttr(Attribute::STATIC) &&
                 fd->TestAttr(Attribute::CONSTRUCTOR) == (*it)->TestAttr(Attribute::CONSTRUCTOR) &&
                 fd->TestAttr(Attribute::MAIN_ENTRY) == (*it)->TestAttr(Attribute::MAIN_ENTRY) &&
-                !IsSameDeserializedFunction(*fd, **it);
+                !IsSameDeserializedFunction(*fd, **it) &&
+                // Nested relative-common: {p1,p2} ⊃ {p1} is one logical func, not an overload conflict.
+                !IsCJMPFeatureDominatedPair(*fd, **it);
         });
         std::vector<Ptr<FuncDecl>> sameSigFuncs;
         std::copy(funcs.begin(), it1, std::back_inserter(sameSigFuncs));

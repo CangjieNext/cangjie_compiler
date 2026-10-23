@@ -6,6 +6,7 @@
 
 #include "cangjie/IncrementalCompilation/ASTCacheCalculator.h"
 
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
 #include "cangjie/IncrementalCompilation/Utils.h"
@@ -30,6 +31,17 @@ public:
           order{calc.order},
           fileMap{calc.fileMap}
     {
+    }
+
+    // Keep mangledBeforeSema from CJMP common-part CJO. Remangling after import drops
+    // type annotations and would change e.g. `3cmp1cV$$l` into `3cmp1cV$$`, breaking
+    // CHIR GlobalVar.rawMangledName lookup against canonicalCommonDecls.
+    void AssignRawMangleName(Decl& decl)
+    {
+        if (decl.TestAttr(Attribute::FROM_COMMON_PART) && !decl.rawMangleName.empty()) {
+            return;
+        }
+        decl.rawMangleName = mangler.Mangle(decl);
     }
 
     void Walk()
@@ -105,7 +117,7 @@ private:
         if (auto extend = DynamicCast<ExtendDecl*>(&decl); extend && extend->inheritedTypes.empty()) {
             // collect direct extends but do not compute the cache; delay the computation until all direct extends
             // with the same name are seen
-            extend->rawMangleName = mangler.Mangle(*extend);
+            AssignRawMangleName(*extend);
             auto& it = directExtends[extend->rawMangleName];
             if (it.empty()) {
                 order.push_back(&decl); // ensure direct extends are written to the cache only once
@@ -264,7 +276,7 @@ private:
         for (auto member : GetMembers(decl)) {
             PrevisitDirectExtendMember(*member);
         }
-        decl.rawMangleName = mangler.Mangle(decl);
+        AssignRawMangleName(decl);
         CollectDecl(decl);
         decl.hash.srcUse = ASTHasher::SrcUseHash(decl);
         decl.hash.bodyHash = ASTHasher::BodyHash(decl, srcInfo);
@@ -336,7 +348,7 @@ private:
         TopLevelDeclCache result{};
         VisitTopLevelDeclMembers(decl, result);
 
-        decl.rawMangleName = mangler.Mangle(decl);
+        AssignRawMangleName(decl);
         decl.hash.srcUse = result.srcUse = ASTHasher::SrcUseHash(decl);
         decl.hash.bodyHash = result.bodyHash = ASTHasher::BodyHash(decl, srcInfo);
         decl.hash.sig = result.sigHash = ASTHasher::SigHash(decl);
@@ -354,7 +366,8 @@ private:
         for (auto member : GetMembers(decl)) {
             result.members.push_back(VisitMember(*member));
         }
-        result.rawMangle = decl.rawMangleName = mangler.Mangle(decl);
+        AssignRawMangleName(decl);
+        result.rawMangle = decl.rawMangleName;
         CollectDecl(decl);
         decl.hash.srcUse = result.srcUse = ASTHasher::SrcUseHash(decl);
         decl.hash.bodyHash = result.bodyHash = ASTHasher::BodyHash(decl, srcInfo);

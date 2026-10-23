@@ -151,6 +151,31 @@ bool IsFeatureSupersetRelation(const Decl& left, const Decl& right)
         std::includes(rightFeatures.begin(), rightFeatures.end(), leftFeatures.begin(), leftFeatures.end());
 }
 
+bool IsStrictFeatureSuperset(const Decl& candidate, const Decl& existing)
+{
+    if (!candidate.curFile || !existing.curFile) {
+        return false;
+    }
+    auto candFeats = candidate.curFile->GetFeatures();
+    auto existFeats = existing.curFile->GetFeatures();
+    if (candFeats == existFeats) {
+        return false;
+    }
+    return std::includes(
+        candFeats.begin(), candFeats.end(), existFeats.begin(), existFeats.end());
+}
+
+bool IsCJMPFeatureDominatedPair(const Decl& left, const Decl& right)
+{
+    if (&left == &right) {
+        return false;
+    }
+    if (!left.TestAttr(Attribute::FROM_COMMON_PART) || !right.TestAttr(Attribute::FROM_COMMON_PART)) {
+        return false;
+    }
+    return IsStrictFeatureSuperset(left, right) || IsStrictFeatureSuperset(right, left);
+}
+
 bool IgnoreCJMPFalsePositiveRedefinition(const Decl& left, const Decl& right)
 {
     if (!left.TestAttr(Attribute::FROM_COMMON_PART) || !right.TestAttr(Attribute::FROM_COMMON_PART)) {
