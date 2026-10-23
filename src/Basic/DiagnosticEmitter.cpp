@@ -146,8 +146,16 @@ size_t DiagnosticEmitterImpl::GetDisplayedWidthFromSource(const std::string& sou
     auto len = source.size();
     start = start > static_cast<int>(len) ? static_cast<int>(len) : start;
     end = end > static_cast<int>(len + 1) ? static_cast<int>(len + 1) : end;
-    CJC_ASSERT(start >= 1 && "wrong start position");
-    CJC_ASSERT(end >= start);
+    // Degenerate ranges (e.g. from nodes mixing original and macro-expansion token
+    // positions, issue #1172) can carry end.column < start.column; fall back to the
+    // default width instead of computing a bogus substr, mirroring the empty-source
+    // handling above.
+    if (start < 1) {
+        start = 1;
+    }
+    if (end < start) {
+        return defaultWidth;
+    }
     std::string substr = source.substr(static_cast<size_t>(start - 1), static_cast<size_t>(end - start));
     auto disWidth = static_cast<size_t>(static_cast<ssize_t>(Unicode::DisplayWidth(substr)));
     // If display width equals to 0, it only contains control character.
