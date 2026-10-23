@@ -129,4 +129,19 @@ Position MacroCallDiagInfo::MapPos(const Position& pos, bool isLowerBound) const
     }
     return pos;
 }
+
+Range MacroCallDiagInfo::MapRange(const Range& range) const
+{
+    auto begin = MapPos(range.begin);
+    auto end = MapPos(range.end, true);
+    if (end < begin) {
+        // Begin and end are remapped independently. When only one endpoint is remapped the
+        // results can land in different files (e.g. the *.macrocall file and the original
+        // source next to the macro call), and since Position comparison ignores fileID the
+        // mapped range may come out inverted, which the diagnostic emitter asserts against
+        // (range.end >= range.begin). Keep the original ordered range in that case.
+        return range;
+    }
+    return MakeRange(begin, end);
+}
 } // namespace Cangjie

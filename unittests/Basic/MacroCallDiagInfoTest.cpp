@@ -5,6 +5,7 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "cangjie/Basic/MacroCallDiagInfo.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Position.h"
 
 #include "gtest/gtest.h"
@@ -87,4 +88,37 @@ TEST(MacroCallDiagInfoTest, MapPosUsesHash32KeysWhenIsCurFile)
     EXPECT_EQ(info.MapPos(Position(1, 103, 40)), Position(1, 103, 40));
     EXPECT_EQ(info.MapPos(Position(1, 103, 40), true), Position(1, 103, 40));
     EXPECT_EQ(info.MapPos(Position(1, 103, 45), true), Position(1, 103, 45));
+}
+
+TEST(MacroCallDiagInfoTest, MapRangeKeepsMappedExpansionRangeOrdered)
+{
+    auto info = MakeInfo();
+    // Both endpoints are repacked expansion tokens: both map into the *.macrocall file and
+    // the mapped range stays ordered.
+    auto r = info.MapRange(MakeRange(Position(1, 5, 40), Position(1, 5, 65)));
+    EXPECT_EQ(r.begin, Position(331, 9, 3));
+    EXPECT_EQ(r.end, Position(331, 9, 15));
+}
+
+TEST(MacroCallDiagInfoTest, MapRangeFallsBackToOriginalWhenMappingInvertsRange)
+{
+    auto info = MakeInfo();
+    // Begin is a repacked expansion token that maps into the *.macrocall file (line 9);
+    // the end lies on original-source line 7, which MapPos passes through untouched.
+    // Position comparison ignores fileID, so mapping alone would yield end < begin and
+    // trip the emitter's assertion; MapRange must keep the original ordered range.
+    auto orig = MakeRange(Position(1, 5, 40), Position(1, 7, 10));
+    auto r = info.MapRange(orig);
+    EXPECT_EQ(r.begin, orig.begin);
+    EXPECT_EQ(r.end, orig.end);
+}
+
+TEST(MacroCallDiagInfoTest, MapRangeKeepsPassThroughRange)
+{
+    auto info = MakeInfo();
+    // Both endpoints belong to the original source (other lines): the range is unchanged.
+    auto orig = MakeRange(Position(1, 103, 20), Position(1, 105, 14));
+    auto r = info.MapRange(orig);
+    EXPECT_EQ(r.begin, orig.begin);
+    EXPECT_EQ(r.end, orig.end);
 }

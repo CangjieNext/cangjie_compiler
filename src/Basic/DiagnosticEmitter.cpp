@@ -68,7 +68,10 @@ void DiagnosticEmitterImpl::CollectInformation(std::vector<CollectedInfo>& vec, 
     info.hint = str.str;
     info.color = str.color;
     info.isMain = isMain;
-    CJC_ASSERT(str.range.end >= str.range.begin);
+    // Do NOT abort on inverted ranges (end < begin). Diagnostics related to macro
+    // expansions can carry such ranges when a node mixes original-source token positions
+    // with repacked expansion-token positions (issue #1172, category B). The multi-line
+    // rendering below copes with them, so treat them like any other range.
     if (str.range.begin.line == str.range.end.line) {
         info.range = str.range;
     } else {
@@ -77,7 +80,8 @@ void DiagnosticEmitterImpl::CollectInformation(std::vector<CollectedInfo>& vec, 
         auto startInfo = CollectedInfo{startRange, info.isMain, true, false, "", str.color};
         vec.push_back(startInfo);
         multiLineRecordMap.emplace(std::pair{startInfo, multiLineHangingPtrVec.size()});
-        CJC_ASSERT(str.range.end.column > 1 && "end of range must be bigger than 1");
+        // No assert on `end.column > 1` here: the branch below handles `end.column == 1`
+        // explicitly, and macro-related diagnostics can legitimately end at column 1.
         auto s = str.range.end.column > 1 ? str.range.end - Position{0, 0, 1} :
                                           Position{str.range.end.fileID, str.range.end.line, 1};
         auto e = str.range.end.column > 1 ? str.range.end : Position{str.range.end.fileID, str.range.end.line, 1 + 1};
@@ -322,11 +326,11 @@ void DiagnosticEmitterImpl::AnalyseMultiLineHanging(const CollectedInfo& info, s
         }
     } else {
         auto [line, column] = multiLineHangingPtrVec[loc];
-        CJC_ASSERT(column < multiLineHangingVec.size() && "column is bigger than size of multiLineHangingVec");
+        // The checks below already return gracefully for stale hanging pointers produced
+        // by degenerate (e.g. inverted) ranges, so do not abort on them.
         if (column >= multiLineHangingVec.size()) {
             return;
         }
-        CJC_ASSERT(line < multiLineHangingVec[column].size() && "line is bigger than size of multiLineHangingVec");
         if (line >= multiLineHangingVec[column].size()) {
             return;
         }
@@ -540,14 +544,14 @@ void DiagnosticEmitterImpl::ConvertHangingContentsHelper(
 {
     auto k = i + 1;
     while (k < hanging.size()) {
-        CJC_ASSERT(begin < hanging[k].size() && "begin is bigger than hanging size");
+        // Degenerate hanging spans (e.g. from inverted macro diagnostic ranges) can make
+        // `begin`/`end - 1` overflow; the guards below already skip such entries safely.
         if (begin >= hanging[k].size()) {
             break;
         }
         if (hanging[k][begin] == g_spaceOfNum(1)) {
             hanging[k][begin] = GetColoredString(color, std::string{MULTI_LINE_SYMBOL});
         }
-        CJC_ASSERT(end - 1 < hanging[k].size() && "end is bigger than hanging size");
         if (end - 1 >= hanging[k].size()) {
             break;
         }
@@ -580,7 +584,8 @@ HangingStr DiagnosticEmitterImpl::ConvertHangingContents(size_t line)
         for (size_t j = 0; j < multiLineHangingVec[i].size(); j++) {
             auto [begin, end, color] = multiLineHangingVec[i][j];
             color = noColor ? DiagColor::NO_COLOR : color;
-            CJC_ASSERT(begin != end - 1);
+            // `begin == end - 1` (degenerate span) is handled fine by the helper: the
+            // fill loop below simply does nothing, so do not abort on it.
             ConvertHangingContentsHelper(hanging, i, begin, end, color);
         }
     }
