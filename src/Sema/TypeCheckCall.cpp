@@ -2376,6 +2376,122 @@ bool TypeChecker::TypeCheckerImpl::CheckRefConstructor(const ASTContext& ctx, co
     return true;
 }
 
+bool TypeChecker::TypeCheckerImpl::TryResolveTypeAliasNumConv(ASTContext& ctx, CallExpr& ce, Expr& baseExpr)
+{
+    // The base of the call must be a type alias; only a type alias can act as a numeric conversion.
+    Ptr<Decl> aliasDecl = nullptr;
+    if (auto re = DynamicCast<RefExpr>(&baseExpr)) {
+        aliasDecl = re->ref.target;
+    } else if (auto ma = DynamicCast<MemberAccess>(&baseExpr)) {
+        aliasDecl = ma->target;
+    }
+    if (!aliasDecl || aliasDecl->astKind != ASTKind::TYPE_ALIAS_DECL) {
+        return false;
+    }
+    // Resolve through the (possibly nested) alias chain to the final underlying type, so that
+    // `type word1 = Int64; type word = word1; word(1)` works (Issue #1045).
+    auto realTarget = TypeCheckUtil::GetRealTarget(aliasDecl);
+    auto origTy = realTarget ? realTarget->GetTy() : nullptr;
+    // For cross-package aliases, GetRealTarget may not fully resolve to the
+    // underlying primitive type (the RefType's target may be empty).  In that
+    // case, fall back to the alias's own type expression to determine if it
+    // references a numeric/rune type.
+    if (!origTy || origTy->kind == TypeKind::TYPE) {
+        if (auto tad = DynamicCast<TypeAliasDecl>(aliasDecl.get()); tad && tad->type) {
+            origTy = tad->type->GetTy();
+        }
+    }
+    if (!origTy || !(origTy->IsNumeric() || origTy->kind == TypeKind::TYPE_RUNE)) {
+        return false;
+    }
+    // A numeric type alias conversion takes exactly one argument.
+    if (ce.args.size() != 1) {
+        diag.Diagnose(ce, DiagKind::sema_parameters_and_arguments_mismatch);
+        ce.SetTy(TypeManager::GetInvalidTy());
+        return true;
+    }
+    // Desugar into the builtin TypeConvExpr form so that argument coercion (e.g. integer
+    // literals), diagnostics and CHIR lowering exactly mirror primitive conversions
+    // like UInt16(1) (Issue #1045).
+    DesugarTypeAliasNumConvCall(ctx, ce, origTy->kind);
+    auto convTy = SynTypeConvExpr(ctx, *RawStaticCast<TypeConvExpr*>(ce.desugarExpr.get()));
+    ce.SetTy(convTy);
+    return Ty::IsTyCorrect(convTy);
+}
+
+bool TypeChecker::TypeCheckerImpl::TryTypeAliasConvCall(
+    ASTContext& ctx, CallExpr& ce, const Expr& base, bool aliasCandidate)
+{
+    // Issue #1045: the call base targets a type alias with no function candidates — try
+    // the numeric-conversion path first; a non-numeric alias falls through to the
+    // caller's normal error path.
+    if (aliasCandidate && TryResolveTypeAliasNumConv(ctx, ce, const_cast<Expr&>(base))) {
+        return true;
+    }
+    return true;
+}
+
+bool TypeChecker::TypeCheckerImpl::CheckTypeAliasConvArgs(ASTContext& ctx, CallExpr& ce)
+{
+    // Issue #1045: if the call base is a type alias to a numeric/rune type, the call has
+    // already been resolved as a type conversion by TryResolveTypeAliasNumConv (via
+    // ChkCallBaseRefExpr/ChkCallBaseMemberAccess).  In that case ce.GetTy() is already
+    // set to the underlying numeric type.  We must still type-check the argument against
+    // the target type (e.g. word("hello") should fail).
+    // Guard with a check that the base target is indeed a type alias, so that legitimate
+    // function-pointer calls returning a numeric type are not affected.
+    auto ceTy = ce.GetTy();
+    if (ce.desugarExpr) {
+        // Already desugared into a builtin TypeConvExpr and checked by SynTypeConvExpr
+        // inside TryResolveTypeAliasNumConv; nothing left to do here.
+        return true;
+    }
+    if (!Ty::IsTyCorrect(ceTy) || ceTy->IsNothing() ||
+        !(ceTy->IsNumeric() || ceTy->kind == TypeKind::TYPE_RUNE)) {
+        return false;
+    }
+    auto baseTarget = ce.baseFunc->GetTarget();
+    if (!baseTarget || baseTarget->astKind != ASTKind::TYPE_ALIAS_DECL) {
+        return false;
+    }
+    // From here on we are in the type-alias conversion path.  Return true on all
+    // outcomes (success or diagnosed failure) so that CheckNonNormalCall does not
+    // fall through to the function-call paths and produce duplicate diagnostics.
+    // A numeric type alias conversion takes exactly one argument.
+    if (ce.args.size() != 1) {
+        diag.Diagnose(ce, DiagKind::sema_parameters_and_arguments_mismatch);
+        ce.SetTy(TypeManager::GetInvalidTy());
+        return true;
+    }
+    // Synthesize the argument to ensure it is well-typed.
+    if (!Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, ce.args[0].get()))) {
+        ce.SetTy(TypeManager::GetInvalidTy());
+        return true;
+    }
+    // Check the argument can be converted to the target type.  For Rune, allow
+    // integer literals (which are IdealInt) since Rune(65) is a common pattern.
+    auto argTy = ce.args[0]->GetTy();
+    if (!argTy || !Ty::IsTyCorrect(argTy) || argTy->IsNothing()) {
+        ce.SetTy(TypeManager::GetInvalidTy());
+        return true;
+    }
+    bool isCompatible = false;
+    if (ceTy->kind == TypeKind::TYPE_RUNE) {
+        // Rune accepts integer literals and Rune values.
+        isCompatible = argTy->IsNumeric() || argTy->kind == TypeKind::TYPE_RUNE || argTy->HasIdealTy();
+    } else {
+        // Numeric types: use subtype check.
+        isCompatible = typeManager.IsSubtype(argTy, ceTy) || argTy->HasIdealTy();
+    }
+    if (!isCompatible) {
+        if (ce.ShouldDiagnose()) {
+            diag.Diagnose(ce, DiagKind::sema_parameters_and_arguments_mismatch);
+        }
+        ce.SetTy(TypeManager::GetInvalidTy());
+    }
+    return true;
+}
+
 bool TypeChecker::TypeCheckerImpl::ChkCallBaseRefExpr(
     ASTContext& ctx, CallExpr& ce, Ptr<Decl>& target, std::vector<Ptr<FuncDecl>>& candidates)
 {
@@ -2391,9 +2507,21 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseRefExpr(
     }
     if (!re->ref.target && re->ref.targets.empty()) {
         return false;
-    } else {
-        return CheckRefConstructor(ctx, ce, *re) && GetCallBaseCandidates(ctx, ce, *re, target, candidates);
     }
+    if (!CheckRefConstructor(ctx, ce, *re)) {
+        return false;
+    }
+    if (GetCallBaseCandidates(ctx, ce, *re, target, candidates)) {
+        // GetCallBaseCandidates returns true even when the target is a user-defined
+        // type alias with no function candidates.  In that case, the call is not a
+        // function call but a potential numeric type conversion via the alias.
+        // Use re->ref.target (the original resolved target) rather than the `target`
+        // parameter which may have been overwritten inside GetCallBaseCandidates.
+        return TryTypeAliasConvCall(ctx, ce, *re,
+            re->ref.target && re->ref.target->astKind == ASTKind::TYPE_ALIAS_DECL && candidates.empty());
+    }
+    // Issue #1045: type alias to numeric/rune type is treated as a type conversion.
+    return TryResolveTypeAliasNumConv(ctx, ce, *re);
 }
 
 bool TypeChecker::TypeCheckerImpl::ChkCallBaseMemberAccess(
@@ -2416,7 +2544,18 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseMemberAccess(
         }
         return false;
     } else {
-        return GetCallBaseCandidates(ctx, ce, *ma, target, candidates);
+        // Issue #1045: a member access whose field is a type alias (e.g. an imported
+        // `pkg.alias(1)`) is treated as a type conversion, mirroring the RefExpr path.
+        if (GetCallBaseCandidates(ctx, ce, *ma, target, candidates)) {
+            // GetCallBaseCandidates returns true even when the target is a user-defined
+            // type alias with no function candidates.  In that case, the call is not a
+            // function call but a potential numeric type conversion via the alias.
+            // Use ma->target (the original resolved target) rather than the `target`
+            // parameter which may have been overwritten inside GetCallBaseCandidates.
+            return TryTypeAliasConvCall(ctx, ce, *ma,
+                ma->target && ma->target->astKind == ASTKind::TYPE_ALIAS_DECL && candidates.empty());
+        }
+        return TryResolveTypeAliasNumConv(ctx, ce, *ma);
     }
 }
 
@@ -2891,9 +3030,43 @@ Ptr<FuncTy> TryCastingToFuncTy(Ptr<Ty> ty, size_t arity, TypeManager& tyMgr)
 };
 }
 
+bool TypeChecker::TypeCheckerImpl::CheckVariadicFuncPtrCall(ASTContext& ctx, Ptr<Ty> target, CallExpr& ce,
+    const FuncTy& funcTy, bool res, std::vector<Diagnostic>& diagnostics)
+{
+    if (res) {
+        return true;
+    }
+    DesugarVariadicCallExpr(ctx, ce, funcTy.paramTys.size() - 1);
+    bool success = false;
+    {
+        auto ds = DiagSuppressor(diag);
+        success = CheckFuncPtrCall(ctx, target, *StaticAs<ASTKind::CALL_EXPR>(ce.desugarExpr.get()),
+            *const_cast<FuncTy*>(&funcTy));
+        if (diagnostics.empty()) {
+            diagnostics = ds.GetSuppressedDiag();
+        }
+    }
+    if (success) {
+        ce.SetTy(ce.desugarExpr->GetTy());
+        return true;
+    }
+    RecoverFromVariadicCallExpr(ce);
+    std::for_each(diagnostics.cbegin(), diagnostics.cend(), [this](auto info) { diag.Diagnose(info); });
+    ce.SetTy(TypeManager::GetInvalidTy());
+    return false;
+}
+
 bool TypeChecker::TypeCheckerImpl::CheckNonNormalCall(ASTContext& ctx, Ptr<Ty> target, CallExpr& ce)
 {
     CJC_NULLPTR_CHECK(ce.baseFunc);
+    // Issue #1045: if the call base is a numeric/rune type alias resolved as a type
+    // conversion, type-check its argument against the alias target type here instead of
+    // falling through to the function-call paths below.  Returns true when the base is
+    // such an alias (checked or diagnosed); false means "not an alias conversion" and we
+    // continue with the normal call handling.
+    if (CheckTypeAliasConvArgs(ctx, ce)) {
+        return true;
+    }
     bool res = false;
     if (auto funcTy = TryCastingToFuncTy(ce.baseFunc->GetTy(), ce.args.size(), typeManager)) {
         auto maybeVariadic = IsPossibleVariadicFunction(*funcTy, ce);
@@ -2905,25 +3078,8 @@ bool TypeChecker::TypeCheckerImpl::CheckNonNormalCall(ASTContext& ctx, Ptr<Ty> t
         } else {
             res = CheckFuncPtrCall(ctx, target, ce, *funcTy);
         }
-        if (!res && maybeVariadic) {
-            DesugarVariadicCallExpr(ctx, ce, funcTy->paramTys.size() - 1);
-            bool success = false;
-            {
-                auto ds = DiagSuppressor(diag);
-                success = CheckFuncPtrCall(ctx, target, *StaticAs<ASTKind::CALL_EXPR>(ce.desugarExpr.get()), *funcTy);
-                if (diagnostics.empty()) {
-                    diagnostics = ds.GetSuppressedDiag();
-                }
-            }
-            if (success) {
-                ce.SetTy(ce.desugarExpr->GetTy());
-                res = true;
-            } else {
-                RecoverFromVariadicCallExpr(ce);
-                std::for_each(diagnostics.cbegin(), diagnostics.cend(), [this](auto info) { diag.Diagnose(info); });
-                ce.SetTy(TypeManager::GetInvalidTy());
-                res = false;
-            }
+        if (maybeVariadic) {
+            res = CheckVariadicFuncPtrCall(ctx, target, ce, *funcTy, res, diagnostics);
         }
         // VArray must modify by 'inout' in CFunc lambda call.
         if (funcTy->IsCFunc()) {

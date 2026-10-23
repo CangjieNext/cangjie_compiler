@@ -10,6 +10,7 @@
 #include <vector>
 #include "gtest/gtest.h"
 #include "TestCompilerInstance.h"
+#include "cangjie/AST/ASTTypeValidator.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/PrintNode.h"
 #include "cangjie/AST/Walker.h"
@@ -193,6 +194,37 @@ protected:
         EXPECT_EQ(functionReference->targets[0], target);
     }
 };
+
+TEST_F(TypeCheckerTest, TypeAliasNumericConversionTest)
+{
+    std::string code = R"(type word = UInt16
+type myInt64 = Int64
+type myRune = Rune
+type myWord = word
+
+main(): Int64 {
+    var a: UInt16 = word(20)
+    var b: Int64 = myInt64(-999999)
+    var g: Rune = myRune(65)
+    var k: UInt16 = myWord(42)
+    var q: UInt16 = word(20.05)
+    if (a != 20 || b != -999999 || k != 42) {
+        return 1
+    }
+    if (g != r'A' || q != 20) {
+        return 2
+    }
+    return 0
+})";
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->Compile(CompileStage::SEMA);
+    // Mirror the validation performed at the end of GenericInstantiatePackage so that
+    // invalid nodes (reported as "please report this to Cangjie team" in full builds)
+    // surface locally.
+    AST::ValidateUsedNodes(diag, *instance->GetSourcePackages()[0]);
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
 
 TEST_F(TypeCheckerTest, TypecheckTest)
 {

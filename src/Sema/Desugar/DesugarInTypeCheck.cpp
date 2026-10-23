@@ -561,6 +561,30 @@ void DesugarVariadicCallExpr(ASTContext& ctx, CallExpr& ce, size_t fixedPosition
     AddCurFile(ce, ce.curFile);
 }
 
+void TypeChecker::TypeCheckerImpl::DesugarTypeAliasNumConvCall(
+    ASTContext& ctx, CallExpr& ce, TypeKind targetKind)
+{
+    // Issue #1045: rewrite `alias(x)` where alias targets a numeric/rune type into the
+    // builtin TypeConvExpr form used for primitive conversions like UInt16(x), so that
+    // literal coercion, argument checking and CHIR lowering are all reused unchanged.
+    auto typeConvExpr = MakeOwnedNode<TypeConvExpr>();
+    auto type = MakeOwnedNode<PrimitiveType>();
+    type->kind = targetKind;
+    type->SetTy(TypeManager::GetPrimitiveTy(targetKind));
+    typeConvExpr->type = std::move(type);
+    if (!ce.args.empty()) {
+        typeConvExpr->expr = std::move(ce.args[0]->expr);
+    }
+    typeConvExpr->scopeName = ce.scopeName;
+    typeConvExpr->sourceExpr = &ce;
+    typeConvExpr->begin = ce.begin;
+    typeConvExpr->end = ce.end;
+    ce.args.clear();
+    ce.desugarExpr = std::move(typeConvExpr);
+    ctx.RemoveTypeCheckCache(*ce.desugarExpr);
+    AddCurFile(ce, ce.curFile);
+}
+
 void TypeChecker::TypeCheckerImpl::DesugarPointerCall(ASTContext& ctx, CallExpr& ce)
 {
     auto pointerExpr = MakeOwnedNode<PointerExpr>();
