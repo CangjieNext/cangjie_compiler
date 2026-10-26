@@ -1632,21 +1632,36 @@ void BCHIRInterpreter::InterpretSwitch()
 
 template <typename Ty> void BCHIRInterpreter::InterpretSwitchWithType()
 {
-    size_t realValue = static_cast<unsigned char>(interpStack.ArgsPop<Ty>().content);
-    // sorted case
+    // The selector is compared by its bit pattern zero-extended to 64 bits, which is how
+    // CHIR2BCHIR::TranslateMultiBranch encodes the case values.
+    auto content = interpStack.ArgsPop<Ty>().content;
+    uint64_t realValue;
+    if constexpr (std::is_same_v<decltype(content), bool>) {
+        realValue = content ? 1 : 0;
+    } else {
+        realValue = static_cast<uint64_t>(static_cast<std::make_unsigned_t<decltype(content)>>(content));
+    }
     auto casesIdx = pc + 1;
     auto cases = bchir.Get(casesIdx);
+    auto firstCaseIdx = casesIdx + 1;
 
-    // each case is a 8 bytes value
-    auto from = reinterpret_cast<const size_t*>(&*(bchir.GetLinkedByteCode().GetByteCode().begin() + casesIdx + 1));
-    auto until = from + cases;
-
-    auto found = std::lower_bound(from, until, realValue);
-    if (found == until || *found != realValue) {
-        // default target
-        pc = bchir.Get(casesIdx + 1 + cases * Bchir::FLAG_TWO);
+    // cases are sorted in ascending order and each one takes two bytecode cells (8 bytes)
+    Bchir::ByteCodeContent low = 0;
+    Bchir::ByteCodeContent high = cases;
+    constexpr Bchir::ByteCodeContent BISECTION_DIVISOR = 2;
+    while (low < high) {
+        auto mid = low + (high - low) / BISECTION_DIVISOR;
+        if (bchir.Get8bytes(firstCaseIdx + mid * Bchir::FLAG_TWO) < realValue) {
+            low = mid + 1;
+        } else {
+            high = mid;
+        }
+    }
+    auto defaultTargetIdx = firstCaseIdx + cases * Bchir::FLAG_TWO;
+    if (low == cases || bchir.Get8bytes(firstCaseIdx + low * Bchir::FLAG_TWO) != realValue) {
+        pc = bchir.Get(defaultTargetIdx);
     } else {
-        pc = bchir.Get(static_cast<unsigned>(casesIdx + 1 + cases * Bchir::FLAG_TWO + 1 + (found - from)));
+        pc = bchir.Get(defaultTargetIdx + 1 + low);
     }
 }
 
