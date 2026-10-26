@@ -8,6 +8,7 @@
 #include "cangjie/CHIR/IR/Annotation.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
+#include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 
 using namespace Cangjie;
 using namespace Cangjie::CHIR;
@@ -190,22 +191,18 @@ void MergeBlocks::RunOnFunc(const BlockGroup& body, CHIRBuilder& builder, const 
     bool isStable;
     do {
         isStable = true;
-        for (auto block : body.GetBlocks()) {
-            for (auto expr : block->GetExpressions()) {
-                if (expr->GetExprKind() == ExprKind::LAMBDA) {
-                    RunOnFunc(*StaticCast<const Lambda*>(expr)->GetBody(), builder, opts);
-                }
+        Visitor::Visit(const_cast<BlockGroup&>(body), [&](Block& block) {
+            if (block.Get<GeneratedFromForIn>()) {
+                isStable = false;
+                MergeForInCondBlock(builder, block);
+            } else if (checkSingleEntrySingleExit(block, opts)) {
+                isStable = false;
+                MergeIntoPredecessor(block);
+            } else if (checkGotoOnly(block, opts)) {
+                isStable = false;
+                MergeGotoOnlyBlock(block);
             }
-            if (block->Get<GeneratedFromForIn>()) {
-                isStable = false;
-                MergeForInCondBlock(builder, *block);
-            } else if (checkSingleEntrySingleExit(*block, opts)) {
-                isStable = false;
-                MergeIntoPredecessor(*block);
-            } else if (checkGotoOnly(*block, opts)) {
-                isStable = false;
-                MergeGotoOnlyBlock(*block);
-            }
-        }
+            return VisitResult::CONTINUE;
+        });
     } while (!isStable);
 }

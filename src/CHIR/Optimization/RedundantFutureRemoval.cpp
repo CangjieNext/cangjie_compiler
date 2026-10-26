@@ -7,13 +7,14 @@
 #include "cangjie/CHIR/Optimization/RedundantFutureRemoval.h"
 
 #include "cangjie/CHIR/Analysis/Utils.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 
 namespace Cangjie::CHIR {
 
-RedundantFutureRemoval::RedundantFutureRemoval(const Package& pkg, bool isDebug)
-    : package(pkg), isDebug(isDebug)
+RedundantFutureRemoval::RedundantFutureRemoval(CHIRBuilder& builder, const Package& pkg, bool isDebug)
+    : builder(builder), package(pkg), isDebug(isDebug)
 {
 }
 
@@ -29,7 +30,7 @@ void RedundantFutureRemoval::RunOnFunc(const Function& func)
     auto visitExitAction = [this](Expression& expr) {
         auto [future, apply] = CheckSpawnWithFuture(expr);
         if (future != nullptr) {
-            auto spawnExpr = StaticCast<Spawn*>(&expr);
+            auto spawnExpr = StaticCast<SpawnBase*>(&expr);
             RewriteSpawnWithOutFuture(*spawnExpr, *future, *apply);
             if (isDebug) {
                 std::string message = "[RedundantFutureRemoval] The call to Spawn" +
@@ -43,10 +44,10 @@ void RedundantFutureRemoval::RunOnFunc(const Function& func)
     Visitor::Visit(func, visitExitAction);
 }
 
-Function* RedundantFutureRemoval::GetExecureClosureFunc() const
+Function* RedundantFutureRemoval::GetExecuteClosureFunc() const
 {
     for (auto def : package.GetAllCustomTypeDef()) {
-        if (!IsCoreFuture(*def)) {
+        if (!IsCoreFutureT(*def)) {
             continue;
         }
         for (auto method : def->GetMethods()) {
@@ -59,16 +60,54 @@ Function* RedundantFutureRemoval::GetExecureClosureFunc() const
     return nullptr;
 }
 
-void RedundantFutureRemoval::RewriteSpawnWithOutFuture(Spawn& spawnExpr, LocalVar& futureValue, Apply& apply)
+void RedundantFutureRemoval::ReplaceTerminatorWithGoTo(Expression& terminator, Block& successBlock) const
 {
-    /* change from:
-        %a : future = Allocate()
-        %b : funcType = Lambda()
-        %c : Apply(Future, %a, %b)
-        %d : Spawn(%a)
-        change to:
-        %b : funcType = Lambda()
-        %d : Spwan(%b)
+    auto parentBlock = terminator.GetParentBlock();
+    CJC_NULLPTR_CHECK(parentBlock);
+    auto loc = terminator.GetDebugLocation();
+    // RemoveSelfFromBlock also drops this block from each successor's predecessor
+    // list, so the exception edge disappears along with the terminator.
+    terminator.RemoveSelfFromBlock();
+    parentBlock->AppendExpression(builder.CreateTerminator<GoTo>(loc, &successBlock, parentBlock));
+}
+
+void RedundantFutureRemoval::RewriteSpawnWithOutFuture(SpawnBase& spawnExpr, LocalVar& futureValue, ApplyBase& apply)
+{
+    /* The `Future` object only exists to be handed to `Spawn`, so drop it and
+       let `Spawn` take the closure directly.
+
+       change from:
+        %1: () -> Int64 = Lambda[...](): Int64
+        %2: Class-Future<Int64>& = Allocate(Class-Future<Int64>)
+        %3: Void = Apply(Class-Future<Int64>&->@Future<Int64>::<init>, %2, %1)
+        %4: Class-Future<Int64>& = Spawn(%2)
+        %5: Unit = Debug(%2, f)                 // only when bound to a variable
+
+       change to:
+        %1: () -> Int64 = Lambda[...](): Int64
+        %4: Class-Future<Int64>& = Spawn(%1)    // executeClosure: @Future<Int64>::executeClosure
+        %5: Unit = Debug(%1, f)
+
+       Note that `Allocate` and `Apply` are erased, while any `Debug` is kept
+       and retargeted to the lambda so the variable stays observable. `Spawn`
+       keeps its own result type and gains an `executeClosure` reference, which
+       is what tells CodeGen to pass a closure instead of a `Future`
+       (see GenerateSpawn in src/CodeGen/Base/SpawnExprImpl.cpp).
+
+       Inside a `try` block the same three nodes appear as their exception
+       throwing counterparts, each ending its own basic block:
+
+        Block #0:  %2: Class-Future<Int64>& = TryAllocate(Class-Future<Int64>)
+        Block #8:  %3: Void = TryApply(..., %2, %1, normal: #9, exception: #3)
+        Block #9:  %4: Class-Future<Int64>& = TrySpawn(%2, normal: #2, exception: #3)
+
+       `TryAllocate` and `TryApply` are terminators, so they cannot simply be
+       erased -- that would leave their blocks without one. They are replaced by
+       a `GoTo` to their own success block instead: allocating a `Future` and
+       running its constructor are the very things being optimised away, and
+       neither can throw once removed, so the exception edge is dropped too.
+       `TrySpawn` itself stays put, only swapping its operand and gaining the
+       `executeClosure` reference, exactly as in the plain case.
     */
     // 1. Get Lambda from apply expression
     auto lambda = apply.GetOperand(2U);
@@ -76,22 +115,31 @@ void RedundantFutureRemoval::RewriteSpawnWithOutFuture(Spawn& spawnExpr, LocalVa
 
     // 2. Replace spawn and remove useless node
     auto futureExpression = futureValue.GetExpr();
-    apply.RemoveSelfFromBlock();
+    if (auto tryApply = DynamicCast<TryApply*>(&apply)) {
+        ReplaceTerminatorWithGoTo(*tryApply, *tryApply->GetSuccessBlock());
+    } else {
+        apply.RemoveSelfFromBlock();
+    }
     futureValue.ReplaceWith(*lambda, spawnExpr.GetParentBlock()->GetParentBlockGroup());
-    futureExpression->RemoveSelfFromBlock();
+    if (auto tryAllocate = DynamicCast<TryAllocate*>(futureExpression)) {
+        ReplaceTerminatorWithGoTo(*tryAllocate, *tryAllocate->GetSuccessBlock());
+    } else {
+        futureExpression->RemoveSelfFromBlock();
+    }
     if (executeClosure == nullptr) {
-        executeClosure = GetExecureClosureFunc();
+        executeClosure = GetExecuteClosureFunc();
         CJC_NULLPTR_CHECK(executeClosure);
     }
     spawnExpr.SetExecuteClosure(*executeClosure);
 }
 
-std::pair<LocalVar*, Apply*> RedundantFutureRemoval::CheckSpawnWithFuture(Expression& expr) const
+std::pair<LocalVar*, ApplyBase*> RedundantFutureRemoval::CheckSpawnWithFuture(Expression& expr) const
 {
-    if (expr.GetExprKind() != ExprKind::SPAWN) {
+    // Covers both `Spawn` and the `TrySpawn` produced inside a `try` block.
+    if (!Is<SpawnBase>(expr)) {
         return {nullptr, nullptr};
     }
-    auto spawnExpr = StaticCast<Spawn*>(&expr);
+    auto spawnExpr = StaticCast<SpawnBase*>(&expr);
     if (spawnExpr->IsExecuteClosure()) {
         return {nullptr, nullptr};
     }
@@ -117,8 +165,10 @@ std::pair<LocalVar*, Apply*> RedundantFutureRemoval::CheckSpawnWithFuture(Expres
     }
     // optimize spawn if only apply is left
     auto apply = *usersSet.begin();
-    CJC_ASSERT(apply->GetExprKind() == ExprKind::APPLY);
-    return {localFuture, StaticCast<Apply*>(apply)};
+    if (!Is<ApplyBase>(*apply)) {
+        return {nullptr, nullptr};
+    }
+    return {localFuture, StaticCast<ApplyBase*>(apply)};
 }
 
 } // namespace Cangjie::CHIR

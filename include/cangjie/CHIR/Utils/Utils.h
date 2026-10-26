@@ -653,12 +653,18 @@ bool IsCoreObject(const CustomTypeDef& def);
 bool IsCoreOption(const CustomTypeDef& def);
 
 /**
- * @brief Checks if a custom type definition is the core 'Future' type.
+ * @brief Checks if a custom type definition is the core generic 'Future<T>' definition.
+ *
+ * Only matches the generic (uninstantiated) definition; definitions with the
+ * GENERIC_INSTANTIATED attribute (e.g. 'Future<Int64>') return false. Callers that
+ * need to match instantiated definitions as well should check the package name and
+ * source code name directly, e.g. via IsExpectedCustomType().
  *
  * @param def The custom type definition to check.
- * @return True if the custom type definition is the core 'Future' type, false otherwise.
+ * @return True if the custom type definition is the core generic 'Future<T>' definition,
+ * false otherwise.
  */
-bool IsCoreFuture(const CustomTypeDef& def);
+bool IsCoreFutureT(const CustomTypeDef& def);
 
 /**
  * @brief Checks if a class definition is a closure conversion environment class.
