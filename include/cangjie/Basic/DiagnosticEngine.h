@@ -677,9 +677,7 @@ public:
         static_assert(IsAllString<Args...>, "args of AddHint in diagnostic builder should all be string.");
         std::vector<std::string> arguments{args...};
         if (diagnostic.macroDiagInfo) {
-            return AddHint(MakeRange(diagnostic.macroDiagInfo->MapPos(range.begin),
-                                     diagnostic.macroDiagInfo->MapPos(range.end, true)),
-                arguments);
+            return AddHint(diagnostic.macroDiagInfo->MapRange(range), arguments);
         }
         AddHint(range, arguments);
     }

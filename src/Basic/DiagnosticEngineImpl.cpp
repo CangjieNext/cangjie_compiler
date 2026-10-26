@@ -109,7 +109,7 @@ DiagnosticBuilder DiagnosticEngine::DiagnoseRefactor(DiagKindRefactor kind, cons
     const Range& range, std::vector<std::string> formatArgs)
 {
     CheckRange(Diagnostic::GetDiagnoseCategory(kind), range);
-    auto newRange = MakeRange(info.MapPos(range.begin), info.MapPos(range.end, true));
+    auto newRange = info.MapRange(range);
     Diagnostic diagnostic(true, newRange, kind, std::move(formatArgs));
     AddMacroCallNote(diagnostic, info, range.begin);
     return DiagnosticBuilder(*this, diagnostic);

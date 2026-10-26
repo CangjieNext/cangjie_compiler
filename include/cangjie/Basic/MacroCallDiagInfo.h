@@ -15,6 +15,8 @@
 
 namespace Cangjie {
 
+struct Range;
+
 struct MacroCallDiagInfo {
     Position macroCallBegin; /**< Begin position of the macro call node. */
     Position macroCallEnd;   /**< End position of the macro call node. */
@@ -40,6 +42,14 @@ struct MacroCallDiagInfo {
                          expansion. */
 
     Position MapPos(const Position& pos, bool isLowerBound = false) const;
+
+    /**
+     * Map a whole diagnostic range to the displayed positions. Begin and end are mapped
+     * independently by MapPos, which can invert the range when only one endpoint is
+     * remapped; in that case the original (ordered) range is returned unchanged, so the
+     * diagnostic emitter never sees end < begin.
+     */
+    Range MapRange(const Range& range) const;
 
     // Custom annotation in the current source file and not produced by macro expansion.
     bool IsCustomAnnotation() const
