@@ -1331,10 +1331,14 @@ Ptr<Expr> MockSupportManager::ReplaceAssignment(AssignExpr& assignment, bool isI
     assignment.leftValue->EnableAttr(Attribute::LEFT_VALUE);
 
     if (assignment.isCompound) {
+        if (auto memberAccess = DynamicCast<MemberAccess>(assignment.leftValue.get());
+            memberAccess && Is<StructDecl>(memberAccess->target->outerDecl)) {
+            ReplaceSubMemberAccessWithAccessor(*memberAccess, isInConstructor, &assignment);
+            return assignment.desugarExpr;
+        }
         return nullptr;
     }
 
-    // Support all compound assignments
     return ReplaceFieldSetWithAccessor(assignment, isInConstructor);
 }
 
