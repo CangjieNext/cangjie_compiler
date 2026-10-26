@@ -21,6 +21,7 @@
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <iostream>
 #include <optional>
@@ -484,18 +485,19 @@ FuncType* ConvertRealFuncTypeToVirtualFuncType(const FuncType& type, CHIRBuilder
     return builder.GetType<FuncType>(paramInVtable, builder.GetType<UnitType>());
 }
 
-Value* TypeCastIfNeeded(
+std::pair<Value*, std::vector<Expression*>> TypeCastIfNeeded(
     Value& val, Type& expectedTy, CHIRBuilder& builder, Block& parentBlock, const DebugLocation& loc, bool needCheck)
 {
     // Do not cast a nothing type value, otherwise it will mess up the dead code elimination
     if (val.GetType()->IsNothing()) {
-        return &val;
+        return {&val, {}};
     }
     if (val.GetType() != &expectedTy) {
+        std::vector<Expression*> newExprs;
         Value* tmpValue = &val;
         if (val.GetType()->StripAllRefs()->IsGeneric() && val.GetType()->IsRef()) {
             auto load = builder.CreateExpression<Load>(val.GetType()->StripAllRefs(), &val, &parentBlock);
-            parentBlock.AppendExpression(load);
+            newExprs.emplace_back(load);
             tmpValue = load->GetResult();
         }
         Expression* ret = nullptr;
@@ -505,11 +507,11 @@ Value* TypeCastIfNeeded(
         } else {
             ret = builder.CreateExpression<ClassStaticCast>(loc, &expectedTy, tmpValue, &parentBlock);
         }
-        parentBlock.AppendExpression(ret);
+        newExprs.emplace_back(ret);
         ret->Set<NeedCheckCast>(needCheck);
-        return ret->GetResult();
+        return {ret->GetResult(), newExprs};
     }
-    return &val;
+    return {&val, {}};
 }
 
 static bool HasGenericInNonFuncScope(const Type& type)
@@ -528,33 +530,31 @@ static bool HasGenericInNonFuncScope(const Type& type)
     return hasGenericInNonFuncScope;
 }
 
-Ptr<Value> TransformGenericIfNeeded(
+std::pair<Value*, std::vector<Expression*>> TransformGenericIfNeeded(
     Value& val, Type& expectedTy, CHIRBuilder& builder, Block& parentBlock, const DebugLocation& loc, bool needCheck)
 {
     (void)needCheck;
     // Specially, the cast for generation/de-generation enum still use type-cast
     if (val.GetType()->IsEnum() && (expectedTy.IsTuple() || expectedTy.IsUnsignedInteger())) {
-        return nullptr;
+        return {nullptr, {}};
     }
     if ((val.GetType()->IsTuple() || val.GetType()->IsUnsignedInteger()) && expectedTy.IsEnum()) {
-        return nullptr;
+        return {nullptr, {}};
     }
 
     // this should be deleted after supported by codegen
     if (val.GetType()->IsStructArray() && expectedTy.IsStructArray()) {
-        return nullptr;
+        return {nullptr, {}};
     }
 
     if (HasGenericInNonFuncScope(expectedTy) && !HasGenericInNonFuncScope(*val.GetType())) {
         auto ret = builder.CreateExpression<CastToGeneric>(loc, &expectedTy, &val, &parentBlock);
-        parentBlock.AppendExpression(ret);
-        return ret->GetResult();
+        return {ret->GetResult(), {ret}};
     } else if (HasGenericInNonFuncScope(*val.GetType()) && !HasGenericInNonFuncScope(expectedTy)) {
         auto ret = builder.CreateExpression<CastToConcrete>(loc, &expectedTy, &val, &parentBlock);
-        parentBlock.AppendExpression(ret);
-        return ret->GetResult();
+        return {ret->GetResult(), {ret}};
     }
-    return nullptr;
+    return {nullptr, {}};
 }
 
 bool LeftTypeIsBoxOfRightType(const Type& left, const Type& right)
@@ -571,7 +571,7 @@ bool LeftTypeIsBoxOfRightType(const Type& left, const Type& right)
     return &right == boxType->GetBaseType();
 }
 
-Ptr<Value> BoxIfNeeded(
+std::pair<Value*, std::vector<Expression*>> BoxIfNeeded(
     Value& val, Type& expectedTy, CHIRBuilder& builder, Block& parentBlock, const DebugLocation& loc, bool needCheck)
 {
     (void)needCheck;
@@ -590,49 +590,45 @@ Ptr<Value> BoxIfNeeded(
     }
     auto dstIsReferenceTy = expectedTy.IsRef() && StaticCast<RefType*>(&expectedTy)->GetBaseType()->IsReferenceType();
     if (srcIsValueTy && dstIsReferenceTy) {
+        std::vector<Expression*> newExprs;
         auto boxSrcVal = &val;
         if (srcTy->IsRef()) {
             auto loadSrc = builder.CreateExpression<Load>(
                 loc, StaticCast<RefType*>(srcTy)->GetBaseType(), boxSrcVal, &parentBlock);
-            parentBlock.AppendExpression(loadSrc);
+            newExprs.emplace_back(loadSrc);
             boxSrcVal = loadSrc->GetResult();
         }
         auto ret = builder.CreateExpression<Box>(loc, &expectedTy, boxSrcVal, &parentBlock);
-        parentBlock.AppendExpression(ret);
-        return ret->GetResult();
+        newExprs.emplace_back(ret);
+        return {ret->GetResult(), newExprs};
     } else if (srcIsReferenceTy && dstIsValueTy) {
         if (expectedTy.IsRef()) {
             auto ret = builder.CreateExpression<UnBoxToRef>(loc, &expectedTy, &val, &parentBlock);
-            parentBlock.AppendExpression(ret);
-            return ret->GetResult();
+            return {ret->GetResult(), {ret}};
         } else {
             auto ret = builder.CreateExpression<UnBoxToValue>(loc, &expectedTy, &val, &parentBlock);
-            parentBlock.AppendExpression(ret);
-            return ret->GetResult();
+            return {ret->GetResult(), {ret}};
         }
     } else if (LeftTypeIsBoxOfRightType(*srcTy, expectedTy)) {
         auto ret = builder.CreateExpression<UnBoxToValue>(loc, &expectedTy, &val, &parentBlock);
-        parentBlock.AppendExpression(ret);
-        return ret->GetResult();
+        return {ret->GetResult(), {ret}};
     } else if (LeftTypeIsBoxOfRightType(expectedTy, *srcTy)) {
         auto ret = builder.CreateExpression<Box>(loc, &expectedTy, &val, &parentBlock);
-        parentBlock.AppendExpression(ret);
-        return ret->GetResult();
+        return {ret->GetResult(), {ret}};
     }
-    return nullptr;
+    return {nullptr, {}};
 }
 
-// this API should not force to insert the generated expression into the end of block
-Ptr<Value> TypeCastOrBoxIfNeeded(
+// this API does not insert the generated expression into the block; caller must append or move them
+std::pair<Value*, std::vector<Expression*>> TypeCastOrBoxIfNeeded(
     Value& val, Type& expectedTy, CHIRBuilder& builder, Block& parentBlock, const DebugLocation& loc, bool needCheck)
 {
-    Ptr<Value> ret;
-    ret = BoxIfNeeded(val, expectedTy, builder, parentBlock, loc, needCheck);
-    if (ret != nullptr) {
+    auto ret = BoxIfNeeded(val, expectedTy, builder, parentBlock, loc, needCheck);
+    if (ret.first != nullptr) {
         return ret;
     }
     ret = TransformGenericIfNeeded(val, expectedTy, builder, parentBlock, loc, needCheck);
-    if (ret != nullptr) {
+    if (ret.first != nullptr) {
         return ret;
     }
     return TypeCastIfNeeded(val, expectedTy, builder, parentBlock, loc, needCheck);
@@ -724,6 +720,49 @@ std::unordered_map<const GenericType*, Type*> GetInstMapFromCurDefAndExDefToCurT
         replaceTable.merge(tempTable);
     }
     return replaceTable;
+}
+
+std::unordered_map<const GenericType*, Type*> GetInstMapFromApply(const ApplyBase& apply, CHIRBuilder& builder)
+{
+    std::unordered_map<const GenericType*, Type*> instMap;
+    auto callee = apply.GetCallee();
+    // 1. callee is lambda
+    if (auto localVar = DynamicCast<LocalVar*>(callee)) {
+        auto lambda = StaticCast<Lambda*>(localVar->GetExpr());
+        auto genericTypeParams = lambda->GetGenericTypeParams();
+        auto instantiatedTypeArgs = apply.GetInstantiatedTypeArgs();
+        CJC_ASSERT(genericTypeParams.size() == instantiatedTypeArgs.size());
+        for (size_t i = 0; i < genericTypeParams.size(); ++i) {
+            instMap.emplace(genericTypeParams[i], instantiatedTypeArgs[i]);
+        }
+        return instMap;
+    }
+
+    auto func = DynamicCast<Function*>(callee);
+    // 2. callee is parameter, we don't know it's lambda or function, and can't get instMap from it
+    if (func == nullptr) {
+        return instMap;
+    }
+    // 3. callee is function
+    auto customDef = func->GetParentCustomTypeDef();
+    if (customDef != nullptr && customDef->IsGenericDef()) {
+        auto instParentCustomType = apply.GetInstParentCustomTyOfCallee(builder);
+        CJC_NULLPTR_CHECK(instParentCustomType);
+        if (auto exDef = DynamicCast<const ExtendDef*>(customDef)) {
+            auto newMap = exDef->GetExtendedType()->CalculateGenericTyMapping(*instParentCustomType);
+            CJC_ASSERT(newMap.first);
+            instMap = std::move(newMap.second);
+        } else {
+            instMap = GetInstMapFromCurDefToCurType(StaticCast<CustomType&>(*instParentCustomType));
+        }
+    }
+    auto genericTypeParams = func->GetGenericTypeParams();
+    auto instantiatedTypeArgs = apply.GetInstantiatedTypeArgs();
+    CJC_ASSERT(genericTypeParams.size() == instantiatedTypeArgs.size());
+    for (size_t i = 0; i < genericTypeParams.size(); ++i) {
+        instMap.emplace(genericTypeParams[i], instantiatedTypeArgs[i]);
+    }
+    return instMap;
 }
 
 void GetAllInstantiatedParentType(ClassType& cur, CHIRBuilder& builder, std::vector<ClassType*>& parents,
@@ -1218,14 +1257,6 @@ Value* GetCastOriginalTarget(const Expression& expr)
     return nullptr;
 }
 
-bool IsInstanceVarInit(const Value& value)
-{
-    if (auto func = DynamicCast<Function>(&value)) {
-        return func->IsInstanceVarInit();
-    }
-    return false;
-}
-
 std::vector<ClassType*> GetSuperTypesRecusively(Type& subType, CHIRBuilder& builder)
 {
     std::vector<ClassType*> result;
@@ -1236,7 +1267,9 @@ std::vector<ClassType*> GetSuperTypesRecusively(Type& subType, CHIRBuilder& buil
     } else if (auto genericType = DynamicCast<GenericType*>(&subType)) {
         for (auto upperBound : genericType->GetUpperBounds()) {
             auto classType = StaticCast<ClassType*>(upperBound->StripAllRefs());
-            result.emplace_back(classType);
+            if (std::find(result.begin(), result.end(), classType) == result.end()) {
+                result.emplace_back(classType);
+            }
             auto tempParents = GetSuperTypesRecusively(*classType, builder);
             for (auto p : tempParents) {
                 if (std::find(result.begin(), result.end(), p) == result.end()) {
@@ -1366,6 +1399,40 @@ Type* GetInstParentCustomTyOfCallee(
         builtinType && builtinType->IsSameTypeKind(*calleeParentDef->GetType())) {
         // we should compare type pointer, but CPointer<T> is generic type, so we have to compare type kind
         return derefThisType;
+    } else if (auto genericType = DynamicCast<GenericType*>(derefThisType)) {
+        /**
+         * `thisType` is a generic type parameter, find parent type from its upper bounds.
+         *  interface I {
+         *      func foo() {}
+         *  }
+         *  func goo<T>(a: T) where T <: I {
+         *      a.foo()  // `thisType` is Generic-T, `foo`'s parent def is I, parent type is I
+         *  }
+         *
+         *  interface I<U> {
+         *      func foo() {}
+         *  }
+         *  func goo<T>(a: T) where T <: I<Bool> {
+         *      a.foo()  // `thisType` is Generic-T, parent type is I<Bool>
+         *  }
+         *
+         *  interface I<U> {
+         *      func foo(a: U) {}
+         *  }
+         *  func goo<T>(a: T) where T <: I<Bool> & I<Int64> {
+         *      a.foo(1)  // need to pick I<Int64> by argument types
+         *  }
+         */
+        CJC_ASSERT(!genericType->GetUpperBounds().empty());
+        auto parentTypes = GetSuperTypesRecusively(*genericType, builder);
+        std::vector<ClassType*> matchedTypes;
+        for (auto pType : parentTypes) {
+            if (typeAndDefIsEquivalent(*pType, *calleeParentDef)) {
+                matchedTypes.emplace_back(pType);
+            }
+        }
+        CJC_ASSERT(!matchedTypes.empty());
+        return GetInstParentType(matchedTypes, *callee, args, builder);
     } else {
         /**
          * a function declared in parent def, but called by sub type, then we need to compute instantiated parent type
@@ -1392,7 +1459,7 @@ Type* GetInstParentCustomTyOfCallee(
          *      func foo(a: T) {}
          *  }
          *  class B <: A<Bool> & A<Int64> {}
-         *  B().foo(1)  // `thisType` is B<Bool>, `foo`'s parent def is A<T>, then parent type is A<Int64>
+         *  B().foo(1)  // `thisType` is B, `foo`'s parent def is A<T>, then parent type is A<Int64>
          */
         auto parentTypes = GetSuperTypesRecusively(*derefThisType, builder);
         std::vector<ClassType*> matchedTypes;
@@ -1403,11 +1470,6 @@ Type* GetInstParentCustomTyOfCallee(
         }
         return GetInstParentType(matchedTypes, *callee, args, builder);
     }
-}
-
-Type* GetInstParentCustomTypeForApplyCallee(const ApplyBase& expr, CHIRBuilder& builder)
-{
-    return GetInstParentCustomTyOfCallee(*expr.GetCallee(), expr.GetArgs(), expr.GetThisType(), builder);
 }
 
 std::vector<VTableSearchRes> GetFuncIndexInVTable(Type& root, const FuncCallType& funcCallType, CHIRBuilder& builder)
@@ -1656,5 +1718,67 @@ std::vector<Expression*> GetNonDebugUsers(const Value& val)
         }
     }
     return res;
+}
+
+Function* GetCalleeInSrcParentType(
+    Function& callee, const std::string& methodName, std::optional<size_t> expectedOffset)
+{
+    auto def = callee.GetParentCustomTypeDef();
+    CJC_NULLPTR_CHECK(def);
+    ClassDef* srcParentDef = nullptr;
+    size_t offset = 0;
+    for (auto& typeVtable : def->GetDefVTable().GetTypeVTables()) {
+        auto virtualMethods = typeVtable.GetVirtualMethods();
+        for (size_t i = 0; i < virtualMethods.size(); ++i) {
+            auto& vtableItem = virtualMethods[i];
+            if (vtableItem.GetVirtualMethod() == &callee && vtableItem.GetMethodName() == methodName &&
+                (!expectedOffset.has_value() || i == expectedOffset.value())) {
+                srcParentDef = typeVtable.GetSrcParentType()->GetClassDef();
+                offset = i;
+                break;
+            }
+        }
+    }
+    CJC_NULLPTR_CHECK(srcParentDef);
+    if (def->IsClass() && srcParentDef == StaticCast<ClassType*>(def->GetType())->GetClassDef()) {
+        return &callee;
+    }
+    auto srcParentType = StaticCast<ClassType*>(srcParentDef->GetType());
+    const auto& virtualMethods =
+        srcParentDef->GetDefVTable().GetExpectedTypeVTable(*srcParentType).GetVirtualMethods();
+    CJC_ASSERT(offset < virtualMethods.size());
+    return virtualMethods[offset].GetVirtualMethod();
+}
+
+void AddTypeCastForReturnVal(Expression& expr, Type& expectedTy, CHIRBuilder& builder)
+{
+    CJC_ASSERT(Is<FuncCall>(&expr));
+    if (expr.GetResult()->GetType() == &expectedTy) {
+        return;
+    }
+    if (expr.IsTerminator()) {
+        for (auto user : expr.GetResult()->GetUsers()) {
+            auto [typecast, newExprs] = TypeCastOrBoxIfNeeded(
+                *expr.GetResult(), expectedTy, builder, *user->GetParentBlock());
+            for (auto newExpr : newExprs) {
+                newExpr->MoveBefore(user);
+            }
+            user->ReplaceOperand(expr.GetResult(), typecast);
+        }
+    } else {
+        auto [typecast, newExprs] = TypeCastOrBoxIfNeeded(
+            *expr.GetResult(), expectedTy, builder, *expr.GetParentBlock());
+        Expression* insertAfter = &expr;
+        for (auto newExpr : newExprs) {
+            newExpr->MoveAfter(insertAfter);
+            insertAfter = newExpr;
+        }
+        for (auto user : expr.GetResult()->GetUsers()) {
+            if (std::find(newExprs.begin(), newExprs.end(), user) != newExprs.end()) {
+                continue;
+            }
+            user->ReplaceOperand(expr.GetResult(), typecast);
+        }
+    }
 }
 } // namespace Cangjie::CHIR

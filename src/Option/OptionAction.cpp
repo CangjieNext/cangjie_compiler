@@ -258,7 +258,8 @@ bool ParseTargetTriple(GlobalOptions& opts, const std::string& triple)
                 }
 #ifndef CANGJIE_ENABLE_GCOV
             } catch (std::exception const&) {
-                Errorln("The Android API level is illegal. Please use a valid API level which is greater than or equal to 26.");
+                Errorln("The Android API level is illegal."
+                        " Please use a valid API level which is greater than or equal to 23.");
             }
 #endif
         }

@@ -12,6 +12,7 @@
 
 #include "Handlers.h"
 #include "cangjie/AST/Match.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
@@ -25,17 +26,21 @@ void CheckTopLevelFuncTypes::HandleImpl(TypeCheckContext& ctx)
 
     for (auto& paramList : fd->funcBody->paramLists) {
         for (auto& param : paramList->params) {
-            if (!ctx.typeMapper.IsObjCCompatible(*param->GetTy())) {
-                ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_interop_toplevel_param_must_be_objc_compatible,
+            if (!IsObjCCompatible(*param->GetTy(), TypePosition::IN)) {
+                auto builder = ctx.diag.DiagnoseRefactor(
+                    DiagKindRefactor::sema_objc_interop_toplevel_param_must_be_objc_compatible,
                     *param->type, fd->identifier.Val());
+                builder.AddMainHintArguments(param->type->ToString());
 
                 fd->EnableAttr(Attribute::IS_BROKEN);
             }
         }
     }
-    if (fd->funcBody->retType && !ctx.typeMapper.IsObjCCompatible(*fd->funcBody->retType->GetTy())) {
-        ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_interop_toplevel_ret_must_be_objc_compatible,
+    if (fd->funcBody->retType && !IsObjCCompatible(*fd->funcBody->retType->GetTy(), TypePosition::OUT)) {
+        auto builder = ctx.diag.DiagnoseRefactor(
+            DiagKindRefactor::sema_objc_interop_toplevel_ret_must_be_objc_compatible,
             *fd->funcBody->retType, fd->identifier.Val());
+        builder.AddMainHintArguments(fd->funcBody->retType->ToString());
 
         fd->EnableAttr(Attribute::IS_BROKEN);
     }

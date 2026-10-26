@@ -307,7 +307,7 @@ if(CANGJIE_CODEGEN_CJNATIVE_BACKEND) # i.e. "--compile-backend" option
                 LIST_SEPARATOR |
                 CMAKE_ARGS ${LLVM_CMAKE_ARGS}
                 USES_TERMINAL_BUILD ON
-                DEPENDS cangjie-demangler boundscheck)
+                DEPENDS cangjie-demangler boundscheck boundscheck-static)
         else()
             set(LLVM_REPO_DOWNLOAD_ARGS
                 DOWNLOAD_COMMAND git clone -b ${LLVM_TAG} --depth=1 ${REPOSITORY_PATH} <SOURCE_DIR>)
@@ -342,7 +342,7 @@ if(CANGJIE_CODEGEN_CJNATIVE_BACKEND) # i.e. "--compile-backend" option
                 LIST_SEPARATOR |
                 CMAKE_ARGS ${LLVM_CMAKE_ARGS}
                 USES_TERMINAL_BUILD ON
-                DEPENDS cangjie-demangler boundscheck)
+                DEPENDS cangjie-demangler boundscheck boundscheck-static)
         endif()
         ExternalProject_Get_Property(cjnative SOURCE_DIR)
         add_custom_command(

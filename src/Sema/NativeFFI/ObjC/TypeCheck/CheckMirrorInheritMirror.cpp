@@ -12,17 +12,20 @@
  */
 
 #include "Handlers.h"
-#include "cangjie/AST/Match.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
+
+namespace Cangjie::Interop::ObjC {
 
 using namespace Cangjie::AST;
-using namespace Cangjie::Interop::ObjC;
 
 void CheckMirrorInheritMirror::HandleImpl(TypeCheckContext& ctx)
 {
-    if (ctx.typeMapper.IsValidObjCMirror(*ctx.target.GetTy())) {
+    if (IsValidObjCMirror(*ctx.target.GetTy())) {
         return;
     }
 
     ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_mirror_must_inherit_mirror, ctx.target);
     ctx.target.EnableAttr(Attribute::IS_BROKEN);
 }
+
+} // namespace Cangjie::Interop::ObjC

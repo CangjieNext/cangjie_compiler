@@ -10,6 +10,7 @@
 #include "cangjie/CHIR/Analysis/CallGraphAnalysis.h"
 #include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
 #include "cangjie/CHIR/Analysis/DevirtualizationInfo.h"
+#include "cangjie/CHIR/Analysis/UnreachableBlockAnalysis.h"
 #include "cangjie/CHIR/Checker/CHIRChecker.h"
 #include "cangjie/CHIR/Checker/AnnotationChecker.h"
 #include "cangjie/CHIR/Checker/UnreachableBranchCheck.h"
@@ -20,7 +21,6 @@
 #include "cangjie/CHIR/Optimization/ConstPropagation.h"
 #include "cangjie/CHIR/Optimization/DeadCodeElimination.h"
 #include "cangjie/CHIR/Optimization/Devirtualization.h"
-#include "cangjie/CHIR/Optimization/DevirtualizeTrivialStatics.h"
 #include "cangjie/CHIR/Optimization/FunctionInline.h"
 #include "cangjie/CHIR/Optimization/GetRefToArrayElem.h"
 #include "cangjie/CHIR/Optimization/MergeBlocks.h"
@@ -259,8 +259,8 @@ void ToCHIR::DoClosureConversion()
 void ToCHIR::UnreachableBlockReporter()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "UnreachableBlockWarningReporter");
-    auto dce = DeadCodeElimination(builder, diag, *chirPkg);
-    dce.UnreachableBlockWarningReporter(*chirPkg, opts.GetJobs(), maybeUnreachable);
+    auto unreachableAnalysis = UnreachableBlockAnalysis(diag, *chirPkg);
+    unreachableAnalysis.RunOnPackage(opts.GetJobs());
 }
 
 void ToCHIR::UnreachableBlockElimination()
@@ -284,6 +284,19 @@ void ToCHIR::UnreachableBranchReporter()
     Utils::ProfileRecorder recorder("RulesChecking", "UnreachableBranchReporter");
     auto check = CHIR::UnreachableBranchCheck(&constAnalysisWrapper, diag, chirPkg->GetName());
     check.RunOnPackage(*chirPkg, opts.GetJobs());
+}
+
+void ToCHIR::ClearMatchMetadata()
+{
+    for (auto func : chirPkg->GetGlobalFuncsWithBody()) {
+        for (auto block : func->GetBody()->GetAllBlocks()) {
+            block->DisableAttr(Attribute::MATCH_PATTERN);
+            block->Remove<MatchCaseId>();
+            for (auto expr : block->GetExpressions()) {
+                expr->DisableAttr(Attribute::MATCH_PATTERN);
+            }
+        }
+    }
 }
 
 void ToCHIR::UselessExprElimination()
@@ -323,7 +336,7 @@ void ToCHIR::RedundantLoadElimination()
     }
     Utils::ProfileRecorder recorder("CHIR Opt", "RedundantLoadElimination");
     auto rle = CHIR::RedundantLoadElimination();
-    rle.RunOnPackage(chirPkg, opts.chirDebugOptimizer);
+    rle.RunOnPackage(*chirPkg);
     DumpCHIRToFile("RedundantLoadElimination");
 }
 
@@ -347,29 +360,25 @@ void ToCHIR::RunGetRefToArrayElemOpt()
     DumpCHIRToFile("ArrayGetRefOpt");
 }
 
-void ToCHIR::Devirtualization(DevirtualizationInfo& devirtInfo)
+void ToCHIR::Devirtualization()
 {
     if (!opts.IsOptimizationExisted(GlobalOptions::OptimizationFlag::DEVIRTUALIZATION) ||
         opts.enIncrementalCompilation) {
         return;
     }
 
+    Utils::ProfileRecorder::Start("CHIR Opt", "Collect Devirt Info");
+    DevirtualizationInfo devirtInfo(chirPkg);
+    devirtInfo.Collect();
+    Utils::ProfileRecorder::Stop("CHIR Opt", "Collect Devirt Info");
+
     Utils::ProfileRecorder recorder("CHIR Opt", "Devirtualization");
-    devirtInfo.FreshRetMap();
-    devirtInfo.CollectConstMemberVarType();
-    auto funcs = CHIR::Devirtualization::CollectContainInvokeExprFuncs(chirPkg);
-    // Only process functions containing invoke expressions.
-    if (funcs.empty()) {
-        return;
-    }
     size_t threadNum = opts.GetJobs();
     TypeValue::SetCHIRBuilder(&builder);
     AnalysisWrapper<TypeAnalysis, TypeDomain> typeAnalysisWrapper(builder);
     typeAnalysisWrapper.RunOnPackage(chirPkg, opts.chirDebugOptimizer, threadNum, devirtInfo);
-    auto devirt = CHIR::Devirtualization(&typeAnalysisWrapper, devirtInfo);
-    devirt.RunOnFuncs(funcs, builder, opts.chirDebugOptimizer);
-    auto devirtStatics = CHIR::DevirtualizeTrivialStatics();
-    devirtStatics.RunOnPackage(*chirPkg, builder, opts.chirDebugOptimizer);
+    auto devirt = CHIR::Devirtualization(&typeAnalysisWrapper, devirtInfo, builder, *chirPkg, opts);
+    devirt.RunOnFuncs(chirPkg->GetGlobalFuncsWithBody());
 
     // if get frozen inst funcs after first devirtualization, opt them in the second round
     if (!devirt.GetFrozenInstFuns().empty()) {
@@ -378,7 +387,7 @@ void ToCHIR::Devirtualization(DevirtualizationInfo& devirtInfo)
             auto res = typeAnalysisWrapper.RunOnFunc(func, opts.chirDebugOptimizer, devirtInfo);
             devirt.AppendFrozenFuncState(func, std::move(res));
         }
-        devirt.RunOnFuncs(frozenFuncs, builder, opts.chirDebugOptimizer);
+        devirt.RunOnFuncs(frozenFuncs);
 
         auto pass = FunctionInline(
             builder, opts.optimizationLevel, opts.chirDebugOptimizer);
@@ -429,13 +438,13 @@ void ToCHIR::RunArrayListConstStartOpt()
     DumpCHIRToFile("RunArrayListConstStartOpt");
 }
 
-void ToCHIR::RunFunctionInline(DevirtualizationInfo& devirtInfo)
+void ToCHIR::RunFunctionInline()
 {
     if (!opts.IsOptimizationExisted(GlobalOptions::OptimizationFlag::FUNC_INLINING)) {
         return;
     }
     Utils::ProfileRecorder::Start("CHIR Opt", "FunctionInline");
-    CallGraphAnalysis callGraphAnalysis(chirPkg, devirtInfo);
+    CallGraphAnalysis callGraphAnalysis(chirPkg);
     // Collect all call graph information.
     callGraphAnalysis.DoCallGraphAnalysis(false);
     auto pass = FunctionInline(builder, opts.optimizationLevel, opts.chirDebugOptimizer);
@@ -610,19 +619,6 @@ void ToCHIR::RunUnitUnify()
     DumpCHIRToFile("Unit_Unify");
 }
 
-DevirtualizationInfo ToCHIR::CollectDevirtualizationInfo()
-{
-    Utils::ProfileRecorder recorder("CHIR Opt", "Collect Devirt Info");
-    DevirtualizationInfo devirtInfo(chirPkg, opts);
-    if (opts.IsOptimizationExisted(GlobalOptions::OptimizationFlag::FUNC_INLINING) ||
-        (opts.IsOptimizationExisted(GlobalOptions::OptimizationFlag::DEVIRTUALIZATION) &&
-            !opts.enIncrementalCompilation)) {
-        // Collect all inheritance tree information.
-        devirtInfo.CollectInfo();
-    }
-    return devirtInfo;
-}
-
 void ToCHIR::OptimizeFuncReturnType()
 {
     Utils::ProfileRecorder recorder("CHIR Opt", "Optimize Function Return Type");
@@ -637,13 +633,12 @@ void ToCHIR::RunOptimizationPass()
     OptimizeFuncReturnType();
     RunArrayListConstStartOpt();
     RunUnitUnify();
-    auto devirtInfo = CollectDevirtualizationInfo();
-    RunFunctionInline(devirtInfo);
+    RunFunctionInline();
     RedundantLoadElimination();
     RedundantGetOrThrowElimination();
     RunRangePropagation();
     UselessAllocateElimination();
-    Devirtualization(devirtInfo);
+    Devirtualization();
     RunArrayLambdaOpt();
     RunRedundantFutureOpt();
     RunGetRefToArrayElemOpt();
@@ -1064,9 +1059,7 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
     }
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
-        auto fileName =
-            FileUtil::JoinPath(opts.output, chirPkg->GetName()) + std::string(CHIR_SERIALIZATION_FILE_EXTENSION);
-        CHIRSerializer::Serialize(*chirPkg, fileName, CHIR::ToCHIR::RAW);
+        EmitCHIR(outputPath, *chirPkg, Phase::RAW, opts.NeedDumpCHIR());
         return true;
     }
 #endif
@@ -1104,6 +1097,7 @@ bool ToCHIR::RulesChecking()
         return false;
     }
     UnreachableBranchReporter();
+    ClearMatchMetadata();
     // this instantance of block elimination is to maintain dead code warnings
     UnreachableBlockElimination();
     RunMergingBlocks("RulesChecking", "MergingBlockAfterUnreachableBlock");
@@ -1135,9 +1129,7 @@ bool ToCHIR::Run()
     }
     // 2. for cjmp, while compiling common package, just be here and save CHIR to file.
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
-        auto fileName =
-            FileUtil::JoinPath(opts.output, chirPkg->GetName()) + std::string(CHIR_SERIALIZATION_FILE_EXTENSION);
-        CHIRSerializer::Serialize(*chirPkg, fileName, CHIR::ToCHIR::RAW);
+        EmitCHIR(outputPath, *chirPkg, Phase::RAW, opts.NeedDumpCHIR());
         return true;
     }
     // 3. run plugin for CHIR
@@ -1240,7 +1232,7 @@ bool ToCHIR::ExecuteCjPlugins()
     // 3. deserialize plugin result, get new package of cpp
     if (succeed) {
         if (auto newPackage = executePlugin.DeserializePluginResult(
-            srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar, maybeUnreachable)) {
+            srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar)) {
             chirPkg = newPackage;
         } else {
             succeed = false;
@@ -1349,7 +1341,6 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
     srcCodeImportedFuncs = ast2CHIR.GetSrcCodeImportedFuncs();
     srcCodeImportedVars = ast2CHIR.GetSrcCodeImportedVars();
     initFuncsForConstVar = ast2CHIR.GetInitFuncsForConstVar();
-    maybeUnreachable = ast2CHIR.GetMaybeUnreachableBlocks();
     if (isComputingAnnos) {
         annoFactoryFuncs = ast2CHIR.GetAnnoFactoryFuncs();
         globalNominalCache = std::move(chirTypeCache.globalNominalCache);

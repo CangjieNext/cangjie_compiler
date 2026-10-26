@@ -11,7 +11,7 @@
  */
 
 #include "Handlers.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "cangjie/AST/Match.h"
 
 using namespace Cangjie::AST;
@@ -19,20 +19,16 @@ using namespace Cangjie::Interop::ObjC;
 
 void GenerateDeleteCJObjectMethod::HandleImpl(InteropContext& ctx)
 {
-    auto genNativeDeleteMethod = [&ctx](Decl& decl) {
-        if (decl.TestAttr(Attribute::IS_BROKEN)) {
-            return;
-        }
-        auto deleteCjObject = ctx.factory.CreateDeleteCjObject(decl);
-        CJC_ASSERT(deleteCjObject);
-        ctx.genDecls.emplace_back(std::move(deleteCjObject));
-    };
-
     for (auto& impl : ctx.impls) {
-        // generate only for root @ObjCImpl classes
-        if (HasImplSuperClass(*impl)) {
+        if (impl->TestAttr(Attribute::IS_BROKEN)) {
             continue;
         }
-        genNativeDeleteMethod(*impl);
+
+        // generate only for root @ObjCImpl classes
+        if (HasObjCImplSuperClass(*impl)) {
+            continue;
+        }
+        auto deleteCjObject = ctx.factory.CreateDeleteCjObject(*impl);
+        ctx.genDecls.push_back(std::move(deleteCjObject));
     }
 }

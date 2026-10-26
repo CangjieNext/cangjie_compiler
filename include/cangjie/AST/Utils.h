@@ -92,7 +92,6 @@ bool IsSingleByteStringLiteral(const Expr& expr);
 
 Ptr<AST::FuncDecl> GetSizeDecl(const AST::Ty& ty);
 
-std::optional<AST::Attribute> HasJavaAttr(const AST::Node& node) noexcept;
 /**
  * Initialize @p lce 's constValue with its string value.
  */
@@ -126,17 +125,6 @@ void IterateAllExportableDecls(const AST::Package& pkg, const std::function<void
 
 std::vector<Ptr<AST::Pattern>> FlattenVarWithPatternDecl(const AST::VarWithPatternDecl& vwpDecl);
 std::string GetAnnotatedDeclKindString(const Decl& decl);
-inline bool InsideAtJavaDecl(const AST::Decl& decl)
-{
-    if ((decl.astKind == AST::ASTKind::FUNC_DECL || decl.astKind == AST::ASTKind::VAR_DECL) &&
-        decl.TestAttr(AST::Attribute::IN_CLASSLIKE)) {
-        return HasJavaAttr(decl).has_value();
-    }
-    if (decl.astKind == AST::ASTKind::FUNC_PARAM && decl.outerDecl) {
-        return InsideAtJavaDecl(*decl.outerDecl);
-    }
-    return false;
-}
 
 bool IsPackageMemberAccess(const AST::MemberAccess& ma);
 bool IsThisOrSuper(const AST::Expr& expr);
@@ -264,24 +252,5 @@ bool IsMirror(const Node& node);
 bool IsSyntheticMirrorWrapper(const AST::Node& node);
 bool IsObject(const Node& node);
 } // namespace Cangjie::Interop::Java
-
-namespace Cangjie::Interop::ObjC {
-
-bool IsDeclAppropriateForSyntheticClassGeneration(const AST::Decl& decl);
-
-/**
- * Generates and inserts the synthetic class declaration.
- * The synthetic class implements the given interface and has the following structure:
- *
- * Example of generated synthetic
- * ```
- * interface CL <: ObjCId {}
- *
- * class CL$impl <: CL {}
- * ```
- */
-void InsertSyntheticClassDecl(AST::ClassLikeDecl& decl, AST::File& file);
-
-}
 
 #endif

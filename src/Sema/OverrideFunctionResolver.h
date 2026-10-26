@@ -24,6 +24,7 @@ namespace Cangjie {
 
 using MemberFuncsWithInstTys = std::unordered_map<Ptr<AST::FuncDecl>, std::unordered_set<Ptr<AST::FuncTy>>>;
 using MemberFuncWithInstTys = std::pair<Ptr<AST::FuncDecl>, std::unordered_set<Ptr<AST::FuncTy>>>;
+using MemberFuncSet = std::set<Ptr<AST::FuncDecl>, AST::CmpNodeByPos>;
 
 /**
  * A utility class to resolve and manage overridden member functions for a given type.
@@ -71,6 +72,10 @@ public:
 
     Ptr<AST::Ty> GetMatchedFuncInstTyByGivenTarget(
         MemberFuncWithInstTys& candidates, const AST::FuncDecl& target, const Ptr<AST::Ty>& targetBaseTy);
+
+    bool IsImplementationFunc(const AST::FuncDecl& srcFunc, const AST::FuncDecl& superFunc);
+
+    MemberFuncSet GetTopOverriddenFuncs(AST::Ty& instBaseTy, const AST::FuncDecl& funcDecl);
 
     /**
      * Clear the global cache.

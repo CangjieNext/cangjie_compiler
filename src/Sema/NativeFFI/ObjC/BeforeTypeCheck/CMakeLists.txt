@@ -5,4 +5,5 @@
 # See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 file(GLOB SEMA_NATIVE_FFI_OBJ_C_BEFORE_TYPECHECK_SRC *.cpp)
+add_subdirectory(Utils)
 set(SEMA_NATIVE_FFI_OBJ_C_SRC ${SEMA_NATIVE_FFI_OBJ_C_SRC} ${SEMA_NATIVE_FFI_OBJ_C_BEFORE_TYPECHECK_SRC} PARENT_SCOPE)

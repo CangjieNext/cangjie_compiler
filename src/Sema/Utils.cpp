@@ -372,9 +372,10 @@ void TypeChecker::TypeCheckerImpl::AddDefaultCtor(InheritableDecl& decl) const
         return;
     }
 
-    // Do not add default constructor to Objective-C mirrors declarations
+    // Do not add default constructor to Objective-C mirrors / handle wrapper / registry companion declarations
     // because it requires explicitly added one
-    if (decl.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SYNTHETIC_WRAPPER)) {
+    if (decl.TestAnyAttr(Attribute::OBJ_C_FOREIGN, Attribute::OBJ_C_FOREIGN_INTERFACE_HANDLE_WRAPPER,
+            Attribute::OBJ_C_EXPORT_REGISTRY_COMPANION)) {
         return;
     }
 
@@ -382,7 +383,7 @@ void TypeChecker::TypeCheckerImpl::AddDefaultCtor(InheritableDecl& decl) const
     // because it requires explicitly added one.
     {
         using namespace Interop::Java;
-        if (decl.IsJavaMirror() || IsImplRegistryCompanion(decl) || IsSyntheticMirrorWrapper(decl)) {
+        if (decl.IsJavaForeign() || IsImplRegistryCompanion(decl) || IsSyntheticMirrorWrapper(decl)) {
             return;
         }
     }

@@ -428,20 +428,22 @@ void TypeChecker::TypeCheckerImpl::DesugarForPropDecl(Node& pkg)
 void TypeChecker::TypeCheckerImpl::PerformDesugarAfterTypeCheck(ASTContext& ctx, Package& pkg)
 {
     Interop::Java::JavaInteropManager jim(importManager, typeManager, diag, *ci->mangler,
-        ci->invocation.globalOptions.outputJavaGenDir, ci->invocation.globalOptions.output);
+        ci->invocation.globalOptions.outputJavaGenDir, ci->invocation.globalOptions.output,
+        ci->invocation.globalOptions.target);
 
     jim.CheckImplRedefinition(pkg);
     for (auto& file : pkg.files) {
         jim.CheckTypes(*file);
     }
 
-    jim.DesugarPackage(pkg, structMemberMap, [this](auto& node) {
+    jim.DesugarPackage(pkg, [this](auto& node) {
         DesugarForPropDecl(node);
     });
     Interop::ObjC::Desugar(Interop::ObjC::InteropContext(
         pkg, typeManager, importManager, diag, *ci->mangler,
         ci->invocation.globalOptions.output, ci->invocation.globalOptions.outputObjCGenDir,
-        structMemberMap, ci->invocation.globalOptions.target.os));
+        ci->invocation.globalOptions.target.os,
+        [this](auto& node) { DesugarForPropDecl(node); }));
 
     DesugarDeclsForPackage(pkg, ci->invocation.globalOptions.enableCoverage);
     std::function<VisitAction(Ptr<Node>)> preVisit = [this, &ctx](Ptr<Node> node) -> VisitAction {

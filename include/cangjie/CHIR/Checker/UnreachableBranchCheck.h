@@ -26,7 +26,18 @@ public:
     void RunOnFunc(const Ptr<Function> func);
 
 private:
-    void PrintWarning(const Expression& node, Block& block, std::set<Block*>& hasProcessed, bool isRecursive = false);
+    void PrintWarning(const Expression& node, Block& block, std::set<Block*>& hasProcessed);
+    /** Reports later cases only while their entries remain unreachable. */
+    template <typename TConstDomain>
+    void PrintMatchSuccessors(Results<TConstDomain>& result, Block& block, std::set<Block*>& hasProcessed);
+    /** Groups unreachable enum-table fragments by source case. */
+    template <typename TConstDomain>
+    bool TryVisitEnumMatchTable(
+        Results<TConstDomain>& result, MultiBranch& table, Block& target, std::set<Block*>& hasProcessed);
+    /** Diagnoses excluded successors of Branch and MultiBranch using the same edge and entry-state rules. */
+    template <typename TConstDomain>
+    void VisitTerminator(
+        Results<TConstDomain>& result, Expression& terminator, Block& target, std::set<Block*>& hasProcessed);
 
     template <typename TConstDomain>
     void VisitFunc(Results<TConstDomain>& result);

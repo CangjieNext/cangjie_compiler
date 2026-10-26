@@ -470,10 +470,6 @@ void PrintBasicpeAliasDecl(unsigned indent, const TypeAliasDecl& alias, std::ost
 
 void PrintClassDecl(unsigned indent, const ClassDecl& classDecl, std::ostream& stream = std::cout)
 {
-    if (auto attr = HasJavaAttr(classDecl); attr) {
-        std::string argStr = attr.value() == Attribute::JAVA_APP ? "app" : "ext";
-        PrintIndent(stream, indent, "@Java[\"" + argStr + "\"]");
-    }
     PrintIndent(stream, indent, "ClassDecl:", classDecl.identifier.Val(), "{");
     PrintBasic(indent + ONE_INDENT, classDecl, stream);
     PrintAnnotations(classDecl, indent + ONE_INDENT, stream);
@@ -494,9 +490,6 @@ void PrintClassDecl(unsigned indent, const ClassDecl& classDecl, std::ostream& s
 
 void PrintInterfaceDecl(unsigned indent, const InterfaceDecl& interfaceDecl, std::ostream& stream = std::cout)
 {
-    if (auto attr = HasJavaAttr(interfaceDecl); attr) {
-        PrintIndent(stream, indent, "@Java[\"", attr.value() == Attribute::JAVA_APP ? "app" : "ext", "\"]");
-    }
     PrintIndent(stream, indent, "InterfaceDecl:", interfaceDecl.identifier.Val(), "{");
     PrintBasic(indent + ONE_INDENT, interfaceDecl, stream);
     PrintModifiers(interfaceDecl, indent, stream);

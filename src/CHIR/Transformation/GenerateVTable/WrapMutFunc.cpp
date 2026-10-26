@@ -182,12 +182,15 @@ void WrapMutFunc::CreateMutFuncWrapper(Function& rawFunc, CustomTypeDef& curDef,
         Cangjie::CHIR::CreateAndAppendExpression<Allocate>(builder, builder.GetType<RefType>(retTy), retTy, entry);
     func->SetReturnValue(*ret->GetResult());
 
-    auto rawFuncFirstArgType = rawFunc.GetFuncType()->GetParamTypes()[0]->StripAllRefs();
+    auto rawFuncFirstArgType = rawFunc.GetFuncType()->GetParamType(0)->StripAllRefs();
     auto firstArgType = GetInstSubType(*rawFuncFirstArgType, srcClassTy, builder);
     if (!firstArgType->IsValueType() || rawFunc.TestAttr(Attribute::MUT)) {
         firstArgType = builder.GetType<RefType>(firstArgType);
     }
-    args[0] = Cangjie::CHIR::TypeCastOrBoxIfNeeded(*args[0], *firstArgType, builder, *entry, INVALID_LOCATION);
+    auto [castedArg0, castedArg0Exprs] =
+        Cangjie::CHIR::TypeCastOrBoxIfNeeded(*args[0], *firstArgType, builder, *entry, INVALID_LOCATION);
+    entry->AppendExpressions(castedArg0Exprs);
+    args[0] = castedArg0;
 
     std::vector<Type*> instArgTypes;
     instArgTypes.reserve(wrapperGenericParams.size());
@@ -201,8 +204,9 @@ void WrapMutFunc::CreateMutFuncWrapper(Function& rawFunc, CustomTypeDef& curDef,
     Cangjie::CHIR::CreateAndAppendExpression<Store>(
         builder, builder.GetUnitTy(), apply->GetResult(), func->GetReturnValue(), entry);
 
-    auto tempThis =
+    auto [tempThis, tempThisExprs] =
         Cangjie::CHIR::TypeCastOrBoxIfNeeded(*args[0], *wrapperParamsTy[0], builder, *entry, INVALID_LOCATION);
+    entry->AppendExpressions(tempThisExprs);
     auto load = Cangjie::CHIR::CreateAndAppendExpression<Load>(builder, parentDefType, tempThis, entry)->GetResult();
     auto structMemberTypes = StaticCast<StructType*>(parentDefType)->GetInstantiatedMemberTys(builder);
 

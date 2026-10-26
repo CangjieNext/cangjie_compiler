@@ -18,7 +18,7 @@ using namespace Cangjie::Interop::ObjC;
 
 void CheckImplTypes::HandleImpl(InteropContext& ctx)
 {
-    auto checker = HandlerFactory<TypeCheckContext>::Start<CheckMirrorSubtypeAttr>()
+    auto checker = HandlerFactory<TypeCheckContext>::Start<CheckImplAttr>()
                        .Use<CheckImplInheritMirror>()
                        .Use<CheckForeignName>()
                        .Use<CheckMemberTypes>();
@@ -27,5 +27,13 @@ void CheckImplTypes::HandleImpl(InteropContext& ctx)
         auto typeCheckCtx = TypeCheckContext(*impl, ctx.diag, ctx.typeMapper, ctx.typeManager);
 
         checker.Handle(typeCheckCtx);
+    }
+
+    auto interfaceChecker = HandlerFactory<TypeCheckContext>::Start<CheckImplAttr>();
+
+    for (auto interface : ctx.unannotatedMirrorSubtypeInterfaces) {
+        auto typeCheckCtx = TypeCheckContext(*interface, ctx.diag, ctx.typeMapper, ctx.typeManager);
+
+        interfaceChecker.Handle(typeCheckCtx);
     }
 }

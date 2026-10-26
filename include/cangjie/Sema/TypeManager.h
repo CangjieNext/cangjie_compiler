@@ -14,6 +14,7 @@
 #define CANGJIE_SEMA_TYPE_MANAGER_H
 
 #include <cassert>
+#include <mutex>
 #include <stack>
 #include <unordered_map>
 
@@ -198,7 +199,6 @@ public:
     TypeSubst GenerateGenericMappingFromGeneric(const AST::Decl& parentDecl, const AST::Decl& childDecl) const;
     MultiTypeSubst GenerateStructDeclTypeMapping(const AST::Decl& decl);
     Ptr<AST::Ty> ReplaceIdealTy(Ptr<AST::Ty> ty);
-    void RestoreJavaGenericsTy(AST::Decl& decl) const;
 
     /**
      * Get all extend interface types.
@@ -239,7 +239,6 @@ public:
         tyExtendInterfaceTyMap.clear();
         tyToSuperTysMap.clear();
         overrideOrShadowCache.clear();
-        overrideMap.clear();
         ClearRecordUsedExtends();
         subtypeCache.clear();
     }
@@ -276,8 +275,11 @@ public:
     Ptr<AST::Decl> GetOverrideDeclInClassLike(
         AST::Decl& baseDecl, const AST::FuncDecl& funcDecl, bool withAbstractOverrides = false);
 
-    void UpdateTopOverriddenFuncDeclMap(const AST::Decl* src, const AST::Decl* target);
-    Ptr<const AST::FuncDecl> GetTopOverriddenFuncDecl(const AST::FuncDecl* funcDecl) const;
+    /**
+     * Return the top-most function in the override chain of @p funcDecl.
+     * If @p funcDecl is already the top-most (does not override anything), return itself.
+     */
+    Ptr<const AST::FuncDecl> GetTopOverriddenFuncDecl(const AST::FuncDecl* funcDecl);
     /**
      * whether the decl is override the funcDecl.
      */
@@ -368,9 +370,6 @@ public:
 private:
     friend class TyVarScope;
     friend class InstCtxScope;
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    friend class TyGeneralizer;
-#endif
     void ReleaseTyVar(Ptr<AST::GenericsTy> genTy);
 
 public:
@@ -542,12 +541,6 @@ private:
     };
     /** Stores the overwrite or shadow judgment result determined based on BaseTy, src funcDecl, and target funcDecl. */
     std::unordered_map<OverrideOrShadowKey, bool, OverrideOrShadowHash, OverrideOrShadowEqual> overrideOrShadowCache;
-    /**
-     * Cache that maps a function declaration to the list of function declarations it overrides.
-     * For each key `f`, `overrideMap[f]` contains the parent/super function(s) overridden by `f`.
-     * This is used to find the top overridden function(s) for a given function declaration.
-     */
-    std::unordered_map<Ptr<const AST::FuncDecl>, std::vector<Ptr<const AST::FuncDecl>>> overrideMap;
 
     // a counter for naming tyvars
     unsigned long long nextUniqId{0};
@@ -569,6 +562,8 @@ private:
     template <typename TypeT, typename... Args> TypeT* GetTypeTy(Args&&... args);
     bool IsClassTyEqual(AST::Ty& leaf, AST::Ty& root);
     Ptr<AST::Ty> GetExtendInterfaceSuperTy(AST::ClassTy& classTy, const AST::Ty& interfaceTy);
+
+    mutable std::mutex overrideResolverImplMutex;
 
     /**
      * The class is used to store typeMapping and ctxVars as context condition of the recursive instantiation.

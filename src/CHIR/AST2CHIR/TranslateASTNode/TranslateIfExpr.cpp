@@ -187,13 +187,15 @@ protected:
             // translate let pattern
             context.ScopePlus();
             auto [patternFalseBlock, patternTrueBlock] = let.patterns.size() == 1
-                ? tr.TranslateNestingCasePattern(*let.patterns[0], selectorVal, originLoc, SourceExpr::IF_EXPR)
-                : tr.TranslateOrPattern(let.patterns, selectorVal, originLoc);
+                ? tr.TranslateNestingCasePattern(*let.patterns[0], selectorVal, originLoc, GetSourceExpr())
+                : tr.TranslateOrPattern(let.patterns, selectorVal, originLoc, GetSourceExpr());
 
             // translate pattern not match block
             if (isRightmost) {
                 auto tb = TranslateTrueBlock();
                 auto fb = TranslateFalseBlock();
+                patternTrueBlock->SetDebugLocation(tb->GetDebugLocation());
+                patternFalseBlock->SetDebugLocation(fb->GetDebugLocation());
                 CreateGoto(*tb, *patternTrueBlock);
                 CreateGoto(*fb, *patternFalseBlock);
                 return {};
@@ -223,6 +225,10 @@ protected:
         if (isRightmost) {
             auto tb = TranslateTrueBlock();
             auto fb = TranslateFalseBlock();
+            res.tb->SetDebugLocation(tb->GetDebugLocation());
+            if (res.fb) {
+                res.fb->SetDebugLocation(fb->GetDebugLocation());
+            }
             CreateGoto(*tb, *res.tb);
             if (res.fb) {
                 CreateGoto(*fb, *res.fb);
@@ -265,10 +271,13 @@ protected:
             indices.push_back(p.first);
             blocks.push_back(p.second);
         }
-        tr.CreateAndAppendTerminator<MultiBranch>(firstSelectorVal, firstDefaultBlock, indices, blocks, baseBlock);
+        auto firstMultiBranch =
+            tr.CreateAndAppendTerminator<MultiBranch>(firstSelectorVal, firstDefaultBlock, indices, blocks, baseBlock);
+        firstMultiBranch->SetSourceExpr(GetSourceExpr());
 
         // Create second switch block.
-        auto branchInfos = tr.TranslateSecondLevelAsTable(matchInfo, &enumVal, firstDefaultBlock);
+        auto branchInfos =
+            tr.TranslateSecondLevelAsTable(matchInfo, &enumVal, firstDefaultBlock, GetSourceExpr());
         // Finally create goto from case's true block to caseBody block.
         for (auto& block : std::as_const(branchInfos[0])) {
             CreateGoto(*tb, *block);
@@ -331,7 +340,9 @@ protected:
         }
         auto castedVal = tr.TypeCastOrBoxIfNeeded(val, *targetType, {});
         auto loc = tr.TranslateLocation(let);
-        auto multib = tr.CreateAndAppendTerminator<MultiBranch>(castedVal, defaultBlock, indices, blocks, baseBlock);
+        auto multib =
+            tr.CreateAndAppendTerminator<MultiBranch>(castedVal, defaultBlock, indices, blocks, baseBlock);
+        multib->SetSourceExpr(GetSourceExpr());
         multib->SetDebugLocation(loc);
         tr.currentBlock = endBlock;
         return {tb, isStillReachable ? defaultBlock : nullptr};
@@ -443,6 +454,15 @@ public:
         }
         tr.SetCurrentBlock(*endBlock);
         if (retVal) {
+            auto predecessors = endBlock->GetPredecessors();
+            // In a nested all-return form such as `if (useWide) { if (...) return ... } else { ... }`,
+            // expected-type propagation leaves one generated GoTo in each join predecessor but no
+            // stored value. Do not create a load for this type-only result.
+            if (std::all_of(predecessors.begin(), predecessors.end(), [](auto predecessor) {
+                    return predecessor->GetExpressions().size() == 1U;
+                })) {
+                return nullptr;
+            }
             auto ret = tr.GetDerefedValue(retVal, tr.TranslateLocation(e1));
             if (forceGenerateUnit) {
                 StaticCast<LocalVar>(ret)->GetExpr()->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);

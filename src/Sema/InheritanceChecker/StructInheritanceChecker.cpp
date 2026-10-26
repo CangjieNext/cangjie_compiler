@@ -18,8 +18,6 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "../NativeFFI/Java/AfterTypeCheck/Utils.h"
-#include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
@@ -30,13 +28,12 @@
 #include "cangjie/Modules/ModulesUtils.h"
 #include "cangjie/Sema/TestManager.h"
 #include "cangjie/Sema/TypeManager.h"
-#include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 
 #include "Diags.h"
 #include "TypeCheckUtil.h"
 #include "TypeCheckerImpl.h"
 #include "NativeFFI/Java/TypeCheck/InheritanceChecker.h"
-#include "NativeFFI/ObjC/Utils/OCStructInheritanceCheckerImpl.h"
+#include "NativeFFI/ObjC/TypeCheck/OCStructInheritanceCheckerImpl.h"
 #include "CJMP/MPTypeCheckerImpl.h"
 
 using namespace Cangjie;
@@ -285,26 +282,6 @@ void TypeChecker::TypeCheckerImpl::CheckInheritance(Package& pkg)
 {
     StructInheritanceChecker checker(diag, typeManager, pkg, importManager, ci->invocation.globalOptions);
     checker.Check();
-
-    auto movedMembers = checker.MoveStructInheritedMembers();
-    // Ensure javaCache is empty before moving in (it should be if called at the correct point in pipeline).
-    CJC_ASSERT_WITH_MSG(this->structMemberMap.empty(),
-        "structMemberMap should be empty when moving inherited members");
-
-    this->structMemberMap = std::move(movedMembers);
-}
-
-/**
- * Moves stored structInheritedMembers out of the StructInheritanceChecker.
- * After move, this instance must not be used again.
- *
- * NOTE: This can only be called once after check phase and before destruction.
- */
-std::unordered_map<Ptr<const InheritableDecl>, MemberMap> StructInheritanceChecker::MoveStructInheritedMembers()
-{
-    auto out = std::move(structInheritedMembers);
-    structInheritedMembers.clear(); // The standard does not guarantee to leave `structInheritedMembers` empty
-    return out;
 }
 
 void StructInheritanceChecker::Check()
@@ -361,6 +338,9 @@ void StructInheritanceChecker::Check()
     CheckAllUpperBoundsConfliction();
     // Check function confliction for instantiated decl.
     CheckInstDupFuncsInNominalDecls();
+    
+    Native::FFI::Java::GenerateJavaForeignAbstractStub(this->structInheritedMembers);
+    Native::FFI::ObjC::GenerateObjCForeignAbstractStub(this->structInheritedMembers);
 }
 
 void StructInheritanceChecker::CheckMembersWithInheritedDecls(const InheritableDecl& decl)
@@ -441,8 +421,9 @@ MemberMap StructInheritanceChecker::GetAndCheckInheritedInterfaces(const Inherit
     // Merge inherited interfaces' members.
     for (auto iTy : interfaceTys) {
         auto interfaceDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(iTy);
-        auto interfaceMembers = structInheritedMembers[interfaceDecl];
-        MergeInheritedMembers(members, interfaceMembers, *iTy, true);
+        if (auto it = structInheritedMembers.find(interfaceDecl); it != structInheritedMembers.end()) {
+            MergeInheritedMembers(members, it->second, *iTy, true);
+        }
     }
     DiagnoseForConflictInheritance(decl, members);
     return members;
@@ -458,7 +439,9 @@ MemberMap StructInheritanceChecker::GetInheritedSuperMembers(
 {
     MemberMap members;
     // Merge inherited class members.
-    MergeInheritedMembers(members, structInheritedMembers[&decl], baseTy);
+    if (auto it = structInheritedMembers.find(&decl); it != structInheritedMembers.end()) {
+        MergeInheritedMembers(members, it->second, baseTy);
+    }
     RemoveInvisibleMember(members, curFile.curPackage->fullPackageName);
     if (ignoreExtends) {
         return members;
@@ -474,9 +457,11 @@ MemberMap StructInheritanceChecker::GetInheritedSuperMembers(
             continue;
         }
         CheckMembersWithInheritedDecls(*extend);
-        auto extendMembers = structInheritedMembers[extend];
-        RemoveInvisibleMember(members, curFile.curPackage->fullPackageName);
-        MergeInheritedMembers(members, extendMembers, baseTy);
+        if (auto extendIt = structInheritedMembers.find(extend); extendIt != structInheritedMembers.end()) {
+            auto allVisibleMember = extendIt->second;
+            RemoveInvisibleMember(allVisibleMember, curFile.curPackage->fullPackageName);
+            MergeInheritedMembers(members, allVisibleMember, baseTy);
+        }
     }
     return members;
 }
@@ -946,9 +931,11 @@ void StructInheritanceChecker::DiagnoseForUnimplementedInterfaces(const MemberMa
     // 1. Foreign struct.
     // 2. Mirror struct.
     // 3. Wrapper classes generated for java interop (corresponding members are generated after typecheck).
+    // 4. Handle wrapper classes generated for objc interop (corresponding members are generated after
+    // typecheck).
     if (structDecl.TestAttr(Attribute::FOREIGN) ||
-        structDecl.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SYNTHETIC_WRAPPER) ||
-        structDecl.TestAttr(Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER)) {
+        structDecl.TestAnyAttr(Attribute::OBJ_C_FOREIGN, Attribute::OBJ_C_FOREIGN_INTERFACE_HANDLE_WRAPPER) ||
+        structDecl.TestAttr(Attribute::JAVA_FOREIGN_SYNTHETIC_WRAPPER)) {
         return;
     }
     std::string prefix = structDecl.astKind == ASTKind::EXTEND_DECL ? "extend " : "";
@@ -1138,6 +1125,16 @@ void StructInheritanceChecker::CheckInheritanceAttributes(const MemberSignature&
 #endif
         } else if (child.TestAttr(Attribute::ABSTRACT) && notInInterface) {
             diag.Diagnose(child, DiagKind::sema_invalid_override_member_in_class, type, child.identifier.Val(), type);
+        } else if (child.TestAttr(Attribute::ABSTRACT) && !notInInterface) {
+            // An abstract redeclaration of an interface default-implemented member is illegal; the
+            // default implementation must be kept (or overridden with a concrete body). This is usually
+            // caught by CheckInheritanceForInterface, but when the default implementation is reached
+            // through an intermediate abstract superclass (e.g. C <: B <: I, B does not redeclare it),
+            // CheckInheritanceForInterface receives the inherited interface member as the child rather
+            // than the abstract redeclaration, so the error is missed and compilation proceeds to VTable
+            // generation where it crashes. Report it here instead.
+            diag.Diagnose(child, DiagKind::sema_invalid_override_or_redefine_member_in_interface, type,
+                child.identifier.Val(), type);
         }
     }
 }
@@ -1495,9 +1492,20 @@ void StructInheritanceChecker::CheckNativeFFI(
     [[maybe_unused]] const MemberSignature& parent, [[maybe_unused]] const MemberSignature& child) const
 {
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    const auto sameStatus = parent.decl->TestAttr(Attribute::STATIC) == child.decl->TestAttr(Attribute::STATIC) &&
+        parent.decl->TestAttr(Attribute::GENERIC) == child.decl->TestAttr(Attribute::GENERIC) &&
+        parent.decl->astKind == child.decl->astKind;
+    const auto parentFuncTy = DynamicCast<FuncTy*>(parent.ty);
+    const auto childFuncTy = DynamicCast<FuncTy*>(child.ty);
+    const auto sameParams = (!parentFuncTy && !childFuncTy) ||
+        (parentFuncTy && childFuncTy && parent.decl->IsFunc() && child.decl->IsFunc() &&
+            typeManager.IsFuncParameterTypesIdentical(*parentFuncTy, *childFuncTy));
+    if (!sameStatus || !sameParams) {
+        return;
+    }
     if (checkingDecls.size() > 0 && checkingDecls.back()) {
-        Interop::Java::CheckForeignName(diag, typeManager, parent, child, *checkingDecls.back());
-        Interop::ObjC::CheckForeignAnnotations(diag, typeManager, parent, child, *checkingDecls.back());
+        Native::FFI::Java::CheckForeignName(diag, typeManager, parent, child, *checkingDecls.back());
+        Native::FFI::ObjC::CheckForeignAnnotations(diag, typeManager, parent, child, *checkingDecls.back());
     }
 #endif
 }

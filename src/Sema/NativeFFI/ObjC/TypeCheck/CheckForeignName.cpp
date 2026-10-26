@@ -10,8 +10,9 @@
  * This file implements semantic checks for @ForeignName anno
  */
 
-#include "NativeFFI/Utils.h"
 #include "Handlers.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
+#include "NativeFFI/Utils.h"
 #include "cangjie/AST/Match.h"
 
 using namespace Cangjie::AST;
@@ -45,13 +46,16 @@ bool HasForeignName(const Decl& member)
 
 void CheckForeignName::HandleImpl(TypeCheckContext& ctx)
 {
-    auto targetKind = ctx.typeMapper.IsObjCMirror(ctx.target) ? "@ObjCMirror" : "@ObjCImpl";
+    if (ctx.target.TestAttr(Attribute::IS_BROKEN)) {
+        return;
+    }
+    auto targetKind = GetObjCDeclKindInfo(ctx.target);
     for (auto memberDecl : ctx.target.GetMemberDeclPtrs()) {
         if (memberDecl->TestAttr(Attribute::IS_BROKEN)) {
             continue;
         }
 
-        if (ctx.typeMapper.IsObjCImpl(*ctx.target.GetTy()) && !memberDecl->TestAttr(Attribute::PUBLIC)) {
+        if (IsObjCExport(*ctx.target.GetTy()) && !memberDecl->TestAttr(Attribute::PUBLIC)) {
             continue;
         }
 
@@ -63,9 +67,11 @@ void CheckForeignName::HandleImpl(TypeCheckContext& ctx)
         memberDecl->EnableAttr(Attribute::IS_BROKEN);
         ctx.target.EnableAttr(Attribute::HAS_BROKEN);
         if (memberDecl->TestAttr(Attribute::CONSTRUCTOR)) {
-            ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_ctor_must_have_foreign_name, *memberDecl, targetKind);
+            ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_ctor_must_have_foreign_name, *memberDecl,
+                targetKind);
         } else {
-            ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_method_must_have_foreign_name, *memberDecl, targetKind, memberDecl->identifier);
+            ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_method_must_have_foreign_name, *memberDecl,
+                memberDecl->identifier, targetKind);
         }
     }
 }

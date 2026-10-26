@@ -19,6 +19,7 @@
 #include "gtest/gtest.h"
 
 #include "TestCompilerInstance.h"
+#include "cangjie/AST/Node.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Frontend/FrontendOptions.h"
 #include "cangjie/FrontendTool/CjdCompilerInstance.h"
@@ -143,6 +144,38 @@ TEST_F(FrontendEntryTest, CjdCompilerInstanceSavesResultsOnlyForChirOutput)
         std::string::npos);
 
     Utils::ProfileRecorder::Enable(false, Utils::ProfileRecorder::Type::ALL);
+}
+
+/*
+ * The case above leaves the cjo loop with zero iterations, so its body never runs. Give the
+ * instance two packages and the loop executes for real.
+ *
+ * Empty packages are deliberate: DefaultCIImpl::SaveCjo returns early on `pkg.IsEmpty()`, so the
+ * loop body is exercised without pulling in the import manager, the AST serializer or the
+ * temporary-file manager - none of which a unit test can set up. That early return is what keeps
+ * this case safe, hence the assertion on IsEmpty() below: if it ever narrows, ExportAST would be
+ * reached with a package the cjo manager never registered and the binary would fault instead of
+ * failing cleanly.
+ *
+ * Note what this does *not* check: because both saves succeed the same way, the case cannot
+ * observe that the loop dispatches per package. It pins down the aggregate result and that saving
+ * does not consume the packages.
+ */
+TEST_F(FrontendEntryTest, CjdCompilerInstanceRunsTheCjoLoopOverSourcePackages)
+{
+    invocation.globalOptions.outputMode = GlobalOptions::OutputMode::CHIR;
+    CjdCompilerInstance ci(invocation, diag);
+
+    ci.srcPkgs.push_back(MakeOwned<AST::Package>());
+    ci.srcPkgs.push_back(MakeOwned<AST::Package>());
+    ASSERT_EQ(ci.GetSourcePackages().size(), 2U);
+    ASSERT_TRUE(ci.GetSourcePackages()[0]->IsEmpty())
+        << "this case relies on the IsEmpty() early return in DefaultCIImpl::SaveCjo";
+
+    EXPECT_TRUE(ci.PerformResultsSaving());
+    EXPECT_EQ(diag.GetErrorCount(), 0U);
+    // Saving must not consume the packages.
+    EXPECT_EQ(ci.GetSourcePackages().size(), 2U);
 }
 
 TEST_F(FrontendEntryTest, DumpTokensPrintsEveryTokenOfEverySourceFile)

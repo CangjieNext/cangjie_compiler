@@ -24,6 +24,74 @@
 namespace Cangjie::CodeGen {
 
 namespace {
+bool IsIgnoredExprBetweenTailCallAndExit(
+    const CHIR::Expression& expr, const CHIR::Function& parentFunc, const CHIR::LocalVar& applyResult)
+{
+    if (expr.GetExprKind() == CHIR::ExprKind::DEBUGEXPR) {
+        return true;
+    }
+    if (expr.GetExprKind() != CHIR::ExprKind::STORE) {
+        return false;
+    }
+    auto& store = StaticCast<const CHIR::Store&>(expr);
+    auto retValue = parentFunc.GetReturnValue();
+    if (!retValue || store.GetLocation() != retValue) {
+        return false;
+    }
+    auto value = store.GetValue();
+    // Ignore Store(applyResult, ret) and Store(unitConstant, ret).
+    return value == &applyResult || value->GetType()->IsUnit();
+}
+
+bool IsTailPositionApply(const CHIRCallExpr& applyWrapper)
+{
+    auto callerFunc = applyWrapper.GetTopLevelFunc();
+    auto applyResult = applyWrapper.GetResult();
+    auto parentBlock = applyWrapper.GetParentBlock();
+    auto terminator = parentBlock->GetTerminator();
+    if (!terminator || terminator->GetExprKind() != CHIR::ExprKind::EXIT) {
+        return false;
+    }
+
+    auto exprs = parentBlock->GetNonTerminatorExpressions();
+    auto* applyExpr = &applyWrapper.GetChirExpr();
+    auto it = std::find(exprs.begin(), exprs.end(), applyExpr);
+    if (it == exprs.end()) {
+        return false;
+    }
+    bool seenApplyResultStore = false;
+    for (++it; it != exprs.end(); ++it) {
+        if (!IsIgnoredExprBetweenTailCallAndExit(**it, *callerFunc, *applyResult)) {
+            return false;
+        }
+        if (auto* store = DynamicCast<const CHIR::Store*>(*it); store &&
+            store->GetLocation() == callerFunc->GetReturnValue() &&
+            (store->GetValue() == applyResult || store->GetValue()->GetType()->IsUnit())) {
+            seenApplyResultStore = true;
+        }
+    }
+
+    return seenApplyResultStore;
+}
+
+bool ReuseCallerSRetForApply(IRBuilder2& irBuilder, const CHIRCallExpr& applyWrapper, const CGFunctionType& calleeType)
+{
+    if (irBuilder.GetCGContext().GetCompileOptions().optimizationLevel == GlobalOptions::OptimizationLevel::O0) {
+        return false;
+    }
+    auto callerCGFunc = irBuilder.GetInsertCGFunction();
+    if (!callerCGFunc->IsSRet()) {
+        return false;
+    }
+    auto* callerFunc = irBuilder.GetInsertFunction();
+    auto* callerSRetArg = callerFunc->getArg(0);
+    auto* calleeSRetArgTy = calleeType.GetLLVMFunctionType()->getParamType(0);
+    if (callerSRetArg->getType() != calleeSRetArgTy) {
+        return false;
+    }
+    return IsTailPositionApply(applyWrapper);
+}
+
 llvm::Value* DoSimpleCast(IRBuilder2& irBuilder, const CGValue& srcValue, const CGType& destType)
 {
     llvm::Value& srcRawVal = *srcValue.GetRawValue();
@@ -162,7 +230,10 @@ std::vector<llvm::Value*> IRBuilder2::TransformFuncArgs(const CGFunctionType& ca
         auto& returnCHIRType = *chirFuncType.GetReturnType();
         auto& returnCGType = *CGType::GetOrCreate(cgMod, &returnCHIRType);
         llvm::Value* allocaForRetVal = nullptr;
-        if (returnCGType.GetSize()) {
+        bool canReuseCallerSRet = applyWrapper && ReuseCallerSRetForApply(*this, *applyWrapper, calleeType);
+        if (canReuseCallerSRet) {
+            allocaForRetVal = GetInsertFunction()->getArg(0);
+        } else if (returnCGType.GetSize()) {
             // known size at compile time
             allocaForRetVal = CreateEntryAlloca(returnCGType);
         } else {
@@ -333,7 +404,9 @@ llvm::Value* IRBuilder2::GetReturnValue(const CGFunctionType& calleeType, llvm::
                 : returnCGType.GetLLVMType());
         callBaseInst->addAttributeAtIndex(llvm::AttributeList::FirstArgIndex, sretAttr);
         ret = argsVal.front();
-        if (!returnCGType.GetSize()) {
+        auto applyWrapper = dynamic_cast<const CHIRCallExpr*>(this->chirExpr);
+        if (!returnCGType.GetSize() &&
+            (!applyWrapper || !ReuseCallerSRetForApply(*this, *applyWrapper, calleeType))) {
             CHIR::Type* rstType = nullptr;
             if (this->chirExpr->GetExprKind() == CHIR::ExprKind::VARRAY_BUILDER) {
                 auto& varrayBuilder = StaticCast<const CHIR::VArrayBuilder&>(this->chirExpr->GetChirExpr());
@@ -446,7 +519,7 @@ size_t IRBuilder2::GetPtrSize() const
 }
 
 // For 64 bit OS: {typeinfo*, <payload>}
-// For 32 bit OS: {typeinfo*, i32, <payload>} 
+// For 32 bit OS: {typeinfo*, i32, <payload>}
 size_t IRBuilder2::GetPayloadOffset() const
 {
     return GetCGContext().GetCompileOptions().target.arch == Triple::ArchType::ARM32 ? GetPtrSize() + 4U : GetPtrSize();
@@ -1178,6 +1251,9 @@ CGValue IRBuilder2::CreateGEP(
                     GetInsertFunction()->hasFnAttribute(THIS_PARAM_HAS_BP)) &&
                 **(cgMod | chirExpr->GetTopLevelFunc()->GetParam(0)) == ret) {
                 // It means this param doesn't have typeinfo, no need to add the offset.
+                // Mark the TypeInfo* as skipped so that the remaining subscripts (e.g. the
+                // inner generic struct field of `this.coords.x`) won't consume the budget.
+                hasSkippedTypeInfo = true;
             } else if (!hasSkippedTypeInfo) {
                 offset = CreateAdd(offset, llvm::ConstantInt::get(offset->getType(), GetPayloadOffset()));
                 hasSkippedTypeInfo = true;
@@ -1424,7 +1500,12 @@ llvm::Value* IRBuilder2::CreateStringLiteral(const std::string& str)
     auto gvCjString =
         llvm::cast<llvm::GlobalVariable>(cgMod.GetLLVMModule()->getOrInsertGlobal(cjStringName, cjStringType));
     CJC_NULLPTR_CHECK(gvCjString);
-    gvCjString->setConstant(true);
+    // Keep the literal non-constant until CJStringPoolMerge runs, so that
+    // pre-link optimization cannot fold the start field into plain integer
+    // instructions (a folded start would become stale when the pass repoints
+    // literals into the merged pool). The pass flips every cjstring literal
+    // back to constant after merging.
+    gvCjString->setConstant(false);
     gvCjString->addAttribute(CJSTRING_LITERAL_ATTR);
     gvCjString->setLinkage(llvm::GlobalValue::PrivateLinkage);
     GetCGContext().AddCJString(gvCjString->getName().str(), str);

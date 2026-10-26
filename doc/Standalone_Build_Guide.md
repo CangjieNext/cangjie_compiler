@@ -44,7 +44,7 @@ python3 build.py install;
 1. `build.py clean` 命令用于清空工作区临时文件。
 2. `build.py build` 命令开始执行编译：
     - 二级选项 `-t` 即 `--build-type`，指定编译产物类型，可以是 `release`、`debug` 或 `relwithdebinfo`。
-    - 二级选项 `--build-cjdb` 选项开启 cjdb(lldb) 编译，了解更多更多关于 cjdb 内容，请参阅 [`cjdb` 工具介绍](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_zh_cn/cmd-tools/cjdb_manual.md)。
+    - 二级选项 `--build-cjdb` 选项开启 cjdb(lldb) 编译，了解更多关于 cjdb 内容，请参阅 [`cjdb` 工具介绍](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_zh_cn/cmd-tools/cjdb_manual.md)。
 3. `build.py install` 命令将编译产物安装到 `output` 目录下。
 
 验证产物：
@@ -93,7 +93,7 @@ python3 build.py install;
 1. `build.py clean` 命令用于清空工作区临时文件。
 2. `build.py build` 命令开始执行编译：
     - 二级选项 `-t` 即 `--build-type`，指定编译产物类型，可以是 `release`、`debug` 或 `relwithdebinfo`。
-    - 二级选项 `--build-cjdb` 选项开启 cjdb(lldb) 编译，了解更多更多关于 cjdb 内容，请参阅 [`cjdb` 工具介绍](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_zh_cn/cmd-tools/cjdb_manual.md)。
+    - 二级选项 `--build-cjdb` 选项开启 cjdb(lldb) 编译，了解更多关于 cjdb 内容，请参阅 [`cjdb` 工具介绍](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_zh_cn/cmd-tools/cjdb_manual.md)。
 3. `build.py install` 命令将编译产物安装到 `output` 目录下。
 
 验证产物：
@@ -152,7 +152,7 @@ python3 build.py install --host windows-x86_64;
     - 二级选项 `--target` 选项指定目标平台描述，可以是 `native`(当前编译平台)、`windows-x86_64`、`ohos-aarch64`、`ohos-x86_64`、`ios-aarch64`、`android-aarch64`、`android-x86_64`、`ios-simulator-aarch64`、`ios-aarch64`。
     - 二级选项 `--target-sysroot` 选项将后面的参数传递给 C/C++ 编译器作为其 `--sysroot` 参数。
     - 二级选项 `--target-toolchain` 选项指定目标平台工具链路径，使用该路径下的编译器进行交叉编译。
-    - 二级选项 `--build-cjdb` 选项开启 cjdb(lldb) 编译，了解更多更多关于 cjdb 内容，请参阅 [`cjdb` 工具介绍](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_zh_cn/cmd-tools/cjdb_manual.md)。
+    - 二级选项 `--build-cjdb` 选项开启 cjdb(lldb) 编译，了解更多关于 cjdb 内容，请参阅 [`cjdb` 工具介绍](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_zh_cn/cmd-tools/cjdb_manual.md)。
 4. `build.py install` 命令将编译产物安装到 `output` 目录下：
     - 二级选项 `--host` 选项指定目标平台安装策略，可以是 `native`(当前编译平台)、`windows-x86_64`、`ohos-aarch64`、`ohos-x86_64`、`android-aarch64`、`android-x86_64`、`ios-simulator-aarch64`、`ios-aarch64`。
 
@@ -207,7 +207,7 @@ python3 build.py install --host android-aarch64;
     - 二级选项 `--product` 指定构建目标产物， 可以是 `all`、`cjc` 或 `libs`。
     - 二级选项 `--target` 选项指定目标平台描述，可以是 `native`(当前编译平台)、`windows-x86_64`、`ohos-aarch64`、`ohos-x86_64`、`ios-aarch64`、`android-aarch64`、`android-x86_64`、`ios-simulator-aarch64`、`ios-aarch64`。
     - 二级选项 `--android-ndk` 选项指定 Android NDK 的路径。
-    - 二级选项 `--build-cjdb` 选项开启 cjdb(lldb) 编译，了解更多更多关于 cjdb 内容，请参阅 [`cjdb` 工具介绍](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_zh_cn/cmd-tools/cjdb_manual.md)。
+    - 二级选项 `--build-cjdb` 选项开启 cjdb(lldb) 编译，了解更多关于 cjdb 内容，请参阅 [`cjdb` 工具介绍](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_zh_cn/cmd-tools/cjdb_manual.md)。
 4. `build.py install` 命令将编译产物安装到 `output` 目录下：
     - 二级选项 `--host` 选项指定目标平台安装策略，可以是 `native`(当前编译平台)、`windows-x86_64`、`ohos-aarch64`、`ohos-x86_64`、`android-aarch64`、`android-x86_64`、`ios-simulator-aarch64`、`ios-aarch64`。
 
@@ -250,7 +250,7 @@ python3 build.py install --host android-aarch64
     - 二级选项 `--product` 指定构建目标产物， 可以是 `all`、`cjc` 或 `libs`。
     - 二级选项 `--target` 选项指定目标平台描述，可以是 `native`(当前编译平台)、`windows-x86_64`、`ohos-aarch64`、`ohos-x86_64`、`ios-aarch64`、`android-aarch64`、`android-x86_64`、`ios-simulator-aarch64`、`ios-aarch64`。
     - 二级选项 `--android-ndk` 选项指定 Android NDK 的路径。
-    - 二级选项 `--build-cjdb` 选项开启 cjdb(lldb) 编译，了解更多更多关于 cjdb 内容，请参阅 [`cjdb` 工具介绍](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_zh_cn/cmd-tools/cjdb_manual.md)。
+    - 二级选项 `--build-cjdb` 选项开启 cjdb(lldb) 编译，了解更多关于 cjdb 内容，请参阅 [`cjdb` 工具介绍](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_zh_cn/cmd-tools/cjdb_manual.md)。
 4. `build.py install` 命令将编译产物安装到 `output` 目录下：
     - 二级选项 `--host` 选项指定目标平台安装策略，可以是 `native`(当前编译平台)、`windows-x86_64`、`ohos-aarch64`、`ohos-x86_64`、`android-aarch64`、`android-x86_64`、`ios-simulator-aarch64`、`ios-aarch64`。
 
@@ -314,7 +314,7 @@ python3 build.py install;
     - 二级选项 `--target` 选项指定目标平台描述，可以是 `native`(当前编译平台)、`windows-x86_64`、`ohos-aarch64`、`ohos-x86_64`、`ios-aarch64`、`android-aarch64`、`android-x86_64`、`ios-simulator-aarch64`、`ios-aarch64`。
     - 二级选项 `--target-sysroot` 选项将后面的参数传递给 C/C++ 编译器作为其 `--sysroot` 参数。
     - 二级选项 `--target-toolchain` 选项指定目标平台工具链路径，使用该路径下的编译器进行交叉编译。
-    - 二级选项 `--build-cjdb` 选项开启 cjdb(lldb) 编译，了解更多更多关于 cjdb 内容，请参阅 [`cjdb` 工具介绍](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_zh_cn/cmd-tools/cjdb_manual.md)。
+    - 二级选项 `--build-cjdb` 选项开启 cjdb(lldb) 编译，了解更多关于 cjdb 内容，请参阅 [`cjdb` 工具介绍](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_zh_cn/cmd-tools/cjdb_manual.md)。
 7. `build.py install` 命令将编译产物安装到 `output` 目录下：
     - 二级选项 `--host` 选项指定目标平台安装策略，可以是 `native`(当前编译平台)、`windows-x86_64`、`ohos-aarch64`、`ohos-x86_64`、`ios-simulator-aarch64`、`ios-aarch64`。
 
@@ -333,7 +333,7 @@ python3 build.py install;
 - `--print-cmd`：用于展示构建脚本配置的完整 cmake 命令。
 - `-j, --jobs JOBS`：并发执行构建任务数。
 - `--link-jobs LINK_JOBS`：并发执行链接任务数。
-- `--enable-assert`：使能编译器断言，开发调试编译器使用。
+- `--enable-assert`：使能编译器断言，供开发调试编译器使用。
 - `--no-tests`：不编译 unittest 用例代码。
 - `--disable-stack-grow-feature`：关闭栈增长功能。
 - `--hwasan`：开启编译器源码硬件 asan 功能，由于其依赖 hwasan 工具，目前仅支持 ohos 平台开启。

@@ -5,18 +5,22 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "Utils.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "TypeCheckUtil.h"
 
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
+#include "Desugar/AfterTypeCheck.h"
+#include <sys/types.h>
 
 namespace Cangjie::Native::FFI {
 
@@ -132,6 +136,78 @@ StructDecl& GetStringDecl(const ImportManager& importManager)
     static auto decl = importManager.GetCoreDecl<StructDecl>(STD_LIB_STRING);
     CJC_NULLPTR_CHECK(decl);
     return *decl;
+}
+
+FuncDecl& GetReadPointerIntrinsicDecl(const ImportManager& importManager)
+{
+    static auto decl = importManager.GetCoreDecl<FuncDecl>(std::string{READ_POINTER_INTRINSIC});
+    CJC_NULLPTR_CHECK(decl);
+    return *decl;
+}
+
+FuncDecl& GetGetPointerAddressIntrinsicDecl(const ImportManager& importManager)
+{
+    static auto decl = importManager.GetCoreDecl<FuncDecl>(std::string{GET_POINTER_ADDRESS_INTRINSIC});
+    CJC_NULLPTR_CHECK(decl);
+    return *decl;
+}
+
+OwnedPtr<Expr> CreateReadPointerCall(const ImportManager& importManager, TypeManager& typeManager, Ptr<Expr> ptr)
+{
+    CJC_ASSERT(ptr && ptr->GetTy()->IsPointer());
+    auto& fd = GetReadPointerIntrinsicDecl(importManager);
+
+    auto fdref = WithinFile(CreateRefExpr(fd), ptr->curFile);
+    fdref->instTys.push_back(ptr->GetTy());
+    fdref->SetTy(typeManager.GetInstantiatedTy(fd.GetTy(), GenerateTypeMapping(fd, fdref->instTys)));
+    static auto int64Ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64);
+    auto zero = WithinFile(CreateLitConstExpr(LitConstKind::INTEGER, "0", int64Ty), ptr->curFile);
+
+    auto readCall = CreateCallExpr(std::move(fdref), {}, &fd, ptr->GetTy()->typeArgs[0],
+        CallKind::CALL_INTRINSIC_FUNCTION);
+    auto& args = readCall->args;
+    args.push_back(CreateFuncArg(ASTCloner::Clone(ptr)));
+    args.push_back(CreateFuncArg(std::move(zero)));
+
+    readCall->EnableAttr(Attribute::UNSAFE);
+    return readCall;
+}
+
+OwnedPtr<Expr> CreateGetPointerAddressCall(const ImportManager& importManager, TypeManager& typeManager, Ptr<Expr> ptr)
+{
+    CJC_ASSERT(ptr && ptr->GetTy()->IsPointer());
+    auto& fd = GetGetPointerAddressIntrinsicDecl(importManager);
+
+    auto fdref = WithinFile(CreateRefExpr(fd), ptr->curFile);
+    fdref->instTys.push_back(ptr->GetTy()->typeArgs.front());
+
+    static auto uintNativeTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT_NATIVE);
+    fdref->SetTy(typeManager.GetFunctionTy(std::vector{ptr->GetTy()}, uintNativeTy));
+
+    auto getAddrCall = CreateCallExpr(std::move(fdref), {}, &fd, uintNativeTy, CallKind::CALL_INTRINSIC_FUNCTION);
+    auto& args = getAddrCall->args;
+    args.push_back(CreateFuncArg(ASTCloner::Clone(ptr)));
+
+    getAddrCall->EnableAttr(Attribute::UNSAFE);
+    return getAddrCall;
+}
+
+OwnedPtr<Expr> CreateIsPtrNullCheckCall(const ImportManager& importManager, TypeManager& typeManager, Ptr<Expr> ptr)
+{
+    static auto uintNativeTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT_NATIVE);
+
+    auto getAddrCall = CreateGetPointerAddressCall(importManager, typeManager, ptr);
+    auto zero = WithinFile(CreateLitConstExpr(LitConstKind::INTEGER, "0", uintNativeTy), ptr->curFile);
+    auto addrCmpExpr = CreateBinaryExpr(std::move(getAddrCall), std::move(zero), TokenKind::EQUAL);
+    addrCmpExpr->SetTy(TypeManager::GetBoolTy());
+    return addrCmpExpr;
+}
+
+OwnedPtr<CallExpr> WrapReturningLambdaCall(TypeManager& typeManager, OwnedPtr<Block> nodes)
+{
+    auto res = WrapReturningLambdaCall(typeManager, std::move(nodes->body));
+    nodes.reset();
+    return res;
 }
 
 OwnedPtr<CallExpr> WrapReturningLambdaCall(TypeManager& typeManager, std::vector<OwnedPtr<Node>> nodes)
@@ -256,63 +332,6 @@ Ptr<std::string> GetSingleArgumentAnnotationValue(const Decl& target, Annotation
     return nullptr;
 }
 
-std::string GetObjCMirrorForeignName(const ClassLikeDecl& target)
-{
-    if (auto customName = GetSingleArgumentAnnotationValue(target, AnnotationKind::OBJ_C_MIRROR)) {
-        return *customName;
-    }
-    return target.identifier.Val();
-}
-
-bool IsObjCGeneratedNSStringCtor(const Decl& target)
-{
-    auto funcDecl = DynamicCast<const FuncDecl>(&target);
-    if (!funcDecl || funcDecl->identifier.Val() != INIT_IDENT ||
-        !funcDecl->TestAttr(Attribute::CONSTRUCTOR, Attribute::COMPILER_ADD)) {
-        return false;
-    }
-
-    CJC_ASSERT(funcDecl->funcBody);
-    auto& paramLists = funcDecl->funcBody->paramLists;
-    CJC_ASSERT(paramLists.size() > 0);
-    auto& params = paramLists[0]->params;
-    if (params.size() != 1 || params[0]->type->symbol->name != STD_LIB_STRING) {
-        return false;
-    }
-
-    return true;
-}
-
-bool IsObjCGeneratedNSObjectToString(const Decl& target)
-{
-    auto funcDecl = DynamicCast<const FuncDecl>(&target);
-    if (!funcDecl || funcDecl->identifier.Val() != TOSTRING_METHOD_IDENT ||
-        !funcDecl->TestAttr(Attribute::COMPILER_ADD) || !funcDecl->funcBody) {
-        return false;
-    }
-
-    CJC_ASSERT(funcDecl->funcBody);
-    auto& paramLists = funcDecl->funcBody->paramLists;
-    CJC_ASSERT(paramLists.size() > 0);
-    auto& params = paramLists[0]->params;
-    if (params.size() != 0) {
-        return false;
-    }
-
-    return true;
-}
-
-bool IsObjCGeneratedMember(const Decl& target)
-{
-    auto classLikeDecl = DynamicCast<const ClassLikeDecl>(target.outerDecl);
-    if (!classLikeDecl) {
-        return false;
-    }
-    auto foreignName = GetObjCMirrorForeignName(*classLikeDecl);
-    return (foreignName == NSSTRING_CLASS_IDENT && IsObjCGeneratedNSStringCtor(target)) ||
-        (foreignName == NSOBJECT_CLASS_IDENT && IsObjCGeneratedNSObjectToString(target));
-}
-
 OwnedPtr<PrimitiveType> GetPrimitiveType(std::string typeName, AST::TypeKind typekind)
 {
     OwnedPtr<PrimitiveType> type = MakeOwned<PrimitiveType>();
@@ -426,21 +445,9 @@ Ptr<Ty> GetInstantyForGenericTy(
 
 ClassDecl& GetExceptionDecl(const ImportManager& importManager)
 {
-    const static auto exception = [&] {
-        const auto exceptionDecl = importManager.GetCoreDecl("Exception");
-        CJC_NULLPTR_CHECK(exceptionDecl);
-
-        ClassDecl* res = nullptr;
-        if (auto ex = As<ASTKind::CLASS_DECL>(exceptionDecl)) {
-            res = ex;
-        } else {
-            CJC_ABORT_WITH_MSG("'Exception' declaration expected to be 'ClassDecl'");
-        }
-
-        return res;
-    }();
-
-    return *exception;
+    static const auto exceptionDecl = importManager.GetCoreDecl<ClassDecl>("Exception");
+    CJC_NULLPTR_CHECK(exceptionDecl);
+    return *exceptionDecl;
 }
 
 OwnedPtr<ThrowExpr> CreateThrowExceptionCall(const ImportManager& importManager,
@@ -470,6 +477,103 @@ bool AreParamTypeKindsValid(const FuncDecl& fd, const std::vector<TypeKind>& typ
         }
     }
     return true;
+}
+
+void RebindClonedStubToSynthetic(Decl& stub, ClassDecl& synthetic)
+{
+    stub.outerDecl = &synthetic;
+    Walker(&stub, [&synthetic](Ptr<Node> node) {
+        node->curFile = synthetic.curFile;
+        if (auto decl = DynamicCast<Decl>(node)) {
+            decl->fullPackageName = synthetic.fullPackageName;
+            decl->moduleName = synthetic.moduleName;
+        }
+        return VisitAction::WALK_CHILDREN;
+    }).Walk();
+}
+
+OwnedPtr<Expr> CreateZeroValue(const ImportManager& importManager, TypeManager& typeManager, Ty& ty)
+{
+    static constexpr std::string_view ZERO_VALUE_INTRINSIC_NAME = "zeroValue";
+    auto zeroValueDecl = importManager.GetCoreDecl<FuncDecl>(std::string(ZERO_VALUE_INTRINSIC_NAME));
+    CJC_ASSERT(zeroValueDecl);
+    auto zeroValueCall = MakeOwned<CallExpr>();
+
+    auto fdRef = CreateRefExpr(*zeroValueDecl);
+    fdRef->instTys.push_back(&ty);
+    auto refTy = typeManager.GetInstantiatedTy(
+        zeroValueDecl->GetTy(), TypeCheckUtil::GenerateTypeMapping(*zeroValueDecl, fdRef->instTys));
+    fdRef->SetTy(refTy);
+
+    zeroValueCall->baseFunc = std::move(fdRef);
+    zeroValueCall->SetTy(&ty);
+    zeroValueCall->callKind = CallKind::CALL_INTRINSIC_FUNCTION;
+    zeroValueCall->resolvedFunction = zeroValueDecl;
+    return zeroValueCall;
+}
+
+Ptr<Ty> GetOptionTy(const ImportManager& importManager, TypeManager& typeManager, Ptr<Ty> ty)
+{
+    return typeManager.GetEnumTy(*GetOptionDecl(importManager), {ty});
+}
+
+Ptr<EnumDecl> GetOptionDecl(const ImportManager& importManager)
+{
+    static auto decl = importManager.GetCoreDecl<EnumDecl>(STD_LIB_OPTION);
+    return decl;
+}
+
+Ptr<Decl> GetOptionSomeDecl(const ImportManager& importManager)
+{
+    static auto someDecl =
+        Sema::Desugar::AfterTypeCheck::LookupEnumMember(GetOptionDecl(importManager), OPTION_VALUE_CTOR);
+    return someDecl;
+}
+
+Ptr<Decl> GetOptionNoneDecl(const ImportManager& importManager)
+{
+    static auto noneDecl =
+        Sema::Desugar::AfterTypeCheck::LookupEnumMember(GetOptionDecl(importManager), OPTION_NONE_CTOR);
+    return noneDecl;
+}
+
+OwnedPtr<Expr> CreateOptionSomeRef(const ImportManager& importManager, TypeManager& typeManager, Ptr<Ty> ty)
+{
+    auto someDeclRef = CreateRefExpr(*GetOptionSomeDecl(importManager));
+    auto optionActualTy = GetOptionTy(importManager, typeManager, ty);
+    someDeclRef->SetTy(typeManager.GetFunctionTy({ty}, optionActualTy));
+    return someDeclRef;
+}
+
+OwnedPtr<Expr> CreateOptionNoneRef(const ImportManager& importManager, TypeManager& typeManager, Ptr<Ty> ty)
+{
+    auto noneDeclRef = CreateRefExpr(*GetOptionNoneDecl(importManager));
+    auto optionActualTy = GetOptionTy(importManager, typeManager, ty);
+    noneDeclRef->SetTy(optionActualTy);
+    return noneDeclRef;
+}
+
+OwnedPtr<Expr> CreateOptionSomeCall(
+    const ImportManager& importManager, TypeManager& typeManager, OwnedPtr<Expr> expr, Ptr<Ty> ty)
+{
+    std::vector<OwnedPtr<FuncArg>> someDeclCallArgs{};
+    someDeclCallArgs.emplace_back(CreateFuncArg(std::move(expr)));
+    auto someDeclCall =
+        CreateCallExpr(CreateOptionSomeRef(importManager, typeManager, ty), std::move(someDeclCallArgs));
+    someDeclCall->SetTy(GetOptionTy(importManager, typeManager, ty));
+    someDeclCall->resolvedFunction = As<ASTKind::FUNC_DECL>(GetOptionSomeDecl(importManager));
+    someDeclCall->callKind = CallKind::CALL_DECLARED_FUNCTION;
+    return someDeclCall;
+}
+
+std::string GetObjCDeclKindInfo(const Decl& decl)
+{
+    using namespace Interop::ObjC;
+    if (IsObjCExport(*decl.GetTy())) {
+        return "exported '@ObjC'";
+    }
+    CJC_ASSERT(decl.IsObjCForeign());
+    return "'@ObjC' foreign";
 }
 
 } // namespace Cangjie::Native::FFI

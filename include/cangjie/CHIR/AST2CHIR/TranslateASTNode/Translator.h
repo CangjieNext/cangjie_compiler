@@ -19,8 +19,8 @@
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Type/CHIRType.h"
-#include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
+#include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/Option/Option.h"
 #include "cangjie/Sema/GenericInstantiationManager.h"
 #include "cangjie/Utils/CheckUtils.h"
@@ -37,10 +37,8 @@ public:
         const ElementList<Ptr<const AST::FuncDecl>>& localConstFuncs, const IncreKind& kind,
         const std::unordered_map<std::string, Value*>& deserializedVals,
         std::vector<std::pair<const AST::Decl*, Function*>>& annoFactories,
-        std::unordered_map<Block*, Expression*>& maybeUnreachable,
         bool computeAnnotations,
-        std::vector<CHIR::Function*>& initFuncForAnnoFactory,
-        const Cangjie::TypeManager& typeManager)
+        std::vector<CHIR::Function*>& initFuncForAnnoFactory, Cangjie::TypeManager& typeManager)
         : builder(builder),
           chirTy(chirTy),
           globalSymbolTable(globalSymbolTable),
@@ -52,7 +50,6 @@ public:
           mergingSpecific(opts.IsCompilingCJMPSpecific()),
           deserializedVals(deserializedVals),
           annoFactoryFuncs(annoFactories),
-          maybeUnreachable(maybeUnreachable),
           isComputingAnnos{computeAnnotations},
           initFuncsForAnnoFactory{initFuncForAnnoFactory},
           typeManager{typeManager}
@@ -109,12 +106,21 @@ public:
     }
 
     struct InstCalleeInfo {
+        /**
+         * Instantiated parent type where the (virtual) method is looked up in vtable.
+         * For Invoke, implicit `this` should be cast to this type (except mut struct).
+         */
         Type* instParentCustomTy{nullptr};
         Type* thisType{nullptr};
         std::vector<Type*> instParamTys;
         Type* instRetTy{nullptr};
         std::vector<Type*> instantiatedTypeArgs;
         bool isVirtualFuncCall{false};
+        /**
+         * AST func decl used as Invoke/InvokeStatic callee via GetSymbolTable.
+         * Virtual call: top-overridden decl; non-virtual call: the resolved decl.
+         */
+        const AST::FuncDecl* originalFuncDecl{nullptr};
     };
 
     // === static helper functions ==
@@ -595,10 +601,9 @@ private:
     const bool mergingSpecific; // add by cjmp
     const std::unordered_map<std::string, Value*>& deserializedVals; // add by cjmp
     std::vector<std::pair<const AST::Decl*, Function*>>& annoFactoryFuncs;
-    std::unordered_map<Block*, Expression*>& maybeUnreachable;
     bool isComputingAnnos{};
     std::vector<CHIR::Function*>& initFuncsForAnnoFactory;
-    const Cangjie::TypeManager& typeManager;
+    Cangjie::TypeManager& typeManager;
 
     class ScopeContext {
     public:
@@ -709,6 +714,7 @@ private:
 
     Expression* CreateAndAppendApplyCallFromCallExpr(
         Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::CallExpr& expr);
+    void FinalizeNothingCallArguments(Expression& call, const DebugLocation& callLoc, const DebugLocation& warningLoc);
     Expression* CreateAndAppendApplyCallFromArray(
         Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::Expr& array);
     Expression* CreateAndAppendGVInitFuncCall(Value& callee);
@@ -943,7 +949,8 @@ private:
     bool CanOptimizeMatchToSwitch(const AST::MatchExpr& matchExpr);
 
     std::vector<Type*> TranslateASTTypes(const std::vector<Ptr<AST::Ty>>& genericInfos);
-    bool HasNothingTypeArg(std::vector<Value*>& args) const;
+    /// Return the first Nothing-typed argument index, or no value when all arguments return normally.
+    std::optional<size_t> GetFirstNothingTypeArgIndex(const std::vector<Value*>& args) const;
     // ============= memberaccess expr ====================
     Ptr<Value> TranslateStaticTargetOrPackageMemberAccess(const AST::MemberAccess& member);
     Ptr<Value> TranslateInstanceMemberMemberAccess(const AST::MemberAccess& member);
@@ -954,11 +961,10 @@ private:
     bool IsVirtualFuncCall(
         const CustomTypeDef& obj, const AST::FuncDecl& funcDecl, bool baseExprIsSuper);
     InvokeCallContext GenerateInvokeCallContext(const InstCalleeInfo& instFuncInfo, Value& caller,
-        const AST::FuncDecl& callee, const std::vector<Value*>& args,
-        const OverflowStrategy strategy = OverflowStrategy::THROWING);
+        const std::vector<Value*>& args, const OverflowStrategy strategy = OverflowStrategy::THROWING);
     InstCalleeInfo GetInstCalleeInfoFromVarInit(const AST::RefExpr& expr);
-    std::pair<Type*, FuncCallType> GetExactParentTypeAndFuncType(
-        const AST::NameReferenceExpr& expr, Type& thisType, const AST::FuncDecl& funcDecl, bool& isVirtualFuncCall);
+    InstCalleeInfo GetInstCalleeInfoInGeneral(
+        const AST::NameReferenceExpr& expr, AST::FuncDecl& resolvedFuncDecl, Type* thisType, bool isVirtualFuncCall);
     InstCalleeInfo GetInstCalleeInfoFromRefExpr(const AST::RefExpr& expr);
     InstCalleeInfo GetInstCalleeInfoFromMemberAccess(const AST::MemberAccess& expr);
 
@@ -978,19 +984,32 @@ private:
     /** Entrance of translating multiple outermost or-pattern case. */
     // return value -> {false block, true block}
     std::pair<Ptr<Block>, Ptr<Block>> TranslateOrPattern(
-        const std::vector<OwnedPtr<AST::Pattern>>& patterns, Ptr<Value> selectorVal, const DebugLocation& originLoc);
-    std::pair<Ptr<Block>, Ptr<Block>> TranslateConstantMultiOr(const std::vector<uint64_t> values, Ptr<Value> value);
+        const std::vector<OwnedPtr<AST::Pattern>>& patterns, Ptr<Value> selectorVal, const DebugLocation& originLoc,
+        SourceExpr sourceExpr);
+    std::pair<Ptr<Block>, Ptr<Block>> TranslateConstantMultiOr(
+        const std::vector<uint64_t> values, Ptr<Value> value, SourceExpr sourceExpr);
     Ptr<Value> GetEnumIDValue(Ptr<AST::Ty> ty, Ptr<Value> selectorVal);
     /* Translate or patterns except constant and enum patterns. */
     std::pair<Ptr<Block>, Ptr<Block>> TranslateComplicatedOrPattern(
         const std::vector<OwnedPtr<AST::Pattern>>& patterns,
-        const Ptr<Value> selectorVal, const DebugLocation& originLoc);
+        const Ptr<Value> selectorVal, const DebugLocation& originLoc, SourceExpr sourceExpr);
     /** Entrance of translating single outermost nesting case pattern. */
     // return value -> {false block, true block}
     std::pair<Ptr<Block>, Ptr<Block>> TranslateNestingCasePattern(const AST::Pattern& pattern,
         const Ptr<Value> selectorVal, const DebugLocation& originLoc,
-        const SourceExpr& sourceExpr = SourceExpr::MATCH_EXPR);
-    void TranslatePatternGuard(const AST::MatchCase& matchCase, Ptr<Block> falseBlock, Ptr<Block>& trueBlock);
+        const SourceExpr& sourceExpr = SourceExpr::MATCH_EXPR, const DebugLocation* matchedBlockLoc = nullptr);
+    /**
+     * @brief Translates a match guard to explicit true and false control-flow targets.
+     * @param condition The guard condition to translate.
+     * @param trueBlock The target selected when the guard succeeds.
+     * @param falseBlock The target selected when the guard fails.
+     * @param sourceExpr The source expression represented by the final failure edge.
+     */
+    void TranslateMatchGuardCondition(
+        const AST::Expr& condition, Ptr<Block> trueBlock, Ptr<Block> falseBlock, SourceExpr sourceExpr);
+    void TranslatePatternGuard(
+        const AST::MatchCase& matchCase, Ptr<Block> falseBlock, Ptr<Block>& trueBlock, SourceExpr sourceExpr,
+        const DebugLocation& originLoc);
     // ========= helper functions for translating each of nesting patterns ==========
     // NOTE: 'blocks' is pair of {final matched block, next condition block}
     // 'enum pattern''s element value should be generated in 'next condition block'.
@@ -1015,7 +1034,10 @@ private:
     // Record relation of enum pattern and its matching case body's id.
     struct SecondSwitchInfo {
         const AST::EnumPattern& ep;
+        // Source case identity is retained when one case is distributed across optimized constructor tables.
         size_t caseId = 0;
+        // Each generated table entry diagnoses the source pattern that created it.
+        DebugLocation loc;
     };
     // NOTE: using map for fixed order of IR generation.
     struct EnumMatchInfo {
@@ -1029,7 +1051,7 @@ private:
     void TranslateEnumPatternMatchAsTable(const AST::MatchExpr& match, Ptr<Value> enumVal, Ptr<Value> retVal);
     void CollectEnumPatternInfo(const AST::Pattern& pattern, EnumMatchInfo& info, size_t caseId);
     std::unordered_map<size_t, std::vector<Ptr<Block>>> TranslateSecondLevelAsTable(
-        const EnumMatchInfo& info, Ptr<Value> enumVal, Ptr<Block> firstDefaultBlock);
+        const EnumMatchInfo& info, Ptr<Value> enumVal, Ptr<Block> firstDefaultBlock, SourceExpr sourceExpr);
     /**
      * Translate sub patterns for each case inside second level switch table.
      * @param endBlock [in]: last block when all sub-patterns are not matched.
@@ -1053,7 +1075,8 @@ private:
      */
     void TranslateSecondLevelTable(Ptr<Block> endBlock, const Ptr<Block> tableBlock, const Ptr<Value> enumVal,
         const std::vector<SecondSwitchInfo>& infos,
-        std::unordered_map<size_t, std::vector<Ptr<Block>>>& blockBranchInfos);
+        std::unordered_map<size_t, std::vector<Ptr<Block>>>& blockBranchInfos, SourceExpr sourceExpr,
+        std::optional<size_t> fallbackCaseId = std::nullopt);
 
     void CreateAndAppendWrappedStoreElementByName(
         const DebugLocation& loc, Value& rhs, Value& lhs, const std::vector<std::string>& path);

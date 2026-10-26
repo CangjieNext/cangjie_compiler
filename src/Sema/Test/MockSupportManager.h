@@ -48,8 +48,8 @@ public:
 
         // Classes along with the interfaces that it implements (directly or through extend)
         // with methods with default implementation. If implemented using extend, then there
-        // is also an extend decl
-        std::vector<std::tuple<Ptr<AST::ClassLikeDecl>, Ptr<AST::InterfaceDecl>, Ptr<AST::ExtendDecl>>>
+        // is also an extend decl. A direct supertype is preferred over extension
+        std::unordered_map<std::pair<Ptr<AST::ClassLikeDecl>, Ptr<AST::InterfaceDecl>>, Ptr<AST::ExtendDecl>, HashPair>
             classWithInterfaceDefaults;
     };
 

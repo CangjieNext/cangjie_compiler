@@ -293,6 +293,18 @@ public:
      */
     virtual void ReplaceOperand(Value* oldOperand, Value* newOperand);
 
+    /**
+     * @brief Retrieves the success and error successor blocks of a Try-* terminator.
+     *
+     * For TryApply / TryInvoke / TryInvokeStatic / TrySpawn / TryIntrinsic /
+     * TryAllocate / TryRawArrayAllocate / TryNumericCast / TryBinaryExpression /
+     * TryUnaryExpression, returns `{successBlock, errorBlock}`.
+     * For non-terminators and other terminators, returns `{nullptr, nullptr}`.
+     *
+     * @return A pair of (success block, error block); either may be null.
+     */
+    std::pair<Block*, Block*> GetSuccessAndErrorBlocks() const;
+
     // ===--------------------------------------------------------------------===//
     // Successor
     // ===--------------------------------------------------------------------===//
@@ -1074,7 +1086,7 @@ public:
      *
      * @return The offset, greater than or equal to zero.
      */
-    size_t GetVirtualMethodOffset(CHIRBuilder* builder = nullptr) const;
+    size_t GetVirtualMethodOffset() const;
 
     // ===--------------------------------------------------------------------===//
     // Instantiated Types
@@ -1103,9 +1115,6 @@ protected:
     ~DynamicDispatch() override = default;
 
     Cangjie::OverflowStrategy overflowStrategy{Cangjie::OverflowStrategy::NA};
-
-private:
-    std::vector<VTableSearchRes> GetVirtualMethodInfo(CHIRBuilder& builder) const;
 };
 
 /**

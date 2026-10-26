@@ -7,10 +7,12 @@
 #include "JavaInteropManager.h"
 
 #include "DiagsInterop.h"
+#include "NativeFFI/Java/Utils.h"
 #include "Utils.h"
 
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/Utils.h"
 
@@ -30,12 +32,12 @@ enum class Position { OUT, IN, BOTH };
 /*
  * Checks if [ty] is direct or indirect child of @JavaMirror-annotated decl.
  */
-bool IsJavaMirrorSubtype(const Ty& ty)
+bool IsJavaForeignSubtype(const Ty& ty)
 {
     if (auto classTy = DynamicCast<ClassTy*>(&ty);
         classTy && classTy->GetSuperClassTy() && !classTy->GetSuperClassTy()->IsObject()) {
-        if (!IsJavaMirrorSubtype(*classTy->GetSuperClassTy()) &&
-            (!classTy->GetSuperClassTy()->decl || !classTy->GetSuperClassTy()->decl->IsJavaMirror())) {
+        if (!IsJavaForeignSubtype(*classTy->GetSuperClassTy()) &&
+            (!classTy->GetSuperClassTy()->decl || !classTy->GetSuperClassTy()->decl->IsJavaForeign())) {
             return false;
         }
         return true;
@@ -47,7 +49,7 @@ bool IsJavaMirrorSubtype(const Ty& ty)
         }
 
         for (auto parent : ity->GetSuperInterfaceTys()) {
-            if (parent->decl->IsJavaMirror()) {
+            if (parent->decl->IsJavaForeign()) {
                 return true;
             }
         }
@@ -63,9 +65,9 @@ struct JavaInteropTypeChecker {
     auto GetJavaClassKind() const
     {
         if (isImpl) {
-            return "@JavaImpl";
+            return "exported '@Java'";
         } else {
-            return "@JavaMirror";
+            return "'@Java' foreign";
         }
     }
 
@@ -73,7 +75,7 @@ struct JavaInteropTypeChecker {
      * Checks if [ty] is supported in signature.
      * - @JavaMirror class types
      * - Some built-in supported types
-     * - String type in return position in Mirror class
+     * - String type
      */
     bool IsSupported(const Ty& ty, Position pos)
     {
@@ -84,6 +86,7 @@ struct JavaInteropTypeChecker {
 
         switch (ty.kind) {
             case TypeKind::TYPE_UNIT:
+                return pos == Position::OUT;
             case TypeKind::TYPE_BOOLEAN:
             case TypeKind::TYPE_INT8:
             case TypeKind::TYPE_UINT16:
@@ -103,7 +106,7 @@ struct JavaInteropTypeChecker {
                 if (ty.IsObject()) {
                     return true;
                 }
-                return StaticCast<ClassLikeTy&>(ty).commonDecl->IsJavaMirror();
+                return StaticCast<ClassLikeTy&>(ty).commonDecl->IsJavaForeign();
             case TypeKind::TYPE_STRUCT:
                 if (ty.name == INTEROPLIB_CFFI_JAVA_ENTITY) {
                     // for javaref getter stub wich is generated on Parser stage
@@ -134,7 +137,7 @@ struct JavaInteropTypeChecker {
         }
 
         if (ty.IsCoreOptionType() && !ty.typeArgs[0]->IsCoreOptionType() && !ty.typeArgs[0]->IsPrimitive()) {
-            return IsJavaCompatible(*ty.typeArgs[0]);
+            return IsJavaCompatible(*ty.typeArgs[0], pos);
         }
 
         if (auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty)) {
@@ -152,7 +155,9 @@ struct JavaInteropTypeChecker {
         for (auto& paramList : fdecl.funcBody->paramLists) {
             for (auto& param : paramList->params) {
                 if (!IsJavaCompatible(*param->GetTy(), Position::IN) && !isJavaArray) {
-                    diag.DiagnoseRefactor(errkind, *param);
+                    auto builder = diag.DiagnoseRefactor(errkind, *param, GetJavaClassKind());
+                    builder.AddMainHintArguments(Ty::ToString(param->GetTy()));
+ 
                     fdecl.EnableAttr(Attribute::IS_BROKEN);
                     fdecl.outerDecl->EnableAttr(Attribute::HAS_BROKEN);
                     fdecl.outerDecl->EnableAttr(Attribute::IS_BROKEN);
@@ -172,8 +177,9 @@ struct JavaInteropTypeChecker {
                 // Type wasn't explicitly written, so report on whole declaration
                 node = &fd;
             }
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_method_ret_unsupported, *node,
-                Ty::ToString(fd.funcBody->retType->GetTy()), GetJavaClassKind());
+            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_method_ret_unsupported, *node,
+                GetJavaClassKind());
+            builder.AddMainHintArguments(Ty::ToString(fd.funcBody->retType->GetTy()));
             fd.EnableAttr(Attribute::IS_BROKEN);
         }
 
@@ -188,7 +194,11 @@ struct JavaInteropTypeChecker {
     void CheckJavaMirrorPropType(PropDecl& prop)
     {
         if (!IsJavaCompatible(*prop.GetTy())) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_prop_must_be_java_mirror, *prop.type);
+            auto kind = isImpl
+                ? DiagKindRefactor::sema_java_impl_prop_must_be_java_compatible
+                : DiagKindRefactor::sema_java_mirror_prop_must_be_java_mirror;
+            auto builder = diag.DiagnoseRefactor(kind, *prop.type);
+            builder.AddMainHintArguments(Ty::ToString(prop.GetTy()));
             prop.EnableAttr(Attribute::IS_BROKEN);
         }
     }
@@ -196,14 +206,14 @@ struct JavaInteropTypeChecker {
     void CheckJavaCompatibleDeclSignature(ClassLikeDecl& decl)
     {
         for (auto& member : decl.GetMemberDecls()) {
+            if (isImpl && member->TestAttr(Attribute::PRIVATE)) {
+                continue;
+            }
             switch (member->astKind) {
                 case ASTKind::FUNC_DECL:
                     if (member->TestAttr(Attribute::CONSTRUCTOR)) {
                         CheckJavaMirrorConstructorTypes(*StaticAs<ASTKind::FUNC_DECL>(member.get()));
                     } else {
-                        if (isImpl && member->TestAttr(Attribute::PRIVATE)) {
-                            continue;
-                        }
                         CheckJavaMirrorMethodTypes(*StaticAs<ASTKind::FUNC_DECL>(member.get()));
                     }
                     break;
@@ -224,19 +234,19 @@ void JavaInteropManager::CheckInheritance(ClassLikeDecl& decl) const
 {
     CheckJavaMirrorSubtypeAttrClassLikeDecl(decl);
 
-    if (decl.IsJavaMirror() || decl.IsJavaImpl()) {
+    if (decl.IsJavaForeign() || decl.IsJavaExport()) {
         CheckNonJavaSuperType(decl);
     }
 }
 
 void JavaInteropManager::CheckNonJavaSuperType(ClassLikeDecl& decl) const
 {
-    CJC_ASSERT(decl.IsJavaMirror() || decl.IsJavaImpl());
+    CJC_ASSERT(decl.IsJavaForeign() || decl.IsJavaExport());
 
     auto superDecls = decl.GetAllSuperDecls();
 
     for (const auto superDecl : superDecls) {
-        if (!superDecl->IsJavaMirror() && !superDecl->IsJavaImpl() && !superDecl->GetTy()->IsObject() &&
+        if (!superDecl->IsJavaForeign() && !superDecl->IsJavaExport() && !superDecl->GetTy()->IsObject() &&
             !superDecl->GetTy()->IsAny()) {
             DiagJavaDeclCannotInheritPureCangjieType(diag, decl);
             decl.EnableAttr(Attribute::IS_BROKEN);
@@ -244,7 +254,7 @@ void JavaInteropManager::CheckNonJavaSuperType(ClassLikeDecl& decl) const
         }
     }
 
-    if (decl.HasAnno(AnnotationKind::JAVA_IMPL) && !IsJavaMirrorSubtype(*decl.GetTy())) {
+    if (decl.IsJavaExport() && !IsJavaForeignSubtype(*decl.GetTy())) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_subtype_anno_must_inherit_mirror, decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
@@ -252,8 +262,8 @@ void JavaInteropManager::CheckNonJavaSuperType(ClassLikeDecl& decl) const
 
 void JavaInteropManager::CheckJavaMirrorSubtypeAttrClassLikeDecl(ClassLikeDecl& decl) const
 {
-    if (IsJavaMirrorSubtype(*decl.GetTy())) {
-        if (!decl.IsJavaMirror() && !decl.IsJavaImpl()) {
+    if (IsJavaForeignSubtype(*decl.GetTy())) {
+        if (!decl.IsJavaForeign() && !decl.IsJavaExport()) {
             DiagJavaMirrorChildMustBeAnnotated(diag, decl);
             decl.EnableAttr(Attribute::IS_BROKEN);
         }
@@ -305,8 +315,7 @@ void JavaInteropManager::CheckImplRedefinition(Package& package)
             if (!IsImpl(*classLikeDecl)) {
                 continue;
             }
-
-            auto name = GetJavaFQName(*classLikeDecl);
+            auto name = Native::FFI::Java::GetJavaFQName(*classLikeDecl);
             if (javaNameToDecl.find(name) != javaNameToDecl.end()) {
                 DiagJavaImplRedefinitionInJava(diag, *classLikeDecl, *(javaNameToDecl[name]));
                 classLikeDecl->EnableAttr(Attribute::IS_BROKEN);
@@ -333,15 +342,15 @@ void JavaInteropManager::CheckTypes(File& file)
 
 void JavaInteropManager::CheckTypes(ClassLikeDecl& classLikeDecl)
 {
-    if (!classLikeDecl.IsJavaMirror() && !classLikeDecl.IsJavaImpl()) {
+    if (!classLikeDecl.IsJavaForeign() && !classLikeDecl.IsJavaExport()) {
         return;
     }
 
     hasMirrorOrImpl = true;
 
-    if (classLikeDecl.IsJavaMirror()) {
+    if (classLikeDecl.IsJavaForeign()) {
         CheckJavaMirrorTypes(classLikeDecl);
-    } else if (classLikeDecl.IsJavaImpl()) {
+    } else if (classLikeDecl.IsJavaExport()) {
         // Java impl can be neither interface nor abstract class
         CJC_ASSERT(classLikeDecl.astKind != ASTKind::INTERFACE_DECL);
         CJC_ASSERT(!classLikeDecl.TestAttr(Attribute::ABSTRACT));

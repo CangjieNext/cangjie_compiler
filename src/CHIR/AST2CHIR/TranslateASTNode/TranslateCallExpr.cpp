@@ -870,9 +870,10 @@ Value* Translator::TranslateMemberFuncCall(const AST::CallExpr& expr)
     Type* expectedThisObjTy = nullptr;
     auto expectedParamTys = instCallInfo.instParamTys;
     if (!resolvedFunction->TestAttr(AST::Attribute::STATIC)) {
-        // for virtual func call, we should calculate the correct this object type and store it in instParamTys[0]
+        // for virtual func call, cast implicit `this` to instantiated parent type
         if (instCallInfo.isVirtualFuncCall) {
-            expectedThisObjTy = AddRefIfFuncIsMutOrClass(*instCallInfo.instParentCustomTy, *resolvedFunction, builder);
+            expectedThisObjTy =
+                AddRefIfFuncIsMutOrClass(*instCallInfo.instParentCustomTy, *instCallInfo.originalFuncDecl, builder);
         } else {
             expectedThisObjTy = expectedParamTys[0];
         }
@@ -904,21 +905,19 @@ Value* Translator::TranslateMemberFuncCall(const AST::CallExpr& expr)
                 rtti = CreateAndAppendExpression<GetRTTIStatic>(
                     builder.GetUnitTy(), instCallInfo.thisType->StripAllRefs(), currentBlock)->GetResult();
             }
-            auto invokeInfo =
-                GenerateInvokeCallContext(instCallInfo, *rtti, *resolvedFunction, args, expr.overflowStrategy);
+            auto invokeInfo = GenerateInvokeCallContext(instCallInfo, *rtti, args, expr.overflowStrategy);
             ret = TryCreate<InvokeStatic>(currentBlock, loc, instCallInfo.instRetTy, invokeInfo)->GetResult();
         } else {
             // Invoke
             CJC_ASSERT(!args.empty());
             auto obj = args[0];
             args.erase(args.begin());
-            auto invokeInfo =
-                GenerateInvokeCallContext(instCallInfo, *obj, *resolvedFunction, args, expr.overflowStrategy);
+            auto invokeInfo = GenerateInvokeCallContext(instCallInfo, *obj, args, expr.overflowStrategy);
             ret = TryCreate<Invoke>(currentBlock, loc, instCallInfo.instRetTy, invokeInfo)->GetResult();
         }
-        if (HasNothingTypeArg(args)) {
-            const auto& warningLoc = TranslateLocation(*expr.baseFunc);
-            ret->GetExpr()->Set<DebugLocationInfoForWarning>(warningLoc);
+        const auto& warningLoc = TranslateLocation(*expr.baseFunc);
+        if (auto firstNothingArgIndex = GetFirstNothingTypeArgIndex(args); firstNothingArgIndex.has_value()) {
+            FinalizeNothingCallArguments(*ret->GetExpr(), loc, warningLoc);
         }
     } else {
         auto callee = GetSymbolTable(*resolvedFunction);
@@ -1110,13 +1109,22 @@ Value* Translator::GenerateLoadIfNeccessary(Value& arg, bool isThis, bool isMut,
     return &arg;
 }
 
-bool Translator::HasNothingTypeArg(std::vector<Value*>& args) const
+std::optional<size_t> Translator::GetFirstNothingTypeArgIndex(const std::vector<Value*>& args) const
 {
     auto it = std::find_if(args.begin(), args.end(), [](auto arg) { return arg->GetType()->IsNothing(); });
-    if (it != args.end()) {
-        return true;
+    if (it == args.end()) {
+        return std::nullopt;
     }
-    return false;
+    return static_cast<size_t>(std::distance(args.begin(), it));
+}
+
+void Translator::FinalizeNothingCallArguments(
+    Expression& call, const DebugLocation& callLoc, const DebugLocation& warningLoc)
+{
+    call.Set<DebugLocationInfoForWarning>(warningLoc);
+    CreateAndAppendTerminator<Exit>(callLoc, currentBlock);
+    currentBlock = CreateBlock();
+    currentBlock->SetDebugLocation(callLoc);
 }
 
 Ptr<Value> Translator::ProcessCallExpr(const AST::CallExpr& expr)
@@ -1141,7 +1149,15 @@ Ptr<Value> Translator::ProcessCallExpr(const AST::CallExpr& expr)
     }
     if (bool isNothingCall = !expr.resolvedFunction && expr.baseFunc->TyKind() == AST::TypeKind::TYPE_NOTHING;
         isNothingCall) {
-        return TranslateExprArg(*expr.baseFunc);
+        auto callee = TranslateExprArg(*expr.baseFunc);
+        // `callee` has already terminated its block. Preserve the arguments in that continuation so unreachable
+        // analysis can report them; no outer Apply can be created for a Nothing-typed callee.
+        static_cast<void>(TranslateFuncArgs(expr, nullptr, nullptr));
+        const auto& loc = TranslateLocation(expr);
+        CreateAndAppendTerminator<Exit>(loc, currentBlock);
+        currentBlock = CreateBlock();
+        currentBlock->SetDebugLocation(loc);
+        return callee;
     }
     if (auto res = TranslateFuncTypeValueCall(expr); res) {
         return res;

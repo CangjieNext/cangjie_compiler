@@ -245,7 +245,10 @@ void WrapVirtualFunc::CreateWrapperFuncBody(Function& wrapperFunc,
 
     CJC_ASSERT(args.size() == expectedParamTypes.size());
     for (size_t i = 0; i < expectedParamTypes.size(); ++i) {
-        args[i] = TypeCastOrBoxIfNeeded(*args[i], *expectedParamTypes[i], builder, *entry, INVALID_LOCATION);
+        auto [castedArg, castedArgExprs] =
+            TypeCastOrBoxIfNeeded(*args[i], *expectedParamTypes[i], builder, *entry, INVALID_LOCATION);
+        entry->AppendExpressions(castedArgExprs);
+        args[i] = castedArg;
     }
     std::vector<Type*> instArgTypes;
     instArgTypes.reserve(genericTable.funcGenericTypeParams.size());
@@ -261,7 +264,9 @@ void WrapVirtualFunc::CreateWrapperFuncBody(Function& wrapperFunc,
         .instTypeArgs = instArgTypes,
         .thisType = thisInstTy}, entry);
     apply->SetDebugLocation(rawFunc->GetDebugLocation());
-    auto res = TypeCastOrBoxIfNeeded(*apply->GetResult(), *wrapperRetTy, builder, *entry, INVALID_LOCATION);
+    auto [res, resExprs] =
+        TypeCastOrBoxIfNeeded(*apply->GetResult(), *wrapperRetTy, builder, *entry, INVALID_LOCATION);
+    entry->AppendExpressions(resExprs);
     CreateAndAppendExpression<Store>(builder, builder.GetUnitTy(), res, wrapperFunc.GetReturnValue(), entry);
     entry->AppendExpression(builder.CreateTerminator<Exit>(entry));
 }

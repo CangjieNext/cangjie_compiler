@@ -404,7 +404,9 @@ void GlobalDeclAnalysis::AnalysisDependency(const ElementList<Ptr<const AST::Dec
         (void)std::remove_if(dependencies.begin(), dependencies.end(),
             [&node](const Ptr<const AST::Decl>& element) { return element == node; });
         funcsAndVarsDepMap.AddDeps(node, dependencies);
-        localConstVarsDepMap.emplace(node, localConstVarDeps);
+        if (!localConstVarDeps.empty()) {
+            localConstVarsDepMap.emplace(node, std::move(localConstVarDeps));
+        }
     }
 }
 
@@ -629,14 +631,18 @@ InitOrder GlobalDeclAnalysis::SortLocalConstVarDep(const InitOrder& initOrder)
     AnalysisDependency(localConstVars);
 
     // 3) Map the decl dependencies into var-to-var dependencies
-    for (auto element : localConstVarsDepMap) {
+    std::unordered_map<Ptr<const AST::Decl>, size_t> stableDepPositions;
+    stableDepPositions.reserve(funcsAndVarsDepMap.stableOrderValue.size());
+    for (size_t i = 0; i < funcsAndVarsDepMap.stableOrderValue.size(); ++i) {
+        stableDepPositions.emplace(funcsAndVarsDepMap.stableOrderValue[i].first, i);
+    }
+    for (const auto& element : localConstVarsDepMap) {
         auto& deps = funcsAndVarsDepMap.randomOrderValue[element.first];
         deps.insert(deps.end(), element.second.begin(), element.second.end());
-        for (auto& pair : funcsAndVarsDepMap.stableOrderValue) {
-            if (pair.first == element.first) {
-                pair.second.insert(pair.second.end(), element.second.begin(), element.second.end());
-            }
-        }
+        auto found = stableDepPositions.find(element.first);
+        CJC_ASSERT(found != stableDepPositions.end());
+        auto& stableDeps = funcsAndVarsDepMap.stableOrderValue[found->second].second;
+        stableDeps.insert(stableDeps.end(), element.second.begin(), element.second.end());
     }
     AnalysisGlobalVarsAndLocalConstVarsDependency(initOrder);
 

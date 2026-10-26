@@ -327,6 +327,90 @@ TEST_F(ConstAnalysisFixture, arithmeticOp_mod_int_2_cj)
     ExpectSorted(got, {"Mod=-1", "Mod=1"});
 }
 
+TEST_F(ConstAnalysisFixture, arithmeticOp_mod_int_min_neg1_throwing)
+{
+    // INT_MIN % -1 is defined as 0 and must not be reported as overflow under THROWING.
+    std::vector<std::string> got;
+    {
+        NewFunc();
+        auto* lhs = Lit("Int64", "-9223372036854775808");
+        auto* rhs = Lit("Int64", "-1");
+        auto* expr = builder->CreateExpression<BinaryExpression>(
+            Ty("Int64"), BinaryExprKind::MOD, lhs, rhs, OverflowStrategy::THROWING, curBlock);
+        curBlock->AppendExpression(expr);
+        FinishFunc();
+        auto part = Analyse(curFunc);
+        got.insert(got.end(), part.begin(), part.end());
+        EXPECT_EQ(diag->GetErrorCount(), 0U);
+    }
+    {
+        NewFunc();
+        auto* lhs = Lit("Int32", "-2147483648");
+        auto* rhs = Lit("Int32", "-1");
+        auto* expr = builder->CreateExpression<BinaryExpression>(
+            Ty("Int32"), BinaryExprKind::MOD, lhs, rhs, OverflowStrategy::THROWING, curBlock);
+        curBlock->AppendExpression(expr);
+        FinishFunc();
+        auto part = Analyse(curFunc);
+        got.insert(got.end(), part.begin(), part.end());
+        EXPECT_EQ(diag->GetErrorCount(), 0U);
+    }
+    {
+        NewFunc();
+        auto* lhs = Lit("Int16", "-32768");
+        auto* rhs = Lit("Int16", "-1");
+        auto* expr = builder->CreateExpression<BinaryExpression>(
+            Ty("Int16"), BinaryExprKind::MOD, lhs, rhs, OverflowStrategy::THROWING, curBlock);
+        curBlock->AppendExpression(expr);
+        FinishFunc();
+        auto part = Analyse(curFunc);
+        got.insert(got.end(), part.begin(), part.end());
+        EXPECT_EQ(diag->GetErrorCount(), 0U);
+    }
+    {
+        NewFunc();
+        auto* lhs = Lit("Int8", "-128");
+        auto* rhs = Lit("Int8", "-1");
+        auto* expr = builder->CreateExpression<BinaryExpression>(
+            Ty("Int8"), BinaryExprKind::MOD, lhs, rhs, OverflowStrategy::THROWING, curBlock);
+        curBlock->AppendExpression(expr);
+        FinishFunc();
+        auto part = Analyse(curFunc);
+        got.insert(got.end(), part.begin(), part.end());
+        EXPECT_EQ(diag->GetErrorCount(), 0U);
+    }
+    ExpectSorted(got, {"Mod=0", "Mod=0", "Mod=0", "Mod=0"});
+}
+
+TEST_F(ConstAnalysisFixture, arithmeticOp_mod_int_min_neg1_wrapping_saturating)
+{
+    // Same boundary under WRAPPING / SATURATING still folds to 0.
+    std::vector<std::string> got;
+    {
+        NewFunc();
+        auto* lhs = Lit("Int64", "-9223372036854775808");
+        auto* rhs = Lit("Int64", "-1");
+        auto* expr = builder->CreateExpression<BinaryExpression>(
+            Ty("Int64"), BinaryExprKind::MOD, lhs, rhs, OverflowStrategy::WRAPPING, curBlock);
+        curBlock->AppendExpression(expr);
+        FinishFunc();
+        auto part = Analyse(curFunc);
+        got.insert(got.end(), part.begin(), part.end());
+    }
+    {
+        NewFunc();
+        auto* lhs = Lit("Int32", "-2147483648");
+        auto* rhs = Lit("Int32", "-1");
+        auto* expr = builder->CreateExpression<BinaryExpression>(
+            Ty("Int32"), BinaryExprKind::MOD, lhs, rhs, OverflowStrategy::SATURATING, curBlock);
+        curBlock->AppendExpression(expr);
+        FinishFunc();
+        auto part = Analyse(curFunc);
+        got.insert(got.end(), part.begin(), part.end());
+    }
+    ExpectSorted(got, {"Mod=0", "Mod=0"});
+}
+
 TEST_F(ConstAnalysisFixture, arithmeticOp_mod_trivial_1_cj)
 {
     // from LLT ConstAnalysis/arithmeticOp/mod_trivial_1.cj

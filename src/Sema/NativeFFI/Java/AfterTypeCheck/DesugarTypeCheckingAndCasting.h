@@ -91,8 +91,9 @@ private:
 
     OwnedPtr<AST::Expr> CreateIsInstanceCall(Ptr<AST::VarDecl> jObjectVar,
         Ptr<AST::Ty> classTy, Ptr<AST::File> curFile) const;
+    OwnedPtr<Expr> CreateNewGlobalJavaRef(OwnedPtr<Expr> javarefExpr, Ptr<File> curFile) const;
     OwnedPtr<AST::Expr> CreateJObjectCast(Ptr<AST::VarDecl> jObjectVar,
-        Ptr<AST::ClassLikeDecl> castDecl, Ptr<AST::File> curFile) const;
+        Ptr<AST::ClassLikeDecl> castDecl, Ptr<AST::Ty> castTy, Ptr<AST::File> curFile) const;
     OwnedPtr<AST::Block> CastAndSubstituteVars(
         AST::Expr& expr, const std::vector<std::tuple<Ptr<AST::VarDecl>, Ptr<AST::Ty>>>& patternVars) const;
 

@@ -140,6 +140,8 @@ public:
         return kind;
     }
 
+    bool CanBeInherited() const;
+
     bool SatisfyCType() const;
 
     bool IsSameTypeKind(const Type& type) const

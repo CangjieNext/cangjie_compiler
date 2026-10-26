@@ -6,9 +6,9 @@
 
 #include "Utils.h"
 #include "NativeFFI/Utils.h"
+#include "TypeCheckUtil.h"
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Create.h"
-#include "TypeCheckUtil.h"
 #include "cangjie/Utils/CheckUtils.h"
 
 using namespace Cangjie;
@@ -70,20 +70,6 @@ void InsertMethodStub(FuncDecl& fd, const ImportManager& importManager, TypeMana
     nodes.emplace_back(std::move(throwExpr));
 
     fd.funcBody->body = CreateBlock(std::move(nodes));
-}
-
-ClassDecl& GetExceptionDecl(const ImportManager& importManager)
-{
-    const auto exceptionDecl = importManager.GetCoreDecl("Exception");
-    CJC_NULLPTR_CHECK(exceptionDecl);
-
-    ClassDecl* exception = nullptr;
-    if (auto ex = As<ASTKind::CLASS_DECL>(exceptionDecl)) {
-        exception = ex;
-    }
-    CJC_NULLPTR_CHECK(exception);
-
-    return *exception;
 }
 
 } // namespace Cangjie::Native::FFI::Java

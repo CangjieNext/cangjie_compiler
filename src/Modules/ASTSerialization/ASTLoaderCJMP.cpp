@@ -19,7 +19,7 @@
 #include "cangjie/Basic/Position.h"
 #include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Option/Option.h"
-#include "flatbuffers/ModuleFormat_generated.h"
+#include "flatbuffers/CjoFormat_generated.h"
 
 namespace Cangjie {
 
@@ -190,6 +190,9 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
 
     package = PackageFormat::GetPackage(data.data());
     CJC_NULLPTR_CHECK(package);
+    if (!CheckCjoVersion()) {
+        return false;
+    }
     CJC_NULLPTR_CHECK(package->fullPkgName());
 
     curPackage = &pkg;

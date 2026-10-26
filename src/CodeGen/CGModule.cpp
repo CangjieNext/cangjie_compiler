@@ -443,6 +443,9 @@ llvm::Value* CGModule::GenerateUnitTypeValue()
             cgCtx->GetCompileOptions().target.IsMinGW() ? llvm::GlobalValue::PrivateLinkage
                                                         : llvm::GlobalValue::WeakODRLinkage,
             false);
+        // Every module using the unit value emits its own copy and never references it across
+        // DSOs, so keep it out of .dynsym, same as hidden TypeInfo metadata.
+        unitVal->setVisibility(llvm::GlobalValue::HiddenVisibility);
     }
     return unitVal;
 }

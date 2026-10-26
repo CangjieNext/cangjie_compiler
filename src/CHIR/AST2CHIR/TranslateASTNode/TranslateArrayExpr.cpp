@@ -63,21 +63,31 @@ Ptr<Value> Translator::Visit(const AST::ArrayExpr& array)
 Expression* Translator::CreateAndAppendApplyCallFromCallExpr(
     Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::CallExpr& expr)
 {
-    auto funcCall = TryCreate<Apply>(currentBlock, instFuncTy.GetReturnType(), &callee, context);
     const auto& loc = TranslateLocation(expr);
+    auto firstNothingArgIndex = GetFirstNothingTypeArgIndex(context.args);
+    if (context.args.size() == expr.args.size() && firstNothingArgIndex.has_value()) {
+        // The never-executed call is a separate unreachable source region from its terminating argument.
+        auto argumentRootLocation = currentBlock->GetDebugLocation();
+        CreateAndAppendTerminator<Exit>(currentBlock);
+        currentBlock = CreateBlock();
+        currentBlock->SetDebugLocation(argumentRootLocation);
+    }
+    auto funcCall = TryCreate<Apply>(currentBlock, instFuncTy.GetReturnType(), &callee, context);
     funcCall->SetDebugLocation(loc);
     if (expr.callKind == AST::CallKind::CALL_SUPER_FUNCTION) {
         if (auto apply = DynamicCast<Apply*>(funcCall)) {
             apply->SetSuperCall();
         }
     }
-    if (HasNothingTypeArg(context.args)) {
-        if (expr.baseFunc != nullptr) {
-            const auto& warningLoc = TranslateLocation(*expr.baseFunc);
-            funcCall->Set<DebugLocationInfoForWarning>(warningLoc);
-        } else {
-            funcCall->Set<DebugLocationInfoForWarning>(loc);
-        }
+    const auto& warningLoc = expr.baseFunc != nullptr ? TranslateLocation(*expr.baseFunc) : loc;
+    if (firstNothingArgIndex.has_value()) {
+        FinalizeNothingCallArguments(*funcCall, loc, warningLoc);
+        return funcCall;
+    }
+    if (instFuncTy.GetReturnType()->IsNothing()) {
+        CreateAndAppendTerminator<Exit>(loc, currentBlock);
+        currentBlock = CreateBlock();
+        currentBlock->SetDebugLocation(loc);
     }
     return funcCall;
 }

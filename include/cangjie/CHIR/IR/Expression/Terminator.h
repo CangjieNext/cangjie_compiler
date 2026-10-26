@@ -28,6 +28,8 @@ enum class SourceExpr : uint8_t {
     QUEST,
     BINARY,
     FOR_IN_EXPR,
+    // Its failure edge enters the next source match case rather than another condition in the same case.
+    MATCH_CASE,
     OTHER
 };
 
@@ -114,6 +116,12 @@ public:
 
     std::vector<Block*> GetNormalBlocks() const;
 
+    /** Records which source construct owns the default edge for unreachable diagnostics. */
+    void SetSourceExpr(SourceExpr srcExpr);
+
+    /** Returns the source construct represented by this table's default edge. */
+    SourceExpr GetSourceExpr() const;
+
 protected:
     std::string OperandsToString() const override;
 
@@ -129,6 +137,8 @@ private:
      * Note that default Block does not have the case val.
      */
     std::vector<uint64_t> caseVals;
+    // The checker interprets a table default differently for a match case, if-let, while-let, and ordinary CHIR.
+    SourceExpr sourceExpr{SourceExpr::OTHER};
 };
 
 /**

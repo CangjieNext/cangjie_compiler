@@ -1022,6 +1022,14 @@ private:
         auto dest = cast->GetResult();
         auto src = cast->GetSourceValue();
         auto srcTy = cast->GetSourceType();
+        auto targetTy = cast->GetTargetType();
+        if ((targetTy->IsEnum() &&
+             srcTy->GetTypeKind() == Type::TypeKind::TYPE_UINT32) ||
+            (srcTy->IsEnum() &&
+             targetTy->GetTypeKind() == Type::TypeKind::TYPE_UINT32)) {
+            state.Propagate(src, dest);
+            return;
+        }
         if (srcTy->IsRef() || srcTy->IsClass()) {
             state.Propagate(src, dest);
             return;

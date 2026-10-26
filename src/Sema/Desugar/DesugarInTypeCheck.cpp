@@ -490,8 +490,9 @@ void DesugarCallExpr(ASTContext& ctx, CallExpr& ce)
     auto callExpr = MakeOwnedNode<CallExpr>();
     ctx.RemoveTypeCheckCache(*callExpr);
     callExpr->sourceExpr = &ce;
-    callExpr->begin = ce.begin;
-    callExpr->end = ce.end;
+    CopyBasicInfo(&ce, callExpr.get());
+    callExpr->leftParenPos = ce.leftParenPos;
+    callExpr->rightParenPos = ce.rightParenPos;
     auto ma = MakeOwnedNode<MemberAccess>();
     ctx.RemoveTypeCheckCache(*ma);
     ma->scopeName = ce.baseFunc->scopeName;
@@ -521,6 +522,8 @@ void DesugarVariadicCallExpr(ASTContext& ctx, CallExpr& ce, size_t fixedPosition
     ce.callKind = CallKind::CALL_VARIADIC_FUNCTION;
     callExpr->sourceExpr = &ce;
     CopyBasicInfo(&ce, callExpr.get());
+    callExpr->leftParenPos = ce.leftParenPos;
+    callExpr->rightParenPos = ce.rightParenPos;
     callExpr->baseFunc = std::move(ce.baseFunc);
     CJC_ASSERT(ce.args.size() >= fixedPositionalArity);
     size_t idx = 0;
@@ -640,6 +643,10 @@ void TypeChecker::TypeCheckerImpl::DesugarArrayCall(ASTContext& ctx, CallExpr& c
     arrayExpr->sourceExpr = &ce;
     arrayExpr->begin = ce.begin;
     arrayExpr->end = ce.end;
+    // Keep paren positions so diagnostics on the desugared ArrayExpr (e.g. VArray
+    // arg-number mismatch) carry a valid range instead of a zero position.
+    arrayExpr->leftParenPos = ce.leftParenPos;
+    arrayExpr->rightParenPos = ce.rightParenPos;
     ce.desugarExpr = std::move(arrayExpr);
     AddCurFile(ce, ce.curFile);
 }

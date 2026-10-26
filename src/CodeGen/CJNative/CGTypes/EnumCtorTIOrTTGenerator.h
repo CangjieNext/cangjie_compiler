@@ -53,7 +53,8 @@ private:
     EnumCtorLayout ComputeLLVMLayout(
         const std::vector<CHIR::Type*>& fields, const std::string& tiName, const std::string& className);
     EnumCtorLayout GenLayoutForReferenceType(const std::string& tiName, const std::string& className);
-    EnumCtorLayout GenLayoutForZeroSize();
+    EnumCtorLayout GenLayoutForZeroSize(const std::vector<CHIR::Type*>& paramTypes,
+        const std::string& tiName, const std::string& className);
     EnumCtorLayout GenLayoutForTrivial(const std::string& tiName);
     EnumCtorLayout GenLayoutForStructure(const CGEnumType* cgEnumType, const std::vector<CHIR::Type*>& paramTypes,
         const std::string& tiName, const std::string& className);

@@ -9,60 +9,17 @@
 
 #include "NativeFFI/Java/Utils.h"
 #include "Utils.h"
-#include "NativeFFI/Utils.h"
+#include "NativeFFI/Java/JavaMemberSignature.h"
 
+#include "cangjie/AST/Node.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/AST/Match.h"
+#include "cangjie/Utils/CheckUtils.h"
+#include "cangjie/Utils/SafePointer.h"
 
 namespace Cangjie::Interop::Java {
 using namespace AST;
-
-
-/**
- * method or field jni signature
- */
-struct MemberJNISignature {
-    std::string classTypeSignature;
-    std::string name;
-    std::string signature;
-
-    MemberJNISignature(std::string classTypeSignature, std::string name, std::string signature)
-        : classTypeSignature(classTypeSignature), name(name), signature(signature) {}
-
-    MemberJNISignature(Utils& utils, FuncDecl& member)
-        : MemberJNISignature(utils, member, StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
-    {
-        auto& retTy = *member.funcBody->retType->GetTy();
-        std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
-        signature = utils.GetJavaTypeSignature(retTy, paramTys);
-    }
-
-    MemberJNISignature(Utils& utils, PropDecl& member)
-        : MemberJNISignature(utils, member, StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
-    {
-        signature = utils.GetJavaTypeSignature(*member.GetTy());
-    }
-
-    MemberJNISignature(Utils& utils, Decl& member, Ptr<ClassLikeDecl> jobject)
-    {
-        CJC_ASSERT(jobject);
-        Ptr<Ty> ty = jobject->GetTy();
-
-        if (Java::IsSyntheticMirrorWrapper(*jobject)) {
-            if (jobject->inheritedTypes.size() > 1) {
-                ty = jobject->inheritedTypes[1]->GetTy(); // take interface ty
-            } else {
-                CJC_ASSERT_WITH_MSG(!jobject->inheritedTypes.empty(), "JObject must inherit Cangjie Object");
-                ty = jobject->inheritedTypes[0]->GetTy(); // take superclass ty
-            }
-        }
-        classTypeSignature = utils.GetJavaClassNormalizeSignature(*ty);
-        name = GetJavaMemberName(member);
-        CJC_ASSERT(member.astKind == ASTKind::FUNC_DECL || member.astKind == ASTKind::PROP_DECL);
-        signature = utils.GetJavaTypeSignature(*member.GetTy());
-    }
-};
 
 class InteropLibBridge {
 public:
@@ -91,14 +48,19 @@ public:
     Decl& GetJavaEntityKindJObject();
 
     /**
-     * Java_CFFI_newGlobalReference
+     * Java_CFFI_newGlobalRef
      */
     Ptr<FuncDecl> GetNewGlobalRefDecl();
 
     /**
-     * Java_CFFI_deleteGlobalReference
+     * Java_CFFI_deleteGlobalRef
      */
-    Ptr<FuncDecl> GetDeleteGlobalRefDecl();
+    Ptr<FuncDecl> GetDeleteGlobalRefDecl() const;
+
+    /**
+     * Java_CFFI_swapLocalWithGlobalReference
+     */
+    Ptr<FuncDecl> GetSwapLocalWithGlobalRefDecl() const;
 
     /**
      * JNIEnv_ptr
@@ -210,26 +172,6 @@ public:
     Ptr<FuncDecl> GetGetFromRegistryOptionDecl();
 
     /**
-     * Java_CFFI_getField_raw
-     */
-    Ptr<FuncDecl> GetGetFieldDecl();
-
-    /**
-     * Java_CFFI_setField_raw
-     */
-    Ptr<FuncDecl> GetSetFieldDecl();
-
-    /**
-     * Java_CFFI_getStaticField_raw
-     */
-    Ptr<FuncDecl> GetGetStaticFieldDecl();
-
-    /**
-     * Java_CFFI_setStaticField_raw
-     */
-    Ptr<FuncDecl> GetSetStaticFieldDecl();
-
-    /**
      * INTEROPLIB_VERSION
      */
     Ptr<VarDecl> GetInteropLibVersionVarDecl();
@@ -254,22 +196,11 @@ public:
      */
     Ptr<FuncDecl> GetWithExceptionHandlingDecl();
 
-    Ptr<FuncDecl> GetJClassDecl() const;
-    Ptr<FuncDecl> GetJClassIdDecl() const;
+    Ptr<FuncDecl> GetGetClassDecl() const;
     Ptr<FuncDecl> GetGetMethodIdDecl() const;
     Ptr<FuncDecl> GetGetStaticMethodIdDecl() const;
-    Ptr<FuncDecl> GetParseMethodSignatureDecl();
-    Ptr<FuncDecl> GetParseComponentSignatureDecl();
-    Ptr<FuncDecl> GetCallNestDecl();
-    Ptr<FuncDecl> GetMethodIdConstr();
-    Ptr<FuncDecl> GetMethodIdConstrStatic();
-    Ptr<FuncDecl> GetFieldIdConstr();
-    Ptr<FuncDecl> GetFieldIdConstrStatic();
-
-    /**
-     * deleteLocalRef()
-     */
-    Ptr<FuncDecl> GetDeleteLocalRefDecl();
+    Ptr<FuncDecl> GetGetInstanceFieldIdDecl() const;
+    Ptr<FuncDecl> GetGetStaticFieldIdDecl() const;
 
     Ptr<Ty> GetJValueTy();
 
@@ -287,6 +218,21 @@ public:
      * jobject ty
      */
     AST::Ty& GetJniJobjectTy() const;
+
+    /**
+     * jclass ty
+     */
+    AST::Ty& GetJniJClassTy() const;
+
+    /**
+     * jmethodId ty
+     */
+    AST::Ty& GetJniJmethodIdTy() const;
+
+    /**
+     * jfieldId ty
+     */
+    AST::Ty& GetJniJfieldIdTy() const;
 
     /**
      * jlong
@@ -344,27 +290,24 @@ public:
     OwnedPtr<CallExpr> CreateGetJniEnvCall(Ptr<File> curFile);
 
     /**
-     * Creates a block that performs Java object construction,
-     * including all required JNI setup (JNIEnv, class, constructor ID,
-     * arguments and exception handling), and returns the created object.
-     */
-    OwnedPtr<Block> CreateJavaConstructorBlock(Ptr<Ty> classTy, FuncParamList& paramList,
-        Ptr<File> curFile, bool isMirror);
-
-    /**
      * Java_CFFI_newJavaArray(env, signature, [args])
      */
     OwnedPtr<CallExpr> CreateCFFINewJavaArrayCall(OwnedPtr<Expr> jniEnv, FuncParamList& params);
 
     /**
-     * Java_CFFI_newGlobalReference(env, obj, isWeak)
+     * Java_CFFI_swapLocalWithGlobalReference(env, localRef)
      */
-    OwnedPtr<CallExpr> CreateNewGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj, bool isWeak);
+    OwnedPtr<CallExpr> CreateSwapLocalWithGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> localRef) const;
 
     /**
-     * Java_CFFI_deleteGlobalReference(env, obj)
+     * Java_CFFI_newGlobalRef(env, obj)
      */
-    OwnedPtr<CallExpr> CreateDeleteGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj);
+    OwnedPtr<CallExpr> CreateNewGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj);
+
+    /**
+     * Java_CFFI_deleteGlobalRef(env, obj)
+     */
+    OwnedPtr<CallExpr> CreateDeleteGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj) const;
 
     /**
      * Java_CFFI_arrayGetLength(env)
@@ -377,7 +320,8 @@ public:
      * Java_CFFI_arraySet(jniEnv, obj, typeSignature, cffiMethodArgs)
      */
     OwnedPtr<AST::Expr> CreateCFFICallArrayMethodCall(OwnedPtr<AST::Expr> jniEnv, OwnedPtr<AST::Expr> obj,
-        AST::FuncParamList& params, const Ptr<AST::GenericParamDecl> genericParam, ArrayOperationKind kind);
+        AST::FuncParamList& params, const Ptr<AST::GenericParamDecl> genericParam,
+        Native::FFI::Java::ArrayOperationKind kind);
 
     /**
      * Converts the result of a direct JNI method call to the Cangjie value expected
@@ -387,31 +331,7 @@ public:
      * (currently based on JavaEntity). JNI boolean results are normalized to
      * Cangjie Bool. Other primitive results are returned unchanged.
      */
-    OwnedPtr<Expr> ConvertJavaResultToCJ(OwnedPtr<Expr> result, Ptr<Ty> resultTy, Decl& scope);
-    
-   /**
-    * Creates a block that prepares the JNI state and invokes a Java method.
-    *
-    * @param curFile   Current source file.
-    * @param paramList Method arguments.
-    * @param retTy     Method return type.
-    * @param isStatic  Whether the target method is static.
-    * @param javaRef   Receiver object for instance calls; unused for static calls.
-    * @param signature JNI signature of the target method.
-    */
-    OwnedPtr<Block> CreateJavaMethodCallBlock(Ptr<File> curFile, FuncParamList& paramList, Ptr<Ty> retTy,
-        bool isStatic, OwnedPtr<Expr> javaRef, const MemberJNISignature& signature);
-
-   /**
-    * Creates a block that prepares the JNI state and invokes the Java
-    * superclass method corresponding to the given call.
-    *
-    * @param impl      JavaImpl class containing the call.
-    * @param call      Original super-method call expression.
-    * @param signature JNI signature of the target superclass method.
-    */
-    OwnedPtr<Block> CreateJavaSuperMethodCallBlock(ClassDecl& impl, CallExpr& call,
-        const MemberJNISignature& signature);
+    OwnedPtr<Expr> ConvertJavaResultToCJ(OwnedPtr<Expr> result, Ptr<Ty> resultTy, const Ptr<Decl> scope = nullptr);
 
     /**
      * Java_CFFI_removeFromRegistry(registryId)
@@ -460,32 +380,6 @@ public:
     OwnedPtr<CallExpr> CreateGetFromRegistryOptionCall(OwnedPtr<Expr> regId, Ptr<Ty> ty);
 
     /**
-     * Java_CFFI_getField_raw(env, obj, typeSignature, fieldName, fieldSignature)
-     */
-    OwnedPtr<CallExpr> CreateGetFieldCall(Ptr<Expr> env, OwnedPtr<Expr> obj, std::string typeSignature,
-                                          std::string fieldName, std::string fieldSignature);
-
-    /**
-     * Java_CFFI_getStaticField_raw(env, typeSignature, fieldName, fieldSignature)
-     */
-    OwnedPtr<CallExpr> CreateGetStaticFieldCall(Ptr<Expr> env, std::string typeSignature,
-                                          std::string fieldName, std::string fieldSignature);
-
-    /**
-     * Java_CFFI_setField_raw(env, obj, signature.classTypeSignature,
-     *                        signature.name, signature.signature, Java_CFFI_JavaEntity(value))
-     */
-    OwnedPtr<CallExpr> CreateSetFieldCall(Ptr<Expr> env, OwnedPtr<Expr> obj,
-                                          const MemberJNISignature& signature,
-                                          OwnedPtr<Expr> value);
-
-    /**
-     * Java_CFFI_setStaticField_raw(env, typeSignature, fieldName, fieldSignature, Java_CFFI_JavaEntity(value))
-     */
-    OwnedPtr<CallExpr> CreateSetStaticFieldCall(Ptr<Expr> env, std::string typeSignature, std::string fieldName,
-                                          std::string fieldSignature, OwnedPtr<Expr> value);
-
-    /**
      * Java_CFFI_ensure_not_null(entity)
      */
     OwnedPtr<Expr> CreateEnsureNotNullCall(OwnedPtr<Expr> entity);
@@ -511,10 +405,10 @@ public:
      * If [toRaw] = `true`, then it returns java reference as CPointer<Unit> instead of an instance
      */
     OwnedPtr<Expr> UnwrapJavaMirrorOption(
-        OwnedPtr<Expr> entityOption, Ptr<Ty> ty, const ClassLikeDecl& mirror, bool toRaw = false);
+        OwnedPtr<Expr> entityOption, Ptr<Ty> ty, Ptr<const Decl> scope, bool toRaw = false);
 
     OwnedPtr<Expr> UnwrapJavaImplOption(OwnedPtr<Expr> env, OwnedPtr<Expr> entityOption, Ptr<Ty> ty,
-        const ClassLikeDecl& mirror, bool toRaw = false);
+        Ptr<const Decl> scope, bool toRaw = false);
 
     /**
      * Java_CFFI_JavaEntity -> reference wrapper
@@ -532,7 +426,7 @@ public:
      * Java_CFFI_getFromRegistry<T>(entity).
      * Else, if [toRaw] is `true` and T is @JavaMirror or @JavaImpl class, then it returns its CPointer<Unit> java ref
      */
-    OwnedPtr<Expr> UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty, const Decl& outerDecl, bool toRaw = false);
+    OwnedPtr<Expr> UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty, Ptr<const Decl> scope, bool toRaw = false);
 
     OwnedPtr<AST::MatchExpr> CreateMatchByTypeArgument(
         const Ptr<AST::GenericParamDecl> genericParam,
@@ -553,7 +447,7 @@ public:
     OwnedPtr<Expr> SelectJPrimitiveNameByTypeKind(TypeKind kind, Ptr<Ty> ty);
     OwnedPtr<Expr> SelectEntityWrapperByTypeKind(TypeKind kind, Ptr<Ty> ty, Ptr<FuncParam> param, Ptr<File> file);
     OwnedPtr<Expr> SelectEntityUnwrapperByTypeKind(
-        TypeKind kind, Ptr<Ty> ty, Ptr<Expr> entity, const ClassLikeDecl& mirror);
+        TypeKind kind, Ptr<Ty> ty, Ptr<Expr> entity, Ptr<const Decl> scope);
     std::map<std::string, OwnedPtr<Expr>> GenerateTypeMappingWithSelector(
         std::function<OwnedPtr<Expr>(TypeKind, Ptr<Ty>)> selector
     );
@@ -565,17 +459,40 @@ public:
      */
     OwnedPtr<AST::FuncDecl> CreateDeletingGlobalRefFinalizer(AST::ClassDecl& decl);
 
+    OwnedPtr<Expr> CreateGetClassCall(const AST::Ty& javaTy, Ptr<Expr> envPtr, File& curFile);
+    OwnedPtr<Expr> CreateGetClassCall(const std::string& className, Ptr<Expr> envPtr, File& curFile);
+
+    OwnedPtr<CallExpr> CreateGetMethodIdCall(Ptr<Expr> env, OwnedPtr<Expr> clazz,
+        const std::string& name, const std::string& signature, bool isStatic);
+
+    OwnedPtr<CallExpr> CreateGetFieldIdCall(Ptr<Expr> env, OwnedPtr<Expr> clazz,
+        const Native::FFI::Java::JavaMemberSignature javaField);
+
     bool IsInteropLibAccessible() const;
     void CheckInteropLibVersion();
     static bool IsInteropLibAccessible(const ImportManager& importManager);
     static bool IsJavaEntityTy(Ty& ty);
+
+    OwnedPtr<CallExpr> CreateAsJniJobjectCall(OwnedPtr<Expr> javaEntity) const;
+    OwnedPtr<CallExpr> CreateAsJvalueCall(OwnedPtr<Expr> javaEntity) const;
+
+    Ptr<StructDecl> GetJNINativeInterfaceDecl() const;
+
+    /**
+     * Converts a Cangjie expression to its JNI jvalue representation.
+     */
+    OwnedPtr<Expr> CreateJValueExpr(OwnedPtr<Expr> expr);
+    
+    OwnedPtr<Expr> CreateJObjectExpr(OwnedPtr<Expr> cjExpr);
+
+    OwnedPtr<Expr> CreateJNIHandlePendingExceptionCall(Ptr<Expr> jniEnvPtr);
 
 private:
    /**
     * Version value should be the same as for java interop library for the same SDK.
     * Version value must be bumped up on: API changes in interop library that require compatibility with cjc.
     */
-    static constexpr auto INTEROPLIB_VERSION = 11;
+    static constexpr auto INTEROPLIB_VERSION = 12;
     static constexpr auto INTEROPLIB_PACKAGE_NAME = "java.internal";
 
     const std::vector<TypeKind> supportedArrayPrimitiveElementType = {
@@ -584,6 +501,9 @@ private:
         TypeKind::TYPE_FLOAT32, TypeKind::TYPE_FLOAT64
     };
 
+    /**
+     * Unwraps value of generic type within JArray.
+     */
     OwnedPtr<Expr> UnwrapJavaArrayEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty, const ClassLikeDecl& mirror);
     OwnedPtr<Expr> UnwrapJavaPrimitiveEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty);
 
@@ -615,65 +535,7 @@ private:
         return ImportDecl<K>(INTEROP_JAVA_LANG_PACKAGE, declname);
     }
 
-    const std::string_view SelectJNIStaticMethodName(TypeKind retTypeKind, bool hasArgs);
-    const std::string_view SelectJNIInstanceMethodName(TypeKind retTypeKind, bool virt, bool hasArgs);
-
-    /**
-     * onverts a Cangjie expression to its JNI jvalue representation.
-     */
-    OwnedPtr<Expr> CreateJValueExpr(OwnedPtr<Expr> expr);
-    /**
-     * Creates JNI jvalue-compatible expressions for a non-empty function
-     * parameter list.
-     *
-     * Each returned expression corresponds to one function parameter converted
-     * to its JNI jvalue representation.
-     */
-    std::vector<OwnedPtr<Expr>> CreateJNIArgJValueExprs(FuncParamList& paramList, File& curFile);
-
-    /**
-    * Creates a variable holding a Cangjie VArray of JNI jvalue-compatible
-    * argument representations.
-    *
-    * The input expressions must already be converted to the representation
-    * expected in JNI argument slots.
-    *
-    * Returns nullptr if the argument list is empty
-    */
-    OwnedPtr<VarDecl> CreateJNIArgsVar(std::vector<OwnedPtr<Expr>> args, File& curFile);
-
-   /**
-    * Creates a variable holding the Java class resolved by its JNI class name.
-    *
-    * Generates a Java_CFFI_ClassInit(env, className) call and stores its result
-    * in a temporary variable for use by subsequent JNI operations.
-    *
-    * Returns nullptr if the required CFFI class initialization function
-    * cannot be resolved.
-    */
-    OwnedPtr<VarDecl> CreateJNIClassVar(Ptr<Expr> env, const std::string& className);
-
-   /**
-    * Builds a JNI NewObject/NewObjectA call and wraps the result as JavaEntity.
-    *
-    * @param env       JNI environment (`JNIEnv*`).
-    * @param javaClass Target Java class (`jclass`) to instantiate.
-    * @param methodID  Constructor method ID (`jmethodID`).
-    * @param argsExpr  Constructor arguments as a `jvalue[]` expression.
-    *                   If null, `NewObject` is used; otherwise `NewObjectA`.
-    */
-    OwnedPtr<CallExpr> CreateJNINewObjectCall(Ptr<Expr> env, OwnedPtr<Expr> javaClass,
-        OwnedPtr<Expr> methodID, OwnedPtr<Expr> argsExpr);
-
-    OwnedPtr<CallExpr> CreateJNICall(Ptr<Expr> env, Ptr<VarDecl> jniFunction, std::vector<OwnedPtr<FuncArg>> callArgs);
-    Ptr<StructDecl> GetJNINativeInterfaceDecl() const;
-    Ptr<VarDecl> GetJNINativeInterfaceField(const std::string_view name);
-    OwnedPtr<FuncArg> PrepareJNIArgsVArray(OwnedPtr<Expr> expr);
-    OwnedPtr<CallExpr> CreateJNIEnvReadCall(Ptr<Expr> env);
-    OwnedPtr<CallExpr> CreateAsJObjectCall(OwnedPtr<Expr> javaEntity);
     OwnedPtr<CallExpr> CreateBitCastExpr(OwnedPtr<Expr> expr, Ptr<Ty> resultTy, Ptr<Ty> valueTy, Ptr<File> curFile);
-    OwnedPtr<CallExpr> CreateJNIMethodId(Ptr<Expr> env, OwnedPtr<Expr> clazz,
-        const std::string& name, const std::string& signature, bool isStatic);
 
     const ImportManager& importManager;
     TypeManager& typeManager;

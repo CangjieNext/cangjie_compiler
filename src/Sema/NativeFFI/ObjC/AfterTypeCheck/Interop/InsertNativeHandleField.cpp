@@ -10,7 +10,7 @@
  * This file implements inserting NativeObjCId field in Objective-C mirrors
  */
 
-#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "Handlers.h"
 
 using namespace Cangjie::AST;
@@ -23,37 +23,16 @@ void InsertNativeHandleField::HandleImpl(InteropContext& ctx)
             continue;
         }
         auto mirrorClass = As<ASTKind::CLASS_DECL>(mirror);
-        if (!mirrorClass || HasMirrorSuperClass(*mirrorClass)) {
+        if (!mirrorClass || HasObjCMirrorSuperClass(*mirrorClass)) {
             continue;
         }
 
         auto nativeObjCIdField = ctx.factory.CreateNativeHandleField(*mirrorClass);
-        CJC_NULLPTR_CHECK(nativeObjCIdField);
-        mirrorClass->body->decls.emplace_back(std::move(nativeObjCIdField));
+        mirrorClass->body->decls.push_back(std::move(nativeObjCIdField));
     }
 
-    for (auto& wrapper: ctx.synWrappers) {
-        if (wrapper->TestAttr(Attribute::IS_BROKEN)) {
-            continue;
-        }
+    for (auto& wrapper : ctx.mirrorInterfaceHandleWrappers) {
         auto nativeObjCIdField = ctx.factory.CreateNativeHandleField(*wrapper);
-        CJC_NULLPTR_CHECK(nativeObjCIdField);
-        wrapper->body->decls.emplace_back(std::move(nativeObjCIdField));
-    }
-
-    for (auto& impl : ctx.impls) {
-        if (impl->TestAttr(Attribute::IS_BROKEN)) {
-            continue;
-        }
-
-        if (HasMirrorSuperClass(*impl)) {
-            continue;
-        }
-
-        CJC_ASSERT(HasMirrorSuperInterface(*impl));
-
-        auto nativeObjCIdField = ctx.factory.CreateNativeHandleField(*impl);
-        CJC_NULLPTR_CHECK(nativeObjCIdField);
-        impl->body->decls.emplace_back(std::move(nativeObjCIdField));
+        wrapper->body->decls.push_back(std::move(nativeObjCIdField));
     }
 }

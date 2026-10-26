@@ -85,10 +85,19 @@ void FFIParserImpl::CheckAnnotations(const PtrVector<Annotation>& annos, ScopeKi
             case AnnotationKind::JAVA_MIRROR:
             case AnnotationKind::JAVA_IMPL: {
                 jp.CheckAnnotation(anno);
+                // `@JavaMirror` and `@JavaImpl` annotations are deprecated.
+                // The migration way is to use `@Java foreign` and `@Java` instead.
+                DiagDeprecatedAnnotation(anno);
+                break;
+            }
+            case AnnotationKind::JAVA:
+            case AnnotationKind::JAVA_HAS_DEFAULT: {
+                jp.CheckAnnotation(anno);
                 break;
             }
             case AnnotationKind::FOREIGN_NAME: {
                 CheckForeignNameAnnoArgs(anno);
+                
                 CheckForeignNameAnnoTarget(anno);
                 break;
             }
@@ -98,12 +107,19 @@ void FFIParserImpl::CheckAnnotations(const PtrVector<Annotation>& annos, ScopeKi
                 CheckForeignGetterSetterNameAnnoTarget(anno);
                 break;
             }
-            case AnnotationKind::JAVA_HAS_DEFAULT: {
-                jp.CheckJavaHasDefaultAnnotation(anno);
+            case AnnotationKind::OBJ_C_MIRROR:
+            case AnnotationKind::OBJ_C_IMPL: {
+                op.CheckAnnotation(anno, scopeKind);
+                // `@ObjCMirror` and `@ObjCImpl` annotations are deprecated.
+                // The migration way is to use `@ObjC foreign` and `@ObjC` instead.
+                DiagDeprecatedAnnotation(anno);
                 break;
             }
-            case AnnotationKind::OBJ_C_MIRROR:
-            case AnnotationKind::OBJ_C_IMPL:
+            case AnnotationKind::OBJ_C: {
+                op.CheckAnnotation(anno, scopeKind);
+                break;
+            }
+            
             case AnnotationKind::OBJ_C_INIT:
             case AnnotationKind::OBJ_C_OPTIONAL: {
                 op.CheckAnnotation(anno, scopeKind);
@@ -166,11 +182,12 @@ void FFIParserImpl::CheckForeignNameAnnotation(Decl& decl) const
         if (it->kind != AnnotationKind::FOREIGN_NAME) {
             continue;
         }
-        if (!decl.outerDecl || (!decl.outerDecl->IsJavaMirror() && !decl.outerDecl->IsJavaImpl() &&
-            !decl.outerDecl->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE))) {
-                p.diag.DiagnoseRefactor(DiagKindRefactor::parse_foreign_name_on_ffi_decl_member, decl);
-                decl.EnableAttr(Attribute::IS_BROKEN);
-                return;
+        if (!decl.outerDecl ||
+            (!decl.outerDecl->IsJavaForeign() && !decl.outerDecl->IsJavaExport() &&
+                !decl.outerDecl->TestAnyAttr(Attribute::OBJ_C_FOREIGN, Attribute::OBJ_C_EXPORT))) {
+            p.diag.DiagnoseRefactor(DiagKindRefactor::parse_foreign_name_on_ffi_decl_member, decl);
+            decl.EnableAttr(Attribute::IS_BROKEN);
+            return;
         }
     }
 }
@@ -185,7 +202,7 @@ OCFFIParserImpl FFIParserImpl::ObjC() const
     return op;
 }
 
-void FFIParserImpl::CheckZeroOrSingleStringLitArgAnnotation(const AST::Annotation &anno,
+void FFIParserImpl::CheckZeroOrSingleStringLitArgAnnotation(AST::Annotation &anno,
                                                             const std::string &annotationName) const
 {
     if (anno.args.size() == 0) {
@@ -194,17 +211,19 @@ void FFIParserImpl::CheckZeroOrSingleStringLitArgAnnotation(const AST::Annotatio
 
     if (anno.args.size() > 1 || !IsLitString(anno.args[0]->expr)) {
         p.DiagAnnotationMoreThanOneArgs(anno, annotationName, "'String' literal");
+        anno.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
 }
 
-void FFIParserImpl::CheckNoArgAnnotation(const AST::Annotation &anno, const std::string &annotationName) const
+void FFIParserImpl::CheckNoArgAnnotation(AST::Annotation &anno, const std::string &annotationName) const
 {
     if (anno.args.empty()) {
         return;
     }
 
     p.DiagAnnotationShouldNotHaveArgs(anno, annotationName);
+    anno.EnableAttr(Attribute::IS_BROKEN);
 }
 
 
@@ -218,23 +237,37 @@ void FFIParserImpl::CheckClassLikeSignature(AST::ClassLikeDecl& decl, const PtrV
             case AnnotationKind::JAVA_IMPL:
                 jp.CheckImplSignature(decl, annos);
                 break;
+            case AnnotationKind::JAVA:
+                if (p.HasModifier(decl.modifiers, TokenKind::FOREIGN)) {
+                    jp.CheckMirrorSignature(decl, annos);
+                } else {
+                    jp.CheckImplSignature(decl, annos);
+                }
+                break;
             case AnnotationKind::OBJ_C_MIRROR:
                 op.CheckMirrorSignature(decl, annos);
                 break;
             case AnnotationKind::OBJ_C_IMPL:
                 op.CheckImplSignature(decl, annos);
                 break;
+            case AnnotationKind::OBJ_C:
+                if (p.HasModifier(decl.modifiers, TokenKind::FOREIGN)) {
+                    op.CheckMirrorSignature(decl, annos);
+                } else {
+                    op.CheckImplSignature(decl, annos);
+                }
+                break;
             default: break;
         }
     }
 }
-
 
 void FFIParserImpl::CheckFuncSignature(AST::FuncDecl& decl, const PtrVector<Annotation>& annos) const
 {
     for (auto& anno : annos) {
         switch (anno->kind) {
             case AnnotationKind::OBJ_C_MIRROR:
+            case AnnotationKind::OBJ_C:
                 op.CheckMirrorSignature(decl, annos);
                 break;
             default: break;

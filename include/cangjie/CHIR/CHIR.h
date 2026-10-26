@@ -126,12 +126,13 @@ private:
     void DumpCHIRToFile(const std::string& suffix, bool needCheckFlag = true);
     void DoClosureConversion();
     void ReportUnusedCode();
-    void Devirtualization(DevirtualizationInfo& devirtInfo);
+    void Devirtualization();
     void UnreachableBlockElimination();
     void UnreachableBlockReporter();
     void NothingTypeExprElimination();
     void UselessExprElimination();
     void UnreachableBranchReporter();
+    void ClearMatchMetadata();
     void UselessFuncElimination(const std::string& passName);
     void RedundantLoadElimination();
     void UselessAllocateElimination();
@@ -144,7 +145,7 @@ private:
     void RunConstantPropagation();
     void RunRangePropagation();
     void RunArrayListConstStartOpt();
-    void RunFunctionInline(DevirtualizationInfo& devirtInfo);
+    void RunFunctionInline();
     void RunArrayLambdaOpt();
     void RunRedundantFutureOpt();
     void RunSanitizerCoverage();
@@ -152,7 +153,6 @@ private:
     void RunOptimizationPass();
     void RunUnitUnify();
     void OptimizeFuncReturnType();
-    DevirtualizationInfo CollectDevirtualizationInfo();
     bool RunConstantEvaluation();
     bool RunIRChecker(const Phase& phase);
     void RecordCodeInfoAtTheBegin();
@@ -208,7 +208,6 @@ private:
     std::unordered_set<ClassDef*> uselessClasses;
     std::unordered_set<Function*> uselessLambda;
     std::vector<CHIR::Function*> initFuncsForConstVar;
-    std::unordered_map<Block*, Expression*> maybeUnreachable;
     /// Whether this CHIR convertor is translating Annotations
     bool isComputingAnnos{false};
     std::vector<std::pair<const AST::Decl*, Function*>> annoFactoryFuncs;

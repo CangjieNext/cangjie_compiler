@@ -553,7 +553,14 @@ llvm::MDTuple* ClassMetadataInfo::GenerateClassLikeTypeAttrsMetadata(const CHIR:
     if (IsClassForBoxType(cd.GetSrcCodeIdentifier())) {
         metadataType = ExtraAttribute::BOX_CLASS;
     }
-    return GenerateAttrsMetadata(cd.GetAttributeInfo(), metadataType, cd.GetAnnoInfo());
+    // An abstract class is implicitly open, but CHIR only sets ABSTRACT on it;
+    // VIRTUAL reflects the explicit `open` alone. Patch a local copy, not the def
+    // (same pattern as GenerateClassAbsMethodMetadata).
+    auto attrInfo = cd.GetAttributeInfo();
+    if (cd.IsClass() && cd.TestAttr(CHIR::Attribute::ABSTRACT)) {
+        attrInfo.SetAttr(CHIR::Attribute::VIRTUAL, true);
+    }
+    return GenerateAttrsMetadata(attrInfo, metadataType, cd.GetAnnoInfo());
 }
 
 void EnumMetadataInfo::GenerateAllEnumsMetadata()

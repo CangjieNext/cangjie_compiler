@@ -7,7 +7,7 @@
 #include "DiagsInterop.h"
 #include "Diags.h"
 #include "Utils.h"
-#include "cangjie/AST/Utils.h"
+#include "NativeFFI/Java/Utils.h"
 
 namespace Cangjie::Interop::Java {
 using namespace Sema;
@@ -32,6 +32,7 @@ Range MakeJavaImplJavaNameRange(const ClassLikeDecl& decl)
 
 void DiagJavaImplRedefinitionInJava(DiagnosticEngine& diag, const ClassLikeDecl& decl, const ClassLikeDecl& prevDecl)
 {
+    using namespace Native::FFI::Java;
     if (decl.TestAttr(Attribute::IS_BROKEN)) {
         return;
     }
@@ -56,19 +57,21 @@ void DiagJavaMirrorChildMustBeAnnotated(DiagnosticEngine& diag, const ClassLikeD
         } else if (auto parentI = DynamicCast<InterfaceTy>(pty)) {
             parentDecl = parentI->decl;
         }
-        if (parentDecl && parentDecl->IsJavaMirror()) {
+        if (parentDecl && parentDecl->IsJavaForeign()) {
             break;
         }
     }
 
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_subtype_must_be_annotated, decl, parentDecl->identifier);
+    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_subtype_must_be_annotated, decl,
+        parentDecl->identifier);
+    builder.AddMainHintArguments(decl.identifier);
 }
 
 void DiagJavaDeclCannotInheritPureCangjieType(DiagnosticEngine& diag, ClassLikeDecl& decl)
 {
-    CJC_ASSERT(decl.IsJavaMirror() || decl.IsJavaImpl());
+    CJC_ASSERT(decl.IsJavaForeign() || decl.IsJavaExport());
 
-    auto kind = decl.IsJavaMirror()
+    auto kind = decl.IsJavaForeign()
         ? DiagKindRefactor::sema_java_mirror_cannot_inherit_pure_cangjie_type
         : DiagKindRefactor::sema_java_impl_cannot_inherit_pure_cangjie_type;
 
@@ -77,7 +80,7 @@ void DiagJavaDeclCannotInheritPureCangjieType(DiagnosticEngine& diag, ClassLikeD
     for (const auto& superType : decl.inheritedTypes) {
         auto superDecl = Ty::GetDeclOfTy(superType->GetTy());
         CJC_ASSERT(superDecl);
-        if (!superDecl->IsJavaMirror() && !superDecl->IsJavaImpl() && !superDecl->GetTy()->IsObject() &&
+        if (!superDecl->IsJavaForeign() && !superDecl->IsJavaExport() && !superDecl->GetTy()->IsObject() &&
             !superDecl->GetTy()->IsAny()) {
             builder.AddNote(*superType, "'" + superType->ToString() + "'" + " is not a java-compatible type");
         }
@@ -108,10 +111,10 @@ void DiagJavaTypesAsGenericParam(DiagnosticEngine& diag, const Node& expr, std::
     CJC_ASSERT(genericDecl);
 
     auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_parameter_of_java_type, expr,
-        genericDecl->identifier, primaryDiagJavaDecl->identifier);
+        primaryDiagJavaDecl->identifier, genericDecl->identifier);
 
     for (auto javaDecl : javaDecls) {
-        builder.AddNote("Also uses java interoperability type '" + javaDecl->identifier + "'");
+        builder.AddNote("It also uses '@Java' type '" + javaDecl->identifier + "'");
     }
 }
 

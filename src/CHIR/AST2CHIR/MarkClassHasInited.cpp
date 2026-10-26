@@ -13,23 +13,6 @@
 
 using namespace Cangjie::CHIR;
 
-namespace {
-bool IsObjCMirror(const ClassDef& classDef)
-{
-    return classDef.TestAttr(Attribute::OBJ_C_MIRROR);
-}
-
-bool IsJavaMirror(const ClassDef& classDef)
-{
-    return classDef.TestAttr(Attribute::JAVA_MIRROR);
-}
-
-bool IsMirror(const ClassDef& classDef)
-{
-    return IsObjCMirror(classDef) || IsJavaMirror(classDef);
-}
-} // namespace
-
 MarkClassHasInited::MarkClassHasInited(CHIRBuilder& builder)
     : builder(builder)
 {
@@ -37,16 +20,17 @@ MarkClassHasInited::MarkClassHasInited(CHIRBuilder& builder)
 
 void MarkClassHasInited::AddHasInitedFlagToClassDef(ClassDef& classDef)
 {
-    // Java and Objective-C mirrors have this field generated from AST.
-    if (IsMirror(classDef)) {
-        return;
+    // Older cjo still stores `$hasInited` for Java/ObjC classes, because it used to be an AST member.
+    // Skip those so an imported class does not get a second field.
+    for (auto& var : classDef.GetDirectInstanceVars()) {
+        if (var.name == Cangjie::HAS_INITED_IDENT) {
+            return;
+        }
     }
-
     auto attributeInfo = AttributeInfo();
     attributeInfo.SetAttr(Attribute::NO_REFLECT_INFO, true);
     attributeInfo.SetAttr(Attribute::COMPILER_ADD, true);
     attributeInfo.SetAttr(Attribute::PRIVATE, true);
-    attributeInfo.SetAttr(Attribute::HAS_INITED_FIELD, true);
     classDef.AddInstanceVar(MemberVarInfo{
         .name = Cangjie::HAS_INITED_IDENT,
         .type = builder.GetBoolTy(),

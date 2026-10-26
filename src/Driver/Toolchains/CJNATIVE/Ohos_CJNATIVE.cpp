@@ -60,6 +60,11 @@ void Ohos_CJNATIVE::GenerateLinkingTool(const std::vector<TempFileInfo>& objFile
         tool->AppendArg("-z", "noexecstack");
     }
     tool->AppendArg("-z", "max-page-size=4096");
+    // Pack relative relocations into .relr.dyn (DT_RELR). OHOS standard system already
+    // packs relative relocations for all native components by default
+    // (build/config/compiler/BUILD.gn) and its musl ldso handles DT_RELR, so align with
+    // the system default. The linker here is always the SDK's ld.lld, which supports it.
+    tool->AppendArg("-z", "pack-relative-relocs");
     tool->AppendArgIf(driverOptions.stripSymbolTable, "-s");
 
     // Hot reload relies on .gnu.hash section.

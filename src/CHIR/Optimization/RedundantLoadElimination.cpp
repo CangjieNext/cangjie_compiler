@@ -8,7 +8,6 @@
 
 #include "cangjie/CHIR/Analysis/Engine.h"
 #include "cangjie/CHIR/Analysis/ReachingDefinitionAnalysis.h"
-#include "cangjie/CHIR/Analysis/Utils.h"
 
 namespace Cangjie::CHIR {
 
@@ -16,10 +15,10 @@ RedundantLoadElimination::RedundantLoadElimination()
 {
 }
 
-void RedundantLoadElimination::RunOnPackage(const Ptr<const Package>& package, bool isDebug) const
+void RedundantLoadElimination::RunOnPackage(const Package& package) const
 {
-    for (auto func : package->GetGlobalFuncsWithBody()) {
-        RunOnFunc(func, isDebug);
+    for (auto func : package.GetGlobalFuncsWithBody()) {
+        RunOnFunc(*func);
     }
 }
 
@@ -43,20 +42,20 @@ static void ModifyApplyCalleeInfo(const LocalVar& loadResult, Value& storeValue)
     }
 }
 
-void RedundantLoadElimination::RunOnFunc(const Ptr<const Function>& func, bool isDebug) const
+void RedundantLoadElimination::RunOnFunc(const Function& func) const
 {
-    if (func->TestAttr(Attribute::SKIP_ANALYSIS)) {
+    if (func.TestAttr(Attribute::SKIP_ANALYSIS)) {
         return;
     }
-    auto analysis = std::make_unique<ReachingDefinitionAnalysis>(func);
-    auto engine = Engine<ReachingDefinitionDomain>(func, std::move(analysis));
+    auto analysis = std::make_unique<ReachingDefinitionAnalysis>(&func);
+    auto engine = Engine<ReachingDefinitionDomain>(&func, std::move(analysis));
     auto result = engine.IterateToFixpoint();
     CJC_NULLPTR_CHECK(result);
 
     const auto actionBeforeVisitExpr = [](const ReachingDefinitionDomain&, Expression*, size_t) {};
 
     std::unordered_map<Block*, std::vector<size_t>> toBeRemoved;
-    const auto actionAfterVisitExpr = [func, isDebug, &toBeRemoved](
+    const auto actionAfterVisitExpr = [&func, &toBeRemoved](
                                           const ReachingDefinitionDomain& state, Expression* expr, size_t index) {
         CJC_NULLPTR_CHECK(expr);
         if (expr->GetExprKind() != ExprKind::LOAD) {
@@ -74,14 +73,8 @@ void RedundantLoadElimination::RunOnFunc(const Ptr<const Function>& func, bool i
             ModifyApplyCalleeInfo(*load->GetResult(), *def->GetValue());
 
             // replace load with its exact value
-            load->GetResult()->ReplaceWith(*def->GetValue(), func->GetBody());
+            load->GetResult()->ReplaceWith(*def->GetValue(), func.GetBody());
             toBeRemoved[load->GetParentBlock()].emplace_back(index);
-            if (isDebug) {
-                std::string message = "[RLE] The usages of the result of Load" +
-                    ToPosInfo(load->GetDebugLocation()) + " have been replaced by the value" +
-                    ToPosInfo(def->GetDebugLocation()) + "\n";
-                std::cout << message;
-            }
             return;
         }
 
@@ -89,14 +82,8 @@ void RedundantLoadElimination::RunOnFunc(const Ptr<const Function>& func, bool i
             if (validLoad == load) {
                 return;
             }
-            load->GetResult()->ReplaceWith(*validLoad->GetResult(), func->GetBody());
+            load->GetResult()->ReplaceWith(*validLoad->GetResult(), func.GetBody());
             toBeRemoved[load->GetParentBlock()].emplace_back(index);
-            if (isDebug) {
-                std::string message = "[RLE] The usages of the result of Load" +
-                    ToPosInfo(load->GetDebugLocation()) + " have been replaced by the value" +
-                    ToPosInfo(validLoad->GetDebugLocation()) + "\n";
-                std::cout << message;
-            }
         }
     };
 

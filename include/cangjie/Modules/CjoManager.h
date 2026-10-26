@@ -20,23 +20,6 @@
 namespace Cangjie {
 class ASTLoader;
 
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-const uint8_t CJO_MAJOR_VERSION = 0;
-// 0.5.0: MacroImportSpec.whenExprIndex (single uint32 — only the first @When was
-// persisted, the ASTWriter took the first WHEN and broke) replaced by
-// whenExprIndices:[uint32] (a vector — one index per @When, mirroring the AST
-// `annotations` vector that EvalNodeCondition<MacroImportSpec> walks). Lets a
-// macro import spec carry more than one @When. Breaking change vs 0.4.0.
-// 0.4.0: macro import declarations persisted as a vector of structured
-// MacroImportList nodes (Package.macroImports — one entry per statement, with
-// @When kept as Annotation condExpr AST) instead of the former raw token stream
-// (0.3.0). Downstream reads the structure directly (no re-parse) and evaluates
-// @When via the normal-import path.
-// Breaking change vs 0.3.0 (token stream) — requires clean rebuild.
-const uint8_t CJO_MINOR_VERSION = 5;
-const uint8_t CJO_PATCH_VERSION = 0;
-#endif
-
 class CjoManager {
 public:
     struct Config {

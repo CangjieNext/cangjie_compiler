@@ -12,12 +12,14 @@
 
 #include "cangjie/Sema/TypeManager.h"
 
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "TypeCheckUtil.h"
 #include "LocalTypeArgumentSynthesis.h"
+#include "OverrideFunctionResolver.h"
+#include "TypeCheckUtil.h"
 
 #include "ExtraScopes.h"
 #include "cangjie/AST/Match.h"
@@ -1716,9 +1718,6 @@ void TypeManager::AddOverrideCache(
 {
     OverrideOrShadowKey key(&src, &target, baseTy, expectInstParent);
     overrideOrShadowCache.emplace(key, val);
-    if (val && src.outerDecl && src.outerDecl == Ty::GetDeclPtrOfTy(baseTy)) {
-        UpdateTopOverriddenFuncDeclMap(&src, &target);
-    }
 }
 
 std::set<Ptr<ExtendDecl>> TypeManager::GetDeclExtends(const InheritableDecl& decl)
@@ -1939,25 +1938,6 @@ Ptr<Ty> TypeManager::GetTyForExtendMap(Ty& ty)
     return baseTy;
 }
 
-void TypeManager::RestoreJavaGenericsTy(AST::Decl& decl) const
-{
-    CJC_ASSERT(decl.TestAttr(Attribute::GENERIC_INSTANTIATED) && HasJavaAttr(decl));
-    // When instantiated with erase mode, we make all same class's types pointing to unique
-    // instantiated decl.
-    for (auto& it : std::as_const(allocatedTys)) {
-        auto ty = it.Get();
-        if (Ty::GetDeclPtrOfTy(ty) == decl.genericDecl) {
-            if (auto cty = DynamicCast<ClassTy*>(ty)) {
-                cty->decl = StaticCast<ClassDecl*>(&decl);
-                cty->commonDecl = StaticCast<ClassDecl*>(&decl);
-            } else if (auto ity = DynamicCast<InterfaceTy*>(ty)) {
-                ity->decl = StaticCast<InterfaceDecl*>(&decl);
-                ity->commonDecl = StaticCast<InterfaceDecl*>(&decl);
-            }
-        }
-    }
-}
-
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 
 bool TypeManager::IsFuncDeclSubType(const AST::FuncDecl& decl, const AST::FuncDecl& funcDecl)
@@ -1981,42 +1961,19 @@ bool TypeManager::IsFuncDeclEqualType(const AST::FuncDecl& decl, const AST::Func
     return IsFuncDeclSubType(decl, funcDecl) && IsFuncDeclSubType(funcDecl, decl);
 }
 
-void TypeManager::UpdateTopOverriddenFuncDeclMap(const AST::Decl* src, const AST::Decl* target)
+Ptr<const AST::FuncDecl> TypeManager::GetTopOverriddenFuncDecl(const AST::FuncDecl* funcDecl)
 {
-    if (src == target) {
-        return;
+    CJC_NULLPTR_CHECK(funcDecl);
+    auto seed = funcDecl->genericDecl ? StaticCast<const FuncDecl*>(funcDecl->genericDecl) : funcDecl;
+    MemberFuncSet tops;
+    {
+        std::lock_guard<std::mutex> lock(overrideResolverImplMutex);
+        tops = OverrideFunctionResolver(*this).GetTopOverriddenFuncs(*funcDecl->outerDecl->GetTy(), *seed);
     }
-    if (auto funcDecl = DynamicCast<AST::FuncDecl>(src)) {
-        auto& temp = overrideMap[funcDecl];
-        temp.emplace_back(StaticCast<AST::FuncDecl*>(target));
-    } else if (auto propDecl = DynamicCast<AST::PropDecl>(src)) {
-        auto targetPropDecl = StaticCast<AST::PropDecl*>(target);
-        if (!propDecl->getters.empty() && !targetPropDecl->getters.empty()) {
-            auto& temp = overrideMap[propDecl->getters.front().get()];
-            temp.emplace_back(targetPropDecl->getters.front().get());
-        }
-        if (!propDecl->setters.empty() && !targetPropDecl->setters.empty()) {
-            auto& temp = overrideMap[propDecl->setters.front().get()];
-            temp.emplace_back(targetPropDecl->setters.front().get());
-        }
+    if (!tops.empty()) {
+        return *tops.begin();
     }
-}
-
-Ptr<const AST::FuncDecl> TypeManager::GetTopOverriddenFuncDecl(const AST::FuncDecl* funcDecl) const
-{
-    const auto& decls = overrideMap.find(funcDecl);
-    if (decls == overrideMap.end() || decls->second.empty()) {
-        return nullptr;
-    }
-    Ptr<const FuncDecl> ret = decls->second.front();
-    std::set<Ptr<const FuncDecl>> traversed;
-    while ((overrideMap.find(ret) != overrideMap.end()) && !(overrideMap.find(ret)->second.empty())) {
-        if (auto [_, succ] = traversed.emplace(ret); !succ) {
-            return nullptr; // cycle detected
-        }
-        ret = overrideMap.find(ret)->second.front();
-    }
-    return ret;
+    return funcDecl;
 }
 
 Ptr<Decl> TypeManager::GetOverrideDeclInClassLike(

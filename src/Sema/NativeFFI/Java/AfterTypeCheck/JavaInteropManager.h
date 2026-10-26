@@ -23,13 +23,15 @@ using namespace AST;
 class JavaInteropManager {
 public:
     JavaInteropManager(ImportManager& importManager, TypeManager& typeManager, DiagnosticEngine& diag,
-        const BaseMangler& mangler, const std::optional<std::string>& javagenOutputPath, const std::string outputPath)
+        const BaseMangler& mangler, const std::optional<std::string>& javagenOutputPath, const std::string outputPath,
+        Triple::Info target)
         : importManager(importManager),
           typeManager(typeManager),
           diag(diag),
           mangler(mangler),
           javagenOutputPath(javagenOutputPath),
-          outputPath(outputPath)
+          outputPath(outputPath),
+          target(target)
     {
     }
 
@@ -46,12 +48,8 @@ public:
      * depending on the presence of Java interop declarations.
      *
      * @param pkg The package that contains files to be desugared.
-     * @param memberMap A reference to a collection containing member signature metadata,
-     *        used for generating method stubs in synthetic classes.
-     *        This collection contains method signatures of all structs.
      */
-    void DesugarPackage(Package& pkg, const std::unordered_map<Ptr<const InheritableDecl>, MemberMap>& memberMap,
-        std::function<void(AST::Node&)> desugarPropRef);
+    void DesugarPackage(Package& pkg, std::function<void(AST::Node&)> desugarPropRef);
 
 private:
     void CheckNonJavaSuperType(ClassLikeDecl& decl) const;
@@ -72,6 +70,7 @@ private:
      * Flag that informs on presence of any @JavaMirror- or @JavaImpl-annotated entities in the compilation package
      */
     bool hasMirrorOrImpl = false;
+    Triple::Info target;
 };
 } // namespace Cangjie::Interop::Java
 

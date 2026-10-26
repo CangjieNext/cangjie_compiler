@@ -83,7 +83,7 @@ Value* Translator::TranslateVArrayAssign(const AssignExpr& assign)
         .kind = IntrinsicKind::VARRAY_GET,
         .args = std::vector<Value*>({loadLHSValue->GetResult(), index})
     };
-    auto lhs = CreateAndAppendExpression<Intrinsic>(lhsType, arrGetContext, currentBlock)->GetResult();
+    auto lhs = CreateAndAppendExpression<Intrinsic>(loc, lhsType, arrGetContext, currentBlock)->GetResult();
     if (assign.op == TokenKind::AND_ASSIGN) {
         auto res = TransShortCircuitAnd(lhs, *assign.rightExpr, loc);
         CreateAndAppendVArraySet(*lhsBase, *res, *index, *lhsType, loc);
@@ -132,7 +132,13 @@ void Translator::CreateAndAppendWrappedStore(Value& rhs, Value& lhs, Block& pare
 {
     auto resultType = StaticCast<RefType*>(lhs.GetType())->GetBaseType();
     auto castedRhs = TypeCastOrBoxIfNeeded(rhs, *resultType, loc);
-    CreateAndAppendExpression<Store>(loc, builder.GetUnitTy(), castedRhs, &lhs, &parent);
+    auto store = CreateAndAppendExpression<Store>(loc, builder.GetUnitTy(), castedRhs, &lhs, &parent);
+    // In `return match (...) { case ... => return ... }`, the match result is only a
+    // compiler-generated placeholder. Its outer store must not become a new diagnostic owner.
+    if (auto local = DynamicCast<LocalVar>(&rhs);
+        local && local->GetExpr()->Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING) {
+        store->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+    }
 }
 
 Value* Translator::TranslateCompoundAssign(const AssignExpr& assign)

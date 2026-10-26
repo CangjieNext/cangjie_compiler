@@ -10,7 +10,7 @@
  * This file implements inserting $getObjCClass function in Objective-C mirrors and impls
  */
 
-#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "Handlers.h"
 
 using namespace Cangjie::AST;
