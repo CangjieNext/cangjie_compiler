@@ -551,6 +551,38 @@ void CreateNullReturnValue(CHIRBuilder& builder, Block* parent, const BlockGroup
     }
 }
 
+bool BlockGroupHasStartRegion(const BlockGroup& funcBody)
+{
+    auto entry = funcBody.GetEntryBlock();
+    if (entry == nullptr) {
+        return false;
+    }
+    for (auto expr : entry->GetExpressions()) {
+        if (Is<StartRegion>(expr)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool BlockHasEndRegion(const Block& block)
+{
+    for (auto expr : block.GetExpressions()) {
+        if (Is<EndRegion>(expr)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void AppendEndRegionIfNeeded(CHIRBuilder& builder, Block* parent, const BlockGroup& funcBody)
+{
+    if (parent == nullptr || BlockHasEndRegion(*parent) || !BlockGroupHasStartRegion(funcBody)) {
+        return;
+    }
+    parent->AppendExpression(builder.CreateExpression<EndRegion>(builder.GetUnitTy(), parent));
+}
+
 // Return true if there exists a parameter of Nothing type; false otherwise.
 bool HandleFuncWithNothingParamter(CHIRBuilder& builder, const BlockGroup& funcBody)
 {
@@ -602,6 +634,7 @@ template <typename TApply> void HandleNothingTerminator(CHIRBuilder& builder, TA
         {ExprKind::TRY_APPLY, ExprKind::TRY_INVOKE, ExprKind::TRY_INVOKESTATIC}));
     auto newSuccessBlock = builder.CreateBlock(&funcBody);
     CreateNullReturnValue(builder, newSuccessBlock, funcBody);
+    AppendEndRegionIfNeeded(builder, newSuccessBlock, funcBody);
     newSuccessBlock->AppendExpression(builder.CreateTerminator<Exit>(newSuccessBlock));
 
     auto oldSuccessBlock = expr->GetSuccessBlock();
@@ -651,6 +684,7 @@ void DeadCodeElimination::NothingTypeExprEliminationForFunc(BlockGroup& funcBody
         }
         if (isNothingIr) {
             CreateNullReturnValue(builder, block, funcBody);
+            AppendEndRegionIfNeeded(builder, block, funcBody);
             block->AppendExpression(builder.CreateTerminator<Exit>(block));
         }
     }
