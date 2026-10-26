@@ -1,0 +1,19 @@
+src/CodeGen/CGModule.cpp
+  s_18fe67007eda5a::t_2c4e36119f1ea1 442-451
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "523ab05c6e3b6e83e2db534a1c4820a6afbfdb71",
+  "prompts": {},
+  "sessions": {
+    "s_18fe67007eda5a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a16670-d54c-7307-98e1-866eec787b52",
+        "model": "k3-256k"
+      },
+      "human_author": "yanjs <yejiasheng3@huawei.com>"
+    }
+  }
+}
