@@ -617,3 +617,91 @@ main() {
         EXPECT_EQ(QualName(top), "AAA.foo") << "iteration " << i;
     }
 }
+
+// Each interface redefines the same method. Walking all transitive ancestors
+// recursively without sharing subproblem results takes exponential time.
+TEST_F(GetTopOverriddenFuncDeclTest, DeepInterfaceRedefinitionsResolveToRoot)
+{
+    for (const auto& modifier : {std::string("static "), std::string()}) {
+        std::string source = "interface I_0 { " + modifier + "func sf(): Unit {} }\n";
+        constexpr int depth = 32;
+        for (int i = 1; i <= depth; ++i) {
+            source += "interface I_" + std::to_string(i) + " <: I_" + std::to_string(i - 1) +
+                " { " + modifier + "func sf(): Unit {} }\n";
+        }
+        source += "main() {}\n";
+        BeginMainPackage("", {}, source);
+        ASSERT_TRUE(instance->Compile(CompileStage::SEMA));
+        ASSERT_EQ(diag.GetErrorCount(), 0u);
+        auto funcs = CollectFuncDecls();
+        auto leaf = funcs.find("I_32.sf");
+        ASSERT_NE(leaf, funcs.end());
+        auto tops = OverrideFunctionResolver(*instance->typeManager).GetTopOverriddenFuncs(
+            *leaf->second->outerDecl->GetTy(), *leaf->second);
+        ASSERT_EQ(tops.size(), 1u) << modifier;
+        EXPECT_EQ(QualName(*tops.begin()), "I_0.sf") << modifier;
+    }
+}
+
+TEST_F(GetTopOverriddenFuncDeclTest, DiamondPreservesSharedAndIndependentRoots)
+{
+    BeginMainPackage("", {}, R"(
+interface Root { func f(): Unit }
+interface Other { func f(): Unit }
+interface Left <: Root { func f(): Unit {} }
+interface Right <: Root & Other { func f(): Unit {} }
+interface Leaf <: Left & Right { func f(): Unit {} }
+main() {}
+    )");
+    ASSERT_TRUE(instance->Compile(CompileStage::SEMA));
+    ASSERT_EQ(diag.GetErrorCount(), 0u);
+    auto funcs = CollectFuncDecls();
+    auto leaf = funcs.find("Leaf.f");
+    ASSERT_NE(leaf, funcs.end());
+    auto tops = OverrideFunctionResolver(*instance->typeManager).GetTopOverriddenFuncs(
+        *leaf->second->outerDecl->GetTy(), *leaf->second);
+    std::set<std::string> names;
+    for (auto top : tops) {
+        names.emplace(QualName(top));
+    }
+    EXPECT_EQ(names, (std::set<std::string>{"Root.f", "Other.f"}));
+}
+
+TEST_F(GetTopOverriddenFuncDeclTest, GenericDiamondResolvesToSharedRoot)
+{
+    BeginMainPackage("", {}, R"(
+interface Root<T> { func f(x: T): T { x } }
+interface Left<T> <: Root<T> { func f(x: T): T { x } }
+interface Right<T> <: Root<T> { func f(x: T): T { x } }
+interface Leaf <: Left<Int64> & Right<Int64> { func f(x: Int64): Int64 { x } }
+main() {}
+    )");
+    ASSERT_TRUE(instance->Compile(CompileStage::SEMA));
+    ASSERT_EQ(diag.GetErrorCount(), 0u);
+    auto funcs = CollectFuncDecls();
+    auto leaf = funcs.find("Leaf.f");
+    ASSERT_NE(leaf, funcs.end());
+    auto tops = OverrideFunctionResolver(*instance->typeManager).GetTopOverriddenFuncs(
+        *leaf->second->outerDecl->GetTy(), *leaf->second);
+    ASSERT_EQ(tops.size(), 1u);
+    EXPECT_EQ(QualName(*tops.begin()), "Root.f");
+}
+
+TEST_F(GetTopOverriddenFuncDeclTest, UnrelatedMethodsHaveNoOverriddenRoot)
+{
+    BeginMainPackage("", {}, R"(
+interface Root { static func f(): Unit {} }
+interface Leaf <: Root { static func g(): Unit {} }
+main() {}
+    )");
+    ASSERT_TRUE(instance->Compile(CompileStage::SEMA));
+    ASSERT_EQ(diag.GetErrorCount(), 0u);
+    auto funcs = CollectFuncDecls();
+    OverrideFunctionResolver resolver(*instance->typeManager);
+    for (const auto& name : {"Root.f", "Leaf.g"}) {
+        auto func = funcs.find(name);
+        ASSERT_NE(func, funcs.end());
+        EXPECT_TRUE(resolver.GetTopOverriddenFuncs(*func->second->outerDecl->GetTy(), *func->second).empty());
+        EXPECT_EQ(GetTop(func->second.get()), func->second) << name;
+    }
+}

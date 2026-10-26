@@ -83,6 +83,14 @@ public:
     static void ClearCache();
 
 private:
+    using TopOverriddenFuncsCache =
+        std::unordered_map<std::pair<Ptr<AST::Ty>, Ptr<const AST::FuncDecl>>, MemberFuncSet, HashPair>;
+
+    // Share completed subproblems within one query, without retaining AST pointers
+    // across compiler stages, incremental compilations, or independent queries.
+    MemberFuncSet GetTopOverriddenFuncs(
+        AST::Ty& instBaseTy, const AST::FuncDecl& funcDecl, TopOverriddenFuncsCache& cache);
+
     /**
      * Collect member functions from a declaration.
      */

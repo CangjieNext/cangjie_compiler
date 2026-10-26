@@ -294,7 +294,18 @@ bool OverrideFunctionResolver::IsImplementationFunc(const AST::FuncDecl& srcFunc
 
 MemberFuncSet OverrideFunctionResolver::GetTopOverriddenFuncs(AST::Ty& instBaseTy, const AST::FuncDecl& funcDecl)
 {
+    TopOverriddenFuncsCache cache;
+    return GetTopOverriddenFuncs(instBaseTy, funcDecl, cache);
+}
+
+MemberFuncSet OverrideFunctionResolver::GetTopOverriddenFuncs(
+    AST::Ty& instBaseTy, const AST::FuncDecl& funcDecl, TopOverriddenFuncsCache& cache)
+{
     CJC_NULLPTR_CHECK(typeManager);
+    auto key = std::make_pair(Ptr<AST::Ty>(&instBaseTy), Ptr<const AST::FuncDecl>(&funcDecl));
+    if (auto found = cache.find(key); found != cache.end()) {
+        return found->second;
+    }
     auto baseDecl = AST::Ty::GetDeclPtrOfTy<AST::InheritableDecl>(&instBaseTy);
     std::set<Ptr<ClassLikeDecl>> superDecls;
     std::set<Ptr<AST::ExtendDecl>> extendDecls;
@@ -314,12 +325,12 @@ MemberFuncSet OverrideFunctionResolver::GetTopOverriddenFuncs(AST::Ty& instBaseT
         if (superDecl == baseDecl) {
             continue;
         }
-        auto visit = [this, &funcDecl, &superDecl, &result](AST::Decl& memberFunc) {
+        auto visit = [this, &funcDecl, &superDecl, &result, &cache](AST::Decl& memberFunc) {
             auto parentFunc = DynamicCast<FuncDecl>(&memberFunc);
             if (!parentFunc || parentFunc == &funcDecl || !IsImplementationFunc(funcDecl, *parentFunc)) {
                 return;
             }
-            auto parentTops = GetTopOverriddenFuncs(*superDecl->GetTy(), *parentFunc);
+            auto parentTops = GetTopOverriddenFuncs(*superDecl->GetTy(), *parentFunc, cache);
             if (parentTops.empty()) {
                 result.emplace(parentFunc);
             } else {
@@ -328,5 +339,6 @@ MemberFuncSet OverrideFunctionResolver::GetTopOverriddenFuncs(AST::Ty& instBaseT
         };
         TypeCheckUtil::WorkForMembersOfDecl(*superDecl, visit);
     }
+    cache.emplace(key, result);
     return result;
 }
