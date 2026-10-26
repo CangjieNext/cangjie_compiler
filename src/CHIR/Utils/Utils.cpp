@@ -1056,21 +1056,33 @@ bool IsExpectedCustomType(const Type& ty, const std::string& packageName, const 
 
 bool IsCoreAny(const CustomTypeDef& def)
 {
+    if (def.TestAttr(Attribute::GENERIC_INSTANTIATED)) {
+        return false;
+    }
     return IsExpectedCustomType(*def.GetType(), CORE_PACKAGE_NAME, ANY_NAME);
 }
 
 bool IsCoreObject(const CustomTypeDef& def)
 {
+    if (def.TestAttr(Attribute::GENERIC_INSTANTIATED)) {
+        return false;
+    }
     return IsExpectedCustomType(*def.GetType(), CORE_PACKAGE_NAME, OBJECT_NAME);
 }
 
 bool IsCoreOption(const CustomTypeDef& def)
 {
+    if (def.TestAttr(Attribute::GENERIC_INSTANTIATED)) {
+        return false;
+    }
     return IsExpectedCustomType(*def.GetType(), CORE_PACKAGE_NAME, STD_LIB_OPTION);
 }
 
 bool IsCoreFuture(const CustomTypeDef& def)
 {
+    if (def.TestAttr(Attribute::GENERIC_INSTANTIATED)) {
+        return false;
+    }
     return IsExpectedCustomType(*def.GetType(), CORE_PACKAGE_NAME, STD_LIB_FUTURE);
 }
 
