@@ -658,7 +658,7 @@ bool IsCoreOption(const CustomTypeDef& def);
  * @param def The custom type definition to check.
  * @return True if the custom type definition is the core 'Future' type, false otherwise.
  */
-bool IsCoreFuture(const CustomTypeDef& def);
+bool IsCoreFutureT(const CustomTypeDef& def);
 
 /**
  * @brief Checks if a class definition is a closure conversion environment class.

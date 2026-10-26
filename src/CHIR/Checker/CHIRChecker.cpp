@@ -3014,7 +3014,7 @@ void CHIRChecker::CheckSpawnBase(const SpawnBase& expr, const Function& topLevel
 
     // 2. the first operand's type must be Class-Future& or closure type
     auto def = StaticCast<ClassType*>(objType->StripAllRefs())->GetClassDef();
-    if (!IsCoreFuture(*def) && !IsFuncTypeOrClosureBaseRefType(*objType)) {
+    if (!IsCoreFutureT(*def) && !IsFuncTypeOrClosureBaseRefType(*objType)) {
         auto errMsg = "the first operand's type is `" + objType->ToString() +
             "`, but Class-Future& type or closure type are expected.";
         ErrorInExpr(topLevelFunc, expr, errMsg);

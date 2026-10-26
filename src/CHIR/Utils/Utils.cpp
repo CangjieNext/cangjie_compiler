@@ -1069,8 +1069,11 @@ bool IsCoreOption(const CustomTypeDef& def)
     return IsExpectedCustomType(*def.GetType(), CORE_PACKAGE_NAME, STD_LIB_OPTION);
 }
 
-bool IsCoreFuture(const CustomTypeDef& def)
+bool IsCoreFutureT(const CustomTypeDef& def)
 {
+    if (def.TestAttr(Attribute::GENERIC_INSTANTIATED)) {
+        return false;
+    }
     return IsExpectedCustomType(*def.GetType(), CORE_PACKAGE_NAME, STD_LIB_FUTURE);
 }
 

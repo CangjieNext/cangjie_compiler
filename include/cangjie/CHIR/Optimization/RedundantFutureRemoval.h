@@ -7,6 +7,7 @@
 #ifndef CANGJIE_CHIR_TRANSFORMATION_REDUNDANT_FUTURE_REMOVAL_H
 #define CANGJIE_CHIR_TRANSFORMATION_REDUNDANT_FUTURE_REMOVAL_H
 
+#include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Package.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
@@ -14,10 +15,13 @@
 namespace Cangjie::CHIR {
 /**
  * CHIR Opt Pass: replace future object with closure call in spawn expression.
+ *
+ * Handles both the plain form (`Spawn` / `Apply` / `Allocate`) and the form
+ * inside a `try` block (`TrySpawn` / `TryApply` / `TryAllocate`).
  */
 class RedundantFutureRemoval {
 public:
-    RedundantFutureRemoval(const Package& pkg, bool isDebug);
+    RedundantFutureRemoval(CHIRBuilder& builder, const Package& pkg, bool isDebug);
 
     /**
      * @brief Main process to do future remove in spawn expression.
@@ -27,12 +31,19 @@ public:
 private:
     void RunOnFunc(const Function& func);
 
-    Function* GetExecureClosureFunc() const;
+    Function* GetExecuteClosureFunc() const;
 
-    std::pair<LocalVar*, Apply*> CheckSpawnWithFuture(Expression& expr) const;
+    std::pair<LocalVar*, ApplyBase*> CheckSpawnWithFuture(Expression& expr) const;
 
-    void RewriteSpawnWithOutFuture(Spawn& spawnExpr, LocalVar& futureValue, Apply& apply);
+    void RewriteSpawnWithOutFuture(SpawnBase& spawnExpr, LocalVar& futureValue, ApplyBase& apply);
 
+    /**
+     * @brief Drop a terminator that is no longer needed and fall through to its
+     * success block instead, keeping the block well formed.
+     */
+    void ReplaceTerminatorWithGoTo(Expression& terminator, Block& successBlock) const;
+
+    CHIRBuilder& builder;
     const Package& package;
     bool isDebug{false};
 

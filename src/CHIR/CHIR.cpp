@@ -593,7 +593,7 @@ void ToCHIR::RunRedundantFutureOpt()
         return;
     }
     Utils::ProfileRecorder recorder("CHIR Opt", "RedundantFutureOpt");
-    RedundantFutureRemoval(*chirPkg, opts.chirDebugOptimizer).RunOnPackage();
+    RedundantFutureRemoval(builder, *chirPkg, opts.chirDebugOptimizer).RunOnPackage();
     DumpCHIRToFile("RedundantFutureOpt");
 }
 
