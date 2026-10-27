@@ -21,6 +21,20 @@ void EmitBasicBlockIR(CGModule& cgMod, const CHIR::Block& chirBB);
 void BuildCJFunc(CGModule& cgMod, const CHIR::Function& chirFunc, const CGFunction& cgFunc);
 
 namespace {
+llvm::Function* CreateFunctionWrapperForWithTIBody(const CHIR::Value* chirFunc, CGModule& cgMod)
+{
+    auto func = StaticCast<CHIR::Function*>(chirFunc);
+    CJC_ASSERT(func);
+    auto cgFunc = cgMod.GetOrInsertCGFunction(chirFunc, true);
+    BuildCJFunc(cgMod, *func, *cgFunc);
+    CodeGenUnwindBlockScope unwindBlockScope(cgMod, nullptr);
+    EmitBasicBlockIR(cgMod, *func->GetBody()->GetEntryBlock());
+    for (auto bb : func->GetBody()->GetBlocks()) {
+        cgMod.SetOrUpdateMappedBB(bb, nullptr);
+    }
+    return cgFunc->GetRawFunction();
+}
+
 void CreateFunctionWrapperForNormalCases(
     llvm::Function* function, llvm::Function* wrapperF, const CGFunctionType& cgType, CGModule& cgMod)
 {
@@ -76,6 +90,9 @@ void CreateFunctionWrapperForNormalCases(
 llvm::Function* CreateFunctionWrapper(
     llvm::Function* function, const CGFunctionType* cgType, const CHIR::Value* chirFunc, CGModule& cgMod)
 {
+    if (function->hasFnAttribute(THIS_PARAM_HAS_TI_ATTR)) {
+        return function;
+    }
     auto& cgCtx = cgMod.GetCGContext();
     if (chirFunc->TestAttr(CHIR::Attribute::STATIC) || chirFunc->Get<CHIR::WrappedRawMethod>()) {
         return nullptr;
@@ -89,6 +106,11 @@ llvm::Function* CreateFunctionWrapper(
     auto wrapperFName = function->getName().str();
     function->setName(wrapperFName + POSTFIX_WITHOUT_TI);
     function->addFnAttr(HAS_WITH_TI_WRAPPER_ATTR);
+
+    if (!cgCtx.GetCompileOptions().enableCompileDebug && !cgType->HasBasePtr() && IsDynamicStruct(*outerType) &&
+        !cgCtx.IsValueOfOtherLLVMModule(*chirFunc)) {
+        return CreateFunctionWrapperForWithTIBody(chirFunc, cgMod);
+    }
 
     auto wrapperFType = function->getFunctionType();
     auto p1This =

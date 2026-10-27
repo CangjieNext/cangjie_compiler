@@ -40,6 +40,7 @@ const std::string GC_MTABLE_ATTR = "CFileMTable";
 const std::string GC_FINALIZER_ATTR = "HasFinalizer";
 const std::string STRUCT_MUT_FUNC_ATTR = "record_mut";
 const std::string THIS_PARAM_HAS_BP = "thisParamHasBP";
+const std::string THIS_PARAM_HAS_TI_ATTR = "thisParamHasTI";
 const std::string STRUCT_TYPE_PREFIX = "record.";
 const std::string CJ2C_ATTR = "cj2c";
 const std::string C2CJ_ATTR = "c2cj";

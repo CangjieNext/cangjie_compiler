@@ -57,7 +57,8 @@ CGFunctionType::CGFunctionType(
     this->chirFunc = &chirFunc;
     this->isStaticMethod = chirFunc.TestAttr(CHIR::Attribute::STATIC);
     this->isMethod = chirFunc.GetParentCustomTypeDef();
-    this->allowBasePtr = extraInfo.allowBasePtr;
+    this->forWithTIWrapper = extraInfo.forWithTIWrapper;
+    this->allowBasePtr = this->forWithTIWrapper ? false : extraInfo.allowBasePtr;
     for (auto gt : chirFunc.GetGenericTypeParams()) {
         this->instantiatedParamTypes.emplace_back(gt);
     }
@@ -145,7 +146,8 @@ void CGFunctionType::AppendParamLLVMType(const CHIR::Type& paramType, size_t con
     } else if (NeedsPassByRef(paramType, *cgType)) {
         // If current parameter is the first parameter in a struct method, aka `this`
         llvm::Type* llvmType = nullptr;
-        if (containedCGTypeIndex == 1U && chirFunc && !chirFunc->TestAttr(CHIR::Attribute::STATIC) &&
+        if (!forWithTIWrapper && containedCGTypeIndex == 1U && chirFunc &&
+            !chirFunc->TestAttr(CHIR::Attribute::STATIC) &&
             IsStructOrExtendMethod(*chirFunc)) {
             llvmType = cgType->GetLLVMType()->getPointerTo();
         } else {
@@ -229,7 +231,7 @@ CGType* CGFunctionType::GetFixedParamCGType(const CHIR::Type& chirType, size_t c
     } else if (NeedsPassByRef(chirType, *cgType)) {
         auto refType = CGType::GetRefTypeOf(cgCtx.GetCHIRBuilder(), chirType);
         // If current parameter is the first parameter in a struct method, aka `this`
-        if (containedCGTypeIndex == 1U && chirFunc && IsStructOrExtendMethod(*chirFunc)) {
+        if (!forWithTIWrapper && containedCGTypeIndex == 1U && chirFunc && IsStructOrExtendMethod(*chirFunc)) {
             return CGType::GetOrCreate(cgMod, refType);
         } else {
             return CGType::GetOrCreate(cgMod, refType, CGType::TypeExtraInfo(cgType->GetSize() ? 0U : 1U));

@@ -244,16 +244,20 @@ llvm::Value* HandleBoxExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirEx
         auto tmp = irBuilder.CallClassIntrinsicAlloc(*DeRef(*srcCHIRType));
         auto payloadPtr = irBuilder.GetPayloadFromObject(tmp);
         auto size = irBuilder.GetLayoutSize_32(*DeRef(*srcCHIRType));
+        llvm::Value* srcValue = cgVal.GetRawValue();
+        auto curFunc = irBuilder.GetInsertFunction();
+        if (curFunc && curFunc->hasFnAttribute(THIS_PARAM_HAS_TI_ATTR)) {
+            srcValue = irBuilder.GetPayloadFromObject(srcValue);
+        }
         // Note: in this branch, it means:
         // - we are assigning a "struct" that doesn't begin with TypeInfo* to an address
         //   that should begin with TypeInfo*.
         // - we are in the scope of a struct instance method(without "$withTI" postfix),
         //   the "struct" mentioned above is the `this` parameter of the method.
         if (IsTypeContainsRef(srcCGType->GetLLVMType())) {
-            irBuilder.CallGCWriteAgg(
-                srcCGType->GetLayoutType(), {tmp, payloadPtr, cgVal.GetRawValue(), size});
+            irBuilder.CallGCWriteAgg(srcCGType->GetLayoutType(), {tmp, payloadPtr, srcValue, size});
         } else {
-            irBuilder.CreateMemCpy(payloadPtr, llvm::MaybeAlign(), cgVal.GetRawValue(), llvm::MaybeAlign(), size);
+            irBuilder.CreateMemCpy(payloadPtr, llvm::MaybeAlign(), srcValue, llvm::MaybeAlign(), size);
         }
         return tmp;
     }

@@ -263,6 +263,11 @@ void HandleStoreElementRef(IRBuilder2& irBuilder, const CHIR::StoreElementRef& s
     auto place = cgMod | lhs;
     auto srcCGType = CGType::GetOrCreate(cgMod, rhs->GetType());
     if (!srcCGType->GetSize() && IsThisArgOfStructMethod(*rhs)) {
+        llvm::Value* srcValue = value->GetRawValue();
+        auto curFunc = irBuilder.GetInsertFunction();
+        if (curFunc && curFunc->hasFnAttribute(THIS_PARAM_HAS_TI_ATTR)) {
+            srcValue = irBuilder.GetPayloadFromObject(srcValue);
+        }
         auto typeInfoOfSrc = irBuilder.CreateTypeInfo(srcCGType->GetOriginal());
         auto size = irBuilder.GetLayoutSize_32(srcCGType->GetOriginal());
         auto tmp = irBuilder.CallClassIntrinsicAlloc({typeInfoOfSrc, size});
@@ -273,10 +278,9 @@ void HandleStoreElementRef(IRBuilder2& irBuilder, const CHIR::StoreElementRef& s
         // - we are in the scope of a struct instance method(without "$withTI" postfix),
         //   the "struct" mentioned above is the `this` parameter of the method.
         if (IsTypeContainsRef(srcCGType->GetLLVMType())) {
-            irBuilder.CallGCWriteAgg(
-                srcCGType->GetLayoutType(), {tmp, payloadPtr, value->GetRawValue(), size});
+            irBuilder.CallGCWriteAgg(srcCGType->GetLayoutType(), {tmp, payloadPtr, srcValue, size});
         } else {
-            irBuilder.CreateMemCpy(payloadPtr, llvm::MaybeAlign(), value->GetRawValue(), llvm::MaybeAlign(), size);
+            irBuilder.CreateMemCpy(payloadPtr, llvm::MaybeAlign(), srcValue, llvm::MaybeAlign(), size);
         }
         auto destAddr = irBuilder.CreateGEP(*place, path);
         irBuilder.CreateStore(CGValue(tmp, destAddr.GetCGType()->GetPointerElementType()), destAddr);

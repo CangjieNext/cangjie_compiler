@@ -137,6 +137,7 @@ private:
 
     const CHIR::Function* chirFunc{nullptr};
     bool allowBasePtr{true};
+    bool forWithTIWrapper{false};
     bool isMethod{false};
     bool isStaticMethod{false};
     std::vector<CHIR::Type*> instantiatedParamTypes;

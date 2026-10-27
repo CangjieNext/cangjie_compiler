@@ -309,7 +309,7 @@ void SetupGenericParamsMap(llvm::Function* function, std::unique_ptr<CGFunction>
 }
 } // namespace
 
-CGFunction* CGModule::GetOrInsertCGFunction(const CHIR::Value* func)
+CGFunction* CGModule::GetOrInsertCGFunction(const CHIR::Value* func, bool forWithTIWrapper)
 {
     CJC_NULLPTR_CHECK(func);
     if (auto it = valueMapping.find(func); it != valueMapping.end()) {
@@ -317,8 +317,11 @@ CGFunction* CGModule::GetOrInsertCGFunction(const CHIR::Value* func)
         CJC_NULLPTR_CHECK(cgFunction);
         return cgFunction;
     }
-    auto cgFuncType = StaticCast<CGFunctionType*>(CGType::GetOrCreateWithNode(*this, func, true));
+    auto cgFuncType = StaticCast<CGFunctionType*>(CGType::GetOrCreateWithNode(*this, func, true, forWithTIWrapper));
     auto function = DeclareLLVMFunction(*func, *cgFuncType);
+    if (forWithTIWrapper) {
+        function->addFnAttr(THIS_PARAM_HAS_TI_ATTR);
+    }
     auto cgFunc = std::make_unique<CGFunction>(function, cgFuncType, func, *this);
     SetupGenericParamsMap(function, cgFunc, *func, *cgFuncType);
     SetCJNativeFunctionAttrs(*func, *function, *cgFunc);
