@@ -16,6 +16,7 @@
     DiagnosticEngine diag;                                                                                             \
     diag.SetSourceManager(&sm);                                                                                        \
     Parser parser(code, diag, sm);                                                                                     \
+    parser.SetLocalModeEnabled(true);                                                                                  \
     auto file = parser.ParseTopLevel()
 
 using namespace Cangjie;

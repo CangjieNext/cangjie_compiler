@@ -57,6 +57,8 @@ Ptr<Value> Translator::ProcessBinaryExpr(const AST::BinaryExpr& binaryExpr)
         return TransShortCircuitOr(lhs, *binaryExpr.rightExpr, loc, binaryExpr.TestAttr(AST::Attribute::COMPILER_ADD));
     }
     auto rightExpr = TranslateExprArg(*binaryExpr.rightExpr);
+    lhs = CastModalIfCopyable(*lhs, *chirType, TranslateLocation(*binaryExpr.leftExpr));
+    rightExpr = CastModalIfCopyable(*rightExpr, *chirType, TranslateLocation(*binaryExpr.rightExpr));
     bool mayHaveException = OverloadableExprMayThrowException(binaryExpr, *chirType);
     if (binaryExpr.leftExpr->GetTy()->IsNothing()) {
         const auto& rightExprLoc = TranslateLocation(*binaryExpr.rightExpr);
