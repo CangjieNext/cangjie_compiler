@@ -1,0 +1,200 @@
+src/CHIR/AST2CHIR/TranslateASTNode/TranslateTupleLit.cpp
+  s_b4748a4accc407::t_86ba72b00b16c9 15-18,20-22
+src/Sema/Desugar/DesugarAfterInstantiation.cpp
+  s_3a7e12ebbff7df::t_bde4672fd817fb 263,265-269,277,292,303
+  s_3a7e12ebbff7df::t_affba09358105a 450-451,461-462
+  s_3a7e12ebbff7df::t_d4b2650875ee8c 512
+  s_3a7e12ebbff7df::t_60cf3beca121f5 504
+  s_3a7e12ebbff7df::t_b4c99a49224237 397
+  s_3a7e12ebbff7df::t_a5ab97d78c41a1 425
+  s_3a7e12ebbff7df::t_91e57f6103c100 484
+  s_3a7e12ebbff7df::t_ecd9f1c9d1ddf4 343,346
+  s_3a7e12ebbff7df::t_4c32232c5bc23d 523
+  s_3a7e12ebbff7df::t_5298c5e471a047 375,379
+  s_3a7e12ebbff7df::t_50f99f10a998d6 349
+  h_7fa24ec5a32f2d 235,271
+  s_5330702bd29018::t_45149a4d3c9b2e 236-238,241-242,245-256
+  s_5330702bd29018::t_0c6d32fe4b7a3e 272-276
+src/Sema/Desugar/AutoBoxing.h
+  s_3a7e12ebbff7df::t_a3ad088905ee8c 32
+src/AST/Clone.cpp
+  s_79dd6c8d8c88ee::t_7876fb4a7fc725 760
+src/Sema/Desugar/AfterTypeCheck/StrInterpolationExpr.cpp
+  s_79dd6c8d8c88ee::t_b6068d46dcb5a6 71
+  s_79dd6c8d8c88ee::t_9976d3c38ebf46 100-102
+  s_79dd6c8d8c88ee::t_bd8ffb5dbc8211 177,193-196,205-209,219,239-240
+  h_7fa24ec5a32f2d 47,63,98,103-104,136,222,233
+  s_79dd6c8d8c88ee::t_f241095c46fbd9 50-52,57-58,60-62,66-70
+  s_79dd6c8d8c88ee::t_e8f33685e69370 9
+  s_5330702bd29018::t_a6ea11d4b45616 59,64-65
+src/Sema/TypeCheckExpr/NameReferenceExpr.cpp
+  s_3a7e12ebbff7df::t_9b58d13aea71d1 63-64
+  h_7fa24ec5a32f2d 436
+src/CHIR/Checker/CHIRChecker.cpp
+  s_b4748a4accc407::t_e4a0cdb94bb6b3 3792,3794-3796,3798
+  s_b4748a4accc407::t_81cf40b0cf3794 3899,3901-3905,3907-3911
+  s_b4748a4accc407::t_802697f314fedc 3906
+  h_7fa24ec5a32f2d 4024-4025
+src/CHIR/AST2CHIR/TranslateASTNode/TranslateMemberAccess.cpp
+  s_3a7e12ebbff7df::t_c28809e956cc0d 445
+src/CHIR/AST2CHIR/TranslateASTNode/TranslateMatchExpr.cpp
+  s_b4748a4accc407::t_b870877259d74b 535-537
+src/Sema/LocalTypeArgumentSynthesis.cpp
+  h_7fa24ec5a32f2d 246,253
+src/Sema/TypeCheckExpr/TupleLit.cpp
+  s_5330702bd29018::t_05f19619a1ffeb 58-59
+src/Sema/Promotion.cpp
+  h_7fa24ec5a32f2d 103,124
+src/Sema/TypeCheckReference.cpp
+  h_7fa24ec5a32f2d 480
+src/Sema/InheritanceChecker/StructInheritanceChecker.cpp
+  h_7fa24ec5a32f2d 1366
+src/Sema/Desugar/AfterTypeCheck/Coalescing.cpp
+  s_5330702bd29018::t_544fcc5f1469da 23-24
+  s_5330702bd29018::t_257346c0d4b3ac 135-136
+src/Sema/TypeChecker.cpp
+  h_7fa24ec5a32f2d 2341
+src/CHIR/AST2CHIR/TranslateASTNode/TranslateFuncDecl.cpp
+  h_7fa24ec5a32f2d 115
+src/CHIR/AST2CHIR/TranslateASTNode/TranslateCallExpr.cpp
+  s_5330702bd29018::t_8e29ee9232beb9 682-684
+  s_d4f32c57925ec7::t_7b5caa05106c44 20-21,23-24
+src/Sema/OverrideFunctionResolver.cpp
+  s_5330702bd29018::t_4f64e0591777eb 264-268
+  s_5330702bd29018::t_9a9f08c4e571dc 221-225
+include/cangjie/Sema/TypeManager.h
+  s_68eb9885f36f03::t_a3b5cfd10c7f7b 192-193
+  s_68eb9885f36f03::t_b98492654063eb 194
+src/CHIR/AST2CHIR/TranslateASTNode/Translator.cpp
+  s_5330702bd29018::t_060418646ae5ed 221
+  s_5330702bd29018::t_7097e7d49c54f0 228-230,235-236
+  s_5330702bd29018::t_cf4aeae7f3384e 293-294,304-305
+src/Sema/Desugar/AfterTypeCheck/AsExpr.cpp
+  s_5330702bd29018::t_064e00e0aafbf6 69
+src/CHIR/IR/Type/Type.cpp
+  s_68eb9885f36f03::t_bc2991c3339484 196-198,200
+  s_68eb9885f36f03::t_94a4737fbd6633 206,208-212
+  s_68eb9885f36f03::t_a0ea6048e5e212 195,199
+  s_68eb9885f36f03::t_edc5649f418b8c 207
+  s_68eb9885f36f03::t_fa7f9a876a408e 49,51
+  s_68eb9885f36f03::t_32e68a60b5df71 20,35,50,53-56
+  s_68eb9885f36f03::t_6d1cde052eaf25 36-37,39-48,52,57
+  s_68eb9885f36f03::t_5d2a7f53a7008a 194,201-205,213-215
+  s_68eb9885f36f03::t_9a44a3fd513574 38
+src/CHIR/AST2CHIR/TranslateASTNode/TranslateArrayLit.cpp
+  s_5330702bd29018::t_6c028aafeba3b2 108
+src/Sema/TypeCheckDecl.cpp
+  h_7fa24ec5a32f2d 405
+src/CHIR/IR/Type/StructDef.cpp
+  s_5330702bd29018::t_e42b40065be86a 59-61
+  s_68eb9885f36f03::t_008acef187798d 55
+  s_68eb9885f36f03::t_01c100f2492ba6 68
+  s_68eb9885f36f03::t_51689c874ee36c 44
+  s_68eb9885f36f03::t_eb8e354a640dae 9,41-43,45-54,63
+  h_7fa24ec5a32f2d 58
+src/Sema/TypeCheckExpr/Block.cpp
+  h_7fa24ec5a32f2d 45
+src/Sema/TypeCheckModal.cpp
+  h_7fa24ec5a32f2d 480,612,799,894,1073,1106,1209,1386,1393,1404,1451
+  s_d4f32c57925ec7::t_523aff4bc78127 1028,1058,1093,1150,1152-1155
+src/Sema/TypeManager.cpp
+  h_7fa24ec5a32f2d 1100,1103,1133,1193,1228,1239-1240,1246-1247,1267,1273-1274,1277
+  s_68eb9885f36f03::t_5961603f401c69 1215-1226,1229-1234
+  s_68eb9885f36f03::t_49948d957e4be7 1214
+  h_7fa24ec5a32f2d 1227,1235-1238
+src/Sema/TypeCheckExpr/LambdaExpr.cpp
+  h_7fa24ec5a32f2d 520
+src/Sema/TypeCheckExpr/BinaryExpr.cpp
+  s_5330702bd29018::t_d09eafe16a0ab5 1199-1200,1202-1204,1206-1207,1212
+  h_7fa24ec5a32f2d 1201
+src/Sema/TypeCheckCall.cpp
+  h_7fa24ec5a32f2d 296,928,1064,1329,1332,1346,1581,1886
+  s_5330702bd29018::t_49e1f5d70bf32e 765
+  s_5330702bd29018::t_0c83aea6e2e43c 1952
+  s_5330702bd29018::t_79db725b46377b 1792
+src/Sema/JoinAndMeet.cpp
+  h_7fa24ec5a32f2d 132,176
+schema/NodeFormat.fbs
+  s_3ec84b7d0ce897::t_1556125a033ea5 70
+include/cangjie/Basic/DiagRefactor/DiagnosticSema.def
+  s_3ec84b7d0ce897::t_078a394918b09f 417,419
+  s_3ec84b7d0ce897::t_22b0d850cada94 437
+src/Sema/DeclAttributeChecker.cpp
+  s_3ec84b7d0ce897::t_58360d3294add0 402-403
+unittests/CodeGen/ModalMangleTest.cpp
+  h_f08a759313bce8 1-218
+unittests/Demangle/DemangleTest.cpp
+  h_f08a759313bce8 125-266
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f1bae8c3230992801fa2c67c5b4bbfc4d3a91a63",
+  "prompts": {},
+  "humans": {
+    "h_7fa24ec5a32f2d": {
+      "author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    },
+    "h_f08a759313bce8": {
+      "author": "yuqiaoyu <yujunqiang1@h-partners.com>"
+    }
+  },
+  "sessions": {
+    "s_3a7e12ebbff7df": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "79c3bc0c-8816-4341-8f91-145a4154e2f1",
+        "model": "default"
+      },
+      "human_author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    },
+    "s_3ec84b7d0ce897": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "4a8f14d8-7266-42bf-89fc-68cd132176d4",
+        "model": "default"
+      },
+      "human_author": null
+    },
+    "s_5330702bd29018": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ecfd91c7-54f6-472e-b9be-b4fa346bde7f",
+        "model": "default"
+      },
+      "human_author": null
+    },
+    "s_68eb9885f36f03": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "cb75881d-813d-4a43-8581-0fce58b08376",
+        "model": "default"
+      },
+      "human_author": null
+    },
+    "s_79dd6c8d8c88ee": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "42a994b6-2e71-4f0d-a714-3e5f97d01768",
+        "model": "default"
+      },
+      "human_author": null
+    },
+    "s_b4748a4accc407": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e2f6674d-8c8a-41d1-b1ef-076409be6d16",
+        "model": "default"
+      },
+      "human_author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    },
+    "s_d4f32c57925ec7": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "s_d4f32c57925ec7",
+        "model": "unknown"
+      },
+      "human_author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    }
+  }
+}
