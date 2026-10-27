@@ -122,6 +122,16 @@ Ptr<Value> Translator::TypeCastOrBoxIfNeeded(Value& val, Type& expectedTy, const
     return CHIR::TypeCastOrBoxIfNeeded(val, expectedTy, builder, *currentBlock, loc, needCheck);
 }
 
+Ptr<Value> Translator::CastModalIfCopyable(Value& val, Type& expectedTy, const DebugLocation& loc)
+{
+    // Casting to change the modal is only legal for copyable types.
+    CJC_ASSERT(val.GetType()->IsCopyable());
+    if (builder.WithModal(val.GetType(), expectedTy.GetModalInfo()) != &expectedTy) {
+        return &val;
+    }
+    return TypeCastOrBoxIfNeeded(val, expectedTy, loc);
+}
+
 Ptr<Value> Translator::GetDerefedValue(Ptr<Value> val, const DebugLocation& loc)
 {
     CJC_NULLPTR_CHECK(val);
