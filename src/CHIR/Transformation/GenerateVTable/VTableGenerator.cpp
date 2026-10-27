@@ -114,6 +114,32 @@ bool TypeIsMatched(const Type& type1, const Type& type2)
     return true;
 }
 
+// GetSuperTypesRecusively filters a conditional extend when its constraints cannot be proven for a
+// generic type. A subclass still needs the interface slots contributed by its ancestor's extends:
+// whether the class conforms is decided at runtime by the ExtensionDef where-condition. Collect
+// only interfaces from the instantiated ancestor's own extends, leaving the ancestor's own vtable
+// and unrelated generic types untouched.
+void CollectAncestorConditionalInterfaces(ClassType& type, CHIRBuilder& builder,
+    std::vector<ClassType*>& inheritanceList)
+{
+    auto classDef = type.GetClassDef();
+    auto res = classDef->GetType()->CalculateGenericTyMapping(type).first;
+    CJC_ASSERT(res);
+    for (auto extend : classDef->GetExtends()) {
+        auto [extRes, extReplaceTable] = extend->GetExtendedType()->CalculateGenericTyMapping(type);
+        if (!extRes) {
+            continue;
+        }
+        for (auto ty : extend->GetImplementedInterfaceTys()) {
+            auto interfaceType = StaticCast<ClassType*>(ReplaceRawGenericArgType(*ty, extReplaceTable, builder));
+            if (std::find(inheritanceList.begin(), inheritanceList.end(), interfaceType) != inheritanceList.end()) {
+                continue;
+            }
+            GetAllInstantiatedParentType(*interfaceType, builder, inheritanceList);
+        }
+    }
+}
+
 std::vector<CustomTypeDef*> CollectBrotherDefs(const ExtendDef& curExtend, CHIRBuilder& builder)
 {
     auto extendDefs = curExtend.GetExtendedType()->GetExtends(&builder);
@@ -442,6 +468,18 @@ void VTableGenerator::GenerateVTable(CustomTypeDef& customTypeDef)
         return;
     }
     auto inheritanceList = customTypeDef.GetSuperTypesRecusively(builder);
+    // GetSuperTypesRecusively is conservative for conditional extends on generic ancestors. Extend
+    // the list with interfaces from each generic ancestor's own extends so an inherited conditional
+    // interface still has vtable method slots in this subclass.
+    std::vector<ClassType*> ancestorClassTypes;
+    for (auto parent : inheritanceList) {
+        if (!parent->GetClassDef()->IsInterface() && parent->IsGenericRelated()) {
+            ancestorClassTypes.emplace_back(parent);
+        }
+    }
+    for (auto ancestorType : ancestorClassTypes) {
+        CollectAncestorConditionalInterfaces(*ancestorType, builder, inheritanceList);
+    }
 
     VTableInDef vtable;
     // 1. merge all parent vtable, from grand-parent to parent
