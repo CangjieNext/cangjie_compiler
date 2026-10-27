@@ -796,8 +796,10 @@ void AddTypeCastForOperand(const std::pair<Expression*, std::vector<size_t>>& e,
     auto parentBlock = expr->GetParentBlock();
     for (auto idx : e.second) {
         auto op = expr->GetOperand(idx);
+        auto opClsTy = StaticCast<ClassType*>(op->GetType()->StripAllRefs());
+        // the cast must not change the modal of a non-copyable class type, so keep the source modal
         auto expectedType = builder.GetType<RefType>(
-            StaticCast<ClassType*>(op->GetType()->StripAllRefs())->GetClassDef()->GetSuperClassTy());
+            builder.WithModal(opClsTy->GetClassDef()->GetSuperClassTy(), opClsTy->GetModalInfo()));
         auto typecast = builder.CreateExpression<ClassStaticCast>(expectedType, op, parentBlock);
         typecast->MoveBefore(expr);
         expr->ReplaceOperand(idx, typecast->GetResult());
