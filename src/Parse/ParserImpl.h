@@ -230,6 +230,7 @@ private:
     bool parseDeclFile{false};
 
     bool enableEH{false};
+    bool enableLocalMode{false};
     Triple::BackendType backend{Triple::BackendType::CJNATIVE};
     bool calculateLineNum{false};
     // we store line number info from all tokens
@@ -838,6 +839,7 @@ private:
     void DiagExpectedTypeNameAfterAs(const Token& tok);
     void DiagExpectedTypeName();
     DiagnosticBuilder DiagUnexpectedModal(const Range& range);
+    DiagnosticBuilder DiagLocalModeDisabled(const Range& range);
     void DiagInvalidLeftHandExpr(const AST::Expr& expr, const Token& tok);
     void DiagNoneAssociativeOp(const Token& preT, const Token& tok);
     void DiagInvalidInheritType(const AST::Type& type);

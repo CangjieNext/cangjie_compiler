@@ -210,6 +210,7 @@ Value* Translator::TranslateCompoundAssign(const AssignExpr& assign)
     } else {
         // Translate the RHS part "Y"
         Value* rhs = TranslateExprArg(*assign.rightExpr);
+        rhs = CastModalIfCopyable(*rhs, *lhsRightValue->GetType(), rightValLoc);
         auto kind = tokenKindToBinaryExprKind.at(COMPOUND_ASSIGN_EXPR_MAP.at(assign.op));
         auto binOp = TryCreateWithOV<BinaryExpression>(currentBlock,
             mayHaveException, assign.overflowStrategy, loc, lhsRightValue->GetType(), kind, lhsRightValue, rhs);
