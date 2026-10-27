@@ -1444,11 +1444,11 @@ private:
     }
 
     /// Check field types when struct inherits Copyable (directly or via extend).
-    void CheckCopyType(StructDecl& decl)
+    void CheckCopyType(StructDecl& decl, const TypeSubst& subst = {})
     {
         for (auto member : decl.GetMemberDeclPtrs()) {
             if (auto var = DynamicCast<VarDecl>(member)) {
-                if (type.IsCopyType(var->DataTy())) {
+                if (type.IsCopyType(type.GetInstantiatedTy(var->DataTy(), subst))) {
                     continue;
                 }
                 DiagCopyStructBadField(decl, *var);
@@ -1469,7 +1469,10 @@ private:
         if (InheritsCopyable(*sd)) {
             return;
         }
-        CheckCopyType(*sd);
+        // Instantiate field types with the extend's type arguments, so that constraints on the
+        // extend's generic parameters (e.g. `where T <: Copyable`) are taken into account.
+        auto subst = TypeCheckUtil::GenerateTypeMapping(*sd, ed.extendedType->GetTy()->TyArgs());
+        CheckCopyType(*sd, subst);
     }
 
     void DiagCopyStructBadField(const StructDecl& decl, const VarDecl& var)
@@ -1503,6 +1506,10 @@ bool TypeChecker::TypeCheckerImpl::IsExternalLocal(const ASTContext& ctx, const 
 
 void TypeChecker::TypeCheckerImpl::CheckModalType(const ASTContext& ctx, Package& pkg)
 {
+    // All local mode checks are meaningless when the feature is disabled, skip for performance.
+    if (!ci->invocation.globalOptions.enableLocalMode) {
+        return;
+    }
     modalTypeChecker->Check(ctx, pkg);
 }
 

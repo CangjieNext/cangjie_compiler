@@ -873,6 +873,13 @@ AST::VisitAction TypeChecker::TypeCheckerImpl::CheckLegalityOfReferenceForNameRe
     if (!nameRef->instTys.empty()) {
         CheckInstTypeCompleteness(ctx, *nameRef);
     }
+    // A reference is a use as well. Calls are checked in the call path instead.
+    if (!ci->invocation.globalOptions.enableLocalMode && nameRef->callOrPattern == nullptr) {
+        if (auto target = nameRef->GetTarget(); target && IsDisabledLocalAPI(*target)) {
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_local_api_disabled, *nameRef,
+                std::string(ToSignatureString(*target, target->DataTy(), GetThisParamModal(*target))));
+        }
+    }
     if (auto re = DynamicCast<RefExpr*>(nameRef)) {
         if (re->isThis) {
             CheckUsageOfThis(ctx, *re);

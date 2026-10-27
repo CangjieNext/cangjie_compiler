@@ -652,6 +652,10 @@ void ToCHIR::RunOptimizationPass()
 
 void ToCHIR::SetMemoryRegion()
 {
+    // The pass only handles exclave functions, which cannot exist when local mode is disabled.
+    if (!opts.enableLocalMode) {
+        return;
+    }
     Utils::ProfileRecorder recorder("CHIR", "SetMemoryRegion");
     auto setMemRegion = SetMemRegion(builder);
     setMemRegion.RunOnPackage(*chirPkg);

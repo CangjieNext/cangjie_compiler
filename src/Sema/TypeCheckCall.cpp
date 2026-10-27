@@ -1350,6 +1350,10 @@ void TypeChecker::TypeCheckerImpl::FilterIncompatibleThisParamCandidates(
     ASTContext& ctx, CallExpr& ce, ModalTy target, std::vector<Ptr<FuncDecl>>& candidates)
 {
     Utils::EraseIf(candidates, [this, &ctx, &ce, target](Ptr<FuncDecl> fd) {
+        // A local API is reported when it is used, not filtered out as an unmatched candidate.
+        if (!ci->invocation.globalOptions.enableLocalMode && IsDisabledLocalAPI(*fd)) {
+            return false;
+        }
         return !CheckThisParamCompatible(ctx, *fd, ce, target);
     });
 }
@@ -3386,6 +3390,16 @@ void CheckCallPostfixModal(DiagnosticEngine& diag, const CallExpr& ce, Ptr<const
 bool TypeChecker::TypeCheckerImpl::PostCheckCallExpr(
     const ASTContext& ctx, CallExpr& ce, FuncDecl& func, const SubstPack& typeMapping)
 {
+    // Local-only APIs are unusable while local mode is disabled.
+    if (!ci->invocation.globalOptions.enableLocalMode && IsDisabledLocalAPI(func)) {
+        // An accessor is reported with its property's signature.
+        const Decl& api = func.propDecl ? static_cast<const Decl&>(*func.propDecl) : func;
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_local_api_disabled, *ce.baseFunc,
+            std::string(ToSignatureString(api, api.DataTy(), GetThisParamModal(api))));
+        ce.SetTy({TypeManager::GetInvalidTy()});
+        ce.callKind = CallKind::CALL_INVALID;
+        return false;
+    }
     CheckCallPostfixModal(diag, ce, &func);
     if (!func.TestAttr(Attribute::CONSTRUCTOR) && !CheckStaticCallNonStatic(ctx, ce, func)) {
         // Reset status for re-enter callCheck.

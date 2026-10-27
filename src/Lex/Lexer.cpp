@@ -289,8 +289,8 @@ void LexerImpl::ReadUTF8CharFromMultiBytes(int32_t& ch)
 
 TokenKind LexerImpl::LookupKeyword(const std::string& literal)
 {
-    static const auto tokenMap = [] {
-        static std::unordered_map<std::string_view, TokenKind> map;
+    static const auto buildTokenMap = [](bool enableLocalMode) {
+        std::unordered_map<std::string_view, TokenKind> map;
         for (unsigned char i = 0; i < static_cast<unsigned char>(TokenKind::IDENTIFIER); i++) {
             map[TOKENS[i]] = static_cast<TokenKind>(i);
         }
@@ -310,10 +310,16 @@ TokenKind LexerImpl::LookupKeyword(const std::string& literal)
         map[TOKENS[static_cast<unsigned char>(TokenKind::RESUME)]] = TokenKind::RESUME;
         map[TOKENS[static_cast<unsigned char>(TokenKind::THROWING)]] = TokenKind::THROWING;
         map[TOKENS[static_cast<unsigned char>(TokenKind::HANDLE)]] = TokenKind::HANDLE;
-        map[TOKENS[static_cast<unsigned char>(TokenKind::EXCLAVE)]] = TokenKind::EXCLAVE;
-        map[TOKENS[static_cast<unsigned char>(TokenKind::DEMODE)]] = TokenKind::DEMODE;
+        // Local mode keywords are only registered when local mode is enabled, otherwise they are identifiers.
+        if (enableLocalMode) {
+            map[TOKENS[static_cast<unsigned char>(TokenKind::EXCLAVE)]] = TokenKind::EXCLAVE;
+            map[TOKENS[static_cast<unsigned char>(TokenKind::DEMODE)]] = TokenKind::DEMODE;
+        }
         return map;
-    }();
+    };
+    static const auto localModeTokenMap = buildTokenMap(true);
+    static const auto plainTokenMap = buildTokenMap(false);
+    const auto& tokenMap = localModeEnabled ? localModeTokenMap : plainTokenMap;
     auto it = tokenMap.find(literal);
     TokenKind kind = it != tokenMap.end() ? it->second : TokenKind::IDENTIFIER;
     if (!ehEnabled &&

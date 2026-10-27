@@ -722,7 +722,10 @@ Ptr<PropDecl> TypeChecker::TypeCheckerImpl::ResolvePropOverload(
         // Only in this case, the mode of copy type matters.
         auto pd = StaticCast<PropDecl>(target);
         auto ty = pd->GetTy();
-        if (receiver.Mode().IsSubModal(ty.Mode())) {
+        // A local API is reported when it is used, not filtered out as an unmatched candidate.
+        if (!ci->invocation.globalOptions.enableLocalMode && IsDisabledLocalAPI(*pd)) {
+            callable.push_back(pd);
+        } else if (receiver.Mode().IsSubModal(ty.Mode())) {
             callable.push_back(pd);
         }
     }

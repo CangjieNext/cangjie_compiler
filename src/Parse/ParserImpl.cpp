@@ -110,6 +110,18 @@ bool Parser::IsEHEnabled() const
     return impl->enableEH;
 }
 
+Parser& Parser::SetLocalModeEnabled(bool enabled)
+{
+    impl->enableLocalMode = enabled;
+    impl->lexer->SetLocalModeEnabled(enabled);
+    return *this;
+}
+
+bool Parser::IsLocalModeEnabled() const
+{
+    return impl->enableLocalMode;
+}
+
 TokenVecMap Parser::GetCommentsMap() const
 {
     return impl->commentsMap;
@@ -126,6 +138,8 @@ void Parser::SetCompileOptions(const GlobalOptions& opts)
     // keywords, so we disable them from the parser unless the user
     // explicitly asks to compile with effect handler support
     SetEHEnabled(opts.enableEH);
+    // Local mode is experimental syntax, only enabled on explicit request
+    SetLocalModeEnabled(opts.enableLocalMode);
 }
 
 bool Parser::Skip(TokenKind kind)

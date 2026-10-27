@@ -437,6 +437,8 @@ ERROR(sema_invalid_local_func_type, "cannot define a %s with @local! function ty
 ERROR(sema_static_prop_overload, "static property cannot be overloaded")
 ERROR(sema_cannot_access_local_var_outside_exclave,
     "cannot access local variable %s of '%s' type defined outside %s")
+ERROR(sema_local_api_disabled, "cannot use local API '%s' when local mode is disabled",
+    "compile with '--experimental --enable-local-mode' to enable it")
 
 WARNING(sema_unused_import, UNUSED, "unused import '%s'", "unused import")
 
