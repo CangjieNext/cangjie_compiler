@@ -575,6 +575,20 @@ namespace {
 // Maps an interface collected from an ancestor's extension to its residual runtime condition.
 using ExtendCondMap = std::unordered_map<const CHIR::ClassType*, ExtendCondPairs>;
 
+// Combines the conditions inherited from an outer extension with those contributed by the current
+// extension. An empty result means the conformance is unconditional.
+ExtendCondPairs MergeExtendConds(const ExtendCondPairs* inheritedConds, const ExtendCondPairs* conds)
+{
+    ExtendCondPairs merged;
+    if (inheritedConds != nullptr) {
+        merged.insert(merged.end(), inheritedConds->begin(), inheritedConds->end());
+    }
+    if (conds != nullptr) {
+        merged.insert(merged.end(), conds->begin(), conds->end());
+    }
+    return merged;
+}
+
 // Returns true if `type` mentions (transitively through type arguments) any generic parameter
 // declared by `extend`.
 bool TypeMentionsExtendParams(const CHIR::Type& type, const CHIR::ExtendDef& extend)
@@ -598,8 +612,8 @@ bool TypeMentionsExtendParams(const CHIR::Type& type, const CHIR::ExtendDef& ext
 // skipped). Statically decidable constraints are resolved here; only constraints that cannot be
 // decided at compile time (they involve uninstantiated generic parameters) are kept in `conds`.
 bool ComputeResidualExtendConds(const CHIR::ExtendDef& extend,
-    const std::unordered_map<const CHIR::GenericType*, CHIR::Type*>& replaceTable,
-    CHIR::CHIRBuilder& builder, ExtendCondPairs& conds)
+    const std::unordered_map<const CHIR::GenericType*, CHIR::Type*>& replaceTable, CHIR::CHIRBuilder& builder,
+    ExtendCondPairs& conds)
 {
     for (auto gt : extend.GetGenericTypeParams()) {
         auto it = replaceTable.find(gt);
@@ -616,8 +630,7 @@ bool ComputeResidualExtendConds(const CHIR::ExtendDef& extend,
                 return false; // Unresolvable mapping, be conservative.
             }
             bool satisfied = actual->IsEqualOrSubTypeOf(*ubInst, builder);
-            if (satisfied && actual->IsGeneric() &&
-                StaticCast<CHIR::GenericType*>(actual)->GetUpperBounds().empty()) {
+            if (satisfied && actual->IsGeneric() && StaticCast<CHIR::GenericType*>(actual)->GetUpperBounds().empty()) {
                 // IsEqualOrSubTypeOf is vacuously true for a generic type without upper bounds.
                 satisfied = false;
             }
@@ -634,33 +647,35 @@ bool ComputeResidualExtendConds(const CHIR::ExtendDef& extend,
 }
 
 void GetOrderedParentTypesRecusively(CHIR::ClassType& type, std::list<const CHIR::ClassType*>& parents,
-    CHIR::CHIRBuilder& builder, ExtendCondMap& extendConds)
+    CHIR::CHIRBuilder& builder, ExtendCondMap& extendConds, const ExtendCondPairs* inheritedConds = nullptr)
 {
     if (auto superClass = type.GetSuperClassTy(&builder)) {
         parents.emplace_front(superClass);
-        GetOrderedParentTypesRecusively(*superClass, parents, builder, extendConds);
+        GetOrderedParentTypesRecusively(*superClass, parents, builder, extendConds, inheritedConds);
     }
 
-    auto appendInterface = [&parents, &builder, &extendConds](const CHIR::ClassType* instType,
+    auto appendInterface = [&parents, &builder, &extendConds, inheritedConds](CHIR::ClassType* instType,
                                bool isFromCompilerAddedExtend, const ExtendCondPairs* conds) {
+        auto effectiveConds = MergeExtendConds(inheritedConds, conds);
+        const ExtendCondPairs* effective = effectiveConds.empty() ? nullptr : &effectiveConds;
         if (std::find(parents.begin(), parents.end(), instType) != parents.end()) {
             // The same interface reached from several sources: an unconditional source wins over a
             // conditional one; conditions of conditional sources accumulate (logical AND).
-            if (conds == nullptr || conds->empty()) {
+            if (effective == nullptr) {
                 extendConds.erase(instType);
             } else if (auto it = extendConds.find(instType); it != extendConds.end()) {
-                it->second.insert(it->second.end(), conds->begin(), conds->end());
+                it->second.insert(it->second.end(), effective->begin(), effective->end());
             }
             return;
         }
         parents.emplace_back(instType);
-        if (conds != nullptr && !conds->empty()) {
-            extendConds.emplace(instType, *conds);
+        if (effective != nullptr) {
+            extendConds.emplace(instType, effectiveConds);
         }
         // Keep consistent with the def overload below: for a compiler-added extend def, only the
         // direct interface is collected without recursing into its parent types.
         if (!isFromCompilerAddedExtend) {
-            GetOrderedParentTypesRecusively(*const_cast<CHIR::ClassType*>(instType), parents, builder, extendConds);
+            GetOrderedParentTypesRecusively(*instType, parents, builder, extendConds, effective);
         }
     };
     auto classDef = type.GetClassDef();
@@ -692,8 +707,7 @@ void GetOrderedParentTypesRecusively(CHIR::ClassType& type, std::list<const CHIR
         }
         bool isFromCompilerAddedExtend = extend->TestAttr(CHIR::Attribute::COMPILER_ADD);
         for (auto ty : extend->GetImplementedInterfaceTys()) {
-            auto instType =
-                StaticCast<CHIR::ClassType*>(ReplaceRawGenericArgType(*ty, extReplaceTable, builder));
+            auto instType = StaticCast<CHIR::ClassType*>(ReplaceRawGenericArgType(*ty, extReplaceTable, builder));
             appendInterface(instType, isFromCompilerAddedExtend, &conds);
         }
     }
