@@ -1,0 +1,25 @@
+unittests/Sema/GetTopOverriddenFuncDeclTest.cpp
+  s_d6e4d3f8b51524::t_02492a059fc9e3 620
+  s_d6e4d3f8b51524::t_f36ff0d97d548e 621-707
+src/Sema/OverrideFunctionResolver.h
+  s_d6e4d3f8b51524::t_2309e1763e1fe8 86-93
+src/Sema/OverrideFunctionResolver.cpp
+  s_d6e4d3f8b51524::t_2309e1763e1fe8 297-302,305-308,328,333,342
+  s_d6e4d3f8b51524::t_58393d12d88dfc 296
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "16831cf537754c6c05d84b9013eed0ef1ff2b812",
+  "prompts": {},
+  "sessions": {
+    "s_d6e4d3f8b51524": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a476-fb7f-7851-b4af-f9d90b8c3dd2",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wyq1213 <wangyinqiang2@huawei.com>"
+    }
+  }
+}
