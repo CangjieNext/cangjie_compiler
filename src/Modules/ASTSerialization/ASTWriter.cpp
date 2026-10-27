@@ -782,7 +782,6 @@ void ASTWriter::ASTWriterImpl::AST2FB(std::vector<uint8_t>& data, const PackageD
         vfileInfo = builder.CreateVector<TFileInfoOffset>(allFileInfo);
     }
     auto vdecls = builder.CreateVector<TDeclOffset>(allDecls);
-    auto vexprs = builder.CreateVector<TExprOffset>(allExprs);
     auto vtypes = builder.CreateVector<TTypeOffset>(allTypes);
     std::vector<TStringOffset> vpackageNames;
     for (auto& depStdPkg : package.srcPackage->GetAllDependentStdPkgs()) {
@@ -864,6 +863,12 @@ void ASTWriter::ASTWriterImpl::AST2FB(std::vector<uint8_t>& data, const PackageD
         }
         vmacroImports = builder.CreateVector(stmtOffsets);
     }
+    // Snapshot allExprs AFTER the macroImports block above: macro import @When
+    // condExprs are saved via SaveExpr during AST2FB itself (the macro package's
+    // decl/expr tables were filled in the PreSave phase, but these are not), so the
+    // snapshot must be taken after them or whenExprIndices would point past the
+    // serialized exprs and the downstream LoadExpr would read out of bounds.
+    auto vexprs = builder.CreateVector<TExprOffset>(allExprs);
     auto root = PackageFormat::CreatePackage(builder, cjcVersion, &cjoVersion, packageName, dependencyInfo, vimports,
         vfiles, vfileImports, vtypes, vdecls, vexprs, INVALID_FORMAT_INDEX, kind, access, moduleName, vfileInfo,
         vdependentStdPkgs, vmacroImports, options.has_value() ? options.value() : INVALID_FORMAT_INDEX);
