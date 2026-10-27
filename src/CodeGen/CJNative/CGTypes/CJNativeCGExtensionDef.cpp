@@ -262,7 +262,7 @@ void CGExtensionDef::CollectGenericParamIndicesMap()
     }
 }
 
-llvm::Constant* CGExtensionDef::GenerateWhereConditionFn(const ExtendCondPairs* extendConds)
+llvm::Constant* CGExtensionDef::GenerateWhereConditionFn(const ExtendCondAlternatives* extendConds)
 {
     bool needExtendConds = extendConds != nullptr && !extendConds->empty();
     if (!needExtendConds && whereCondFn) {
@@ -306,8 +306,11 @@ llvm::Constant* CGExtensionDef::GenerateWhereConditionFn(const ExtendCondPairs* 
         return llvm::Constant::getNullValue(i8PtrTy);
     }
     auto funcName = extendDefName + "_cs";
-    if (auto cs = cgMod.GetLLVMModule()->getFunction(funcName)) {
-        return llvm::ConstantExpr::getBitCast(cs, i8PtrTy);
+    // A direct extension and a class-level inherited entry may have different conditions for the
+    // same ExtensionDef. Keep their functions distinct so the global merge can retain both paths.
+    size_t suffix = 0;
+    while (cgMod.GetLLVMModule()->getFunction(funcName)) {
+        funcName = extendDefName + "_cs_" + std::to_string(++suffix);
     }
     auto fn = llvm::Function::Create(whereCondFnType, llvm::Function::PrivateLinkage, funcName, cgMod.GetLLVMModule());
     fn->addFnAttr("native-interface-fn");
@@ -325,13 +328,24 @@ llvm::Constant* CGExtensionDef::GenerateWhereConditionFn(const ExtendCondPairs* 
     if (needExtendConds) {
         // The residual conditions are expressed in the generic context of 'targetType', so their
         // typeInfos are built from the type argument array of 'targetType' passed by the runtime.
-        for (const auto& [actual, upperBound] : *extendConds) {
-            if (retVal != nullptr) {
-                HandleShortcutBranch(irBuilder, retVal, "ext_cs");
+        if (retVal != nullptr) {
+            HandleShortcutBranch(irBuilder, retVal, "ext_cs");
+            retVal = nullptr;
+        }
+        for (const auto& alternative : *extendConds) {
+            if (alternative.empty()) {
+                retVal = irBuilder.getInt1(true);
+                break;
             }
-            auto actualTi = irBuilder.CreateTypeInfo(*actual, genericParamsMap, false);
-            auto upperBoundTi = irBuilder.CreateTypeInfo(*upperBound, genericParamsMap, false);
-            retVal = irBuilder.CallIntrinsicIsSubtype({actualTi, upperBoundTi});
+            llvm::Value* alternativeCond = nullptr;
+            for (const auto& [actual, upperBound] : alternative) {
+                auto actualTi = irBuilder.CreateTypeInfo(*actual, genericParamsMap, false);
+                auto upperBoundTi = irBuilder.CreateTypeInfo(*upperBound, genericParamsMap, false);
+                auto condition = irBuilder.CallIntrinsicIsSubtype({actualTi, upperBoundTi});
+                alternativeCond =
+                    alternativeCond == nullptr ? condition : irBuilder.CreateAnd(alternativeCond, condition);
+            }
+            retVal = retVal == nullptr ? alternativeCond : irBuilder.CreateOr(retVal, alternativeCond);
         }
     }
     CJC_ASSERT(retVal != nullptr);
@@ -486,6 +500,48 @@ std::vector<llvm::Constant*> CGExtensionDef::GetEmptyExtensionDefContent(CGModul
     return defConstants;
 }
 
+namespace {
+llvm::Constant* MergeWhereConditionFns(
+    CGModule& cgMod, const std::string& extensionDefName, llvm::Constant* lhs, llvm::Constant* rhs)
+{
+    auto& llvmCtx = cgMod.GetLLVMContext();
+    auto i8PtrTy = llvm::Type::getInt8PtrTy(llvmCtx);
+    if (lhs->isNullValue() || rhs->isNullValue()) {
+        return llvm::Constant::getNullValue(i8PtrTy);
+    }
+    if (lhs == rhs) {
+        return lhs;
+    }
+
+    std::vector<llvm::Type*> argTypes{
+        llvm::Type::getInt32Ty(llvmCtx), CGType::GetOrCreateTypeInfoPtrType(llvmCtx)->getPointerTo()};
+    auto fnType = llvm::FunctionType::get(llvm::Type::getInt1Ty(llvmCtx), argTypes, false);
+    auto fnName = extensionDefName + "_cs_or";
+    size_t suffix = 0;
+    while (cgMod.GetLLVMModule()->getFunction(fnName)) {
+        fnName = extensionDefName + "_cs_or_" + std::to_string(++suffix);
+    }
+    auto fn = llvm::Function::Create(fnType, llvm::Function::PrivateLinkage, fnName, cgMod.GetLLVMModule());
+    fn->addFnAttr("native-interface-fn");
+    fn->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+    auto entryBB = llvm::BasicBlock::Create(llvmCtx, "entry", fn);
+    IRBuilder2 irBuilder(cgMod, entryBB);
+    auto lhsCallee = llvm::ConstantExpr::getBitCast(lhs, fnType->getPointerTo());
+    auto lhsCond = irBuilder.LLVMIRBuilder2::CreateCall(fnType, lhsCallee, {fn->getArg(0), fn->getArg(1)});
+    // Create 2 blocks: the successful LHS result and the RHS evaluation.
+    auto [trueBB, rhsBB] =
+        Vec2Tuple<2>(irBuilder.CreateAndInsertBasicBlocks({GenNameForBB("ext_or_true"), GenNameForBB("ext_or_rhs")}));
+    irBuilder.CreateCondBr(lhsCond, trueBB, rhsBB);
+    irBuilder.SetInsertPoint(trueBB);
+    irBuilder.CreateRet(irBuilder.getInt1(true));
+    irBuilder.SetInsertPoint(rhsBB);
+    auto rhsCallee = llvm::ConstantExpr::getBitCast(rhs, fnType->getPointerTo());
+    auto rhsCond = irBuilder.LLVMIRBuilder2::CreateCall(fnType, rhsCallee, {fn->getArg(0), fn->getArg(1)});
+    irBuilder.CreateRet(rhsCond);
+    return llvm::ConstantExpr::getBitCast(fn, i8PtrTy);
+}
+} // namespace
+
 bool CGExtensionDef::CreateExtensionDefForType(CGModule& cgMod, const std::string& extensionDefName,
     const std::vector<llvm::Constant*>& content, const CHIR::ClassType& inheritedType, bool isForExternalType)
 {
@@ -495,6 +551,21 @@ bool CGExtensionDef::CreateExtensionDefForType(CGModule& cgMod, const std::strin
         llvm::cast<llvm::GlobalVariable>(cgMod.GetLLVMModule()->getOrInsertGlobal(extensionDefName, extensionDefType));
     CJC_ASSERT(extensionDef);
     if (extensionDef->hasInitializer()) {
+        // A class-level inherited entry and a direct extension can describe alternative paths to
+        // the same interface. Keep the first entry's function table, but merge the complete
+        // runtime conditions instead of letting the first initializer win.
+        auto oldContent = llvm::cast<llvm::ConstantStruct>(extensionDef->getInitializer());
+        auto field = static_cast<unsigned>(WHERE_CONDITION_FN);
+        auto oldWhere = llvm::cast<llvm::Constant>(oldContent->getOperand(field));
+        auto mergedWhere = MergeWhereConditionFns(cgMod, extensionDefName, oldWhere, content[field]);
+        if (mergedWhere != oldWhere) {
+            std::vector<llvm::Constant*> mergedContent;
+            for (const auto& operand : oldContent->operands()) {
+                mergedContent.emplace_back(llvm::cast<llvm::Constant>(operand.get()));
+            }
+            mergedContent[field] = mergedWhere;
+            extensionDef->setInitializer(llvm::ConstantStruct::get(extensionDefType, mergedContent));
+        }
         return false;
     }
     extensionDef->setLinkage(llvm::GlobalValue::PrivateLinkage);
@@ -531,7 +602,8 @@ bool IsSameRootPackage(const std::string& packageName1, const std::string& packa
 }
 }
 
-bool CGExtensionDef::CreateExtensionDefForType(const CHIR::ClassType& inheritedType, const ExtendCondPairs* extendConds)
+bool CGExtensionDef::CreateExtensionDefForType(
+    const CHIR::ClassType& inheritedType, const ExtendCondAlternatives* extendConds)
 {
     auto vTable = chirDef.GetDefVTable().GetExpectedTypeVTable(inheritedType);
     auto funcTableSize = vTable.IsEmpty() ? 0 : vTable.GetMethodNum();
@@ -572,8 +644,8 @@ bool CGExtensionDef::CreateExtensionDefForType(const CHIR::ClassType& inheritedT
 }
 
 namespace {
-// Maps an interface collected from an ancestor's extension to its residual runtime condition.
-using ExtendCondMap = std::unordered_map<const CHIR::ClassType*, ExtendCondPairs>;
+// Maps an interface collected from an ancestor's extension to its alternative runtime conditions.
+using ExtendCondMap = std::unordered_map<const CHIR::ClassType*, ExtendCondAlternatives>;
 
 // Combines the conditions inherited from an outer extension with those contributed by the current
 // extension. An empty result means the conformance is unconditional.
@@ -659,18 +731,25 @@ void GetOrderedParentTypesRecusively(CHIR::ClassType& type, std::list<const CHIR
         auto effectiveConds = MergeExtendConds(inheritedConds, conds);
         const ExtendCondPairs* effective = effectiveConds.empty() ? nullptr : &effectiveConds;
         if (std::find(parents.begin(), parents.end(), instType) != parents.end()) {
-            // The same interface reached from several sources: an unconditional source wins over a
-            // conditional one; conditions of conditional sources accumulate (logical AND).
+            // Each occurrence is an alternative conformance path. An unconditional path wins;
+            // otherwise retain each path's conjunction as a separate alternative.
             if (effective == nullptr) {
                 extendConds.erase(instType);
             } else if (auto it = extendConds.find(instType); it != extendConds.end()) {
-                it->second.insert(it->second.end(), effective->begin(), effective->end());
+                auto& alternatives = it->second;
+                if (std::find(alternatives.begin(), alternatives.end(), effectiveConds) == alternatives.end()) {
+                    alternatives.emplace_back(effectiveConds);
+                }
+            }
+            // Even an already collected interface can contribute a new path to its parents.
+            if (!isFromCompilerAddedExtend) {
+                GetOrderedParentTypesRecusively(*instType, parents, builder, extendConds, effective);
             }
             return;
         }
         parents.emplace_back(instType);
         if (effective != nullptr) {
-            extendConds.emplace(instType, effectiveConds);
+            extendConds[instType].emplace_back(effectiveConds);
         }
         // Keep consistent with the def overload below: for a compiler-added extend def, only the
         // direct interface is collected without recursing into its parent types.
@@ -728,8 +807,12 @@ void GetOrderedParentTypesRecusively(const CHIR::CustomTypeDef& def, std::list<c
     for (auto interface : def.GetImplementedInterfaceTys()) {
         if (std::find(parents.begin(), parents.end(), interface) != parents.end()) {
             // A directly declared interface is unconditional, it wins over a conditional entry
-            // collected from an ancestor's extension.
+            // collected from an ancestor's extension. Continue through its parents so the same
+            // unconditional path is propagated to them as well.
             extendConds.erase(interface);
+            if (!def.TestAttr(CHIR::Attribute::COMPILER_ADD) || !def.IsExtend()) {
+                GetOrderedParentTypesRecusively(*interface, parents, builder, extendConds);
+            }
             continue;
         }
         parents.emplace_back(interface);
@@ -758,7 +841,7 @@ std::pair<uint32_t, std::vector<std::pair<const CHIR::Type*, const CHIR::Type*>>
                 continue;
             }
             auto condIt = extendConds.find(iTy);
-            const ExtendCondPairs* conds = condIt == extendConds.end() ? nullptr : &condIt->second;
+            const ExtendCondAlternatives* conds = condIt == extendConds.end() ? nullptr : &condIt->second;
             if (CreateExtensionDefForType(*iTy, conds)) {
                 ++extensionDefsNum;
                 if (iTy->GetClassDef()->IsInterface()) {
