@@ -79,7 +79,7 @@ void OpenUpForRegCompanions(Decl& moved)
 
 bool RewireMovedField(VarDecl& vd, const MoveTarget& target, InteropContext& ctx, ProxiedMembers& proxied)
 {
-    if (IsObjCImplRegistryCompanionField(vd)) {
+    if (IsObjCExportRegistryCompanionField(vd)) {
         return false;
     }
 
@@ -161,10 +161,10 @@ enum class Region {
 
 Region RegionOf(const ClassDecl& cd)
 {
-    if (IsObjCImplRegistryCompanion(cd)) {
+    if (IsObjCExportRegistryCompanion(cd)) {
         return Region::REG_COMPANION;
     }
-    return IsObjCImpl(cd) ? Region::IMPL : Region::ELSEWHERE;
+    return cd.IsObjCExport() ? Region::IMPL : Region::ELSEWHERE;
 }
 
 /**
@@ -286,7 +286,7 @@ void RetargetCallee(CallExpr& call, FuncDecl& callee) noexcept
 void ResolveToImportedMovedMember(const InteropContext& ctx, CallExpr& call)
 {
     auto proxy = GetCalleeNamedOnSelf(call);
-    if (!proxy || !IsObjCImplMovedMemberProxy(*proxy)) {
+    if (!proxy || !IsObjCExportMovedMemberProxy(*proxy)) {
         return;
     }
 

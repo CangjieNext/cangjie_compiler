@@ -114,11 +114,12 @@ Ptr<Value> Translator::TransShortCircuitOr(
         leftValue->GetType()->IsBoolean() || leftValue->GetType()->IsNothing() || leftValue->GetType()->IsGeneric());
     const auto& rightLoc = TranslateLocation(rightExpr);
     CreateWrappedBranch(SourceExpr::BINARY, loc, leftValue, thenBlock, elseBlock, currentBlock);
-    // Create Then Block:
+    // Create Then Block. This edge stores `true` without evaluating the right operand,
+    // so its location is the whole `||` expression, matching the short-circuit edge of `&&`.
     auto boolLiteral =
-        CreateAndAppendConstantExpression<BoolLiteral>(builder.GetBoolTy(), *thenBlock, true)->GetResult();
-    CreateAndAppendWrappedStore(*boolLiteral, *alloca, *thenBlock, rightLoc);
-    CreateAndAppendTerminator<GoTo>(rightLoc, endBlock, thenBlock);
+        CreateAndAppendConstantExpression<BoolLiteral>(loc, builder.GetBoolTy(), *thenBlock, true)->GetResult();
+    CreateAndAppendWrappedStore(*boolLiteral, *alloca, *thenBlock, loc);
+    CreateAndAppendTerminator<GoTo>(loc, endBlock, thenBlock);
     // Create Else Block:
     currentBlock = elseBlock;
     if (!isImplicitAdd) {

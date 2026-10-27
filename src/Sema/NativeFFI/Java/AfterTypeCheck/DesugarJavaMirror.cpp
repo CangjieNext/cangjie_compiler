@@ -151,21 +151,6 @@ void JavaDesugarManager::InsertJavaMirrorFinalizer(ClassDecl& mirror)
     mirror.body->decls.emplace_back(lib.CreateDeletingGlobalRefFinalizer(mirror));
 }
 
-void JavaDesugarManager::InsertJavaMirrorHasInited(ClassDecl& mirror)
-{
-    static auto boolTy = typeManager.GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
-    auto curFile = mirror.curFile;
-    auto initializer = CreateLitConstExpr(LitConstKind::BOOL, "false", boolTy);
-    auto ret = WithinFile(CreateVarDecl(HAS_INITED_IDENT, std::move(initializer)), curFile);
-    ret->isVar = true;
-    ret->fullPackageName = mirror.fullPackageName;
-    ret->outerDecl = Ptr(&mirror);
-    ret->EnableAttr(
-        Attribute::PRIVATE, Attribute::NO_REFLECT_INFO, Attribute::IN_CLASSLIKE, Attribute::HAS_INITED_FIELD);
-
-    mirror.body->decls.emplace_back(std::move(ret));
-}
-
 void JavaDesugarManager::InsertJavaRefGetterWithBody(ClassDecl& decl)
 {
     auto javaEntityDecl = lib.GetJavaEntityDecl();
@@ -209,7 +194,6 @@ void JavaDesugarManager::GenerateInMirror(AfterTypeCheckContext& ctx, ClassDecl&
 {
     InsertJavaMirrorWrappingConstructorBody(classDecl);
 
-    InsertJavaMirrorHasInited(classDecl);
     InsertJavaMirrorFinalizer(classDecl);
 
     if (&classDecl == utils.GetJStringDecl()) {
@@ -237,7 +221,7 @@ void JavaDesugarManager::GenerateInMirrors(AfterTypeCheckContext& ctx, File& fil
 
     for (auto& decl : file.decls) {
         if (auto cldecl = As<ASTKind::CLASS_LIKE_DECL>(decl.get())) {
-            if (!cldecl->IsJavaMirror()) {
+            if (!cldecl->IsJavaForeign()) {
                 continue;
             }
             if (cldecl->TestAttr(Attribute::IS_BROKEN)) {

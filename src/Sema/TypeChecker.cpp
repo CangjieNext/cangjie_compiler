@@ -143,7 +143,7 @@ bool TypeChecker::TypeCheckerImpl::CheckBodyRetType(ASTContext& ctx, FuncBody& f
             // The body eventually will be appended a 'return ()' expression, so we switch to the Synthesize mode.
             // Errors should be already reported during the synthesis.
             isWellTyped = Ty::IsTyCorrect(Synthesize({ctx, SynPos::UNUSED}, fb.body.get()));
-        } else if (NeedCheckBodyReturn(fb)) {
+        } else {
             isWellTyped = Check(ctx, fb.retType->GetTy(), fb.body.get());
             if (!isWellTyped && fb.body->body.empty()) {
                 DiagMismatchedTypes(diag, *fb.body, *fb.retType, "return type");
@@ -439,11 +439,6 @@ bool TypeChecker::TypeCheckerImpl::CheckReturnThisInFuncBody(const FuncBody& fb)
 void TypeChecker::TypeCheckerImpl::CheckCtorFuncBody(ASTContext& ctx, FuncBody& fb)
 {
     CJC_ASSERT(fb.funcDecl); // Ctor must have related funcDecl.
-    if (fb.parentClassLike) {
-        if (auto attr = HasJavaAttr(*fb.parentClassLike); attr) {
-            fb.funcDecl->EnableAttr(attr.value());
-        }
-    }
     Ptr<Ty> ctorTy = TypeManager::GetInvalidTy();
     if (fb.funcDecl->TestAttr(Attribute::STATIC)) {
         // Static init always has type of 'Unit' as return type.
@@ -1303,7 +1298,7 @@ void TypeChecker::TypeCheckerImpl::CheckConstructor(ASTContext& ctx, const Decl&
     if (!fd.funcBody) {
         return;
     }
-    bool hasBrokenBody = fd.funcBody->generic && !fd.TestAttr(Attribute::STATIC) && !HasJavaAttr(decl);
+    bool hasBrokenBody = fd.funcBody->generic && !fd.TestAttr(Attribute::STATIC);
     if (hasBrokenBody) {
         diag.Diagnose(fd, DiagKind::sema_forbid_generic_constructor, fd.identifier.Val());
     }
@@ -1581,8 +1576,7 @@ void TypeChecker::TypeCheckerImpl::CheckFinalizer(const FuncDecl& fd)
     if (!fd.funcBody) {
         return;
     }
-    bool invalidGeneric =
-        fd.funcBody->generic && !fd.TestAttr(Attribute::STATIC) && fd.outerDecl && !HasJavaAttr(*fd.outerDecl);
+    bool invalidGeneric = fd.funcBody->generic && !fd.TestAttr(Attribute::STATIC) && fd.outerDecl;
     if (invalidGeneric) {
         diag.Diagnose(fd, DiagKind::sema_forbid_generic_finalizer, fd.identifier.Val());
     }

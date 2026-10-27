@@ -108,6 +108,38 @@ bool CheckMethodType(const Cangjie::AST::Ty& astTy, const Type& chirTy)
     return true;
 }
 
+// Compare parameter types only, ignoring the trailing return type.
+bool CheckFuncTypeSameParams(const Cangjie::AST::Ty& astTy, const Type& chirTy)
+{
+    auto astTyArgs = astTy.typeArgs;
+    auto chirTyArgs = chirTy.GetTypeArgs();
+    if (astTyArgs.empty() || astTyArgs.size() != chirTyArgs.size()) {
+        return false;
+    }
+    for (size_t loop = 0; loop + 1 < astTyArgs.size(); loop++) {
+        if (!CheckType(*astTyArgs[loop], *chirTyArgs[loop])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Method variant: chir args are [this, params..., ret], ast args are [params..., ret].
+bool CheckMethodTypeSameParams(const Cangjie::AST::Ty& astTy, const Type& chirTy)
+{
+    auto astTyArgs = astTy.typeArgs;
+    auto chirTyArgs = chirTy.GetTypeArgs();
+    if (astTyArgs.empty() || astTyArgs.size() + 1 != chirTyArgs.size()) {
+        return false;
+    }
+    for (size_t loop = 0; loop + 1 < astTyArgs.size(); loop++) {
+        if (!CheckType(*astTyArgs[loop], *chirTyArgs[loop + 1])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool CheckStructType(const Cangjie::AST::Ty& astTy, const Type& chirTy)
 {
     if (!astTy.IsStruct()) {
@@ -296,15 +328,31 @@ bool CheckInheritDeclGlobalMember(
         if (StaticCast<const Cangjie::AST::FuncDecl&>(decl).TestAttr(AST::Attribute::CONSTRUCTOR) || StaticCast<const Cangjie::AST::FuncDecl&>(decl).IsFinalizer()) {
             return true;
         }
-        if (!decl.TestAttr(Cangjie::AST::Attribute::STATIC) && !CheckMethodType(*decl.GetTy(), *chirCache->GetType())) {
-            Errorln(chirCache->GetIdentifier() + " is expected to be promoted " +
-                Cangjie::AST::Ty::ToString(decl.GetTy()) + ".");
-            return false;
-        }
-        if (decl.TestAttr(Cangjie::AST::Attribute::STATIC) && !CheckFuncType(*decl.GetTy(), *chirCache->GetType())) {
-            Errorln(chirCache->GetIdentifier() + " is expected to be promoted " +
-                Cangjie::AST::Ty::ToString(decl.GetTy()) + ".");
-            return false;
+        // `specific` member function's return type may refine the `common` one (covariant return).
+        // CHIR keeps the origin (common) type in the deserialized node while the AST type is the
+        // refined one, so a return-type-only difference is not an error. Parameters must still match.
+        bool specificOverCommon =
+            decl.TestAttr(Cangjie::AST::Attribute::SPECIFIC) && chirCache->TestAttr(Attribute::DESERIALIZED);
+        if (!decl.TestAttr(Cangjie::AST::Attribute::STATIC)) {
+            bool ok = CheckMethodType(*decl.GetTy(), *chirCache->GetType());
+            if (!ok && specificOverCommon) {
+                ok = CheckMethodTypeSameParams(*decl.GetTy(), *chirCache->GetType());
+            }
+            if (!ok) {
+                Errorln(chirCache->GetIdentifier() + " is expected to be promoted " +
+                    Cangjie::AST::Ty::ToString(decl.GetTy()) + ".");
+                return false;
+            }
+        } else {
+            bool ok = CheckFuncType(*decl.GetTy(), *chirCache->GetType());
+            if (!ok && specificOverCommon) {
+                ok = CheckFuncTypeSameParams(*decl.GetTy(), *chirCache->GetType());
+            }
+            if (!ok) {
+                Errorln(chirCache->GetIdentifier() + " is expected to be promoted " +
+                    Cangjie::AST::Ty::ToString(decl.GetTy()) + ".");
+                return false;
+            }
         }
     }
     return true;

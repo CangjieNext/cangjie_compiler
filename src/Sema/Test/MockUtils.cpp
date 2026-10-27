@@ -657,37 +657,6 @@ std::vector<TypeSubst> MockUtils::BuildGenericSubsts(const Ptr<InheritableDecl> 
     return genericSubsts;
 }
 
-int MockUtils::GetIndexOfGenericTypeParam(Ptr<Ty> ty, Ptr<Generic> generic) const
-{
-    int i = 0;
-    for (auto& typeParam : generic->typeParameters) {
-        if (typeParam->GetTy() == ty) {
-            return i;
-        }
-        i++;
-    }
-    return -1;
-}
-
-void MockUtils::UpdateRefTypesTarget(Ptr<Type> type, Ptr<Generic> oldGeneric, Ptr<Generic> newGeneric) const
-{
-    auto refType = As<ASTKind::REF_TYPE>(type);
-    if (!refType) {
-        return;
-    }
-
-    if (auto genericTy = DynamicCast<GenericsTy*>(refType->GetTy()); genericTy) {
-        auto typeParamIndex = GetIndexOfGenericTypeParam(genericTy, oldGeneric);
-        if (typeParamIndex != -1) {
-            refType->ref.target = newGeneric->typeParameters[static_cast<size_t>(typeParamIndex)].get();
-        }
-    }
-
-    for (auto& typeArg : refType->typeArguments) {
-        UpdateRefTypesTarget(typeArg.get(), oldGeneric, newGeneric);
-    }
-}
-
 std::vector<Ptr<Ty>> MockUtils::AddGenericIfNeeded(Decl& originalDecl, Decl& mockedDecl) const
 {
     if (!originalDecl.TestAttr(Attribute::GENERIC)) {
@@ -718,7 +687,13 @@ std::vector<Ptr<Ty>> MockUtils::AddGenericIfNeeded(Decl& originalDecl, Decl& moc
     if (originalFuncDecl) {
         auto mockedFuncDecl = As<ASTKind::FUNC_DECL>(&mockedDecl);
         CJC_ASSERT(mockedFuncDecl && mockedFuncDecl->funcBody);
-        UpdateRefTypesTarget(mockedFuncDecl->funcBody->retType.get(), generic.get(), newGeneric.get());
+
+        if (mockedFuncDecl->funcBody->retType) {
+            auto retTy = mockedFuncDecl->funcBody->retType->GetTy();
+            auto typeMapping = GenerateTypeMapping(originalDecl, typeParamTys);
+            mockedFuncDecl->funcBody->retType = CreateType<Type>(typeManager.GetInstantiatedTy(retTy, typeMapping));
+        }
+
         mockedFuncDecl->funcBody->generic = std::move(newGeneric);
     } else {
         mockedDecl.generic = std::move(newGeneric);

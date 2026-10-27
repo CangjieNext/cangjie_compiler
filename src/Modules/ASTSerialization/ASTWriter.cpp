@@ -1831,6 +1831,20 @@ std::vector<TAnnoOffset> ASTWriter::ASTWriterImpl::SaveAnnotations(const Decl& d
                     annotations.emplace_back(annoTarget);
                 }
                 break;
+            case AST::AnnotationKind::JAVA: {
+                auto args = builder.CreateVector<TAnnoArgOffset>(SaveAnnotationArgs(*annotation));
+                auto java = PackageFormat::CreateAnno(builder, PackageFormat::AnnoKind_Java,
+                    builder.CreateString(annotation->identifier.Val()), args);
+                annotations.emplace_back(java);
+                break;
+            }
+            case AST::AnnotationKind::OBJ_C: {
+                auto args = builder.CreateVector<TAnnoArgOffset>(SaveAnnotationArgs(*annotation));
+                auto objc = PackageFormat::CreateAnno(builder, PackageFormat::AnnoKind_ObjC,
+                    builder.CreateString(annotation->identifier.Val()), args);
+                annotations.emplace_back(objc);
+                break;
+            }
             default:
                 break;
         }

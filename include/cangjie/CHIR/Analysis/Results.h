@@ -69,6 +69,15 @@ public:
         }
     }
 
+    const Domain& GetEntryState(Block& block) const
+    {
+        if (auto it = entrySets->find(&block); it != entrySets->end()) {
+            return it->second;
+        }
+        auto parentLambda = StaticCast<Lambda*>(block.GetParentBlockGroup()->GetOwnerExpression());
+        return lambdaResultsMap.at(parentLambda)->at(&block);
+    }
+
     const Function* func;
 
 private:

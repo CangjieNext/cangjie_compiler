@@ -42,9 +42,16 @@ std::vector<Ptr<AST::ClassDecl>> GetJavaImplRegistryCompanions(AST::File& file);
 
 std::vector<Ptr<AST::ClassDecl>> GetJavaImplRegistryCompanions(AST::Package& pkg);
 
-bool IsJavaImplRegistryCompanionReferenceField(const AST::Node& node);
+bool IsJavaExportRegistryCompanionReferenceField(const AST::Node& node);
 
 bool IsUserDefinedJavaImplConstructor(const AST::Decl& implMember);
+
+/**
+ * for interfaces and abstract classes
+ */
+Ptr<AST::FuncDecl> GetJavaRefGetter(AST::ClassLikeDecl& mirrorLike);
+
+bool IsJavaRefGetter(const AST::Decl& fd);
 
 /**
  * Returns JNI signature of `javaCompatibleTy` type.

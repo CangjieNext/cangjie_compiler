@@ -178,7 +178,6 @@ public:
 
     OwnedPtr<AST::Expr> CreateAutoreleasePoolScope(Ptr<AST::Ty> ty, std::vector<OwnedPtr<AST::Node>> actions);
     OwnedPtr<AST::FuncDecl> CreateFinalizer(AST::ClassDecl& target);
-    OwnedPtr<AST::VarDecl> CreateHasInitedField(AST::ClassDecl& target);
 
     OwnedPtr<AST::Expr> CreateUnsafePointerCast(OwnedPtr<AST::Expr> expr, Ptr<AST::Ty> elementType);
 

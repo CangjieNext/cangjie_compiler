@@ -18,12 +18,14 @@
 
 #include "InheritanceChecker/MemberSignature.h"
 
-namespace Cangjie::Interop::Java {
+namespace Cangjie::Native::FFI::Java {
 
 /** Checks @ForeignName annotation usage and propagates it */
 void CheckForeignName(DiagnosticEngine& diag, TypeManager& typeManager, const MemberSignature& parent,
     const MemberSignature& child, const AST::Decl& checkingDecl);
 
-} // namespace Cangjie::Interop::Java
+void GenerateJavaForeignAbstractStub(const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& memberMap);
+
+} // namespace Cangjie::Native::FFI::Java
 
 #endif // CANGJIE_SEMA_NATIVE_FFI_JAVA_TYPE_CHECK_INHERITANCE_CHECKER_H

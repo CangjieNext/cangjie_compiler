@@ -1320,7 +1320,6 @@ private:
     void CheckFinalizer(const AST::FuncDecl& fd);
     void CheckOperatorOverloadFunc(const AST::FuncDecl& fd);
     void HandIndexOperatorOverload(const AST::FuncDecl& fd, const AST::FuncTy& funcTy);
-    bool NeedCheckBodyReturn(const AST::FuncBody& fb) const;
     void CheckAnnotations(ASTContext& ctx, AST::Decl& decl);
     void CheckAnnotationDecl(ASTContext& ctx, AST::Annotation& ann);
     void CheckJavaHasDefaultAnnotation(AST::Annotation& ann, const AST::Decl& decl) const;
@@ -1778,13 +1777,6 @@ private:
     Ptr<AST::Node> strictDeprecatedContext = nullptr;
     // cjmp typechecker implementation class
     class MPTypeCheckerImpl* mpImpl;
-    /**
-     * Will be passed as a reference in TypeChecker::TypeCheckerImpl::PerformDesugarAfterTypeCheck
-     * at Perform desugar after typecheck before generic instantiation stage.
-     *
-     * Needed for Java synthetic class wrappers and Objective C handle wrapper generation.
-     */
-    std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap> structMemberMap;
 };
 } // namespace Cangjie
 #endif

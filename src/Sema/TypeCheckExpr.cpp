@@ -42,7 +42,7 @@ bool IsLocalDeclOutOfFuncBody(const Decl& decl, const FuncBody& curFuncBody)
  */
 bool IsDeclaredFuncOrProp(const Decl& decl)
 {
-    return decl.IsFuncOrProp() && !decl.TestAttr(Attribute::OBJ_C_IMPL_MOVED_MEMBER_PROXY);
+    return decl.IsFuncOrProp() && !decl.TestAttr(Attribute::OBJ_C_EXPORT_MOVED_MEMBER_PROXY);
 }
 } // namespace
 
@@ -242,7 +242,7 @@ void TypeChecker::TypeCheckerImpl::CheckForbiddenFuncReferenceAccess(
     if (fd.IsFinalizer() && typeManager.IsSubtype(fd.outerDecl->GetTy(), decl.outerDecl->GetTy())) {
         // A mirror's field reads as a field but is state of the Objective-C object behind the mirror, so
         // naming what it really is beats reporting the property it was desugared into.
-        std::string type = decl.TestAttr(Attribute::OBJ_C_MIRROR, Attribute::DESUGARED_MIRROR_FIELD)
+        std::string type = decl.TestAttr(Attribute::OBJ_C_FOREIGN, Attribute::DESUGARED_FOREIGN_FIELD)
             ? "field of an Objective-C mirror"
             : (decl.astKind == ASTKind::PROP_DECL ? "property" : "function");
         diag.DiagnoseRefactor(DiagKindRefactor::sema_instance_func_cannot_be_used_in_finalizer, pos, type);

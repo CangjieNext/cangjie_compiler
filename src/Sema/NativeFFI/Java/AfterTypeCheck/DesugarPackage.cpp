@@ -20,7 +20,6 @@
 #include "DesugarTypeCheckingAndCasting.h"
 #include "DesugarJArray.h"
 #include "NativeFFI/Java/AfterTypeCheck/InteropLibBridge.h"
-#include <unordered_map>
 
 namespace Cangjie::Interop::Java {
 
@@ -28,7 +27,7 @@ void JavaDesugarManager::ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx,
     std::function<void(AST::Node&)> desugarPropRef)
 {
     Process<GenerateJavaReferenceFieldInJObject>(ctx, lib);
-    Process<GenerateJavaMirrorApiStub>(ctx, typeManager, lib, utils, memberMap);
+    Process<GenerateJavaMirrorApiStub>(ctx, typeManager, lib, utils);
     Process<GenerateJavaImplApiStub>(ctx, typeManager, lib, jniBridge);
 
     for (auto& file : ctx.pkg.files) {
@@ -53,10 +52,7 @@ void JavaDesugarManager::ProcessCallSiteDesugarStages(AfterTypeCheckContext& ctx
     Process<DesugarTypeCheckingAndCasting>(ctx, lib, diag, utils);
 }
 
-void JavaInteropManager::DesugarPackage(Package& pkg,
-    const std::unordered_map<Ptr<const InheritableDecl>,
-    MemberMap>& memberMap,
-    std::function<void(AST::Node&)> desugarPropRef)
+void JavaInteropManager::DesugarPackage(Package& pkg, std::function<void(AST::Node&)> desugarPropRef)
 {
     // if interoplib is accessible, there could be some mirror/impl declarations imported
     if (!InteropLibBridge::IsInteropLibAccessible(importManager)) {
@@ -67,7 +63,7 @@ void JavaInteropManager::DesugarPackage(Package& pkg,
     }
 
     JavaDesugarManager desugarer{
-        importManager, typeManager, diag, mangler, javagenOutputPath, outputPath, memberMap};
+        importManager, typeManager, diag, mangler, javagenOutputPath, outputPath};
 
     AfterTypeCheckContext ctx{importManager, typeManager, pkg, hasMirrorOrImpl, this->target};
     if (hasMirrorOrImpl) {

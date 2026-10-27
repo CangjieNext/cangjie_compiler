@@ -12,11 +12,8 @@ namespace Cangjie::Interop::Java {
 void CheckJavaHasDefaultAnnotation(DiagnosticEngine& diag, const Annotation& ann, const Decl& decl)
 {
     CJC_ASSERT(ann.kind == AnnotationKind::JAVA_HAS_DEFAULT);
-    if (!ann.args.empty()) {
-        DiagJavaHasDefaultNoArgs(diag, ann);
-    }
 
-    auto isOuterDeclJavaMirror = decl.outerDecl && decl.outerDecl->IsJavaMirror();
+    auto isOuterDeclJavaMirror = decl.outerDecl && decl.outerDecl->IsJavaForeign();
     auto isOuterDeclInterface = isOuterDeclJavaMirror && (decl.outerDecl->astKind == ASTKind::INTERFACE_DECL);
     auto isCurrentDeclFunc = decl.astKind == ASTKind::FUNC_DECL;
 

@@ -1938,25 +1938,6 @@ Ptr<Ty> TypeManager::GetTyForExtendMap(Ty& ty)
     return baseTy;
 }
 
-void TypeManager::RestoreJavaGenericsTy(AST::Decl& decl) const
-{
-    CJC_ASSERT(decl.TestAttr(Attribute::GENERIC_INSTANTIATED) && HasJavaAttr(decl));
-    // When instantiated with erase mode, we make all same class's types pointing to unique
-    // instantiated decl.
-    for (auto& it : std::as_const(allocatedTys)) {
-        auto ty = it.Get();
-        if (Ty::GetDeclPtrOfTy(ty) == decl.genericDecl) {
-            if (auto cty = DynamicCast<ClassTy*>(ty)) {
-                cty->decl = StaticCast<ClassDecl*>(&decl);
-                cty->commonDecl = StaticCast<ClassDecl*>(&decl);
-            } else if (auto ity = DynamicCast<InterfaceTy*>(ty)) {
-                ity->decl = StaticCast<InterfaceDecl*>(&decl);
-                ity->commonDecl = StaticCast<InterfaceDecl*>(&decl);
-            }
-        }
-    }
-}
-
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 
 bool TypeManager::IsFuncDeclSubType(const AST::FuncDecl& decl, const AST::FuncDecl& funcDecl)

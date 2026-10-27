@@ -196,7 +196,7 @@ MappedCType TypeMapper::Cj2ObjCForObjC(const Ty& from)
             if (IsObjCId(from)) {
                 return "id";
             }
-            if (IsObjCMirror(from)) {
+            if (IsObjCForeign(from)) {
                 return "id<" + from.name + ">";
             }
             return UNSUPPORTED_TYPE;
