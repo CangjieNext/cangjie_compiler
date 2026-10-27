@@ -638,7 +638,7 @@ bool ComputeResidualExtendConds(const CHIR::ExtendDef& extend,
                 continue; // Statically satisfied, nothing left to check at runtime.
             }
             if (!actual->IsGenericRelated() && !ubInst->IsGenericRelated()) {
-                return false; // Statically violated (normally already filtered out by the caller).
+                return false; // Statically violated.
             }
             conds.emplace_back(actual, ubInst);
         }
@@ -690,11 +690,10 @@ void GetOrderedParentTypesRecusively(CHIR::ClassType& type, std::list<const CHIR
     // of a subclass misses these entries, and virtual dispatch through such an interface would skip
     // overrides declared in the subclass.
     for (auto extend : classDef->GetExtends()) {
-        // IsEqualOrInstantiatedTypeOf also checks the extend's generic constraints (via
-        // SatisfyGenericConstraints), so statically impossible matches are filtered out here.
-        if (!type.IsEqualOrInstantiatedTypeOf(*extend->GetExtendedType(), builder)) {
-            continue;
-        }
+        // A failed structural mapping means this extend does not apply to the current type. Its
+        // generic constraints are classified by ComputeResidualExtendConds: a boolean
+        // IsEqualOrInstantiatedTypeOf check here would incorrectly reject constraints that are
+        // still undecided for a generic subclass.
         auto [extRes, extReplaceTable] = extend->GetExtendedType()->CalculateGenericTyMapping(type);
         if (!extRes) {
             continue;
