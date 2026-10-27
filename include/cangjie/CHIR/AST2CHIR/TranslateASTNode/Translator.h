@@ -627,6 +627,8 @@ private:
     Ptr<CustomTypeDef> GetNominalSymbolTable(const AST::Node& node);
     Ptr<Value> TypeCastOrBoxIfNeeded(
         Value& val, Type& expectedTy, const DebugLocation& loc = INVALID_LOCATION, bool needCheck = true);
+    /// Cast \p val to \p expectedTy if the two types are equal except for modal and \p val is copyable.
+    Ptr<Value> CastModalIfCopyable(Value& val, Type& expectedTy, const DebugLocation& loc);
     Ptr<Block> GetBlockByAST(const AST::Block& block)
     {
         auto val = GetSymbolTable(block);

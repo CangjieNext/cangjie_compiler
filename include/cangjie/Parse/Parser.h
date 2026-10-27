@@ -106,6 +106,9 @@ public:
     Parser& SetEHEnabled(bool enabled);
     bool IsEHEnabled() const;
 
+    Parser& SetLocalModeEnabled(bool enabled);
+    bool IsLocalModeEnabled() const;
+
     Parser& SetModuleName(const std::string& name);
     Parser& SetPrimaryDecl(const std::string& decl);
     Parser& SetForImport(bool isForImport);
