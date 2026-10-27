@@ -882,21 +882,51 @@ void ImportManager::CollectMacroImportChain(const AST::Package& macroPkg,
     // Walk the macroImport declaration chain of a macro package: for each declared
     // import, if the target package is itself a macro package, lift it (and recurse
     // into its chain) so its macroImports propagate downstream through this package.
-    // The macro package carries macroImportPkgNames (Parse-derived package names, not
-    // persisted to cjo) for the cjpm dependency graph; iterate those names directly.
-    for (const auto& targetPkgName : macroPkg.macroImportPkgNames) {
-        if (targetPkgName.empty() || targetPkgName == macroPkg.fullPackageName) {
-            continue;
+    // Walk the cjo-persisted `macroImports` (structured MacroImportList nodes): this
+    // runs at downstream compile time where the macro package was loaded from its cjo,
+    // and macroImportPkgNames (the Parse-derived name list) is not persisted, so it is
+    // empty on loaded packages and cannot be used here.
+    auto targetName = [](const AST::MacroImportSpec& spec) {
+        std::string name;
+        for (const auto& p : spec.content.prefixPaths) {
+            name += p + ".";
         }
-        auto targetPkg = cjoManager->GetPackage(targetPkgName);
-        if (!targetPkg || !targetPkg->isMacroPackage) {
-            continue; // only macro packages carry a macro-import declaration chain
+        if (spec.content.kind == AST::ImportKind::IMPORT_ALL) {
+            if (!name.empty()) {
+                name.pop_back(); // "a.b.*" targets package "a.b"
+            }
+        } else {
+            name += spec.content.identifier.Val();
         }
-        if (!visited.insert(targetPkgName).second) {
-            continue; // avoid cycles in the declaration chain
+        return name;
+    };
+    for (const auto& stmt : macroPkg.macroImports) {
+        for (const auto& spec : stmt->items) {
+            auto targetPkgName = targetName(*spec);
+            if (targetPkgName.empty() || targetPkgName == macroPkg.fullPackageName) {
+                continue;
+            }
+            auto targetPkg = cjoManager->GetPackage(targetPkgName);
+            if (targetPkg == nullptr) {
+                // The chain target is not a direct import of the downstream package, so its
+                // cjo may not have been loaded yet (GetPackage only looks up registered
+                // packages). Load its header on demand from the import search paths — this
+                // also registers it, letting ProcessMacroImports inject its macroImports.
+                auto cjoPath = cjoManager->GetPackageCjoPath(targetPkgName);
+                if (cjoPath.empty() || !cjoManager->LoadPackageHeader(targetPkgName, cjoPath)) {
+                    continue;
+                }
+                targetPkg = cjoManager->GetPackage(targetPkgName);
+            }
+            if (!targetPkg || !targetPkg->isMacroPackage) {
+                continue; // only macro packages carry a macro-import declaration chain
+            }
+            if (!visited.insert(targetPkgName).second) {
+                continue; // avoid cycles in the declaration chain
+            }
+            result.push_back(targetPkgName);
+            CollectMacroImportChain(*targetPkg, visited, result);
         }
-        result.push_back(targetPkgName);
-        CollectMacroImportChain(*targetPkg, visited, result);
     }
 }
 
