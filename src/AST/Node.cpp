@@ -2058,11 +2058,13 @@ std::string MacroImportList::ToString() const
         // single form: exactly one item
         return items.empty() ? "macro import" : items.front()->ToString();
     }
-    // block form
-    std::string ret = "macro { ";
+    // block form, one statement per line (same style as ClassBody::ToString)
+    std::string ret = "{";
     for (const auto& it : items) {
-        ret += it->ToString();
-        ret += "; ";
+        ret += "\n" + it->ToString();
+    }
+    if (!items.empty()) {
+        ret += "\n";
     }
     ret += "}";
     return ret;
