@@ -911,9 +911,12 @@ private:
      * sema and CHIR reuse the exact machinery of primitive conversions like UInt16(1). */
     void DesugarTypeAliasNumConvCall(ASTContext& ctx, AST::CallExpr& ce, AST::TypeKind targetKind);
     /** If the call base is a numeric/rune type alias resolved as a conversion, check its
-     * single argument against the alias target type (Issue #1045). Returns true when the
-     * call base is such an alias (checked or diagnosed), false when it is not one. */
-    bool CheckTypeAliasConvArgs(ASTContext& ctx, AST::CallExpr& ce);
+     * single argument against the alias target type (Issue #1045). The desugared
+     * conversion result must also satisfy IsSubtype against the call's expected type
+     * `target`; otherwise mismatched types is reported and the call is marked invalid.
+     * Returns true when the call base is such an alias (checked or diagnosed), false
+     * when it is not one. */
+    bool CheckTypeAliasConvArgs(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce);
     /** Shared type-alias dispatch used by ChkCallBaseRefExpr/ChkCallBaseMemberAccess:
      * try the numeric-conversion path when the call base targets a type alias with no
      * function candidates; otherwise let the caller fall through to its normal path. */

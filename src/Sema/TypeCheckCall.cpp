@@ -2431,7 +2431,7 @@ bool TypeChecker::TypeCheckerImpl::TryTypeAliasConvCall(
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckTypeAliasConvArgs(ASTContext& ctx, CallExpr& ce)
+bool TypeChecker::TypeCheckerImpl::CheckTypeAliasConvArgs(ASTContext& ctx, Ptr<Ty> target, CallExpr& ce)
 {
     // Issue #1045: if the call base is a type alias to a numeric/rune type, the call has
     // already been resolved as a type conversion by TryResolveTypeAliasNumConv (via
@@ -2443,7 +2443,17 @@ bool TypeChecker::TypeCheckerImpl::CheckTypeAliasConvArgs(ASTContext& ctx, CallE
     auto ceTy = ce.GetTy();
     if (ce.desugarExpr) {
         // Already desugared into a builtin TypeConvExpr and checked by SynTypeConvExpr
-        // inside TryResolveTypeAliasNumConv; nothing left to do here.
+        // inside TryResolveTypeAliasNumConv.  The conversion result must still satisfy
+        // IsSubtype against the call's expected type (e.g. the parameter type when the
+        // conversion is passed as a call argument); otherwise report mismatched types
+        // and mark the call invalid, mirroring the builtin conversion behaviour
+        // (Issue #1045 review).
+        if (target && Ty::IsTyCorrect(target) && !target->IsGeneric() && !target->IsNothing() &&
+            !typeManager.IsSubtype(ce.desugarExpr->GetTy(), target)) {
+            DiagMismatchedTypes(diag, ce, *target);
+            ce.SetTy(TypeManager::GetInvalidTy());
+            return true;
+        }
         return true;
     }
     if (!Ty::IsTyCorrect(ceTy) || ceTy->IsNothing() ||
@@ -3064,7 +3074,7 @@ bool TypeChecker::TypeCheckerImpl::CheckNonNormalCall(ASTContext& ctx, Ptr<Ty> t
     // falling through to the function-call paths below.  Returns true when the base is
     // such an alias (checked or diagnosed); false means "not an alias conversion" and we
     // continue with the normal call handling.
-    if (CheckTypeAliasConvArgs(ctx, ce)) {
+    if (CheckTypeAliasConvArgs(ctx, target, ce)) {
         return true;
     }
     bool res = false;

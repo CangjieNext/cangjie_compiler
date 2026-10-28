@@ -226,6 +226,49 @@ main(): Int64 {
     EXPECT_EQ(diag.GetErrorCount(), 0);
 }
 
+TEST_F(TypeCheckerTest, TypeAliasNumericConversionAsArgumentTest)
+{
+    // Issue #1045: the alias conversion used directly as a call argument, without a
+    // typed variable providing target context (generic and concrete parameters).
+    // NOTE: println(...) hits an "ambiguous match" with the stdlib modules used by
+    // this local unittest environment (same with builtin UInt16(20)), so user-defined
+    // calls are used to exercise the argument path.
+    std::string code = R"(type word = UInt16
+func echo<T>(v: T): T { return v }
+func take(v: UInt16): Int64 { return Int64(v) }
+
+main(): Int64 {
+    let a = echo(word(20))
+    let b = take(word(20))
+    if (Int64(a) != 20) { return 1 }
+    if (b != 20) { return 2 }
+    return 0
+})";
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->Compile(CompileStage::SEMA);
+    AST::ValidateUsedNodes(diag, *instance->GetSourcePackages()[0]);
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+TEST_F(TypeCheckerTest, TypeAliasNumConvTargetMismatchTest)
+{
+    // Review comment on Issue #1045: the desugared alias conversion must satisfy
+    // IsSubtype against the call's expected target type; otherwise report
+    // mismatched types and mark the call invalid (same as builtin UInt16(20)).
+    std::string code = R"(type word = UInt16
+func take(v: Int64): Int64 { return v }
+
+main(): Int64 {
+    return take(word(20))
+})";
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->Compile(CompileStage::SEMA);
+    AST::ValidateUsedNodes(diag, *instance->GetSourcePackages()[0]);
+    EXPECT_EQ(diag.GetErrorCount(), 1);
+}
+
 TEST_F(TypeCheckerTest, TypecheckTest)
 {
     std::string code = R"(
