@@ -7,6 +7,7 @@
 #ifndef CANGJIE_EMITGLOBALVARIABLEIR_H
 #define CANGJIE_EMITGLOBALVARIABLEIR_H
 
+#include <cstddef>
 #include <vector>
 
 namespace Cangjie {
@@ -15,7 +16,7 @@ class GlobalVar;
 }
 namespace CodeGen {
 class CGModule;
-void EmitGlobalVariableIR(CGModule& cgMod, const std::vector<CHIR::GlobalVar*>& chirGVs);
+void EmitGlobalVariableIR(CGModule& cgMod, const std::vector<CHIR::GlobalVar*>& chirGVs, std::size_t splitNum);
 } // namespace CodeGen
 } // namespace Cangjie
 

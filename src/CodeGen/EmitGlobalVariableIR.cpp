@@ -18,8 +18,8 @@ namespace Cangjie {
 namespace CodeGen {
 class GlobalVariableGeneratorImpl : public IRGeneratorImpl {
 public:
-    GlobalVariableGeneratorImpl(CGModule& cgMod, const std::vector<CHIR::GlobalVar*>& chirGVs)
-        : cgMod(cgMod), chirGVs(chirGVs)
+    GlobalVariableGeneratorImpl(CGModule& cgMod, const std::vector<CHIR::GlobalVar*>& chirGVs, std::size_t splitNum)
+        : cgMod(cgMod), chirGVs(chirGVs), splitNum(splitNum)
     {
     }
 
@@ -28,12 +28,14 @@ public:
 private:
     CGModule& cgMod;
     const std::vector<CHIR::GlobalVar*> chirGVs;
+    // Total number of partitions the package is split into (1 = single partition).
+    std::size_t splitNum;
 };
 
 template <> class IRGenerator<GlobalVariableGeneratorImpl> : public IRGenerator<> {
 public:
-    IRGenerator(CGModule& cgMod, const std::vector<CHIR::GlobalVar*>& chirGVs)
-        : IRGenerator<>(std::make_unique<GlobalVariableGeneratorImpl>(cgMod, chirGVs))
+    IRGenerator(CGModule& cgMod, const std::vector<CHIR::GlobalVar*>& chirGVs, std::size_t splitNum)
+        : IRGenerator<>(std::make_unique<GlobalVariableGeneratorImpl>(cgMod, chirGVs, splitNum))
     {
     }
 };
@@ -95,25 +97,29 @@ void GlobalVariableGeneratorImpl::EmitIR()
             rawGV->setMetadata(GC_GLOBAL_VAR_TYPE, fieldMeta);
         }
         const auto& dl = cgMod.GetLLVMModule()->getDataLayout();
-        // Only the last zero-initialized (i.e. .bss) global of the module can
-        // end up as the final .bss fragment after linking; earlier zero-sized
-        // globals are backed by the zero-initialized storage that follows them.
-        // Globals with non-zero initializers (.data), string globals whose
-        // initializer is set later, and constants (.rodata) do not extend .bss
-        // and must not refresh this flag.
+        // Latch semantics: once the module has contained any zero-sized
+        // zero-initialized (i.e. .bss) global, a guard is wanted for the rest
+        // of the module. Globals with non-zero initializers (.data), string
+        // globals whose initializer is set later, and constants (.rodata) do
+        // not extend .bss and must not clear this flag.
         if (!rawGV->isConstant() && rawGV->hasInitializer() && rawGV->getInitializer()->isZeroValue()) {
-            needZeroSizeGuard = dl.getTypeAllocSize(rawGV->getValueType()) == 0;
+            needZeroSizeGuard = needZeroSizeGuard || dl.getTypeAllocSize(rawGV->getValueType()) == 0;
         }
     }
-    if (needZeroSizeGuard) {
+    // Guarding is deliberately limited to multi-partition packages: in the
+    // single-partition build the last .bss fragment of the (one and only)
+    // module has so far always been backed by a non-zero-sized internal flag
+    // global emitted after the user globals. If that ever changes, the guard
+    // condition can simply be relaxed to `needZeroSizeGuard` alone.
+    if (splitNum > 1 && needZeroSizeGuard) {
         AppendZeroSizeGVGuard(cgMod);
     }
 }
 #endif
 
-void EmitGlobalVariableIR(CGModule& cgMod, const std::vector<CHIR::GlobalVar*>& chirGVs)
+void EmitGlobalVariableIR(CGModule& cgMod, const std::vector<CHIR::GlobalVar*>& chirGVs, std::size_t splitNum)
 {
-    IRGenerator<GlobalVariableGeneratorImpl>(cgMod, chirGVs).EmitIR();
+    IRGenerator<GlobalVariableGeneratorImpl>(cgMod, chirGVs, splitNum).EmitIR();
 }
 } // namespace CodeGen
 } // namespace Cangjie
