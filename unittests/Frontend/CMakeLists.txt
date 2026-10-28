@@ -13,3 +13,14 @@ target_link_libraries(
     GTest::gtest_main
     TestCompilerInstanceObject)
 add_test(NAME CompilerInstanceTest COMMAND CompilerInstanceTest)
+
+if(CANGJIE_CODEGEN_CJNATIVE_BACKEND)
+    # Cross-file wildcard lambdas must remain distinct after CFFI wrapper generation.
+    add_test(NAME GlobalWildcardLambdaTest
+        COMMAND ${CMAKE_COMMAND}
+            -DCJC=$<TARGET_FILE:cjc>
+            -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/GlobalWildcardLambda
+            -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/GlobalWildcardLambda
+            -DEXE_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/GlobalWildcardLambda/run.cmake)
+endif()

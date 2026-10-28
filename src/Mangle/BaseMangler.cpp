@@ -820,6 +820,12 @@ std::string BaseMangler::ManglePrefix(const Node& node, const std::vector<Ptr<No
 
                 std::optional<size_t> index = GetIndexOfWildcard(vwpDecl, prefix);
                 CJC_ASSERT_WITH_MSG(index.has_value(), "Index of wildcard should not be empty");
+                // Global wildcard indices are file-local, just like their declarations' names.
+                // Their lambdas also need the file identity before CFFI wrappers are generated.
+                const auto& fileName = vwpDecl.curFile->fileName;
+                mangleStr += MANGLE_FILE_ID_PREFIX +
+                    (IsHashable(fileName) ? HashToBase62(fileName)
+                                          : (FileNameWithoutExtension(fileName) + MANGLE_DOLLAR_PREFIX));
                 mangleStr += MANGLE_ANONYMOUS_VARIABLE_PREFIX;
                 mangleStr += MangleUtils::DecimalToManglingNumber(std::to_string(index.value()));
                 mangled += mangleStr;
