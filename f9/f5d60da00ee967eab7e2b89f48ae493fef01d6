@@ -1,0 +1,19 @@
+src/CodeGen/Base/ExprDispatcher/OtherExprDispatcher.cpp
+  s_eb88edfc30d1e0::t_b80152ced0337f 399-401
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f9f5d60da00ee967eab7e2b89f48ae493fef01d6",
+  "prompts": {},
+  "sessions": {
+    "s_eb88edfc30d1e0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a166f7-1bed-7363-a22a-281ec5b83fbf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "kongbx <kongbingxin@huawei.com>"
+    }
+  }
+}
