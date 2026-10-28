@@ -1395,7 +1395,7 @@ Ptr<Expr> MockSupportManager::ReplaceRefExprWithGetAccessor(RefExpr& refExpr)
 Ptr<Expr> MockSupportManager::ReplaceVarRefExprWithGetAccessor(RefExpr& refExpr)
 {
     auto target = refExpr.GetTarget();
-    if (target->TestAttr(Attribute::COMPILER_ADD) || !target->outerDecl) {
+    if (!target->outerDecl) {
         return nullptr;
     }
 
@@ -1596,7 +1596,7 @@ OwnedPtr<CallExpr> MockSupportManager::ReplaceRefExprFieldSetWithAccessor(RefExp
 OwnedPtr<CallExpr> MockSupportManager::ReplaceRefExprFieldSetWithAccessorImpl(RefExpr& refExpr)
 {
     auto target = refExpr.GetTarget();
-    if (target->TestAttr(Attribute::COMPILER_ADD) || !target->outerDecl) {
+    if (!target->outerDecl) {
         return nullptr;
     }
     return GenerateSetterCall(refExpr);
