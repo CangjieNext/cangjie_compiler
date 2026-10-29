@@ -700,7 +700,7 @@ void VerifyImportSpecToString()
     auto file = ParseFileFromSrc("package my_pkg\nimport std.collection.*\n");
     ASSERT_NE(file, nullptr);
     ASSERT_FALSE(file->imports.empty());
-    (void)file->imports[0]->ToString();
+    EXPECT_EQ("import std.collection.*", file->imports[0]->ToString());
 }
 
 void VerifyPackageSpecToString()
@@ -708,14 +708,14 @@ void VerifyPackageSpecToString()
     auto file = ParseFileFromSrc("package my_pkg\n");
     ASSERT_NE(file, nullptr);
     ASSERT_NE(file->package, nullptr);
-    (void)file->package->ToString();
+    EXPECT_EQ("package my_pkg", file->package->ToString());
 }
 
 void VerifyFileToString()
 {
     auto file = ParseFileFromSrc("package my_pkg\n");
     ASSERT_NE(file, nullptr);
-    (void)file->ToString();
+    EXPECT_EQ("package my_pkg\n", file->ToString());
 }
 
 void VerifyMainDeclToString()
@@ -725,14 +725,14 @@ void VerifyMainDeclToString()
     ASSERT_FALSE(file->decls.empty());
     ASSERT_TRUE(Is<MainDecl>(file->decls[0].get()));
     auto mainDecl = As<ASTKind::MAIN_DECL>(file->decls[0].get());
-    (void)mainDecl->ToString();
+    EXPECT_EQ("main() {}", mainDecl->ToString());
 }
 
 void VerifyStrInterpolationToString()
 {
     auto expr = ParseExprFromSrc("\"hello ${name}\"");
     ASSERT_NE(expr, nullptr);
-    (void)expr->ToString();
+    EXPECT_EQ("\"hello ${name}\"", expr->ToString());
 }
 } // namespace
 
@@ -3102,4 +3102,60 @@ TEST(ToStringTest, ConstructedGetStableSuperInterfaceTysComparator)
     cd->inheritedTypes.push_back(std::move(ref2));
     auto supers = cd->GetStableSuperInterfaceTys();
     ASSERT_EQ(2u, supers.size());
+}
+
+// ---------------------------------------------------------------------------
+// Issue 860: PackageSpec / ImportSpec must render their modifiers, and
+// MacroExpandDecl must render the declaration carried by invocation.decl.
+// ---------------------------------------------------------------------------
+
+TEST(ToStringTest, PackageSpecKeepsModifierAndMacroKeyword)
+{
+    struct Case {
+        std::string src;
+        std::string expect;
+    };
+    const Case cases[] = {
+        {"package a.b\n", "package a.b"},
+        {"public package a.b\n", "public package a.b"},
+        {"internal package a.b\n", "internal package a.b"},
+        {"protected package a.b\n", "protected package a.b"},
+        {"macro package a.b\n", "macro package a.b"},
+        {"public macro package a.b\n", "public macro package a.b"},
+    };
+    for (const auto& c : cases) {
+        auto file = ParseFileFromSrc(c.src);
+        ASSERT_NE(file, nullptr) << c.src;
+        ASSERT_NE(file->package, nullptr) << c.src;
+        EXPECT_EQ(c.expect, file->package->ToString()) << c.src;
+    }
+}
+
+TEST(ToStringTest, ImportSpecModifierPrecedesImportKeyword)
+{
+    // The modifier is part of the declaration header, so it has to be emitted
+    // before the `import` keyword: `import public x` is not valid Cangjie.
+    auto file = ParseFileFromSrc("package a.b\npublic import std.collection.*\n");
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(file->imports.empty());
+    EXPECT_EQ("public import std.collection.*", file->imports[0]->ToString());
+
+    auto plain = ParseFileFromSrc("package a.b\nimport std.collection.*\n");
+    ASSERT_NE(plain, nullptr);
+    ASSERT_FALSE(plain->imports.empty());
+    EXPECT_EQ("import std.collection.*", plain->imports[0]->ToString());
+}
+
+TEST(ToStringTest, MacroExpandDeclRendersInvocationDecl)
+{
+    auto med = MakeOwned<MacroExpandDecl>();
+    med->identifier = "Moo";
+    // No invocation.decl: only the macro name is available.
+    EXPECT_EQ("@Moo", med->ToString());
+
+    auto inner = MakeOwned<FuncDecl>();
+    inner->identifier = "foo";
+    inner->funcBody = MakeOwned<FuncBody>();
+    med->invocation.decl = std::move(inner);
+    EXPECT_EQ("@Moo func foo", med->ToString());
 }

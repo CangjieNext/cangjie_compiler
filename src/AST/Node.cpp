@@ -1997,7 +1997,34 @@ std::string MacroExpandExpr::ToString() const
 
 std::string MacroExpandDecl::ToString() const
 {
-    return "@" + identifier.Val();
+    std::string ret = "@" + identifier.Val();
+    if (!invocation.attrs.empty()) {
+        ret += "[";
+        for (size_t i = 0; i < invocation.attrs.size(); ++i) {
+            if (i > 0) {
+                ret += ", ";
+            }
+            ret += invocation.attrs[i].Value();
+        }
+        ret += "]";
+    }
+    if (invocation.hasParenthesis) {
+        ret += "(";
+        for (size_t i = 0; i < invocation.args.size(); ++i) {
+            if (i > 0) {
+                ret += ", ";
+            }
+            ret += invocation.args[i].Value();
+        }
+        ret += ")";
+    }
+    // The macro argument declaration is the source after the macro name, e.g. the
+    // `func foo() {}` in `@Moo func foo() {}`. Render it so ToString round-trips
+    // the macro call instead of dropping the declaration.
+    if (invocation.decl) {
+        ret += " " + invocation.decl->ToString();
+    }
+    return ret;
 }
 
 std::string MacroDecl::ToString() const
@@ -2034,20 +2061,32 @@ std::string MainDecl::ToString() const
 
 std::string ImportSpec::ToString() const
 {
-    std::string ret = "import ";
+    std::string ret;
     if (modifier) {
         auto modStr = modifier->ToString();
         if (!modStr.empty()) {
             ret += modStr + " ";
         }
     }
+    ret += "import ";
     ret += content.ToString();
     return ret;
 }
 
 std::string PackageSpec::ToString() const
 {
-    return "package " + GetPackageName();
+    std::string ret;
+    if (modifier) {
+        auto modStr = modifier->ToString();
+        if (!modStr.empty()) {
+            ret += modStr + " ";
+        }
+    }
+    if (hasMacro) {
+        ret += "macro ";
+    }
+    ret += "package " + GetPackageName();
+    return ret;
 }
 
 std::string PackageDecl::ToString() const
