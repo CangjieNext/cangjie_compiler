@@ -63,6 +63,9 @@ protected:
         const std::pair<std::string, std::string>& gccCrtFilePair) override;
 
     void GenerateLinkOptions(Tool& tool) override;
+    // COFF has no objcopy --localize-symbols; internal symbols are excluded from the PE
+    // export table at link time instead.
+    void LocalizePackageInternalSymbols(const std::string& objFile) override;
 
     std::string FindCangjieMinGWToolPath(const std::string toolName) const;
 

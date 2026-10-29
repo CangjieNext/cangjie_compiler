@@ -150,6 +150,11 @@ void MinGW_CJNATIVE::GenerateLinkingTool(const std::vector<TempFileInfo>& objFil
     if (driverOptions.outputMode == GlobalOptions::OutputMode::SHARED_LIB) {
         tool->AppendArg("-e", "DllMainCRTStartup");
         tool->AppendArg("--export-all-symbols");
+        // COFF has no objcopy --localize-symbols. Keep package internal symbols out of the
+        // automatic export table instead; they stay available for intra-DLL calls.
+        for (const auto& symbol : driverOptions.symbolsNeedLocalized) {
+            tool->AppendArg("--exclude-symbols=" + symbol);
+        }
     }
     // Link order: crt2 -> crtbegin -> other input files -> crtend.
     if (driverOptions.outputMode == GlobalOptions::OutputMode::EXECUTABLE ||
@@ -171,6 +176,12 @@ void MinGW_CJNATIVE::GenerateLinkingTool(const std::vector<TempFileInfo>& objFil
     // extra ld options given by -ld-options
     tool->AppendArg(GetGccLibFile(gccCrtFilePair.second, gccLibPath));
     backendCmds.emplace_back(MakeSingleToolBatch({std::move(tool)}));
+}
+
+void MinGW_CJNATIVE::LocalizePackageInternalSymbols(const std::string& /* objFile */)
+{
+    // No-op on COFF: objcopy does not support --localize-symbols for COFF objects. The linker
+    // excludes these symbols from the PE export table via --exclude-symbols in GenerateLinkingTool.
 }
 
 void MinGW_CJNATIVE::HandleLibrarySearchPaths(Tool& tool, const std::string& cangjieLibPath)

@@ -46,7 +46,7 @@ protected:
      * @brief Localize the symbols that are private to the package in the given object file, by
      * writing them to a `.__symbols` file and running `objcopy --localize-symbols` on it.
      */
-    void LocalizePackageInternalSymbols(const std::string& objFile);
+    virtual void LocalizePackageInternalSymbols(const std::string& objFile);
     virtual std::string GenerateGCCLibPath(const std::pair<std::string, std::string>& gccCrtFilePair) const;
 
     virtual void GenerateArchiveTool(const std::vector<TempFileInfo>& objFiles);
