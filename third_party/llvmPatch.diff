@@ -33320,7 +33320,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..6283a0ba0 100644
+index b391fe1ea..1c4223662 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -33376,7 +33376,7 @@ index b391fe1ea..6283a0ba0 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.3.0-alpha.08";
++    g_version_str += "\n  cangjie 1.3.0-alpha.09";
    }
  
    return g_version_str.c_str();
@@ -49004,7 +49004,7 @@ index d46a0a23c..2d3908b11 100644
              !isa<GCRelocateInst>(Inst) && !isa<GCResultInst>(Inst)) {
            OptimizationRemarkMissed R("sdagisel", "FastISelFailure",
 diff --git a/llvm/lib/CodeGen/SelectionDAG/StatepointLowering.cpp b/llvm/lib/CodeGen/SelectionDAG/StatepointLowering.cpp
-index c5c093ae2..f8a984c8e 100644
+index c5c093ae2..88a2963a4 100644
 --- a/llvm/lib/CodeGen/SelectionDAG/StatepointLowering.cpp
 +++ b/llvm/lib/CodeGen/SelectionDAG/StatepointLowering.cpp
 @@ -22,6 +22,8 @@
@@ -49567,7 +49567,7 @@ index c5c093ae2..f8a984c8e 100644
    SI.StatepointInstr = &I;
    SI.ID = I.getID();
  
-@@ -1117,13 +1304,44 @@ SelectionDAGBuilder::LowerStatepoint(const GCStatepointInst &I,
+@@ -1117,13 +1304,38 @@ SelectionDAGBuilder::LowerStatepoint(const GCStatepointInst &I,
    SI.StatepointFlags = I.getFlags();
    SI.NumPatchBytes = I.getNumPatchBytes();
    SI.EHPadBB = EHPadBB;
@@ -49579,17 +49579,11 @@ index c5c093ae2..f8a984c8e 100644
 +      !needToDisableTailCall(I, DAG.getTargetLoweringInfo(),
 +                             I.isMustTailCall()) &&
 +      isInTailCallPosition(I, DAG.getTarget()) &&
-+      // STATEPOINT_TAIL_CALL lowers an indirect call target to a register
-+      // jump. If that target must live in a callee-saved register across an
-+      // intervening call, the epilogue's callee-saved restore clobbers it
-+      // before the tail jump. Direct (symbol) targets use pc-relative tail
-+      // jumps and are unaffected, so only allow tail statepoints for direct
-+      // callees until indirect targets are lowered to a caller-saved
-+      // register after the epilogue.
-+      CalleeFunc != nullptr &&
 +      // C2N/N2C stubs create a full runtime frame, and the runtime
 +      // unwinder/GC/EH still rely on the managed caller frame being present.
-+      !CalleeFunc->isCangjieNativeStub(*I.getFunction());
++      // (Indirect callees are never stubs: the frontend calls stubs directly.)
++      (CalleeFunc == nullptr ||
++       !CalleeFunc->isCangjieNativeStub(*I.getFunction()));
 +
 +  SI.ActualCalledFunction = CalleeFunc;
  
@@ -49615,7 +49609,7 @@ index c5c093ae2..f8a984c8e 100644
      // The return value is not needed, just generate a poison value.
      // Note: This covers the void return case.
      setValue(&I, DAG.getIntPtrConstant(-1, getCurSDLoc()));
-@@ -1225,7 +1443,28 @@ void SelectionDAGBuilder::visitGCResult(const GCResultInst &CI) {
+@@ -1225,7 +1437,28 @@ void SelectionDAGBuilder::visitGCResult(const GCResultInst &CI) {
    setValue(&CI, CopyFromReg);
  }
  
@@ -49645,7 +49639,7 @@ index c5c093ae2..f8a984c8e 100644
    const Value *Statepoint = Relocate.getStatepoint();
  #ifndef NDEBUG
    // Consistency check
-@@ -1237,15 +1476,23 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
+@@ -1237,15 +1470,23 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
    if (isa<UndefValue>(Statepoint))
      return;
  
@@ -49675,7 +49669,7 @@ index c5c093ae2..f8a984c8e 100644
    auto &RelocationMap =
        FuncInfo.StatepointRelocationMaps[cast<GCStatepointInst>(Statepoint)];
    auto SlotIt = RelocationMap.find(&Relocate);
-@@ -1257,7 +1504,7 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
+@@ -1257,7 +1498,7 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
      assert(cast<GCStatepointInst>(Statepoint)->getParent() ==
                 Relocate.getParent() &&
             "Nonlocal gc.relocate mapped via SDValue");
@@ -49684,7 +49678,7 @@ index c5c093ae2..f8a984c8e 100644
      assert(SDV.getNode() && "empty SDValue");
      setValue(&Relocate, SDV);
      return;
-@@ -1301,7 +1548,8 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
+@@ -1301,7 +1542,8 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
                                                             Relocate.getType());
  
      SDValue SpillLoad =
@@ -49694,7 +49688,7 @@ index c5c093ae2..f8a984c8e 100644
      PendingLoads.push_back(SpillLoad.getValue(1));
  
      assert(SpillLoad.getNode());
-@@ -1310,8 +1558,7 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
+@@ -1310,8 +1552,7 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
    }
  
    assert(Record.type == RecordType::NoRelocate);
@@ -49704,7 +49698,7 @@ index c5c093ae2..f8a984c8e 100644
    if (SD.isUndef() && SD.getValueType().getSizeInBits() <= 64) {
      // Lowering relocate(undef) as arbitrary constant. Current constant value
      // is chosen such that it's unlikely to be a valid pointer.
-@@ -1321,7 +1568,14 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
+@@ -1321,7 +1562,14 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
  
    // We didn't need to spill these special cases (constants and allocas).
    // See the handling in spillIncomingValueForStatepoint for detail.
@@ -57682,10 +57676,18 @@ index f59860a24..62de8bad7 100644
    /// the function.
    void emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
 diff --git a/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp b/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp
-index 06e21f90e..8193cf55d 100644
+index 06e21f90e..e81f3ba2a 100644
 --- a/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp
 +++ b/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp
-@@ -706,6 +706,8 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
+@@ -44,6 +44,7 @@
+ #include "llvm/CodeGen/MachineRegisterInfo.h"
+ #include "llvm/CodeGen/RuntimeLibcalls.h"
+ #include "llvm/CodeGen/SelectionDAG.h"
++#include "llvm/CodeGen/StackMaps.h"
+ #include "llvm/CodeGen/SelectionDAGNodes.h"
+ #include "llvm/CodeGen/TargetCallingConv.h"
+ #include "llvm/CodeGen/TargetInstrInfo.h"
+@@ -706,6 +707,8 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
  
    setOperationAction(ISD::PREFETCH, MVT::Other, Custom);
  
@@ -57694,15 +57696,29 @@ index 06e21f90e..8193cf55d 100644
    setOperationAction(ISD::FLT_ROUNDS_, MVT::i32, Custom);
    setOperationAction(ISD::SET_ROUNDING, MVT::Other, Custom);
  
-@@ -2519,6 +2521,7 @@ MachineBasicBlock *AArch64TargetLowering::EmitInstrWithCustomInserter(
+@@ -2519,6 +2522,21 @@ MachineBasicBlock *AArch64TargetLowering::EmitInstrWithCustomInserter(
      return EmitF128CSEL(MI, BB);
  
    case TargetOpcode::STATEPOINT:
 +  case TargetOpcode::STATEPOINT_TAIL_CALL:
++    // PEI inserts the callee-saved restores right before this instruction,
++    // so the register target of the tail jump must avoid X19-X28/FP/LR:
++    // constrain it to tcGPR64, or rtcGPR64 (x16/x17 only) under BTI.
++    if (MI.getOpcode() == TargetOpcode::STATEPOINT_TAIL_CALL) {
++      StatepointOpers Opers(&MI);
++      MachineOperand &T = MI.getOperand(Opers.getNCallArgsPos() + 1);
++      if (T.isReg() && T.getReg().isVirtual())
++        MI.getMF()->getRegInfo().setRegClass(
++            T.getReg(),
++            MI.getMF()->getInfo<AArch64FunctionInfo>()
++                        ->branchTargetEnforcement()
++                ? &AArch64::rtcGPR64RegClass
++                : &AArch64::tcGPR64RegClass);
++    }
      // STATEPOINT is a pseudo instruction which has no implicit defs/uses
      // while bl call instruction (where statepoint will be lowered at the end)
      // has implicit def. This def is early-clobber as it will be set at
-@@ -4269,6 +4272,26 @@ static bool isAddSubZExt(SDNode *N, SelectionDAG &DAG) {
+@@ -4269,6 +4287,26 @@ static bool isAddSubZExt(SDNode *N, SelectionDAG &DAG) {
    return false;
  }
  
@@ -57729,7 +57745,7 @@ index 06e21f90e..8193cf55d 100644
  SDValue AArch64TargetLowering::LowerFLT_ROUNDS_(SDValue Op,
                                                  SelectionDAG &DAG) const {
    // The rounding mode is in bits 23:22 of the FPSCR.
-@@ -5507,6 +5530,10 @@ SDValue AArch64TargetLowering::LowerOperation(SDValue Op,
+@@ -5507,6 +5545,10 @@ SDValue AArch64TargetLowering::LowerOperation(SDValue Op,
      return LowerFP_TO_INT_SAT(Op, DAG);
    case ISD::FSINCOS:
      return LowerFSINCOS(Op, DAG);
@@ -57740,7 +57756,7 @@ index 06e21f90e..8193cf55d 100644
    case ISD::FLT_ROUNDS_:
      return LowerFLT_ROUNDS_(Op, DAG);
    case ISD::SET_ROUNDING:
-@@ -5719,6 +5746,7 @@ CCAssignFn *AArch64TargetLowering::CCAssignFnForCall(CallingConv::ID CC,
+@@ -5719,6 +5761,7 @@ CCAssignFn *AArch64TargetLowering::CCAssignFnForCall(CallingConv::ID CC,
      return CC_AArch64_WebKit_JS;
    case CallingConv::GHC:
      return CC_AArch64_GHC;
@@ -57748,7 +57764,7 @@ index 06e21f90e..8193cf55d 100644
    case CallingConv::C:
    case CallingConv::Fast:
    case CallingConv::PreserveMost:
-@@ -5746,8 +5774,10 @@ CCAssignFn *AArch64TargetLowering::CCAssignFnForCall(CallingConv::ID CC,
+@@ -5746,8 +5789,10 @@ CCAssignFn *AArch64TargetLowering::CCAssignFnForCall(CallingConv::ID CC,
  
  CCAssignFn *
  AArch64TargetLowering::CCAssignFnForReturn(CallingConv::ID CC) const {
@@ -57761,7 +57777,7 @@ index 06e21f90e..8193cf55d 100644
  }
  
  SDValue AArch64TargetLowering::LowerFormalArguments(
-@@ -6557,6 +6587,7 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
+@@ -6557,6 +6602,7 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
  
    // Get a count of how many bytes are to be pushed on the stack.
    unsigned NumBytes = CCInfo.getNextStackOffset();
@@ -57769,7 +57785,7 @@ index 06e21f90e..8193cf55d 100644
  
    if (IsSibCall) {
      // Since we're not changing the ABI to make this a tail call, the memory
-@@ -6577,6 +6608,7 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
+@@ -6577,6 +6623,7 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
      // Since callee will pop argument stack as a tail call, we must keep the
      // popped size 16-byte aligned.
      NumBytes = alignTo(NumBytes, 16);
@@ -57777,7 +57793,7 @@ index 06e21f90e..8193cf55d 100644
  
      // FPDiff will be negative if this tail call requires more space than we
      // would automatically have in our incoming argument space. Positive if we
-@@ -6841,9 +6873,23 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
+@@ -6841,9 +6888,23 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
    // direct call is) turn it into a TargetGlobalAddress/TargetExternalSymbol
    // node so that legalize doesn't hack it.
    if (auto *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
@@ -57801,7 +57817,7 @@ index 06e21f90e..8193cf55d 100644
      if (OpFlags & AArch64II::MO_GOT) {
        Callee = DAG.getTargetGlobalAddress(GV, DL, PtrVT, 0, OpFlags);
        Callee = DAG.getNode(AArch64ISD::LOADgot, DL, PtrVT, Callee);
-@@ -8700,7 +8746,11 @@ SDValue AArch64TargetLowering::LowerSPONENTRY(SDValue Op,
+@@ -8700,7 +8761,11 @@ SDValue AArch64TargetLowering::LowerSPONENTRY(SDValue Op,
  // this table could be generated automatically from RegInfo.
  Register AArch64TargetLowering::
  getRegisterByName(const char* RegName, LLT VT, const MachineFunction &MF) const {
@@ -57814,7 +57830,7 @@ index 06e21f90e..8193cf55d 100644
    if (AArch64::X1 <= Reg && Reg <= AArch64::X28) {
      const MCRegisterInfo *MRI = Subtarget->getRegisterInfo();
      unsigned DwarfRegNum = MRI->getDwarfRegNum(Reg, false);
-@@ -8709,8 +8759,7 @@ getRegisterByName(const char* RegName, LLT VT, const MachineFunction &MF) const
+@@ -8709,8 +8774,7 @@ getRegisterByName(const char* RegName, LLT VT, const MachineFunction &MF) const
    }
    if (Reg)
      return Reg;
@@ -57824,7 +57840,7 @@ index 06e21f90e..8193cf55d 100644
  }
  
  SDValue AArch64TargetLowering::LowerADDROFRETURNADDR(SDValue Op,
-@@ -13636,6 +13685,10 @@ bool AArch64TargetLowering::generateFMAsInMachineCombiner(
+@@ -13636,6 +13700,10 @@ bool AArch64TargetLowering::generateFMAsInMachineCombiner(
           !useSVEForFixedLengthVectorVT(VT);
  }
  
@@ -59818,10 +59834,18 @@ index 9b83fe77d..0f95417c8 100644
                                Register &SPReg) const;
    StackOffset getFrameIndexReferenceSP(const MachineFunction &MF, int FI,
 diff --git a/llvm/lib/Target/X86/X86ISelLowering.cpp b/llvm/lib/Target/X86/X86ISelLowering.cpp
-index cd45c4825..21383bca4 100644
+index cd45c4825..26c02c79e 100644
 --- a/llvm/lib/Target/X86/X86ISelLowering.cpp
 +++ b/llvm/lib/Target/X86/X86ISelLowering.cpp
-@@ -4408,12 +4408,21 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
+@@ -39,6 +39,7 @@
+ #include "llvm/CodeGen/MachineLoopInfo.h"
+ #include "llvm/CodeGen/MachineModuleInfo.h"
+ #include "llvm/CodeGen/MachineRegisterInfo.h"
++#include "llvm/CodeGen/StackMaps.h"
+ #include "llvm/CodeGen/TargetLowering.h"
+ #include "llvm/CodeGen/WinEHFuncInfo.h"
+ #include "llvm/IR/CallingConv.h"
+@@ -4408,12 +4409,21 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
  
    // Get a count of how many bytes are to be pushed on the stack.
    unsigned NumBytes = CCInfo.getAlignedCallFrameSize();
@@ -59844,7 +59868,7 @@ index cd45c4825..21383bca4 100644
  
    int FPDiff = 0;
    if (isTailCall &&
-@@ -4433,6 +4442,10 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
+@@ -4433,6 +4443,10 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
    unsigned NumBytesToPush = NumBytes;
    unsigned NumBytesToPop = NumBytes;
  
@@ -59855,7 +59879,7 @@ index cd45c4825..21383bca4 100644
    // If we have an inalloca argument, all stack space has already been allocated
    // for us and be right at the top of the stack.  We don't support multiple
    // arguments passed in memory when using inalloca.
-@@ -4727,7 +4740,19 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
+@@ -4727,7 +4741,19 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
      InFlag = Chain.getValue(1);
    }
  
@@ -59876,7 +59900,7 @@ index cd45c4825..21383bca4 100644
      assert(Is64Bit && "Large code model is only legal in 64-bit mode.");
      // In the 64-bit large code model, we have to make all calls
      // through a register, since the call instruction's 32-bit
-@@ -20469,6 +20494,8 @@ static SDValue LowerToTLSExecModel(GlobalAddressSDNode *GA, SelectionDAG &DAG,
+@@ -20469,6 +20495,8 @@ static SDValue LowerToTLSExecModel(GlobalAddressSDNode *GA, SelectionDAG &DAG,
    // Most TLS accesses are not RIP relative, even on x86-64.  One exception is
    // initialexec.
    unsigned WrapperKind = X86ISD::Wrapper;
@@ -59885,7 +59909,7 @@ index cd45c4825..21383bca4 100644
    if (model == TLSModel::LocalExec) {
      OperandFlags = is64Bit ? X86II::MO_TPOFF : X86II::MO_NTPOFF;
    } else if (model == TLSModel::InitialExec) {
-@@ -20506,8 +20533,40 @@ static SDValue LowerToTLSExecModel(GlobalAddressSDNode *GA, SelectionDAG &DAG,
+@@ -20506,8 +20534,40 @@ static SDValue LowerToTLSExecModel(GlobalAddressSDNode *GA, SelectionDAG &DAG,
    return DAG.getNode(ISD::ADD, dl, PtrVT, ThreadPointer, Offset);
  }
  
@@ -59928,7 +59952,7 @@ index cd45c4825..21383bca4 100644
  
    GlobalAddressSDNode *GA = cast<GlobalAddressSDNode>(Op);
  
-@@ -20521,20 +20580,15 @@ X86TargetLowering::LowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const {
+@@ -20521,20 +20581,15 @@ X86TargetLowering::LowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const {
    if (Subtarget.isTargetELF()) {
      TLSModel::Model model = DAG.getTarget().getTLSModel(GV);
      switch (model) {
@@ -59958,7 +59982,7 @@ index cd45c4825..21383bca4 100644
      }
      llvm_unreachable("Unknown TLS model.");
    }
-@@ -24042,8 +24096,8 @@ static SDValue LowerAndToBT(SDValue And, ISD::CondCode CC, const SDLoc &dl,
+@@ -24042,8 +24097,8 @@ static SDValue LowerAndToBT(SDValue And, ISD::CondCode CC, const SDLoc &dl,
        if ((!isUInt<32>(AndRHSVal) || (OptForSize && !isUInt<8>(AndRHSVal))) &&
            isPowerOf2_64(AndRHSVal)) {
          Src = AndLHS;
@@ -59969,11 +59993,22 @@ index cd45c4825..21383bca4 100644
        }
      }
    }
-@@ -36430,6 +36484,7 @@ X86TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
+@@ -36430,6 +36485,18 @@ X86TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
      return EmitSjLjDispatchBlock(MI, BB);
  
    case TargetOpcode::STATEPOINT:
 +  case TargetOpcode::STATEPOINT_TAIL_CALL:
++    // PEI pops callee-saved registers right before this instruction, so
++    // the register target of the tail jump must avoid callee-saved GPRs:
++    // constrain it via getGPRsForTailCall (Win64 -> GR64_TCW64).
++    if (MI.getOpcode() == TargetOpcode::STATEPOINT_TAIL_CALL) {
++      StatepointOpers Opers(&MI);
++      MachineOperand &T = MI.getOperand(Opers.getNCallArgsPos() + 1);
++      if (T.isReg() && T.getReg().isVirtual())
++        MI.getMF()->getRegInfo().constrainRegClass(
++            T.getReg(),
++            Subtarget.getRegisterInfo()->getGPRsForTailCall(*MI.getMF()));
++    }
      // As an implementation detail, STATEPOINT shares the STACKMAP format at
      // this point in the process.  We diverge later.
      return emitPatchPoint(MI, BB);
@@ -61480,10 +61515,10 @@ index 8c77b6937..4e65ed2e2 100644
        F->addParamAttr(ArgNo, Attribute::NoAlias);
 diff --git a/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
 new file mode 100644
-index 000000000..5218c250b
+index 000000000..5f13501d2
 --- /dev/null
 +++ b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
-@@ -0,0 +1,4306 @@
+@@ -0,0 +1,4311 @@
 +//===- CJPartialEscapeAnalysis.cpp - escape analysis for Cangjie ----------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -65274,9 +65309,14 @@ index 000000000..5218c250b
 +    if (!Temp)
 +      return MemPtr::create(BaseV, VPOffset, *this, LI);
 +    GCPtr *CurP = nullptr;
++    SmallDenseSet<GCPtr *> Visited;
 +    do {
 +      CurP = Temp;
 +      if (CurP->isPtr())
++        return CurP;
++      // Stop at a repeated node instead of walking a cyclic definition chain
++      // forever.
++      if (!Visited.insert(CurP).second)
 +        return CurP;
 +      MemPtr *MP = reinterpret_cast<MemPtr *>(CurP);
 +      VPOffset = MP->Offset;
@@ -113228,6 +113268,41 @@ index 000000000..bdc9d0bc4
 +
 +attributes #0 = { argmemonly nounwind }
 +attributes #1 = { argmemonly nocallback nofree nounwind willreturn writeonly }
+diff --git a/llvm/test/Transforms/CJPartialEscapeAnalysis/pea-cyclic-def.ll b/llvm/test/Transforms/CJPartialEscapeAnalysis/pea-cyclic-def.ll
+new file mode 100644
+index 000000000..6749705e6
+--- /dev/null
++++ b/llvm/test/Transforms/CJPartialEscapeAnalysis/pea-cyclic-def.ll
+@@ -0,0 +1,29 @@
++; RUN: opt < %s '-passes=cj-pea' -S | FileCheck %s
++
++%TypeInfo = type { i8 }
++%ObjLayout.Box = type { [16 x i8] } ; 16: two eight-byte reference slots.
++
++@Box.ti = global %TypeInfo zeroinitializer, !RelatedType !0
++
++declare i8 addrspace(1)* @CJ_MCC_NewObject(i8*, i32)
++declare void @escape(i8 addrspace(1)*)
++declare void @llvm.memcpy.p0i8.p1i8.i64(i8*, i8 addrspace(1)*, i64, i1 immarg)
++declare void @llvm.memcpy.p1i8.p0i8.i64(i8 addrspace(1)*, i8*, i64, i1 immarg)
++
++; CHECK-LABEL: define void @cyclic_def(
++define void @cyclic_def() gc "cangjie" {
++entry:
++  %a = alloca [16 x i8]
++  %tmp = alloca [16 x i8]
++  %a.i8 = bitcast [16 x i8]* %a to i8*
++  %tmp.i8 = bitcast [16 x i8]* %tmp to i8*
++  %h = call i8 addrspace(1)* @CJ_MCC_NewObject(i8* bitcast (%TypeInfo* @Box.ti to i8*), i32 24) ; 24: header plus payload.
++  %h.field = getelementptr i8, i8 addrspace(1)* %h, i64 40 ; 40: source and destination offsets differ.
++  call void @llvm.memcpy.p1i8.p0i8.i64(i8 addrspace(1)* %h.field, i8* %a.i8, i64 16, i1 false) ; 16: copy the payload.
++  call void @llvm.memcpy.p0i8.p1i8.i64(i8* %a.i8, i8 addrspace(1)* %h.field, i64 16, i1 false) ; 16: copy the payload.
++  call void @llvm.memcpy.p0i8.p1i8.i64(i8* %tmp.i8, i8 addrspace(1)* %h.field, i64 16, i1 false) ; 16: copy the payload.
++  call void @escape(i8 addrspace(1)* %h)
++  ret void
++}
++
++!0 = !{!"ObjLayout.Box"}
 diff --git a/llvm/test/Transforms/CJPartialEscapeAnalysis/pea-escape-depth-spread.ll b/llvm/test/Transforms/CJPartialEscapeAnalysis/pea-escape-depth-spread.ll
 new file mode 100644
 index 000000000..25dd3fa71
