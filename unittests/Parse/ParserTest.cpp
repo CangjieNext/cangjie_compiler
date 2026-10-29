@@ -3662,3 +3662,77 @@ main(): Int64 {
     ASSERT_NE(file, nullptr);
     EXPECT_EQ(diag.GetErrorCount(), 1);
 }
+
+// Regression test for issue #1182: a parenthesized member access chain must still be
+// recognized as a valid left-hand side of an assignment, e.g. `(d.c).b.a.value = 2`.
+// A parenthesized expression is transparent for left-value purposes and CHIR already
+// unwraps PAREN_EXPR when translating a left value (TranslateExprAsLeftValue).
+TEST(ParserTestLeftValue, ParenthesizedMemberAccessInAssign)
+{
+    std::string code = R"(
+class A { var value = 0 }
+class B { var a = A() }
+class C { var b = B() }
+class D { var c = C() }
+
+main() {
+    let d = D()
+    d.c.b.a.value = 2
+    (d.c).b.a.value = 3
+    ((d.c)).b.a.value = 4
+    (d.c.b).a.value = 5
+}
+)";
+    SourceManager sm;
+    DiagnosticEngine diag;
+    diag.SetSourceManager(&sm);
+    Parser parser(code, diag, sm);
+    OwnedPtr<File> file = parser.ParseTopLevel();
+    EXPECT_EQ(0, diag.GetErrorCount());
+}
+
+// A parenthesized base is transparent for a subscript assignment target as well.
+TEST(ParserTestLeftValue, ParenthesizedBaseOfSubscriptAssign)
+{
+    std::string code = R"(
+main() {
+    var a = [1, 2, 3]
+    var i = 0
+    (a)[0] = 5
+    (a)[i] = 6
+}
+)";
+    SourceManager sm;
+    DiagnosticEngine diag;
+    diag.SetSourceManager(&sm);
+    Parser parser(code, diag, sm);
+    OwnedPtr<File> file = parser.ParseTopLevel();
+    EXPECT_EQ(0, diag.GetErrorCount());
+}
+
+// Negative control: parentheses must not make an arbitrary expression assignable.
+// `(1 + 2).x = 3` still has to be rejected as an invalid left-hand expression, so the
+// fix only unwraps PAREN_EXPR instead of bypassing the left-value check. Assert the exact
+// diagnostic instead of a bare error count so an unrelated error cannot mask a regression.
+TEST(ParserTestLeftValue, ParenthesizedNonLeftValueStillRejected)
+{
+    std::string code = R"(
+main() {
+    (1 + 2).x = 3
+}
+)";
+    SourceManager sm;
+    DiagnosticEngine diag;
+    diag.SetSourceManager(&sm);
+    Parser parser(code, diag, sm);
+    OwnedPtr<File> file = parser.ParseTopLevel();
+
+    auto parseDiags = diag.GetCategoryDiagnostic(DiagCategory::PARSE);
+    bool foundInvalidLeftHandExpr = false;
+    for (auto& d : parseDiags) {
+        if (d.rKind == DiagKindRefactor::parse_invalid_left_hand_expr) {
+            foundInvalidLeftHandExpr = true;
+        }
+    }
+    EXPECT_TRUE(foundInvalidLeftHandExpr) << "expected parse_invalid_left_hand_expr diagnostic";
+}

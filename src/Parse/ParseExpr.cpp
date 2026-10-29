@@ -652,6 +652,7 @@ bool ParserImpl::IsLeftAuxExpression(const OwnedPtr<Expr>& expr, const Token& to
      *      | leftAuxExpression QUEST? NL* DOT NL* Identifier (NL* typeArguments)?
      *      | leftAuxExpression QUEST? callSuffix
      *      | leftAuxExpression QUEST? indexAccess
+     *      | LPAREN NL* leftAuxExpression NL* RPAREN
      *      ;
      */
     switch (expr->astKind) {
@@ -659,6 +660,16 @@ bool ParserImpl::IsLeftAuxExpression(const OwnedPtr<Expr>& expr, const Token& to
         case ASTKind::REF_TYPE:
         case ASTKind::PRIMITIVE_TYPE_EXPR:
             return true;
+        case ASTKind::PAREN_EXPR: {
+            // A parenthesized expression is transparent for left-value purposes, e.g. `(a.b).c = 1`,
+            // `(arr)[0] = 1`. CHIR already unwraps PAREN_EXPR when translating a left value
+            // (see TranslateExprAsLeftValue), so the parser must accept it as well.
+            auto& parenExpr = *StaticAs<ASTKind::PAREN_EXPR>(expr.get());
+            if (parenExpr.expr == nullptr) {
+                return false;
+            }
+            return IsLeftAuxExpression(parenExpr.expr, tok);
+        }
         case ASTKind::OPTIONAL_EXPR:
             return IsLeftAuxExpression(StaticAs<ASTKind::OPTIONAL_EXPR>(expr.get())->baseExpr, tok);
         case ASTKind::MEMBER_ACCESS:
