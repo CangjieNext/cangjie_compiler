@@ -202,6 +202,12 @@ void MinGW_CJNATIVE::GenerateLinkOptions(Tool& tool)
 
 bool MinGW_CJNATIVE::PrepareDependencyPath()
 {
+    // Package internal symbol localization is inherited from Gnu and runs objcopy on the object
+    // files before the linker builds the PE export table. Without this lookup objcopyPath stays
+    // empty and the driver would try to execute an empty command name.
+    if ((objcopyPath = FindCangjieLLVMToolPath(g_toolList.at(ToolID::LLVM_OBJCOPY).name)).empty()) {
+        return false;
+    }
     if ((arPath = FindCangjieLLVMToolPath(g_toolList.at(ToolID::LLVM_AR).name)).empty()) {
         return false;
     }
