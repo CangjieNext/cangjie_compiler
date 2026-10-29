@@ -1,0 +1,19 @@
+src/CodeGen/EmitGlobalVariableIR.cpp
+  h_f08a759313bce8 109
+  h_f08a759313bce8 21-22,31,36-37,107-108,111,114,120,122
+src/CodeGen/EmitGlobalVariableIR.h
+  h_f08a759313bce8 10,19
+src/CodeGen/EmitPackageIR.cpp
+  h_f08a759313bce8 355-356
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a82f8ecbccb0fa7acd1dd7f5c34afb6a7bd798e3",
+  "prompts": {},
+  "humans": {
+    "h_f08a759313bce8": {
+      "author": "yuqiaoyu <yujunqiang1@h-partners.com>"
+    }
+  }
+}
