@@ -37,9 +37,29 @@ bool IsSpecialFunction(const FuncDecl& fd)
     return isGetCommandLineArgsFunc || isImplictUsed || isToAny || isMainInvoke;
 }
 
+/**
+ * Mark @p decl as a declaration that the code generated for another package may still refer to by its
+ * mangled name, so its symbol has to keep the global binding in the object file of this package.
+ *
+ * The linkage alone cannot answer that question: `Linkage::EXTERNAL` is the default value of a
+ * declaration, it is kept on almost everything the user writes, and it is set on purpose on the
+ * declarations another package may instantiate or inline. Which declarations those really are is only
+ * known by the visibility analysis in this file, so record the answer here and let code generation
+ * read it back from the CHIR declaration, see `IsPackageInternalSymbol`.
+ */
+void MarkDeclAsSrcExported(Decl& decl)
+{
+    decl.EnableAttr(Attribute::SRC_EXPORTED);
+}
+
 void MarkFunctionLinkage(FuncDecl& fd, const Linkage linkage)
 {
     fd.linkage = linkage;
+    if (linkage == Linkage::EXTERNAL) {
+        // A function that keeps the external linkage is one that this package does not hide: either it
+        // is exported to source, or another package may instantiate or inline a body that names it.
+        MarkDeclAsSrcExported(fd);
+    }
     // Set linkage for the funcDecl obtained by desugaring parameters with default values
     if (fd.funcBody && !fd.funcBody->paramLists.empty()) {
         auto& funcParams = fd.funcBody->paramLists[0]->params;
@@ -78,7 +98,12 @@ void MarkFunctionAsExternalLinkage(FuncDecl& fd)
 
 inline void MarkVarDeclAbstractLinkage(VarDeclAbstract& vda)
 {
-    if (vda.IsExportedDecl() || vda.TestAttr(Attribute::IMPLICIT_USED)) {
+    if (vda.TestAttr(Attribute::IMPLICIT_USED)) {
+        // An implicit used declaration is one the compiler refers to by name in the code it generates
+        // for another package.
+        vda.linkage = Cangjie::Linkage::EXTERNAL;
+        MarkDeclAsSrcExported(vda);
+    } else if (vda.IsExportedDecl()) {
         vda.linkage = Cangjie::Linkage::EXTERNAL;
     } else {
         vda.linkage = Cangjie::Linkage::INTERNAL;
@@ -175,7 +200,9 @@ void AnalyzeMemberDeclAsInternalLinkageInStruct(InheritableDecl& id)
         id.linkage = Linkage::INTERNAL;
     }
     IterateAllFunctionInStruct(id, [](auto& fd) {
-        if (!IsSpecialFunction(fd) && !fd.IsExportedDecl()) {
+        if (IsSpecialFunction(fd)) {
+            MarkDeclAsSrcExported(fd);
+        } else if (!fd.IsExportedDecl()) {
             MarkFunctionAsInternalLinkage(fd);
         }
     });
@@ -189,7 +216,9 @@ void AnalyzeFunctionAsInternalLinkageInExtend(ExtendDecl& ed, bool exportForTest
     IterateAllFunctionInStruct(ed, [isExportedExtend](auto& fd) {
         // Ignore whether extend is public, to HACK function's linkage for decls used in src exported internal decls.
         bool publicInstance = fd.TestAttr(Attribute::PUBLIC) && !fd.TestAttr(Attribute::STATIC);
-        if (!IsSpecialFunction(fd) && (!fd.IsExportedDecl() || (!isExportedExtend && !publicInstance))) {
+        if (IsSpecialFunction(fd)) {
+            MarkDeclAsSrcExported(fd);
+        } else if (!fd.IsExportedDecl() || (!isExportedExtend && !publicInstance)) {
             MarkFunctionAsInternalLinkage(fd);
         }
     });
@@ -203,14 +232,23 @@ void AnalyzeLinkageBasedOnModifier(Package& pkg, const GlobalOptions& opt)
 {
     for (auto& file : pkg.files) {
         if (IsIntrinsicFile(*file)) {
+            // The compiler emits calls to these declarations by their mangled name in the code it
+            // generates for other packages, e.g. `rt$CreateOverflowException_msg` for the overflow
+            // check of a `+`, so they are part of the ABI of this package.
+            for (auto& decl : file->decls) {
+                MarkDeclAsSrcExported(*decl);
+            }
             continue;
         }
         for (auto& decl : file->decls) {
             if (auto vda = DynamicCast<VarDeclAbstract*>(decl.get())) {
                 MarkVarDeclAbstractLinkage(*vda);
-            } else if (auto fd = DynamicCast<FuncDecl*>(decl.get());
-                fd && !IsSpecialFunction(*fd) && !fd->IsExportedDecl()) {
-                MarkFunctionAsInternalLinkage(*fd);
+            } else if (auto fd = DynamicCast<FuncDecl*>(decl.get()); fd) {
+                if (IsSpecialFunction(*fd)) {
+                    MarkDeclAsSrcExported(*fd);
+                } else if (!fd->IsExportedDecl()) {
+                    MarkFunctionAsInternalLinkage(*fd);
+                }
             } else if (auto ed = DynamicCast<ExtendDecl*>(decl.get()); ed) {
                 AnalyzeFunctionAsInternalLinkageInExtend(*ed, opt.exportForTest);
             } else if (auto id = DynamicCast<InheritableDecl*>(decl.get()); id) {
@@ -267,6 +305,9 @@ private:
     void SetVarTargetLinkage(VarDecl& vd, bool byTy = false, bool isConstInCJMP = false);
     void AddSrcExportedDecl(Ptr<Decl> decl)
     {
+        // The declaration is exported to source, so another package may refer to it by name, or may
+        // copy its body here and refer to the declarations that body names.
+        MarkDeclAsSrcExported(*decl);
         if (visitedSrcExportedDecls.count(decl) == 0) {
             srcExportedDecls.emplace(decl);
         }
@@ -580,6 +621,7 @@ void ExternalLinkageAnalyzer::SetVarTargetLinkage(VarDecl& vd, bool byTy, bool i
         return;
     }
     vd.linkage = Linkage::EXTERNAL;
+    MarkDeclAsSrcExported(vd);
     if (vd.isConst || vd.HasAnno(AnnotationKind::FROZEN) || IsInstMemberVarInGenericDecl(vd) ||
         IsMemberVarShouldBeSrcExported(vd)) {
         AddSrcExportedDecl(&vd);

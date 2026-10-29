@@ -70,6 +70,7 @@ enum class Attribute {
     OBJ_C_EXPORT,   ///< Mark whether it's a declaration exported to Objective-C.
     MATCH_PATTERN,    ///< Marks CFG nodes that evaluate patterns, excluding case bodies and nested expressions.
     PLUGIN_ADDED,     ///< Mark that the declaration is added by a CHIR plugin.
+    SRC_EXPORTED,     ///< Mark a declaration another package may reference by name, see AST::Attribute.
 
     ATTR_END
 };
@@ -93,7 +94,7 @@ const std::unordered_map<Attribute, std::string> ATTR_TO_STRING{{Attribute::STAT
     {Attribute::JAVA_HAS_DEFAULT, "javaHasDefault"}, {Attribute::PREVIOUSLY_DESERIALIZED, "previouslyDeserialized"},
     {Attribute::DOES_NOT_THROW, "doesNotThrow"}, {Attribute::OBJ_C_EXPORT, "objCExport"},
     {Attribute::MATCH_PATTERN, "matchPattern"},
-    {Attribute::PLUGIN_ADDED, "pluginAdded"}
+    {Attribute::PLUGIN_ADDED, "pluginAdded"}, {Attribute::SRC_EXPORTED, "srcExported"}
 };
 
 constexpr uint64_t ATTR_SIZE = 64;
