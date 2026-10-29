@@ -422,6 +422,14 @@ bool Gnu::ProcessGeneration(std::vector<TempFileInfo>& objFiles)
         codegenOutputBCNum += obj.isForeignInput ? 0 : 1;
     }
     if (codegenOutputBCNum <= 1) {
+        // Code generation produced a single object file, so the partial link step is skipped. The
+        // package internal symbols still have to be localized here, otherwise the single module mode
+        // (for example `-j1`) would not benefit from it.
+        for (const auto& obj : objFiles) {
+            if (obj.isFrontendOutput && !obj.isForeignInput) {
+                LocalizePackageInternalSymbols(obj.filePath);
+            }
+        }
         // The '--output-type=staticlib', one more step to go, create an archive
         // file consisting of all generated object files
         if (driverOptions.outputMode == GlobalOptions::OutputMode::STATIC_LIB) {
@@ -435,6 +443,31 @@ bool Gnu::ProcessGeneration(std::vector<TempFileInfo>& objFiles)
         }
     }
     return PerformPartialLinkAndContinue(objFiles);
+}
+
+void Gnu::LocalizePackageInternalSymbols(const std::string& objFile)
+{
+    // With LTO the code generation output is bitcode, there is no object file to localize yet and the
+    // LTO backend decides the final symbol visibility itself.
+    if (driverOptions.symbolsNeedLocalized.empty() || driverOptions.IsLTOEnabled()) {
+        return;
+    }
+    auto outputDir = FileUtil::GetAbsPath(FileUtil::GetDirPath(objFile));
+    CJC_ASSERT(outputDir.has_value());
+    auto name = FileUtil::JoinPath(outputDir.value(),
+        FileUtil::GetFileNameWithoutExtension(FileUtil::GetFileName(objFile)) + ".__symbols");
+    std::ofstream file(FileUtil::NormalizePath(name));
+    CJC_ASSERT(file.is_open());
+    for (const auto& str : driverOptions.symbolsNeedLocalized) {
+        file << str << "\n";
+    }
+    file.close();
+
+    auto changeSymVis =
+        std::make_unique<Tool>(objcopyPath, ToolType::BACKEND, driverOptions.environment.allVariables);
+    changeSymVis->AppendArg(objFile);
+    changeSymVis->AppendArg("--localize-symbols=" + name);
+    backendCmds.emplace_back(MakeSingleToolBatch({std::move(changeSymVis)}));
 }
 
 bool Gnu::PerformPartialLinkAndContinue(std::vector<TempFileInfo>& objFiles)
@@ -458,23 +491,9 @@ bool Gnu::PerformPartialLinkAndContinue(std::vector<TempFileInfo>& objFiles)
     }
     backendCmds.emplace_back(MakeSingleToolBatch({std::move(tool)}));
 
-    auto outputDir = FileUtil::GetAbsPath(FileUtil::GetDirPath(outputFile));
-    CJC_ASSERT(outputDir.has_value());
-    auto name = FileUtil::JoinPath(outputDir.value(), FileUtil::GetFileNameWithoutExtension(fileName) + ".__symbols");
-    std::ofstream file(FileUtil::NormalizePath(name));
-    CJC_ASSERT(file.is_open());
-    for (const auto& str : driverOptions.symbolsNeedLocalized) {
-        file << str << "\n";
-    }
-    file.close();
-
-    if (!driverOptions.symbolsNeedLocalized.empty()) {
-        auto changeSymVis =
-            std::make_unique<Tool>(objcopyPath, ToolType::BACKEND, driverOptions.environment.allVariables);
-        changeSymVis->AppendArg(outputFile);
-        changeSymVis->AppendArg("--localize-symbols=" + name);
-        backendCmds.emplace_back(MakeSingleToolBatch({std::move(changeSymVis)}));
-    }
+    // The symbols that are private to the package are localized after the partial link, because a
+    // symbol may be defined in one object file and referenced from another one of the same package.
+    LocalizePackageInternalSymbols(outputFile);
 
     TempFileInfo fileInfo = {FileUtil::GetFileNameWithoutExtension(outputFile), outputFile, outputFile, true, false};
     processedObjFiles.insert(processedObjFiles.begin(), fileInfo);
