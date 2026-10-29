@@ -134,15 +134,14 @@ void Transpiler::ProcessPreamble(
     struct EmittableObjCClassMetainfo metainfo,
     bool hasImplicitImplParent)
 {
-    Emitter::EmitFileImport(sourceImport, metainfo.className);
     Emitter::EmitSourceImport(sourceImport);
     Emitter::EmitHeaderImport(headerImport);
-    for (auto i : metainfo.interfaces) {
-        Emitter::EmitFileImport(headerImport, i);
+    Emitter::EmitFileImport(headerImport, metainfo.importName);
+    for (auto i : metainfo.imports) {
+        Emitter::EmitModuleImport(headerImport, i);
     }
 
     Emitter::EmitInterfaceDeclaration(headerBody, metainfo);
-    Emitter::EmitFileImport(headerImport, metainfo.superclassName);
     Emitter::EmitImplementationDeclaration(sourceBody, metainfo);
     Emitter::EmitSyntheticHeaderFunctionDecls(headerBody);
     if (!hasImplicitImplParent) {
@@ -352,6 +351,9 @@ struct EmittableObjCClassMetainfo Transpiler::GetObjCClassMetainfo(ClassDecl* cl
     bool isClassInheritedFromClass = superClassPtr && superClassPtr->identifier.Val() != Cangjie::OBJECT_NAME;
     auto superclassName = isClassInheritedFromClass ? ctx.nameGenerator.GetObjCDeclName(*superClassPtr) : "";
 
+    std::vector<std::string> importNames;
+    importNames.push_back(this->ctx.nameGenerator.GetObjCImport(*superClassPtr));
+
     auto isFinal = !decl->IsOpen();
 
     std::set<Ptr<Cangjie::AST::InterfaceTy>> interfaces = classDecl
@@ -367,6 +369,8 @@ struct EmittableObjCClassMetainfo Transpiler::GetObjCClassMetainfo(ClassDecl* cl
     std::vector<std::string> interfaceNames;
     for (auto i : interfacesVec) {
         interfaceNames.push_back(this->ctx.nameGenerator.GetObjCDeclName(*i->decl));
+        auto importName = this->ctx.nameGenerator.GetObjCImport(*i->decl);
+        importNames.push_back(importName);
     }
 
     EmittableObjCClassMetainfo eocm;
@@ -374,6 +378,8 @@ struct EmittableObjCClassMetainfo Transpiler::GetObjCClassMetainfo(ClassDecl* cl
     eocm.superclassName = superclassName;
     eocm.isFinal = isFinal;
     eocm.interfaces = interfaceNames;
+    eocm.importName = this->ctx.nameGenerator.GetObjCImport(*classDecl);
+    eocm.imports = importNames;
     return eocm;
 }
 

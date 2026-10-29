@@ -57,6 +57,7 @@ public:
      * Gets the pointer to value of @ForeignName anno or @ObjCMirror/@ObjCImpl annos or returns nullptr.
      */
     static Ptr<std::string> GetUserDefinedObjCName(const AST::Decl& target);
+    static std::string GetObjCImport(const AST::Decl& target);
 
     static std::string GenerateHandleWrapperName(const AST::ClassLikeDecl& mirror) noexcept;
     static std::string GenerateRegistryCompanionName(const AST::ClassDecl& impl) noexcept;

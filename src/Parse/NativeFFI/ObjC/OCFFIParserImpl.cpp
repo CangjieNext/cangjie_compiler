@@ -34,7 +34,6 @@ void OCFFIParserImpl::CheckAnnotation(Annotation& anno, ScopeKind scopeKind) con
             break;
         }
         case AnnotationKind::OBJ_C: {
-            CheckObjCAnnoArgs(anno);
             CheckObjCAnnoTarget(anno, scopeKind);
             break;
         }
@@ -58,6 +57,25 @@ void OCFFIParserImpl::CheckMirrorSignature(ClassLikeDecl& decl, const PtrVector<
         (p.HasAnnotation(annos, AnnotationKind::OBJ_C) && p.HasModifier(decl.modifiers, TokenKind::FOREIGN)));
     decl.EnableAttr(Attribute::OBJ_C_FOREIGN);
     decl.EnableAttr(Attribute::NO_REFLECT_INFO);
+
+    for (auto &anno : annos) {
+        if (anno->kind != AnnotationKind::OBJ_C) {
+            continue;
+        }
+        if (
+            p.ffiParser->CheckZeroArgAnnotation(*anno)                 ||
+            p.ffiParser->CheckSingleStringLitArgAnnotation(*anno)      ||
+            p.ffiParser->CheckSingleStringLitNamedArgAnnotation(*anno) ||
+            p.ffiParser->CheckDoubleAnnotations(*anno)
+        ) {
+            break;
+        }
+
+        p.DiagAnnotationUsage(*anno, "@ObjC",
+            "@ObjC[(optional)\"ForeignName\", (optional)importedFrom: \"file.h\"]");
+        decl.EnableAttr(Attribute::IS_BROKEN);
+        return;
+    }
     
     /*
      * Disable `Attribute::FOREIGN` here to avoid any possible clashes with `@C`.
@@ -130,6 +148,15 @@ void OCFFIParserImpl::CheckImplSignature(ClassLikeDecl& decl, const PtrVector<An
         (p.HasAnnotation(annos, AnnotationKind::OBJ_C) && !p.HasModifier(decl.modifiers, TokenKind::FOREIGN)));
     decl.EnableAttr(Attribute::OBJ_C_EXPORT);
     decl.EnableAttr(Attribute::NO_REFLECT_INFO);
+
+    for (auto &anno : annos) {
+        if (anno->kind != AnnotationKind::OBJ_C) {
+            continue;
+        }
+
+        static const std::string OBJC_NAME = "@" + ANNO_KIND_TO_NAME.at(AnnotationKind::OBJ_C);
+        p.ffiParser->CheckZeroOrSingleStringLitArgAnnotation(*anno, OBJC_NAME);
+    }
 
     if (decl.GetGeneric() != nullptr) {
         DiagObjCImplCannotBeGeneric(decl);

@@ -318,6 +318,7 @@ ERROR(parse_deprecated_invalid_target, "%s can not be target of @Deprecated")
 ERROR(parse_annotation_max_one_argument, "%s requires zero or one%s argument", "expected %s here")
 ERROR(parse_annotation_one_argument, "%s requires exactly one%s argument", "expected %s here")
 ERROR(parse_annotation_no_arguments, "%s accepts no arguments", "unexpected argument(s)")
+ERROR(parse_annotation_usage, "incompatible arguments for %s", "usage: %s")
 
 // Shared diagnostics for Java / Objective-C interoperability
 ERROR(parse_foreign_name_on_ffi_decl_member, "'@ForeignName' can only be used on '@Java' or '@ObjC' declaration member")

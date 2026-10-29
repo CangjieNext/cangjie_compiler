@@ -37,6 +37,11 @@ public:
     void CheckClassLikeSignature(AST::ClassLikeDecl& decl, const PtrVector<Annotation>& annos) const;
     void CheckFuncSignature(AST::FuncDecl& decl, const PtrVector<Annotation>& annos) const;
 
+    bool CheckZeroArgAnnotation(AST::Annotation& anno) const;
+    bool CheckSingleStringLitArgAnnotation(AST::Annotation& anno) const;
+    bool CheckSingleStringLitNamedArgAnnotation(AST::Annotation& anno) const;
+    bool CheckDoubleAnnotations(AST::Annotation& anno) const;
+
     JFFIParserImpl Java() const;
     OCFFIParserImpl ObjC() const;
 

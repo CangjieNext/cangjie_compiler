@@ -132,6 +132,32 @@ void FFIParserImpl::CheckAnnotations(const PtrVector<Annotation>& annos, ScopeKi
     CheckAnnotationsConflict(annos);
 }
 
+bool FFIParserImpl::CheckZeroArgAnnotation(AST::Annotation& anno) const
+{
+    return anno.args.size() == 0;
+}
+
+bool FFIParserImpl::CheckSingleStringLitArgAnnotation(AST::Annotation& anno) const
+{
+    return (anno.args.size() == 1 && IsLitString(anno.args[0]->expr));
+}
+
+bool FFIParserImpl::CheckSingleStringLitNamedArgAnnotation(AST::Annotation& anno) const
+{
+    return CheckSingleStringLitArgAnnotation(anno) && anno.args[0]->name != "";
+}
+
+bool FFIParserImpl::CheckDoubleAnnotations(AST::Annotation& anno) const
+{
+    return (
+        anno.args.size() == 2                   &&
+        IsLitString(anno.args[0]->expr)         &&
+        anno.args[0]->name == ""                &&
+        IsLitString(anno.args[1]->expr)         &&
+        anno.args[1]->name != ""
+    );
+}
+
 void FFIParserImpl::CheckForeignNameAnnoTarget(const Annotation& anno) const
 {
     if (p.SeeingAny({TokenKind::FUNC, TokenKind::PROP, TokenKind::INIT, TokenKind::LET,
@@ -148,7 +174,6 @@ void FFIParserImpl::CheckForeignNameAnnoTarget(const Annotation& anno) const
 void FFIParserImpl::CheckForeignNameAnnoArgs(const Annotation& anno) const
 {
     static const std::string FOREIGN_NAME_NAME = "@ForeignName";
-
     if (anno.args.size() != 1 || !IsLitString(anno.args[0]->expr)) {
         p.DiagAnnotationExpectsOneArgument(anno, FOREIGN_NAME_NAME, "'String' literal");
         return;

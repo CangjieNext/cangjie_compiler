@@ -16,6 +16,7 @@
 #include "ParserImpl.h"
 
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/Node.h"
 
 namespace Cangjie {
 using namespace AST;
@@ -1487,6 +1488,15 @@ void ParserImpl::DiagAnnotationExpectsOneArgument(const Annotation& node, const 
             dbuilder.AddMainHintArguments("single " + argInfo + " for " + annotationName);
             break;
     }
+}
+
+void ParserImpl::DiagAnnotationUsage(const Annotation& node, const std::string& annotationName,
+                                     const std::string& usage)
+{
+    auto dbuilder = ParseDiagnoseRefactor(
+        DiagKindRefactor::parse_annotation_usage,
+        node, annotationName, usage);
+    dbuilder.AddMainHintArguments(usage);
 }
 
 void ParserImpl::DiagAnnotationMoreThanOneArgs(const Annotation& node, const std::string& annotationName)

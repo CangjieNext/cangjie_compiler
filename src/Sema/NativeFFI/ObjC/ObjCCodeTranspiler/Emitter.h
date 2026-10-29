@@ -43,7 +43,9 @@ struct EmittableObjCFuncMetainfo {
 struct EmittableObjCClassMetainfo {
     std::string className;
     std::string superclassName;
+    std::string importName;
     std::vector<std::string> interfaces;
+    std::vector<std::string> imports;
     bool isFinal;
 };
 

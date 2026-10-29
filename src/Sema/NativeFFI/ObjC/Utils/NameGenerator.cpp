@@ -137,6 +137,51 @@ std::string NameGenerator::GetFieldSetterWrapperName(const VarDeclAbstract& targ
     return WRAPPER_PREFIX + name + WRAPPER_SETTER_SUFFIX;
 }
 
+std::string NameGenerator::GetObjCImport(const Decl& target)
+{
+    for (auto& anno : target.annotations) {
+        if (anno->kind != AnnotationKind::OBJ_C) {
+            continue;
+        }
+
+        // A broken annotation (e.g. more than one argument) has already been diagnosed by the parser,
+        // there is no usable user-defined name in it.
+        if (anno->TestAttr(Attribute::IS_BROKEN)) {
+            return "";
+        }
+
+        CJC_ASSERT(anno->args.size() < 3);
+        if (anno->args.empty()) {
+            break;
+        }
+
+        if (anno->args.size() == 2 &&
+            anno->args[1]->name != "importedFrom") {
+            break;
+        }
+
+        if (anno->args.size() == 1) {
+            CJC_ASSERT(anno->args[0]->expr->astKind == ASTKind::LIT_CONST_EXPR);
+            auto lce = As<ASTKind::LIT_CONST_EXPR>(anno->args[0]->expr.get());
+            CJC_ASSERT(lce);
+
+            return lce->stringValue;
+        }
+
+        if (anno->args.size() == 2) {
+            if (anno->args[1]->name != "importedFrom") {
+                break;
+            }
+            CJC_ASSERT(anno->args[1]->expr->astKind == ASTKind::LIT_CONST_EXPR);
+            auto lce = As<ASTKind::LIT_CONST_EXPR>(anno->args[1]->expr.get());
+            CJC_ASSERT(lce);
+
+            return lce->stringValue;
+        }
+    }
+    return "";
+}
+
 Ptr<std::string> NameGenerator::GetUserDefinedObjCName(const Decl& target)
 {
     for (auto& anno : target.annotations) {
@@ -155,8 +200,13 @@ Ptr<std::string> NameGenerator::GetUserDefinedObjCName(const Decl& target)
             return nullptr;
         }
 
-        CJC_ASSERT(anno->args.size() < 2);
+        CJC_ASSERT(anno->args.size() < 3);
         if (anno->args.empty()) {
+            break;
+        }
+
+        if (anno->args.size() == 1 &&
+            anno->args[0]->name != "") {
             break;
         }
 
