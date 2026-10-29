@@ -2830,7 +2830,10 @@ ModalTy TypeManager::ObtainsAliasType(Ptr<const Node> node)
             break;
         }
         case ASTKind::PAREN_TYPE: {
-            ret = ObtainsAliasType(StaticCast<ParenType>(node)->type.get());
+            // Preserve the resolved type's modal when recovering its alias form;
+            // parentheses only control precedence.
+            auto innerTy = ObtainsAliasType(StaticCast<ParenType>(node)->type.get());
+            ret = {innerTy.Ty(), node->TyMode()};
             break;
         }
         case ASTKind::VARRAY_TYPE: {

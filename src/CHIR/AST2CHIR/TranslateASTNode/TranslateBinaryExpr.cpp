@@ -6,6 +6,8 @@
 
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 
+#include "cangjie/CHIR/AST2CHIR/Utils.h"
+
 using namespace Cangjie::CHIR;
 using namespace Cangjie;
 
@@ -57,6 +59,17 @@ Ptr<Value> Translator::ProcessBinaryExpr(const AST::BinaryExpr& binaryExpr)
         return TransShortCircuitOr(lhs, *binaryExpr.rightExpr, loc, binaryExpr.TestAttr(AST::Attribute::COMPILER_ADD));
     }
     auto rightExpr = TranslateExprArg(*binaryExpr.rightExpr);
+    // Align operand modals for arithmetic and bitwise operations so identities
+    // such as 0 + x -> x preserve the result type. Comparisons return Bool,
+    // whose modal is not the expected modal of the compared operands.
+    bool isMathematicalOp = kd >= BinaryExprKind::ADD && kd <= BinaryExprKind::EXP;
+    bool isBitwiseOp = kd >= BinaryExprKind::LSHIFT && kd <= BinaryExprKind::BITXOR;
+    if (isMathematicalOp || isBitwiseOp) {
+        lhs = TypeCastCopyableTypeIfNeeded(
+            *lhs, chirType->GetModalInfo(), builder, *currentBlock, TranslateLocation(*binaryExpr.leftExpr));
+        rightExpr = TypeCastCopyableTypeIfNeeded(
+            *rightExpr, chirType->GetModalInfo(), builder, *currentBlock, TranslateLocation(*binaryExpr.rightExpr));
+    }
     bool mayHaveException = OverloadableExprMayThrowException(binaryExpr, *chirType);
     if (binaryExpr.leftExpr->GetTy()->IsNothing()) {
         const auto& rightExprLoc = TranslateLocation(*binaryExpr.rightExpr);

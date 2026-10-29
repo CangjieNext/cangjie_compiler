@@ -78,6 +78,17 @@ FuncType* AdjustFuncType(FuncType& funcType, const AST::FuncDecl& funcDecl, CHIR
     return &funcType;
 }
 
+Value* TypeCastCopyableTypeIfNeeded(
+    Value& value, ModalInfo modal, CHIRBuilder& builder, Block& parentBlock, const DebugLocation& loc)
+{
+    auto valueType = value.GetType();
+    if (!valueType->IsCopyable()) {
+        return &value;
+    }
+    auto targetType = builder.WithModal(valueType, modal);
+    return TypeCastOrBoxIfNeeded(value, *targetType, builder, parentBlock, loc);
+}
+
 DebugLocation GetDeclLoc(const CHIRContext& cctx, const AST::Decl& decl)
 {
     auto& begin = decl.identifier.Begin();

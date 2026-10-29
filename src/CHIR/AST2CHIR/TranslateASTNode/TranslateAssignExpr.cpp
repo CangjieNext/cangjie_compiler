@@ -113,6 +113,8 @@ Value* Translator::TranslateVArrayAssign(const AssignExpr& assign)
     } else {
         // normal compound assign, e.g a[0] += b
         auto rhsValue = TranslateExprArg(*assign.rightExpr);
+        rhsValue = TypeCastCopyableTypeIfNeeded(
+            *rhsValue, lhs->GetType()->GetModalInfo(), builder, *currentBlock, TranslateLocation(*assign.rightExpr));
         bool mayHaveException = OverloadableExprMayThrowException(assign, *lhs->GetType());
         auto kind = tokenKindToBinaryExprKind.at(COMPOUND_ASSIGN_EXPR_MAP.at(assign.op));
         auto binaryOpResult = TryCreateWithOV<BinaryExpression>(
@@ -210,6 +212,8 @@ Value* Translator::TranslateCompoundAssign(const AssignExpr& assign)
     } else {
         // Translate the RHS part "Y"
         Value* rhs = TranslateExprArg(*assign.rightExpr);
+        rhs = TypeCastCopyableTypeIfNeeded(
+            *rhs, lhsRightValue->GetType()->GetModalInfo(), builder, *currentBlock, rightValLoc);
         auto kind = tokenKindToBinaryExprKind.at(COMPOUND_ASSIGN_EXPR_MAP.at(assign.op));
         auto binOp = TryCreateWithOV<BinaryExpression>(currentBlock,
             mayHaveException, assign.overflowStrategy, loc, lhsRightValue->GetType(), kind, lhsRightValue, rhs);
