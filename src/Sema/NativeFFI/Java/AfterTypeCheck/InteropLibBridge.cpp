@@ -1183,17 +1183,31 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaImpl(OwnedPtr<Expr> env, OwnedPtr<Exp
 
     auto& ctor = GetJavaImplWrappingConstructor(*classTy->decl);
 
+    auto entityTy = entity->GetTy();
+    auto entityVar = CreateTmpVarDecl(nullptr, nullptr);
+    entityVar->isVar = false;
+    entityVar->curFile = curFile;
+    entityVar->initializer = std::move(entity);
+    entityVar->SetTy(entityTy);
+
+    auto entityRef1 = WithinFile(CreateRefExpr(*entityVar), curFile);
+    auto entityRef2 = WithinFile(CreateRefExpr(*entityVar), curFile);
+
     std::vector<OwnedPtr<FuncArg>> refWrapperCtorArgs;
-    refWrapperCtorArgs.push_back(CreateFuncArg(ASTCloner::Clone(entity.get())));
+    refWrapperCtorArgs.push_back(CreateFuncArg(std::move(entityRef1)));
     refWrapperCtorArgs.push_back(CreateFuncArg(
-        CreateGetRegistryIdCall(std::move(env), std::move(entity))));
+        CreateGetRegistryIdCall(std::move(env), std::move(entityRef2))));
 
     auto refWrapperCtorCall = CreateCallExpr(
         WithinFile(CreateRefExpr(ctor), curFile),
         std::move(refWrapperCtorArgs),
         &ctor, ty, CallKind::CALL_OBJECT_CREATION);
 
-    return refWrapperCtorCall;
+    std::vector<OwnedPtr<Node>> nodes;
+    nodes.emplace_back(std::move(entityVar));
+    nodes.emplace_back(std::move(refWrapperCtorCall));
+    auto lambda = WrapReturningLambdaExpr(typeManager, std::move(nodes));
+    return CreateCallExpr(std::move(lambda), {}, nullptr, ty, CallKind::CALL_DECLARED_FUNCTION);
 }
 
 OwnedPtr<Expr> InteropLibBridge::CreateEnsureNotNullCall(OwnedPtr<Expr> entity)

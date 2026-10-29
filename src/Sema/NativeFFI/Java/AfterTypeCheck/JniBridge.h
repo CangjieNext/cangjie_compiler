@@ -51,9 +51,26 @@ struct JniNativeInterfaceBridge {
     #include "JniNativeInterface.inc"
     #undef DEFINE_MEMBER
 
-private:
+    #define DEFINE_MEMBER_WITH_TABLE
+    #define DEFINE_MEMBER(NAME, KIND, PARAMS) \
+    template <typename... Args> std::enable_if_t<(sizeof...(Args) == (PARAMS) - 1), OwnedPtr<AST::Expr>>    \
+        Create##NAME##Call(Ptr<AST::Expr> tablePtr, Ptr<AST::Expr> envPtr, OwnedPtr<Args>&&... args) const  \
+            {                                                                                               \
+                auto& member = Get##NAME##Member();                                                         \
+                return CreateMemberCall(typeManager,                                                        \
+                    ASTCloner::Clone(tablePtr),                                                             \
+                    member,                                                                                 \
+                    ASTCloner::Clone(envPtr),                                                               \
+                    std::forward<OwnedPtr<Args>>(args)...);                                                 \
+            }
+
+    #include "JniNativeInterface.inc"
+    #undef DEFINE_MEMBER
+    #undef DEFINE_MEMBER_WITH_TABLE
+
     OwnedPtr<Expr> CreateJNIEnvReadCall(Ptr<Expr> env) const;
 
+private:
     template <ASTKind KIND = ASTKind::DECL>
     typename NodeKind<KIND>::Type& GetInterfaceMember(const std::string_view memberName) const
     {
@@ -80,6 +97,17 @@ private:
         }
 #include "JniNativeInterface.inc"
 #undef DEFINE_MEMBER
+
+#define DEFINE_MEMBER_WITH_TABLE
+#define DEFINE_MEMBER(NAME, KIND, PARAMS)                                                                     \
+    NodeKind<ASTKind::KIND>::Type& Get##NAME##Member() const                                                  \
+    {                                                                                                         \
+        static typename NodeKind<ASTKind::KIND>::Type& member = GetInterfaceMember<ASTKind::KIND>(#NAME);     \
+        return member;                                                                                        \
+    }
+#include "JniNativeInterface.inc"
+#undef DEFINE_MEMBER
+#undef DEFINE_MEMBER_WITH_TABLE
 
     TypeManager& typeManager;
     const ImportManager& importManager;
@@ -149,15 +177,15 @@ public:
      */
     AST::Ty& ConvertCangjieToJniTy(AST::Ty& javaCompatibleTy) const;
 
-    OwnedPtr<AST::Expr> CreateNonvirtualJavaMethodCall(const AST::Ty& retTy,
+    OwnedPtr<AST::Expr> CreateNonvirtualJavaMethodCall(const AST::Ty& retTy, Ptr<Expr> tablePtr,
         Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jobject, Ptr<AST::Expr> jclass, Ptr<AST::Expr> jmethod,
         OwnedPtr<AST::FuncArg> jniArgs = nullptr) const;
 
-    OwnedPtr<AST::Expr> CreateVirtualInstanceJavaMethodCall(const AST::Ty& retTy,
+    OwnedPtr<AST::Expr> CreateVirtualInstanceJavaMethodCall(const AST::Ty& retTy, Ptr<Expr> tablePtr,
         Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jobject, Ptr<AST::Expr> jmethod,
         OwnedPtr<FuncArg> jniArgs = nullptr) const;
 
-    OwnedPtr<AST::Expr> CreateStaticJavaMethodCall(const AST::Ty& retTy,
+    OwnedPtr<AST::Expr> CreateStaticJavaMethodCall(const AST::Ty& retTy, Ptr<Expr> tablePtr,
         Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jclass, Ptr<AST::Expr> jmethod,
         OwnedPtr<FuncArg> jniArgs = nullptr) const;
 
@@ -174,6 +202,22 @@ public:
         Ptr<AST::Expr> jniEnvPtr, Ptr<AST::Expr> jobject, Ptr<AST::Expr> jfield, Ptr<AST::Expr> value) const;
 
     const JniNativeInterfaceBridge interface;
+
+    OwnedPtr<Expr> CreateExceptionCheckCall(Ptr<Expr> tablePtr, Ptr<Expr> jniEnvPtr) const;
+
+    OwnedPtr<Expr> CreateGetArrayRegionCall(const Ty& elementTy, Ptr<Expr> tablePtr, Ptr<Expr> jniEnvPtr,
+        OwnedPtr<Expr> array, OwnedPtr<Expr> start, OwnedPtr<Expr> len, OwnedPtr<FuncArg> buffer) const;
+
+    OwnedPtr<Expr> CreateSetArrayRegionCall(const Ty& elementTy, Ptr<Expr> tablePtr, Ptr<Expr> jniEnvPtr,
+        OwnedPtr<Expr> array, OwnedPtr<Expr> start, OwnedPtr<Expr> len, OwnedPtr<FuncArg> buffer) const;
+
+    OwnedPtr<Expr> CreateGetObjectArrayElementCall(Ptr<Expr> tablePtr, Ptr<Expr> jniEnvPtr,
+        OwnedPtr<Expr> javaArray, OwnedPtr<Expr> index) const;
+
+    OwnedPtr<Expr> CreateSetObjectArrayElementCall(Ptr<Expr> tablePtr, Ptr<Expr> jniEnvPtr,
+        OwnedPtr<Expr> javaArray, OwnedPtr<Expr> index, OwnedPtr<Expr> value) const;
+
+    OwnedPtr<AST::Expr> CreateJNIEnvReadCall(Ptr<AST::Expr> env) const;
 
 private:
     AST::Ty& GetJniEnvPtrTy() const;

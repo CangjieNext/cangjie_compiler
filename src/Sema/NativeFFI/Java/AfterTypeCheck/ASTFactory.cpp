@@ -23,17 +23,37 @@ using namespace AST;
 
 namespace {
 
-// a: VArray<T, $X> -> inout(a) of type T
-OwnedPtr<FuncArg> CreateInoutVArrayArg(OwnedPtr<Expr> expr, TypeManager& typeManager)
+// Create an inout argument. For VArray<T, $X>, use T as the pointer element type.
+OwnedPtr<FuncArg> CreateInoutArg(OwnedPtr<Expr> expr, TypeManager& typeManager)
 {
-    CJC_ASSERT(expr->TyKind() == TypeKind::TYPE_VARRAY);
-
     auto arg = CreateFuncArg(std::move(expr));
-    auto* varrayTy = StaticCast<VArrayTy>(arg->GetTy());
-    CJC_ASSERT_WITH_MSG(!varrayTy->typeArgs.empty(), "VArray must be generic");
     arg->withInout = true;
-    arg->SetTy(typeManager.GetPointerTy(varrayTy->typeArgs[0]));
+
+    auto ty = arg->GetTy();
+    if (ty->kind == TypeKind::TYPE_VARRAY) {
+        auto varrayTy = StaticCast<VArrayTy>(ty);
+        CJC_ASSERT_WITH_MSG(!varrayTy->typeArgs.empty(), "VArray must be generic");
+        ty = varrayTy->typeArgs[0];
+    }
+
+    arg->SetTy(typeManager.GetPointerTy(ty));
     return arg;
+}
+
+OwnedPtr<Expr> CreateHandlePendingExceptionIfNeeded(JniBridge& jni, InteropLibBridge& ilib,
+    Ptr<Expr> jniEnvPtr, Ptr<Expr> tablePtr)
+{
+    auto exceptionCheck = jni.CreateExceptionCheckCall(tablePtr, jniEnvPtr);
+    auto& uint8Ty = *TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT8);
+    auto& boolTy = *TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
+    auto condition = CreateBinaryExpr(std::move(exceptionCheck),
+        CreateLitConstExpr(LitConstKind::INTEGER, "0", &uint8Ty), TokenKind::NOTEQ);
+    condition->SetTy(&boolTy);
+    auto thenBody = CreateBlock(Nodes(ilib.CreateJNIHandlePendingExceptionCall(jniEnvPtr)),
+        TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+    auto elseBody = CreateBlock({}, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+    return CreateIfExpr(std::move(condition), std::move(thenBody),
+        std::move(elseBody), TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
 }
 } // namespace
 
@@ -43,6 +63,208 @@ ASTFactory::ASTFactory(
     : typeManager(typeManager), ilib(ilib), jni(jni),
     jclassCache(jclassCache), jmethodIdCache(jmethodIdCache), jfieldIdCache(jfieldIdCache)
 {
+}
+
+OwnedPtr<Block> ASTFactory::CreatePrimitiveArrayGetCall(const Ty& elementTy, Ptr<Expr> jniEnvPtr,
+    OwnedPtr<Expr> javaArray, OwnedPtr<Expr> index) const
+{
+    CJC_ASSERT(elementTy.IsPrimitive());
+    CJC_ASSERT(elementTy.kind != TypeKind::TYPE_UNIT);
+    auto curFile = jniEnvPtr->curFile;
+    CJC_NULLPTR_CHECK(curFile);
+    auto& elementType = *TypeManager::GetPrimitiveTy(elementTy.kind);
+    auto isBoolean = elementTy.kind == TypeKind::TYPE_BOOLEAN;
+    Ty* bufferTy = &elementType;
+    if (isBoolean) {
+        bufferTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT8).get();
+    }
+
+    auto block = CreateBlock({}, &elementType);
+    auto jniTableExpr = jni.CreateJNIEnvReadCall(jniEnvPtr);
+    auto jniTableTy = jniTableExpr->GetTy();
+    auto& jniTable = StaticCast<VarDecl&>(
+        *block->body.emplace_back(CreateTmpVarDecl(nullptr, nullptr)));
+    jniTable.isVar = false;
+    jniTable.curFile = curFile;
+    jniTable.initializer = std::move(jniTableExpr);
+    jniTable.SetTy(jniTableTy);
+
+    auto& result = StaticCast<VarDecl&>(
+        *block->body.emplace_back(CreateTmpVarDecl(nullptr, nullptr)));
+    result.isVar = true;
+    result.curFile = curFile;
+    result.initializer = CreateLitConstExpr(LitConstKind::INTEGER, "0", bufferTy);
+    result.SetTy(bufferTy);
+
+    auto buffer = CreateInoutArg(WithinFile(CreateRefExpr(result), curFile), typeManager);
+    auto& intTy = *TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT32);
+
+    block->body.emplace_back(jni.CreateGetArrayRegionCall(elementTy, WithinFile(CreateRefExpr(jniTable), curFile),
+        jniEnvPtr, std::move(javaArray), std::move(index), CreateLitConstExpr(LitConstKind::INTEGER, "1", &intTy),
+        std::move(buffer)));
+    CJC_ASSERT(block->body.back() != nullptr);
+
+    block->body.emplace_back(CreateHandlePendingExceptionIfNeeded(jni, ilib, jniEnvPtr,
+        WithinFile(CreateRefExpr(jniTable), curFile)));
+    CJC_ASSERT(block->body.back() != nullptr);
+
+    if (isBoolean) {
+        auto resultExpr = CreateBinaryExpr(WithinFile(CreateRefExpr(result), curFile),
+            CreateLitConstExpr(LitConstKind::INTEGER, "0", bufferTy), TokenKind::NOTEQ);
+        resultExpr->SetTy(&elementType);
+        block->body.emplace_back(std::move(resultExpr));
+    } else {
+        block->body.emplace_back(WithinFile(CreateRefExpr(result), curFile));
+    }
+    CJC_ASSERT(block->body.back() != nullptr);
+
+    return block;
+}
+
+OwnedPtr<Block> ASTFactory::CreatePrimitiveArraySetCall(const Ty& elementTy, Ptr<Expr> jniEnvPtr,
+    OwnedPtr<Expr> javaArray, OwnedPtr<Expr> index, OwnedPtr<Expr> value) const
+{
+    CJC_ASSERT(elementTy.IsPrimitive());
+    CJC_ASSERT(elementTy.kind != TypeKind::TYPE_UNIT);
+    auto curFile = jniEnvPtr->curFile;
+    CJC_NULLPTR_CHECK(curFile);
+
+    auto& elementType = *TypeManager::GetPrimitiveTy(elementTy.kind);
+    auto isBoolean = elementTy.kind == TypeKind::TYPE_BOOLEAN;
+    Ty* bufferTy = &elementType;
+    if (isBoolean) {
+        bufferTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT8).get();
+    }
+
+    auto block = CreateBlock({}, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+
+    // Read the JNI function table once.
+    auto jniTableExpr = jni.CreateJNIEnvReadCall(jniEnvPtr);
+    auto jniTableTy = jniTableExpr->GetTy();
+    auto& jniTable = StaticCast<VarDecl&>(
+        *block->body.emplace_back(CreateTmpVarDecl(nullptr, nullptr)));
+    jniTable.isVar = false;
+    jniTable.curFile = curFile;
+    jniTable.initializer = std::move(jniTableExpr);
+    jniTable.SetTy(jniTableTy);
+
+    // Convert Bool to jboolean when necessary.
+    OwnedPtr<Expr> bufferValue;
+    if (isBoolean) {
+        bufferValue = CreateIfExpr(std::move(value),
+            CreateBlock(Nodes(CreateLitConstExpr(LitConstKind::INTEGER, "1", bufferTy)), bufferTy),
+            CreateBlock(Nodes(CreateLitConstExpr(LitConstKind::INTEGER, "0", bufferTy)), bufferTy),
+            bufferTy);
+    } else {
+        bufferValue = std::move(value);
+    }
+
+    // Store the value to write.
+    auto& valueVar = StaticCast<VarDecl&>(
+        *block->body.emplace_back(CreateTmpVarDecl(nullptr, nullptr)));
+    valueVar.isVar = true;
+    valueVar.curFile = curFile;
+    valueVar.initializer = std::move(bufferValue);
+    valueVar.SetTy(bufferTy);
+
+    auto buffer = CreateInoutArg(WithinFile(CreateRefExpr(valueVar), curFile), typeManager);
+    auto& intTy = *TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT32);
+
+    // Write one element using the cached JNI table.
+    block->body.emplace_back(jni.CreateSetArrayRegionCall(elementTy, WithinFile(CreateRefExpr(jniTable), curFile),
+        jniEnvPtr, std::move(javaArray), std::move(index), CreateLitConstExpr(LitConstKind::INTEGER, "1", &intTy),
+        std::move(buffer)));
+    CJC_ASSERT(block->body.back() != nullptr);
+
+    // Check for a pending JNI exception using the same table.
+    block->body.emplace_back(CreateHandlePendingExceptionIfNeeded(jni, ilib, jniEnvPtr,
+        WithinFile(CreateRefExpr(jniTable), curFile)));
+    CJC_ASSERT(block->body.back() != nullptr);
+    return block;
+}
+
+OwnedPtr<Expr> ASTFactory::CreateObjectArrayGetCall(Ptr<Expr> jniEnvPtr, OwnedPtr<Expr> javaArray,
+    OwnedPtr<Expr> index) const
+{
+    auto curFile = jniEnvPtr->curFile;
+    CJC_NULLPTR_CHECK(curFile);
+    auto block = CreateBlock({}, nullptr);
+
+    // Read the JNI function table once.
+    auto jniTableExpr = jni.CreateJNIEnvReadCall(jniEnvPtr);
+    auto jniTableTy = jniTableExpr->GetTy();
+
+    auto& jniTable = StaticCast<VarDecl&>(
+        *block->body.emplace_back(CreateTmpVarDecl(nullptr, nullptr)));
+    jniTable.isVar = false;
+    jniTable.curFile = curFile;
+    jniTable.initializer = std::move(jniTableExpr);
+    jniTable.SetTy(jniTableTy);
+
+    auto getElementCall = jni.CreateGetObjectArrayElementCall(WithinFile(CreateRefExpr(jniTable), curFile),
+        jniEnvPtr, std::move(javaArray), std::move(index));
+    CJC_ASSERT(getElementCall != nullptr);
+    auto resultTy = getElementCall->GetTy();
+    auto& result = StaticCast<VarDecl&>(*block->body.emplace_back(
+        CreateTmpVarDecl(nullptr, nullptr)));
+    result.isVar = false;
+    result.curFile = curFile;
+    result.initializer = std::move(getElementCall);
+    result.SetTy(resultTy);
+
+    // Check for a pending JNI exception using the same table.
+    block->body.emplace_back(CreateHandlePendingExceptionIfNeeded(
+        jni, ilib, jniEnvPtr, WithinFile(CreateRefExpr(jniTable), curFile)));
+    CJC_ASSERT(block->body.back() != nullptr);
+    block->body.emplace_back(WithinFile(CreateRefExpr(result), curFile));
+    CJC_ASSERT(block->body.back() != nullptr);
+    block->SetTy(resultTy);
+
+    auto paramLists = Nodes<FuncParamList>(CreateFuncParamList(Nodes<FuncParam>()));
+    auto retTypeNode = CreateType(resultTy);
+    auto lambdaFuncBody = CreateFuncBody(std::move(paramLists), std::move(retTypeNode),
+        std::move(block), resultTy);
+
+    auto lambda = CreateLambdaExpr(std::move(lambdaFuncBody));
+    lambda->curFile = curFile;
+    lambda->SetTy(typeManager.GetFunctionTy({}, resultTy));
+
+    auto call = CreateCallExpr(std::move(lambda), {}, nullptr, resultTy);
+    call->curFile = curFile;
+    return call;
+}
+
+OwnedPtr<Block> ASTFactory::CreateObjectArraySetCall(Ptr<Expr> jniEnvPtr, OwnedPtr<Expr> javaArray,
+    OwnedPtr<Expr> index, OwnedPtr<Expr> value) const
+{
+    auto curFile = jniEnvPtr->curFile;
+    CJC_NULLPTR_CHECK(curFile);
+    auto& unitTy = *TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    auto block = CreateBlock({}, &unitTy);
+
+    // Read the JNI function table once.
+    auto jniTableExpr = jni.CreateJNIEnvReadCall(jniEnvPtr);
+    auto jniTableTy = jniTableExpr->GetTy();
+    auto& jniTable = StaticCast<VarDecl&>(
+        *block->body.emplace_back(CreateTmpVarDecl(nullptr, nullptr)));
+    jniTable.isVar = false;
+    jniTable.curFile = curFile;
+    jniTable.initializer = std::move(jniTableExpr);
+    jniTable.SetTy(jniTableTy);
+
+    auto javaEntity = ilib.WrapJavaEntity(std::move(value));
+    CJC_ASSERT(javaEntity != nullptr);
+    auto javaObject = ilib.CreateAsJniJobjectCall(std::move(javaEntity));
+    CJC_ASSERT(javaObject != nullptr);
+    block->body.emplace_back(jni.CreateSetObjectArrayElementCall(WithinFile(CreateRefExpr(jniTable), curFile),
+        jniEnvPtr, std::move(javaArray), std::move(index), std::move(javaObject)));
+    CJC_ASSERT(block->body.back() != nullptr);
+
+    // Check for a pending JNI exception using the same table.
+    block->body.emplace_back(CreateHandlePendingExceptionIfNeeded(
+        jni, ilib, jniEnvPtr, WithinFile(CreateRefExpr(jniTable), curFile)));
+    CJC_ASSERT(block->body.back() != nullptr);
+    return block;
 }
 
 OwnedPtr<Block> ASTFactory::CreateNewJavaObjectCall(AfterTypeCheckContext& ctx, Ptr<Expr> jniEnvPtr,
@@ -76,7 +298,7 @@ OwnedPtr<Block> ASTFactory::CreateNewJavaObjectCall(AfterTypeCheckContext& ctx, 
         callResVar.initializer = jni.interface.CreateNewObjectACall(jniEnvPtr,
             CreateFuncArg(ASTCloner::Clone(jclass.get())),
             CreateFuncArg(ASTCloner::Clone(jmethod.get())),
-            CreateInoutVArrayArg(WithinFile(CreateRefExpr(jniArgs), curFile), typeManager));
+            CreateInoutArg(WithinFile(CreateRefExpr(jniArgs), curFile), typeManager));
     }
     callResVar.SetTy(callResVar.initializer->GetTy());
 
@@ -168,6 +390,15 @@ OwnedPtr<Block> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx, Ptr
     auto block = CreateBlock({}, &retTy);
     block->curFile = curFile;
 
+    auto jniTableExpr = jni.CreateJNIEnvReadCall(jniEnvPtr);
+    auto jniTableTy = jniTableExpr->GetTy();
+    auto& jniTable = StaticCast<VarDecl&>(*block->body.emplace_back(CreateTmpVarDecl(nullptr, nullptr)));
+    jniTable.isVar = false;
+    jniTable.curFile = curFile;
+    jniTable.initializer = std::move(jniTableExpr);
+    jniTable.SetTy(jniTableTy);
+    auto jniTablePtr = WithinFile(CreateRefExpr(jniTable), curFile);
+
     static auto convertJniValueToJavaCompatible = [this](OwnedPtr<Expr> jniValue,
         Ty& expectedTy, Ptr<Expr> jniEnvPtr, Block& block) {
             auto ret = std::move(jniValue);
@@ -197,15 +428,15 @@ OwnedPtr<Block> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx, Ptr
     if (args.empty()) {
         // 2. jniCallRes = Java_CFFI_JavaEntity((*jniEnv)->CallMethod(jclass/jobject, jmethod))
         auto jniMethodCall = method.IsStatic()
-        ? jni.CreateStaticJavaMethodCall(retTy, jniEnvPtr, jclass, jmethod)
+        ? jni.CreateStaticJavaMethodCall(retTy, jniTablePtr, jniEnvPtr, jclass, jmethod)
         : isVirtual
-            ? jni.CreateVirtualInstanceJavaMethodCall(retTy, jniEnvPtr, jobjectInstance, jmethod)
-            : jni.CreateNonvirtualJavaMethodCall(retTy, jniEnvPtr, jobjectInstance, jclass, jmethod);
+            ? jni.CreateVirtualInstanceJavaMethodCall(retTy, jniTablePtr, jniEnvPtr, jobjectInstance, jmethod)
+            : jni.CreateNonvirtualJavaMethodCall(retTy, jniTablePtr, jniEnvPtr, jobjectInstance, jclass, jmethod);
 
         callResVar.initializer = std::move(jniMethodCall);
     } else {
-        auto createInoutVArrayArg = [this, &curFile](VarDecl& varrayArg) {
-            return CreateInoutVArrayArg(WithinFile(CreateRefExpr(varrayArg), curFile), typeManager);
+        auto createInoutArg = [this, &curFile](VarDecl& varrayArg) {
+            return CreateInoutArg(WithinFile(CreateRefExpr(varrayArg), curFile), typeManager);
         };
         // 0. var jniArgs: VArray<jvalue, $x> = [args...]
         auto& jniArgs = StaticCast<VarDecl&>(**block->body.emplace(block->body.begin(),
@@ -213,18 +444,20 @@ OwnedPtr<Block> ASTFactory::CreateJavaMethodCall(AfterTypeCheckContext& ctx, Ptr
 
         // 2. jniCallRes = (*jniEnv)->CallMethod(jclass/jobject, jmethod, inout jniArgs)
         auto jniMethodCall = method.IsStatic()
-        ? jni.CreateStaticJavaMethodCall(retTy, jniEnvPtr, jclass, jmethod, createInoutVArrayArg(jniArgs))
+        ? jni.CreateStaticJavaMethodCall(retTy, jniTablePtr, jniEnvPtr, jclass, jmethod,createInoutArg(jniArgs))
         : isVirtual
-            ? jni.CreateVirtualInstanceJavaMethodCall(retTy, jniEnvPtr, jobjectInstance, jmethod,
-                createInoutVArrayArg(jniArgs))
-            : jni.CreateNonvirtualJavaMethodCall(retTy, jniEnvPtr, jobjectInstance, jclass, jmethod,
-                createInoutVArrayArg(jniArgs));
+            ? jni.CreateVirtualInstanceJavaMethodCall(retTy, jniTablePtr, jniEnvPtr, jobjectInstance, jmethod,
+                createInoutArg(jniArgs))
+            : jni.CreateNonvirtualJavaMethodCall(retTy, jniTablePtr, jniEnvPtr, jobjectInstance, jclass, jmethod,
+                createInoutArg(jniArgs));
 
         callResVar.initializer = std::move(jniMethodCall);
     }
     callResVar.SetTy(callResVar.initializer->GetTy());
     // 3. handlePendingException()
-    block->body.push_back(ilib.CreateJNIHandlePendingExceptionCall(jniEnvPtr));
+    block->body.push_back(CreateHandlePendingExceptionIfNeeded(jni, ilib, jniEnvPtr,
+        WithinFile(CreateRefExpr(jniTable), curFile)));
+
     // 4. return unwrapped jniCallRes
     block->body.push_back(convertJniValueToJavaCompatible(
         WithinFile(CreateRefExpr(callResVar), curFile),

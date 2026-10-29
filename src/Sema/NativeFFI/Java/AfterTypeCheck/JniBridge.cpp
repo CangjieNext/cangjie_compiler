@@ -207,19 +207,23 @@ Ty& JniBridge::ConvertCangjieToJniTy(Ty& javaCompatibleTy) const
 namespace {
 
 using JniNonVirtualCallTy = OwnedPtr<Expr> (JniNativeInterfaceBridge::*)(
-    Ptr<Expr>, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&) const;
+    Ptr<Expr>, Ptr<Expr>, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&) const;
+
 using JniNonVirtualCallATy = OwnedPtr<Expr> (JniNativeInterfaceBridge::*)(
-    Ptr<Expr>, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&, OwnedPtr<FuncArg>&&) const;
+    Ptr<Expr>, Ptr<Expr>, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&,
+    OwnedPtr<FuncArg>&&) const;
 
 using JniVirtualInstanceCallTy = OwnedPtr<Expr> (JniNativeInterfaceBridge::*)(
-    Ptr<Expr>, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&) const;
+    Ptr<Expr>, Ptr<Expr>, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&) const;
+
 using JniVirtualInstanceCallATy = OwnedPtr<Expr> (JniNativeInterfaceBridge::*)(
-    Ptr<Expr>, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&, OwnedPtr<FuncArg>&&) const;
+    Ptr<Expr>, Ptr<Expr>, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&, OwnedPtr<FuncArg>&&) const;
 
 using JniStaticCallTy = OwnedPtr<Expr> (JniNativeInterfaceBridge::*)(
-    Ptr<Expr>, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&) const;
+    Ptr<Expr>, Ptr<Expr>, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&) const;
+
 using JniStaticCallATy = OwnedPtr<Expr> (JniNativeInterfaceBridge::*)(
-    Ptr<Expr>, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&, OwnedPtr<FuncArg>&&) const;
+    Ptr<Expr>, Ptr<Expr>, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&, OwnedPtr<FuncArg>&&) const;
 
 using JniStaticFieldGetATy = OwnedPtr<Expr> (JniNativeInterfaceBridge::*)(
     Ptr<Expr>, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&) const;
@@ -231,6 +235,9 @@ using JniStaticFieldSetATy = OwnedPtr<Expr> (JniNativeInterfaceBridge::*)(
 using JniInstanceFieldSetATy = OwnedPtr<Expr> (JniNativeInterfaceBridge::*)(
     Ptr<Expr>, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&) const;
 
+using JniArrayRegionCallTy = OwnedPtr<Expr> (JniNativeInterfaceBridge::*)(
+    Ptr<Expr>, Ptr<Expr>, OwnedPtr<Expr>&&, OwnedPtr<Expr>&&,
+    OwnedPtr<Expr>&&, OwnedPtr<FuncArg>&&) const;
 
 using Interface = JniNativeInterfaceBridge;
 
@@ -393,40 +400,90 @@ JniInstanceFieldSetATy MatchInstanceFieldSetMethod(const Ty& ty)
         default: return &Interface::CreateSetObjectFieldCall;
     }
 }
+
+JniArrayRegionCallTy MatchGetArrayRegionCall(const Ty& elementTy)
+{
+    switch (elementTy.kind) {
+        case TypeKind::TYPE_BOOLEAN:
+            return &Interface::CreateGetBooleanArrayRegionCall;
+        case TypeKind::TYPE_INT8:
+        case TypeKind::TYPE_UINT8:
+            return &Interface::CreateGetByteArrayRegionCall;
+        case TypeKind::TYPE_UINT16:
+            return &Interface::CreateGetCharArrayRegionCall;
+        case TypeKind::TYPE_INT16:
+            return &Interface::CreateGetShortArrayRegionCall;
+        case TypeKind::TYPE_INT32:
+            return &Interface::CreateGetIntArrayRegionCall;
+        case TypeKind::TYPE_INT64:
+            return &Interface::CreateGetLongArrayRegionCall;
+        case TypeKind::TYPE_FLOAT32:
+            return &Interface::CreateGetFloatArrayRegionCall;
+        case TypeKind::TYPE_FLOAT64:
+            return &Interface::CreateGetDoubleArrayRegionCall;
+        default:
+            CJC_ABORT();
+    }
+}
+
+JniArrayRegionCallTy MatchSetArrayRegionCall(const Ty& elementTy)
+{
+    switch (elementTy.kind) {
+        case TypeKind::TYPE_BOOLEAN:
+            return &Interface::CreateSetBooleanArrayRegionCall;
+        case TypeKind::TYPE_INT8:
+        case TypeKind::TYPE_UINT8:
+            return &Interface::CreateSetByteArrayRegionCall;
+        case TypeKind::TYPE_UINT16:
+            return &Interface::CreateSetCharArrayRegionCall;
+        case TypeKind::TYPE_INT16:
+            return &Interface::CreateSetShortArrayRegionCall;
+        case TypeKind::TYPE_INT32:
+            return &Interface::CreateSetIntArrayRegionCall;
+        case TypeKind::TYPE_INT64:
+            return &Interface::CreateSetLongArrayRegionCall;
+        case TypeKind::TYPE_FLOAT32:
+            return &Interface::CreateSetFloatArrayRegionCall;
+        case TypeKind::TYPE_FLOAT64:
+            return &Interface::CreateSetDoubleArrayRegionCall;
+        default:
+            CJC_ABORT();
+    }
+}
 } // namespace
 
-OwnedPtr<Expr> JniBridge::CreateNonvirtualJavaMethodCall(const Ty& retTy,
+OwnedPtr<Expr> JniBridge::CreateNonvirtualJavaMethodCall(const Ty& retTy, Ptr<Expr> tablePtr,
     Ptr<Expr> jniEnvPtr, Ptr<Expr> jobject, Ptr<Expr> jclass, Ptr<Expr> jmethod, OwnedPtr<FuncArg> jniArgs) const
 {
     if (jniArgs) {
-        return (interface.*MatchNonVirtualCallMethodA(retTy))(jniEnvPtr,
+        return (interface.*MatchNonVirtualCallMethodA(retTy))(tablePtr, jniEnvPtr,
             ASTCloner::Clone(jobject), ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
     }
-        
+
     return (interface.*MatchNonVirtualCallMethod(retTy))
-        (jniEnvPtr, ASTCloner::Clone(jobject), ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        (tablePtr, jniEnvPtr, ASTCloner::Clone(jobject), ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
 }
 
-OwnedPtr<Expr> JniBridge::CreateVirtualInstanceJavaMethodCall(const Ty& retTy,
+OwnedPtr<Expr> JniBridge::CreateVirtualInstanceJavaMethodCall(const Ty& retTy, Ptr<Expr> tablePtr,
     Ptr<Expr> jniEnvPtr, Ptr<Expr> jobject, Ptr<Expr> jmethod, OwnedPtr<FuncArg> jniArgs) const
 {
     if (jniArgs) {
         return (interface.*MatchVirtualInstanceCallAMethod(retTy))
-            (jniEnvPtr, ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
+            (tablePtr, jniEnvPtr, ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod), std::move(jniArgs));
     }
     return (interface.*MatchVirtualInstanceCallMethod(retTy))
-        (jniEnvPtr, ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
+        (tablePtr, jniEnvPtr, ASTCloner::Clone(jobject), ASTCloner::Clone(jmethod));
 }
 
-OwnedPtr<Expr> JniBridge::CreateStaticJavaMethodCall(const Ty& retTy,
+OwnedPtr<Expr> JniBridge::CreateStaticJavaMethodCall(const Ty& retTy, Ptr<Expr> tablePtr,
     Ptr<Expr> jniEnvPtr, Ptr<Expr> jclass, Ptr<Expr> jmethod, OwnedPtr<FuncArg> jniArgs) const
 {
     if (jniArgs) {
         return (interface.*MatchStaticCallAMethod(retTy))
-            (jniEnvPtr, ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
+            (tablePtr, jniEnvPtr, ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod), std::move(jniArgs));
     }
     return (interface.*MatchStaticCallMethod(retTy))
-        (jniEnvPtr, ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
+        (tablePtr, jniEnvPtr, ASTCloner::Clone(jclass), ASTCloner::Clone(jmethod));
 }
 
 OwnedPtr<Expr> JniBridge::CreateGetStaticJavaFieldCall(const Ty& ty,
@@ -457,6 +514,11 @@ OwnedPtr<Expr> JniBridge::CreateSetInstanceJavaFieldCall(const Ty& ty,
         (jniEnvPtr, ASTCloner::Clone(jobject), ASTCloner::Clone(jfield), ASTCloner::Clone(value));
 }
 
+OwnedPtr<Expr> JniBridge::CreateJNIEnvReadCall(Ptr<Expr> env) const
+{
+    return interface.CreateJNIEnvReadCall(env);
+}
+
 JniNativeInterfaceBridge::JniNativeInterfaceBridge(
     TypeManager& typeManager, const ImportManager& importManager, StructDecl& jniInterfaceDecl)
 : typeManager(typeManager), importManager(importManager), jniInterfaceDecl(jniInterfaceDecl) {}
@@ -468,6 +530,39 @@ OwnedPtr<Expr> JniNativeInterfaceBridge::CreateJNIEnvReadCall(Ptr<Expr> env) con
     // readPointer<JNINativeInterface_>(read1,0)
     auto read2 = CreateReadPointerCall(importManager, typeManager, read1);
     return read2;
+}
+
+OwnedPtr<Expr> JniBridge::CreateGetArrayRegionCall(const Ty& elementTy, Ptr<Expr> tablePtr, Ptr<Expr> jniEnvPtr,
+    OwnedPtr<Expr> javaArray, OwnedPtr<Expr> start, OwnedPtr<Expr> len, OwnedPtr<FuncArg> buffer) const
+{
+    return (interface.*MatchGetArrayRegionCall(elementTy))(tablePtr, jniEnvPtr,
+        std::move(javaArray), std::move(start), std::move(len), std::move(buffer));
+}
+
+OwnedPtr<Expr> JniBridge::CreateSetArrayRegionCall(const Ty& elementTy, Ptr<Expr> tablePtr, Ptr<Expr> jniEnvPtr,
+    OwnedPtr<Expr> javaArray, OwnedPtr<Expr> start, OwnedPtr<Expr> len, OwnedPtr<FuncArg> buffer) const
+{
+    return (interface.*MatchSetArrayRegionCall(elementTy))(tablePtr, jniEnvPtr,
+        std::move(javaArray), std::move(start), std::move(len), std::move(buffer));
+}
+
+OwnedPtr<Expr> JniBridge::CreateGetObjectArrayElementCall(Ptr<Expr> tablePtr, Ptr<Expr> jniEnvPtr,
+    OwnedPtr<Expr> javaArray, OwnedPtr<Expr> index) const
+{
+    return interface.CreateGetObjectArrayElementCall(tablePtr, jniEnvPtr,
+        std::move(javaArray), std::move(index));
+}
+
+OwnedPtr<Expr> JniBridge::CreateSetObjectArrayElementCall(Ptr<Expr> tablePtr, Ptr<Expr> jniEnvPtr,
+    OwnedPtr<Expr> javaArray, OwnedPtr<Expr> index, OwnedPtr<Expr> value) const
+{
+    return interface.CreateSetObjectArrayElementCall(tablePtr, jniEnvPtr,
+        std::move(javaArray), std::move(index), std::move(value));
+}
+
+OwnedPtr<Expr> JniBridge::CreateExceptionCheckCall(Ptr<Expr> tablePtr, Ptr<Expr> jniEnvPtr) const
+{
+    return interface.CreateExceptionCheckCall(tablePtr, jniEnvPtr);
 }
 
 } // namespace Cangjie::Native::FFI::Java
