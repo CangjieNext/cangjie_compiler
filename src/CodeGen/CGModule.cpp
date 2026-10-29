@@ -352,6 +352,13 @@ llvm::Function* CGModule::DeclareLLVMFunction(const CHIR::Value& func, const CGF
     if (func.IsFuncWithBody()) {
         bool markByMD = cgCtx->IsCGParallelEnabled() && !IsCHIRWrapper(func.GetIdentifierWithoutPrefix());
         AddLinkageTypeMetadata(*function, CHIRLinkage2LLVMLinkage(chirLinkage), markByMD);
+        // A package internal function cannot be referenced from another DSO, so its binding can be
+        // localized in the object file. The driver then applies `objcopy --localize-symbols` and the
+        // linker resolves every call to it directly, without a PLT stub, a GOT slot and a dynamic
+        // relocation. The symbol also disappears from the dynamic symbol table.
+        if (IsPackageInternalSymbol(*chirFunc)) {
+            cgCtx->AddLocalizedSymbol(function->getName().str());
+        }
     } else if (chirLinkage == Linkage::EXTERNAL_WEAK) {
         // Import function in if branch of @IfAvailable need to mark as EXTERNAL_WEAK.
         function->setLinkage(llvm::GlobalValue::ExternalWeakLinkage);
@@ -400,6 +407,9 @@ CGValue* CGModule::GetOrInsertGlobalVariable(const CHIR::GlobalVar* chirGV)
     if (!chirGV->TestAttr(CHIR::Attribute::IMPORTED) || chirGV->IsLocalConst()) {
         auto chirLinkage = chirGV->Get<CHIR::LinkTypeInfo>();
         AddLinkageTypeMetadata(*gv, CHIRLinkage2LLVMLinkage(chirLinkage), cgCtx->IsCGParallelEnabled());
+        if (IsPackageInternalSymbol(*chirGV)) {
+            cgCtx->AddLocalizedSymbol(gv->getName().str());
+        }
     }
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     gv->addAttribute(CJGLOBAL_VALUE_ATTR);
