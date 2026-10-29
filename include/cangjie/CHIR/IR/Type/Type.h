@@ -1170,6 +1170,42 @@ const static std::unordered_map<Type::TypeKind, std::string> TYPEKIND_TO_STRING{
     {Type::TypeKind::TYPE_GENERIC, "GenericType"}, {Type::TypeKind::TYPE_VOID, "Void"},
     {Type::TypeKind::TYPE_REFTYPE, "RefType"}};
 
+/**
+ * @brief Three-valued verdict of a runtime type test (`is`, represented as CHIR `InstanceOf`).
+ *
+ * The compiler must never replace a runtime type test with a constant unless it can prove that the
+ * constant is equal to the runtime answer for *every* possible value.  A two-valued formulation
+ * (subtype / not subtype) is not enough: "not a subtype" does NOT imply "no runtime value can ever
+ * match", because the operand's static type may have a sub type that the target also describes.
+ *
+ * See `docs/type-test-semantics.md` for the rule table and the soundness argument of each rule.
+ */
+enum class TypeTestVerdict {
+    /** Every runtime value of the source type satisfies the test. */
+    ALWAYS_TRUE,
+    /** No runtime value can satisfy the test: the source and the target type are provably disjoint. */
+    ALWAYS_FALSE,
+    /** Cannot be proven either way: the `InstanceOf` must be kept and resolved at runtime. */
+    RUNTIME,
+};
+
+/**
+ * @brief Statically decide a type test between the static type of an operand and a target type.
+ *
+ * This is the single source of truth for "can this `is` be resolved at compile time?", shared by
+ * the CHIR optimizer (which folds `InstanceOf`) and by CHIRChecker (which enforces that every
+ * `InstanceOf` reaching CodeGen is one that really needs the runtime).
+ *
+ * The default answer is `TypeTestVerdict::RUNTIME`: any type shape this function does not model
+ * explicitly is left to the runtime, so extending the type system can never turn an unhandled case
+ * into a wrong constant fold.
+ *
+ * @param src static type of the tested operand (references are stripped internally).
+ * @param target target type of the test (references are stripped internally).
+ * @return the three-valued verdict.
+ */
+TypeTestVerdict GetTypeTestVerdict(const Type& src, const Type& target, CHIRBuilder& builder);
+
 Type* GetFieldOfType(Type& baseTy, uint64_t index, CHIRBuilder& builder);
 } // namespace Cangjie::CHIR
 #endif // CANGJIE_CHIR_TYPE_H

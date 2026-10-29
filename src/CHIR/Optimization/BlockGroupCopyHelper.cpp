@@ -231,23 +231,26 @@ void FixCastProblemAfterInst(std::vector<Block*>& blocks, CHIRBuilder& builder)
 {
     auto preVisit = [&builder](Expression& e) {
         if (e.GetExprKind() == ExprKind::INSTANCEOF) {
-            // fix instanceOf problem
+            // Resolve the type test through the shared three-valued decision procedure. A test may
+            // only be replaced by a constant when the answer is proven for *every* runtime value.
+            //
+            // Note: folding `!srcType.IsSubtypeOf(targetType)` to `false` is unsound -- the source
+            // type may have a sub type that the target type describes, in which case the answer
+            // depends on the value itself (issue #667: `(A2, A2) is (A2, A3)` with an `(A3, A3)`
+            // value). The old implementation enumerated ad-hoc exceptions (generic types and
+            // references to classes) and therefore kept missing type shapes such as tuples.
             auto instance = StaticCast<InstanceOf*>(&e);
-            auto objType = instance->GetObject()->GetType();
-            if (objType->IsGenericRelated() ||
-                (objType->IsRef() && StaticCast<RefType*>(objType)->GetBaseType()->IsClass()) ||
-                instance->GetType()->IsGenericRelated()) {
-                return VisitResult::CONTINUE;
-            }
-            if (objType->IsEqualOrSubTypeOf(*instance->GetType(), builder)) {
+            auto verdict = GetTypeTestVerdict(*instance->GetObject()->GetType(), *instance->GetType(), builder);
+            if (verdict == TypeTestVerdict::ALWAYS_TRUE) {
                 auto trueExpr =
                     builder.CreateConstantExpression<BoolLiteral>(builder.GetBoolTy(), e.GetParentBlock(), true);
                 e.ReplaceWith(*trueExpr);
-            } else {
+            } else if (verdict == TypeTestVerdict::ALWAYS_FALSE) {
                 auto falseExpr =
                     builder.CreateConstantExpression<BoolLiteral>(builder.GetBoolTy(), e.GetParentBlock(), false);
                 e.ReplaceWith(*falseExpr);
             }
+            return VisitResult::CONTINUE;
         } else if (e.GetExprKind() == ExprKind::CAST_TO_CONCRETE) {
             // change transformToConcrete to box/unbox/typecast
             auto& cast = StaticCast<CastToConcrete&>(e);

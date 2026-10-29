@@ -1628,6 +1628,128 @@ bool Type::SatisfyGenericConstraints(const GenericType& type, CHIRBuilder& build
     return true;
 }
 
+namespace {
+bool IsInterfaceType(const Type& ty)
+{
+    if (!ty.IsClass()) {
+        return false;
+    }
+    auto classDef = StaticCast<const ClassType&>(ty).GetClassDef();
+    return classDef != nullptr && classDef->IsInterface();
+}
+
+bool HasSameStructDef(const Type& lhs, const Type& rhs)
+{
+    auto lhsDef = StaticCast<const StructType&>(lhs).GetStructDef();
+    auto rhsDef = StaticCast<const StructType&>(rhs).GetStructDef();
+    return lhsDef != nullptr && lhsDef == rhsDef;
+}
+
+bool HasSameEnumDef(const Type& lhs, const Type& rhs)
+{
+    auto lhsDef = StaticCast<const EnumType&>(lhs).GetEnumDef();
+    auto rhsDef = StaticCast<const EnumType&>(rhs).GetEnumDef();
+    return lhsDef != nullptr && lhsDef == rhsDef;
+}
+} // namespace
+
+TypeTestVerdict GetTypeTestVerdict(const Type& src, const Type& target, CHIRBuilder& builder)
+{
+    auto srcTy = src.StripAllRefs();
+    auto targetTy = target.StripAllRefs();
+    if (srcTy == nullptr || targetTy == nullptr) {
+        return TypeTestVerdict::RUNTIME;
+    }
+
+    // Rule 1: identical types. Every runtime value of a type is an instance of that type.
+    if (srcTy == targetTy) {
+        return TypeTestVerdict::ALWAYS_TRUE;
+    }
+
+    // Rule 2: static subtyping. `S <: T` guarantees that every runtime value of `S` satisfies `T`,
+    // so the test may be folded to `true`.
+    if (srcTy->IsEqualOrSubTypeOf(*targetTy, builder)) {
+        return TypeTestVerdict::ALWAYS_TRUE;
+    }
+
+    // Rule 3: type shapes whose runtime identity cannot be described by the static type at all.
+    // `Any` on the source side means "we know nothing"; generics, `This`, `Box` and invalid types
+    // are likewise unmodelled here. Fail safe.
+    if (srcTy->IsInvalid() || targetTy->IsInvalid() || srcTy->IsGeneric() || targetTy->IsGeneric() ||
+        srcTy->IsThis() || targetTy->IsThis() || srcTy->IsBox() || targetTy->IsBox() || srcTy->IsAny()) {
+        return TypeTestVerdict::RUNTIME;
+    }
+
+    // Rule 4: `Nothing` is inhabited by no value, so nothing can be an instance of it.
+    if (targetTy->IsNothing()) {
+        return TypeTestVerdict::ALWAYS_FALSE;
+    }
+
+    // Rule 5: the reverse subtype direction. `T <: S` means the operand's static type still admits
+    // values of type `T`, so the runtime answer depends on the actual value: this must NOT be
+    // folded. Folding `!S.IsSubtypeOf(T)` to `false` here is exactly the defect of issue #667.
+    if (targetTy->IsEqualOrSubTypeOf(*srcTy, builder)) {
+        return TypeTestVerdict::RUNTIME;
+    }
+
+    // Rule 6: builtin primitive types are pairwise disjoint.
+    if (srcTy->IsPrimitive() && targetTy->IsPrimitive()) {
+        return TypeTestVerdict::ALWAYS_FALSE;
+    }
+
+    // Rule 7: an interface conformance may be added by `extend T <: I` in any package, so a type
+    // test against an interface can never be proven disjoint from a static type.
+    if (IsInterfaceType(*srcTy) || IsInterfaceType(*targetTy)) {
+        return TypeTestVerdict::RUNTIME;
+    }
+
+    // Rule 8: Cangjie classes use single inheritance, so two classes that are not comparable (rules
+    // 2 and 5 already handled the comparable cases) cannot share a runtime instance.
+    if (srcTy->IsClass() && targetTy->IsClass()) {
+        return TypeTestVerdict::ALWAYS_FALSE;
+    }
+
+    // Rule 9: tuples are tested element-wise at runtime (see CodeGen::GenerateInstanceOf, which
+    // lowers a tuple test to `IsTupleTypeOf`). The tuple verdict is the element-wise combination:
+    // one disjoint element makes the whole test impossible, all elements certain makes it certain,
+    // otherwise the answer depends on the runtime values.
+    if (srcTy->IsTuple() && targetTy->IsTuple()) {
+        auto srcElems = StaticCast<const TupleType&>(*srcTy).GetElementTypes();
+        auto targetElems = StaticCast<const TupleType&>(*targetTy).GetElementTypes();
+        if (srcElems.size() != targetElems.size()) {
+            return TypeTestVerdict::ALWAYS_FALSE;
+        }
+        bool allCertain = true;
+        for (size_t i = 0; i < srcElems.size(); ++i) {
+            auto verdict = GetTypeTestVerdict(*srcElems[i], *targetElems[i], builder);
+            if (verdict == TypeTestVerdict::ALWAYS_FALSE) {
+                return TypeTestVerdict::ALWAYS_FALSE;
+            }
+            allCertain = allCertain && verdict == TypeTestVerdict::ALWAYS_TRUE;
+        }
+        return allCertain ? TypeTestVerdict::ALWAYS_TRUE : TypeTestVerdict::RUNTIME;
+    }
+
+    // Rule 10: structs and enums are sealed nominal types: a different definition is disjoint.
+    // The same definition with different generic arguments is left to the runtime to stay safe.
+    if (srcTy->IsStruct() && targetTy->IsStruct()) {
+        return HasSameStructDef(*srcTy, *targetTy) ? TypeTestVerdict::RUNTIME : TypeTestVerdict::ALWAYS_FALSE;
+    }
+    if (srcTy->IsEnum() && targetTy->IsEnum()) {
+        return HasSameEnumDef(*srcTy, *targetTy) ? TypeTestVerdict::RUNTIME : TypeTestVerdict::ALWAYS_FALSE;
+    }
+
+    // Rule 11: two different nominal categories (class vs struct, class vs enum, struct vs enum)
+    // never share a runtime value.
+    if (srcTy->IsNominal() && targetTy->IsNominal()) {
+        return TypeTestVerdict::ALWAYS_FALSE;
+    }
+
+    // Rule 12: everything else (function types, arrays, VArray, CPointer, CString, ...) stays
+    // conservative on purpose. Extending the type system must never silently produce a fold.
+    return TypeTestVerdict::RUNTIME;
+}
+
 bool Type::CanBeInherited() const
 {
     auto customType = DynamicCast<CustomType*>(this);
