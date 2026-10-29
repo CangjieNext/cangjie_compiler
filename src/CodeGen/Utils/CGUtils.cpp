@@ -402,6 +402,53 @@ bool IsCHIRWrapper(const std::string& chirFuncName)
         endsWith(chirFuncName, "_cc_abstractFunc_wrapper");
 }
 
+bool IsPackageInternalSymbol(const CHIR::GlobalValue& chirGV)
+{
+    // A declaration is resolved in another DSO, there is nothing to localize.
+    if (chirGV.TestAttr(CHIR::Attribute::IMPORTED)) {
+        return false;
+    }
+    // Only external linkage is interesting: internal linkage is already local for LLVM, and
+    // weak/link-once definitions are merged by the dynamic linker, so the uniqueness of the merged
+    // symbol would be broken by localizing it.
+    if (chirGV.Get<CHIR::LinkTypeInfo>() != Linkage::EXTERNAL) {
+        return false;
+    }
+    // `public`/`protected` declarations are part of the package ABI. A `protected` member is
+    // reachable from a sub class living in another package, so it has to stay visible as well.
+    if (chirGV.TestAttr(CHIR::Attribute::PUBLIC) || chirGV.TestAttr(CHIR::Attribute::PROTECTED)) {
+        return false;
+    }
+    // Declarations exported to another language runtime are looked up by symbol name at run time.
+    if (chirGV.TestAttr(CHIR::Attribute::JAVA_EXPORT) || chirGV.TestAttr(CHIR::Attribute::OBJ_C_EXPORT)) {
+        return false;
+    }
+    // Members of a custom type are reachable from another package through the type metadata and
+    // through the generic instantiation generated there, even when the member itself is not public.
+    // Restricting the localization to top level declarations keeps the first step of this change
+    // free of that risk, see issue 793 for the follow-up.
+    if (chirGV.GetParentCustomTypeDef() != nullptr) {
+        return false;
+    }
+    // Package/global initializers are called by the initializer of every package that depends on
+    // this one, so they have to keep their global binding even though they are not public.
+    if (chirGV.TestAttr(CHIR::Attribute::INITIALIZER)) {
+        return false;
+    }
+    // Compiler generated declarations (the `toAny` helpers, the `@C` wrappers, the default parameter
+    // functions, ...) are referenced from other packages through the imported declaration, so they
+    // are treated as part of the ABI. Only declarations written by the user are localized here.
+    if (chirGV.TestAttr(CHIR::Attribute::COMPILER_ADD)) {
+        return false;
+    }
+    // Incremental compilation decides by itself which cached symbols may be replaced, see
+    // IncrementalGen.cpp. Never override that decision here.
+    if (chirGV.TestAttr(CHIR::Attribute::NON_RECOMPILE)) {
+        return false;
+    }
+    return true;
+}
+
 llvm::GlobalValue::LinkageTypes CHIRLinkage2LLVMLinkage(Linkage chirLinkage)
 {
     switch (chirLinkage) {
