@@ -30,7 +30,8 @@ inline std::map<Cangjie::AST::Attribute, Attribute> g_attrMap = {
     {Cangjie::AST::Attribute::OBJ_C_FOREIGN, Attribute::OBJ_C_FOREIGN},
     {Cangjie::AST::Attribute::UNSAFE, Attribute::UNSAFE},
     {Cangjie::AST::Attribute::DOES_NOT_THROW, Attribute::DOES_NOT_THROW},
-    {Cangjie::AST::Attribute::OBJ_C_EXPORT, Attribute::OBJ_C_EXPORT}};
+    {Cangjie::AST::Attribute::OBJ_C_EXPORT, Attribute::OBJ_C_EXPORT},
+    {Cangjie::AST::Attribute::SRC_EXPORTED, Attribute::SRC_EXPORTED}};
 
 void TranslateFunctionGenericUpperBounds(CHIRType& chirTy, const AST::FuncDecl& func)
 {

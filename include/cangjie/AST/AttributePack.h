@@ -735,6 +735,22 @@ enum class Attribute {
      */
     OBJ_C_EXPORT_MOVED_MEMBER_PROXY,
 
+    /**
+     * Mark a declaration whose symbol the code generated for another package may still refer to by its
+     * mangled name, so the symbol has to keep the global binding in the object file of this package.
+     *
+     * `public` and `protected` declarations are part of the package ABI by their modifier alone. This
+     * attribute marks the declarations that are not part of it, but that another package still names:
+     *  - a declaration whose body is instantiated or inlined there (generic, `@Frozen`, `inline`,
+     *    `const`, default implementation), and the declarations that body refers to;
+     *  - a declaration in one of the core files the compiler itself calls into (`IsIntrinsicFile`);
+     *  - a special function the compiler emits a call to (`IsSpecialFunction`).
+     *
+     * W: Sema (`CheckFunctionLinkage.cpp`).
+     * R: CodeGen (`IsPackageInternalSymbol`).
+     */
+    SRC_EXPORTED,
+
     AST_ATTR_END,
 };
 
