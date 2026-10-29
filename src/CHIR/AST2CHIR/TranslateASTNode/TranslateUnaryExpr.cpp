@@ -6,6 +6,8 @@
 
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 
+#include "cangjie/CHIR/AST2CHIR/Utils.h"
+
 using namespace Cangjie::CHIR;
 using namespace Cangjie;
 
@@ -21,6 +23,8 @@ Ptr<Value> Translator::Visit(const AST::UnaryExpr& unaryExpr)
         CJC_ASSERT(false && "Visit UnaryExpr: invalid unary operation!");
     }
     auto chirExpr = TranslateExprArg(*unaryExpr.expr);
+    chirExpr = TypeCastCopyableTypeIfNeeded(
+        *chirExpr, chirType->GetModalInfo(), builder, *currentBlock, TranslateLocation(*unaryExpr.expr));
     const auto& loc = TranslateLocation(unaryExpr.begin, unaryExpr.end);
 
     auto ofs = unaryExpr.overflowStrategy;

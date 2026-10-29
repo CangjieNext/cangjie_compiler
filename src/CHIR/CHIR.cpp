@@ -673,7 +673,8 @@ bool ToCHIR::RunConstantEvaluation()
 
 bool ToCHIR::RunIRChecker(const Phase& phase)
 {
-    if (!opts.chirWFC) {
+    if (chirPkg->GetName().find("std.") == std::string::npos &&
+        chirPkg->GetName().find("stdx.") == std::string::npos) {
         return true;
     }
     // skip CJMP common package
