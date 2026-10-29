@@ -1767,7 +1767,7 @@ std::optional<TypeTestVerdict> GetDisjointnessVerdict(const Type& src, const Typ
  * folded at compile time.
  *
  * The decision is a fixed sequence of rules, each of which either settles the answer or leaves it
- * to the next one:
+ * to the next one, as listed below.
  *
  *   1. identical types                        -> ALWAYS_TRUE
  *   2. `src <: target`                        -> ALWAYS_TRUE
