@@ -796,8 +796,10 @@ void AddTypeCastForOperand(const std::pair<Expression*, std::vector<size_t>>& e,
     auto parentBlock = expr->GetParentBlock();
     for (auto idx : e.second) {
         auto op = expr->GetOperand(idx);
-        auto expectedType = builder.GetType<RefType>(
-            StaticCast<ClassType*>(op->GetType()->StripAllRefs())->GetClassDef()->GetSuperClassTy());
+        auto sourceType = StaticCast<ClassType*>(op->GetType()->StripAllRefs());
+        // Upcasting a closure changes its class, not its allocation region.
+        auto superType = builder.WithModal(sourceType->GetClassDef()->GetSuperClassTy(), sourceType->GetModalInfo());
+        auto expectedType = builder.GetType<RefType>(superType);
         auto typecast = builder.CreateExpression<ClassStaticCast>(expectedType, op, parentBlock);
         typecast->MoveBefore(expr);
         expr->ReplaceOperand(idx, typecast->GetResult());

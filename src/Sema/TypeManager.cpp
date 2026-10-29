@@ -2830,7 +2830,10 @@ ModalTy TypeManager::ObtainsAliasType(Ptr<const Node> node)
             break;
         }
         case ASTKind::PAREN_TYPE: {
-            ret = ObtainsAliasType(StaticCast<ParenType>(node)->type.get());
+            // Parentheses may carry the closure's own modal, independently of
+            // the return type inside them. Preserve it when exporting aliases.
+            auto innerTy = ObtainsAliasType(StaticCast<ParenType>(node)->type.get());
+            ret = {innerTy.Ty(), node->TyMode()};
             break;
         }
         case ASTKind::VARRAY_TYPE: {

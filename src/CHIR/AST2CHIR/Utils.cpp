@@ -78,6 +78,13 @@ FuncType* AdjustFuncType(FuncType& funcType, const AST::FuncDecl& funcDecl, CHIR
     return &funcType;
 }
 
+Value* TypeCastToModalIfNeeded(
+    Value& value, ModalInfo modal, CHIRBuilder& builder, Block& parentBlock, const DebugLocation& loc)
+{
+    auto targetType = builder.WithModal(value.GetType(), modal);
+    return TypeCastOrBoxIfNeeded(value, *targetType, builder, parentBlock, loc);
+}
+
 DebugLocation GetDeclLoc(const CHIRContext& cctx, const AST::Decl& decl)
 {
     auto& begin = decl.identifier.Begin();

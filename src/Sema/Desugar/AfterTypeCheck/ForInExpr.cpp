@@ -531,11 +531,14 @@ void TypeChecker::TypeCheckerImpl::ReArrangeForInStringExpr(ASTContext& ctx, For
     auto end = CreateTmpVarDecl();
     auto sizeDecl = FieldLookup(ctx, Ty::GetDeclPtrOfTy(tmp->GetTy()), "size", {.lookupExtend = false});
     CJC_ASSERT(!sizeDecl.empty());
-    // fix later: design for in modal syntax
-    auto getter = StaticCast<FuncDecl*>(GetUsedMemberDecl(*sizeDecl[0], true));
+    auto sizeAccess = CreateMemberAccess(CreateRefExpr(*tmp), "size");
+    // Select the getter using the receiver's modal, just like an explicit tmp.size access.
+    auto sizeProp = ResolvePropOverload(ctx, *sizeAccess, sizeDecl);
+    CJC_NULLPTR_CHECK(sizeProp);
+    auto getter = StaticCast<FuncDecl*>(GetUsedMemberDecl(*sizeProp, true));
     CJC_NULLPTR_CHECK(getter);
     end->initializer =
-        CreateCallExpr(CreateMemberAccess(CreateRefExpr(*tmp), *getter), {}, getter, sizeDecl[0]->GetTy());
+        CreateCallExpr(CreateMemberAccess(CreateRefExpr(*tmp), *getter), {}, getter, sizeProp->GetTy());
     end->initializer->begin = tmp->begin;
     end->initializer->end = tmp->end;
     CopyBasicInfo(&forInExpr, end.get());
@@ -766,10 +769,14 @@ void TypeChecker::TypeCheckerImpl::DesugarForInString(ASTContext& ctx, AST::ForI
     auto end = CreateTmpVarDecl();
     auto sizeDecl = FieldLookup(ctx, Ty::GetDeclPtrOfTy(tmp->GetTy()), "size", {.lookupExtend = false});
     CJC_ASSERT(!sizeDecl.empty());
-    auto getter = StaticCast<FuncDecl*>(GetUsedMemberDecl(*sizeDecl[0], true));
+    auto sizeAccess = CreateMemberAccess(CreateRefExpr(*tmp), "size");
+    // Keep the fallback desugaring consistent with the native for-in path.
+    auto sizeProp = ResolvePropOverload(ctx, *sizeAccess, sizeDecl);
+    CJC_NULLPTR_CHECK(sizeProp);
+    auto getter = StaticCast<FuncDecl*>(GetUsedMemberDecl(*sizeProp, true));
     CJC_NULLPTR_CHECK(getter);
     end->initializer =
-        CreateCallExpr(CreateMemberAccess(CreateRefExpr(*tmp), *getter), {}, getter, sizeDecl[0]->GetTy());
+        CreateCallExpr(CreateMemberAccess(CreateRefExpr(*tmp), *getter), {}, getter, sizeProp->GetTy());
     CopyBasicInfo(&forInExpr, end.get());
     AddCurFile(*end->initializer, forInExpr.curFile);
     end->SetTy(SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, end->initializer.get()));

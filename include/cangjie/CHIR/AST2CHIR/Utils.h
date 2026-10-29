@@ -29,6 +29,19 @@ namespace CHIR {
 FuncType* AdjustFuncType(FuncType& funcType, const AST::FuncDecl& funcDecl, CHIRBuilder& builder, CHIRType& chirType);
 
 /**
+ * @brief Converts a value to the requested modal while preserving its data type.
+ *
+ * @param value The value to convert.
+ * @param modal The target modal.
+ * @param builder The CHIR builder.
+ * @param parentBlock The block in which to append the conversion.
+ * @param loc The debug location of the conversion.
+ * @return Converted value, or the original value if no conversion is needed.
+ */
+Value* TypeCastToModalIfNeeded(
+    Value& value, ModalInfo modal, CHIRBuilder& builder, Block& parentBlock, const DebugLocation& loc);
+
+/**
  * @brief Retrieves the debug location of an AST declaration.
  *
  * @param cctx The CHIR context.
