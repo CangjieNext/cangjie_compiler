@@ -24,6 +24,9 @@
 #include "cangjie/CHIR/IR/Type/Type.h"
 
 namespace Cangjie {
+namespace CHIR {
+class GlobalValue;
+} // namespace CHIR
 namespace CodeGen {
 enum TypeInfoFields : uint8_t {
     TYPEINFO_NAME = 0,            // mangledName : i8*.
@@ -227,6 +230,25 @@ const std::unordered_map<CHIR::IntrinsicKind, llvm::Intrinsic::ID> INTRINSIC_KIN
 };
 bool IsCHIRWrapper(const std::string& chirFuncName);
 llvm::GlobalValue::LinkageTypes CHIRLinkage2LLVMLinkage(Linkage chirLinkage);
+/**
+ * @brief Whether a symbol defined in the current package is private to the generated DSO and can
+ * therefore be localized in the object file (`objcopy --localize-symbols`).
+ *
+ * @details A localized symbol has local binding: it cannot be preempted at load time, so the linker
+ * resolves the references to it directly instead of building a PLT stub, and it disappears from the
+ * dynamic symbol table together with its relocation entries.
+ *
+ * Cangjie carries both the linkage and the source level visibility of every CHIR global value, but
+ * codegen used to look at the linkage alone. Package internal functions are `internal` by default
+ * and still get `Linkage::EXTERNAL`, so they were treated as part of the package ABI. The linkage
+ * cannot be fixed here: another package does need an external linkage symbol for the declarations it
+ * instantiates or inlines. What tells the two cases apart is `Attribute::SRC_EXPORTED`, which the
+ * visibility analysis in Sema sets on the declarations another package may name.
+ *
+ * The predicate is deliberately conservative, `false` always means "keep the global binding":
+ * a symbol that may be referenced from another package must stay visible.
+ */
+bool IsPackageInternalSymbol(const CHIR::GlobalValue& chirGV);
 void AddLinkageTypeMetadata(
     llvm::GlobalObject& globalObject, llvm::GlobalValue::LinkageTypes linkageType, bool markByMD);
 llvm::GlobalValue::LinkageTypes GetLinkageTypeOfGlobalObject(const llvm::GlobalObject& globalObject);
