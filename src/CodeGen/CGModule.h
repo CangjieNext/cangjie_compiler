@@ -284,6 +284,12 @@ public:
     void GenTypeInfo();
     void GenTypeTemplate();
 
+    void AddPrimitiveTICandidate(llvm::GlobalVariable* ti)
+    {
+        primitiveTICandidates.emplace_back(ti);
+    }
+    void PruneUnprofitablePrimitiveTI();
+
     void DelayGenTypeInfo(CGType* cgType)
     {
         delayGenTypeInfo.push(cgType);
@@ -315,6 +321,7 @@ private:
     std::vector<std::unique_ptr<CGExtensionDef>> cgExtensionDefs;
     std::stack<CGType*> delayGenTypeInfo;
     std::stack<CGType*> delayGenTypeTemplate;
+    std::vector<llvm::GlobalVariable*> primitiveTICandidates;
 
     void MergeUselessBBIntoPreds(llvm::Function* function) const;
     void EraseUnusedFuncs(const std::function<bool(const llvm::GlobalObject&)> extraCond);

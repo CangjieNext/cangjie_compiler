@@ -377,6 +377,7 @@ void GenSubCHIRPackage(CGModule& cgMod)
     DumpIRIfNeeded(cgMod, "ReplaceAndInlineFunc", subDirNum);
     GenerateReflectionMetadata(cgMod, subCHIRPkg);
     cgMod.GenTypeInfo(); // for reflect generated typeinfo
+    cgMod.PruneUnprofitablePrimitiveTI();
     DumpIRIfNeeded(cgMod, "GenReflectionInfo", subDirNum);
     cgMod.diBuilder->Finalize();
     TransformFFIs(cgMod);

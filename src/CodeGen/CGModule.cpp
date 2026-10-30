@@ -6,6 +6,9 @@
 
 #include "CGModule.h"
 
+#include <string>
+
+#include "llvm/ADT/Triple.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
@@ -140,6 +143,56 @@ void CGModule::GenTypeTemplate()
         delayGenTypeTemplate.pop();
         cgType->GenTypeTemplate();
     }
+}
+
+/*
+ * Decides, per primitive typeinfo, whether the local copy emitted by
+ * CGType::GenPrimitiveTypeInfoBody() is worth keeping.
+ *
+ * Keeping the copy replaces one pointer relocation per reference plus one dynamic symbol (and
+ * its .dynstr entry) with a TypeInfo body plus the same name string. The name string cost and
+ * the dropped .dynstr entry roughly cancel out, so the profit is
+ *   refs * relocSize - sizeof(TypeInfo)
+ * which for a 96 byte body on LP64 (24 byte Elf64_Rela entries) turns positive at four
+ * references. A body also moves every section behind it in the file, so a gain smaller than the
+ * section alignment padding it may cause is regularly lost again: on the OHOS SDK the padding
+ * jumped by 139 to 594 bytes for the libraries where the body was marginal. Requiring the
+ * predicted gain to clear that band keeps the decision profitable regardless of the final
+ * layout.
+ *
+ * Dropping the body again is just a matter of turning the global back into a declaration, the
+ * linker then binds the references to the canonical definition in std.core as before.
+ */
+void CGModule::PruneUnprofitablePrimitiveTI()
+{
+    if (primitiveTICandidates.empty()) {
+        return;
+    }
+    const llvm::Triple targetTriple(module->getTargetTriple());
+    // Elf64_Rela is 24 bytes, Elf32_Rel is 8 bytes.
+    const uint64_t relocSize = targetTriple.isArch64Bit() ? 24U : 8U;
+    const uint64_t bodySize = module->getDataLayout().getTypeAllocSize(
+        CGType::GetOrCreateTypeInfoType(cgCtx->GetLLVMContext()));
+    // Smallest predicted gain worth the section layout perturbation a body causes. Measured on
+    // the 92 arkui libraries of the OHOS SDK: a pure per-symbol break-even (margin 0) shrinks 16
+    // libraries but grows 72 of them, because a body shifts every following section and the
+    // resulting alignment padding is of the same order as the gain. Requiring a 512 byte net
+    // gain keeps 90% of the total win while bounding the regressions to about 200 bytes.
+    constexpr uint64_t minNetGain = 512;
+    for (auto* ti : primitiveTICandidates) {
+        const uint64_t cost = ti->getNumUses() * relocSize;
+        if (cost >= bodySize + minNetGain) {
+            continue;
+        }
+        ti->setInitializer(nullptr);
+        ti->setLinkage(llvm::GlobalValue::ExternalLinkage);
+        ti->setVisibility(llvm::GlobalValue::DefaultVisibility);
+        // A declaration with default visibility is preemptible, so it must not keep the dso_local
+        // marker: otherwise the backend addresses it directly (adrp/add) instead of through the GOT
+        // and the relocation it produces cannot be used against an imported symbol.
+        ti->setDSOLocal(false);
+    }
+    primitiveTICandidates.clear();
 }
 
 bool CGModule::InitIncrementalGen()

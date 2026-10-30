@@ -239,6 +239,7 @@ public:
     }
 
     void GenTypeInfo();
+    void GenPrimitiveTypeInfoBody();
 
     void SetCGExtensionDef(CGExtensionDef* ed)
     {

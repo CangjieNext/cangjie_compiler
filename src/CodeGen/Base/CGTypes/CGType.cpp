@@ -6,6 +6,7 @@
 
 #include "Base/CGTypes/CGType.h"
 
+#include "llvm/ADT/Triple.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -632,6 +633,7 @@ void CGType::GenTypeInfo()
     }
 
     if (chirType.IsPrimitive() || chirType.IsVoid() || chirType.IsCString()) {
+        GenPrimitiveTypeInfoBody();
         return;
     }
 
@@ -685,6 +687,76 @@ void CGType::GenTypeInfo()
         AddLinkageTypeMetadata(*typeInfo, linkageType, cgMod.GetCGContext().IsCGParallelEnabled());
     }
     PostActionOfGenTypeInfo();
+}
+
+/*
+ * Emits a local copy of a primitive typeinfo. Every DSO that mentions e.g. Int64.ti imports it
+ * from std.core, which costs one symbol-resolved pointer relocation per reference plus one
+ * .dynsym/.dynstr entry. Such a relocation cannot be packed by RELR, while a reference to a
+ * definition located in the same DSO becomes section-relative and thus packable. The copy is
+ * byte-identical to the canonical one emitted by typetemplate.c: every field is zero/null
+ * except name/type/size/align, which this function takes from the CHIR type itself, so no
+ * primitive type table has to be replicated here.
+ */
+void CGType::GenPrimitiveTypeInfoBody()
+{
+    // Only the ELF layout benefits: it is the one where an intra-DSO reference is relaxed into a
+    // RELATIVE relocation that RELR can encode, and where hiding the symbol shrinks .dynsym. The
+    // import only exists in a shared library, an executable or a static library links the canonical
+    // definitions from std.core into the same image instead.
+    if (!llvm::Triple(cgMod.GetLLVMModule()->getTargetTriple()).isOSBinFormatELF() ||
+        cgCtx.GetCompileOptions().outputMode != GlobalOptions::OutputMode::SHARED_LIB) {
+        return;
+    }
+    if (typeInfo->hasInitializer()) {
+        // The canonical definition is already in this module, std.core emits it from
+        // typetemplate.c, so a second definition of the same name would clash.
+        return;
+    }
+    if (cgMod.GetCGContext().GetCGPkgContext().GetCurrentPkgName() == "std.core") {
+        // std.core owns the canonical definitions, which come from the C runtime sources rather
+        // than from this module. Emitting a copy here would at best be dead weight and at worst
+        // compete with the exported definition.
+        return;
+    }
+    auto& llvmCtx = cgMod.GetLLVMContext();
+    auto i8PtrTy = llvm::Type::getInt8PtrTy(llvmCtx);
+    std::vector<llvm::Constant*> typeInfoVec(TYPE_INFO_FIELDS_NUM);
+    typeInfoVec[static_cast<size_t>(TYPEINFO_NAME)] = GenNameOfTypeInfo();
+    typeInfoVec[static_cast<size_t>(TYPEINFO_TYPE_KIND)] = GenKindOfTypeInfo();
+    typeInfoVec[static_cast<size_t>(TYPEINFO_FLAG)] = GenFlagOfTypeInfo();
+    typeInfoVec[static_cast<size_t>(TYPEINFO_FIELDS_NUM)] = GenFieldsNumOfTypeInfo();
+    typeInfoVec[static_cast<size_t>(TYPEINFO_SIZE)] = GenSizeOfTypeInfo();
+    typeInfoVec[static_cast<size_t>(TYPEINFO_GC_TIB)] =
+        llvm::ConstantPointerNull::get(CGType::GetBitMapType(llvmCtx)->getPointerTo());
+    typeInfoVec[static_cast<size_t>(TYPEINFO_UUID)] = llvm::ConstantInt::get(llvm::Type::getInt32Ty(llvmCtx), 0);
+    typeInfoVec[static_cast<size_t>(TYPEINFO_ALIGN)] = GenAlignOfTypeInfo();
+    typeInfoVec[static_cast<size_t>(TYPEINFO_TYPE_ARGS_NUM)] = GenTypeArgsNumOfTypeInfo();
+    // typetemplate.c keeps inheritedClassNum at 0 for primitive types, so the
+    // GenInheritedClassNumOfTypeInfo() accessor must not be used here: it ORs in
+    // INHERITED_CLASS_NUM_FE_FLAG, which marks a type that has field extensions.
+    typeInfoVec[static_cast<size_t>(TYPEINFO_INHERITED_CLASS_NUM)] =
+        llvm::ConstantInt::get(llvm::Type::getInt16Ty(llvmCtx), 0);
+    typeInfoVec[static_cast<size_t>(TYPEINFO_OFFSETS)] = GenOffsetsOfTypeInfo();
+    typeInfoVec[static_cast<size_t>(TYPEINFO_SOURCE_GENERIC)] = llvm::ConstantPointerNull::get(i8PtrTy);
+    typeInfoVec[static_cast<size_t>(TYPEINFO_TYPE_ARGS)] = GenTypeArgsOfTypeInfo();
+    typeInfoVec[static_cast<size_t>(TYPEINFO_FIELDS)] = GenFieldsOfTypeInfo();
+    typeInfoVec[static_cast<size_t>(TYPEINFO_SUPER)] = GenSuperOfTypeInfo();
+    typeInfoVec[static_cast<size_t>(TYPEINFO_EXTENSIONDEF_PTR)] =
+        llvm::ConstantPointerNull::get(CGType::GetOrCreateExtensionDefPtrType(llvmCtx)->getPointerTo());
+    typeInfoVec[static_cast<size_t>(TYPEINFO_MTABLE)] = llvm::ConstantPointerNull::get(i8PtrTy);
+    typeInfoVec[static_cast<size_t>(TYPEINFO_REFLECTION)] = GenReflectionOfTypeInfo();
+
+    typeInfo->setInitializer(llvm::ConstantStruct::get(CGType::GetOrCreateTypeInfoType(llvmCtx), typeInfoVec));
+    // LinkOnceODR keeps the one-copy-per-DSO semantics while still letting a linked module that
+    // defines the canonical typeinfo (std.core) win, and hidden keeps the copy out of .dynsym
+    // and makes intra-DSO references non-preemptible.
+    typeInfo->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+    typeInfo->setVisibility(llvm::GlobalValue::HiddenVisibility);
+    // The copy is only ever addressed from inside this DSO, so let the backend reference it
+    // directly instead of loading its address from the GOT.
+    typeInfo->setDSOLocal(true);
+    cgMod.AddPrimitiveTICandidate(typeInfo);
 }
 
 llvm::Constant* CGType::GenInheritedClassNumOfTypeInfo() const
