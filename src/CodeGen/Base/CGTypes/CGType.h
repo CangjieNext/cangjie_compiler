@@ -239,6 +239,14 @@ public:
     }
 
     void GenTypeInfo();
+    void GenPrimitiveTypeInfoBody();
+
+    // Whether primitive type infos are emitted as hidden per-DSO copies by this build, see
+    // GenPrimitiveTypeInfoBody().
+    static bool IsPrimitiveTILocalizedForBuild(const CGModule& cgMod);
+    // Whether this type's type info may exist as more than one copy inside a process, which makes
+    // its address unusable as an identity test.
+    bool TypeInfoIsPerDSOCopy() const;
 
     void SetCGExtensionDef(CGExtensionDef* ed)
     {

@@ -1039,9 +1039,16 @@ llvm::Value* IRBuilder2::CallIntrinsicForUninitialized(const CHIR::Type& ty)
             Vec2Tuple<4>(CreateAndInsertBasicBlocks({GenNameForBB("handle_ref"), GenNameForBB("handle_non_ref"),
                 GenNameForBB("handle_nothing"), GenNameForBB("get_uninitialized_value")}));
         auto ti = CreateBitCast(CreateTypeInfo(ty), getInt8PtrTy());
-        auto nothingTi = CreateBitCast(CGType::GetNothingCGType(cgMod)->GetOrCreateTypeInfo(), getInt8PtrTy());
+        auto* nothingCGType = CGType::GetNothingCGType(cgMod);
+        auto nothingTi = CreateBitCast(nothingCGType->GetOrCreateTypeInfo(), getInt8PtrTy());
+        // Nothing.ti can be a hidden local copy of this DSO while the runtime hands out the
+        // canonical one (or a copy of another DSO), so compare through the runtime when primitive
+        // type infos are localized; an address comparison would silently skip the exception below.
+        llvm::Value* isNothingEqual =
+            nothingCGType->TypeInfoIsPerDSOCopy() ? CallIntrinsicIsTypeEqualTo({ti, nothingTi})
+                                                  : CreateICmpEQ(ti, nothingTi);
         auto isNothing =
-            CreateIntrinsic(llvm::Intrinsic::expect, {getInt1Ty()}, {CreateICmpEQ(ti, nothingTi), getFalse()});
+            CreateIntrinsic(llvm::Intrinsic::expect, {getInt1Ty()}, {isNothingEqual, getFalse()});
         CreateCondBr(isNothing, handleNothing, handleRef);
         // For zeroValue<Nothing>, throw exception:
         SetInsertPoint(handleNothing);

@@ -284,6 +284,14 @@ public:
     void GenTypeInfo();
     void GenTypeTemplate();
 
+    // Primitive type info whose body is decided only once every reference of the package is known,
+    // see GenProfitablePrimitiveTIBodies().
+    void AddPrimitiveTICandidate(CGType* cgType, llvm::GlobalVariable* typeInfo)
+    {
+        primitiveTICandidates.push_back({cgType, typeInfo});
+    }
+    void GenProfitablePrimitiveTIBodies();
+
     void DelayGenTypeInfo(CGType* cgType)
     {
         delayGenTypeInfo.push(cgType);
@@ -315,6 +323,11 @@ private:
     std::vector<std::unique_ptr<CGExtensionDef>> cgExtensionDefs;
     std::stack<CGType*> delayGenTypeInfo;
     std::stack<CGType*> delayGenTypeTemplate;
+    struct PrimitiveTICandidate {
+        CGType* cgType;
+        llvm::GlobalVariable* typeInfo;
+    };
+    std::vector<PrimitiveTICandidate> primitiveTICandidates;
 
     void MergeUselessBBIntoPreds(llvm::Function* function) const;
     void EraseUnusedFuncs(const std::function<bool(const llvm::GlobalObject&)> extraCond);

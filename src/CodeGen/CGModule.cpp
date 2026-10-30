@@ -6,6 +6,10 @@
 
 #include "CGModule.h"
 
+#include <string>
+
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/Triple.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
@@ -140,6 +144,83 @@ void CGModule::GenTypeTemplate()
         delayGenTypeTemplate.pop();
         cgType->GenTypeTemplate();
     }
+}
+
+namespace {
+/*
+ * Counts the embeddings of the candidate type infos in a constant expression tree. Every embedding
+ * becomes one relocation in the object file, which is what the cost model has to weigh. The use
+ * list of the global is not a substitute for this: LLVM uniquifies identical constant expressions,
+ * so many embeddings can share a single use, and uses that later passes or the linker eliminate are
+ * counted as well. Measured on one library, the two numbers disagreed in both directions:
+ * Int64.ti had 260 uses against 110 relocations, Unit.ti 31 uses against 82 relocations.
+ */
+void AccumulateTypeInfoReferences(
+    const llvm::Constant* constant, llvm::DenseMap<const llvm::GlobalVariable*, uint64_t>& counts)
+{
+    if (auto* gv = llvm::dyn_cast<llvm::GlobalVariable>(constant)) {
+        auto it = counts.find(gv);
+        if (it != counts.end()) {
+            ++it->second;
+        }
+        return;
+    }
+    for (const auto& operand : constant->operands()) {
+        if (auto* nested = llvm::dyn_cast<llvm::Constant>(operand)) {
+            AccumulateTypeInfoReferences(nested, counts);
+        }
+    }
+}
+} // namespace
+
+/*
+ * Emits the local primitive typeinfo bodies that pay off, see
+ * CGType::GenPrimitiveTypeInfoBody().
+ *
+ * Keeping a copy replaces one pointer relocation per reference plus one dynamic symbol (and its
+ * .dynstr entry) with a TypeInfo body plus the same name string. The name string cost and the
+ * dropped .dynstr entry roughly cancel out, so the profit is
+ *   refs * relocSize - sizeof(TypeInfo)
+ * which for a 96 byte body on LP64 (24 byte Elf64_Rela entries) turns positive at four
+ * references. A body also moves every section behind it in the file, so a gain smaller than the
+ * section alignment padding it may cause is regularly lost again: on the OHOS SDK the padding
+ * jumped by 139 to 594 bytes for the libraries where the body was marginal. Requiring the
+ * predicted gain to clear that band keeps the decision profitable regardless of the final layout.
+ *
+ * Candidates that are rejected simply keep their imported declaration, and since the body (and its
+ * private name string) is only materialized here, nothing has to be dropped again.
+ */
+void CGModule::GenProfitablePrimitiveTIBodies()
+{
+    if (primitiveTICandidates.empty()) {
+        return;
+    }
+    const llvm::Triple targetTriple(module->getTargetTriple());
+    // Elf64_Rela is 24 bytes, Elf32_Rel is 8 bytes.
+    const uint64_t relocSize = targetTriple.isArch64Bit() ? 24U : 8U;
+    const uint64_t bodySize = module->getDataLayout().getTypeAllocSize(
+        CGType::GetOrCreateTypeInfoType(cgCtx->GetLLVMContext()));
+    // Smallest predicted gain worth the section layout perturbation a body causes. Measured on
+    // the 92 arkui libraries of the OHOS SDK: a pure per-symbol break-even (margin 0) shrinks 16
+    // libraries but grows 72 of them, because a body shifts every following section and the
+    // resulting alignment padding is of the same order as the gain. Requiring a 512 byte net
+    // gain keeps 90% of the total win while bounding the regressions to about 200 bytes.
+    constexpr uint64_t minNetGain = 512;
+    llvm::DenseMap<const llvm::GlobalVariable*, uint64_t> refs;
+    for (const auto& candidate : primitiveTICandidates) {
+        refs[candidate.typeInfo] = 0U;
+    }
+    for (const auto& gv : module->globals()) {
+        if (gv.hasInitializer()) {
+            AccumulateTypeInfoReferences(gv.getInitializer(), refs);
+        }
+    }
+    for (const auto& candidate : primitiveTICandidates) {
+        if (refs[candidate.typeInfo] * relocSize >= bodySize + minNetGain) {
+            candidate.cgType->GenPrimitiveTypeInfoBody();
+        }
+    }
+    primitiveTICandidates.clear();
 }
 
 bool CGModule::InitIncrementalGen()

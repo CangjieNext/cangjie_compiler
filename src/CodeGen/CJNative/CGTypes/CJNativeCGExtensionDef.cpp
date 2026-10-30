@@ -67,6 +67,12 @@ llvm::Value* CGExtensionDef::CreateTypeComparison(
     auto derefType = DeRef(staticType);
     auto cgType = CGType::GetOrCreate(cgMod, derefType);
     if (cgType->IsConcrete()) {
+        if (cgType->TypeInfoIsPerDSOCopy()) {
+            // A primitive type info can be a hidden local copy of this DSO while the operand comes
+            // from somewhere that kept the canonical one, so the address is no longer an identity
+            // test. Fall back to the runtime, which compares type uuids.
+            return irBuilder.CallIntrinsicIsTypeEqualTo({typeInfo, cgType->GetOrCreateTypeInfo()});
+        }
         // For concrete type, determine equality based on the address.
         return irBuilder.CreateICmpEQ(typeInfo, cgType->GetOrCreateTypeInfo());
     } else if (cgType->IsStaticGI()) {
