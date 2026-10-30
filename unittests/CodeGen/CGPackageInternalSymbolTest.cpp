@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include "Utils/CGCommonDef.h"
+#include "cangjie/Option/Option.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Package.h"
@@ -191,4 +192,57 @@ TEST_F(CGPackageInternalSymbolTest, ExternalWeakStaysResolvable)
     auto* func = CreateFunc("maybeImported");
     func->Set<LinkTypeInfo>(Linkage::EXTERNAL_WEAK);
     EXPECT_FALSE(IsPackageInternalSymbol(*func));
+}
+
+namespace {
+GlobalOptions MakeOptions(GlobalOptions::OutputMode mode)
+{
+    GlobalOptions options;
+    options.outputMode = mode;
+    return options;
+}
+} // namespace
+
+TEST(IsFinalLinkUnitForPackageInternalSymbolsTest, ExecutableIsFinal)
+{
+    EXPECT_TRUE(IsFinalLinkUnitForPackageInternalSymbols(
+        MakeOptions(GlobalOptions::OutputMode::EXECUTABLE)));
+}
+
+TEST(IsFinalLinkUnitForPackageInternalSymbolsTest, SharedLibraryIsFinal)
+{
+    EXPECT_TRUE(IsFinalLinkUnitForPackageInternalSymbols(
+        MakeOptions(GlobalOptions::OutputMode::SHARED_LIB)));
+}
+
+TEST(IsFinalLinkUnitForPackageInternalSymbolsTest, StaticLibraryIsNotFinal)
+{
+    // The archive is an input to a later link step that may name the symbols from another object
+    // file. Localizing them here left ~845 strong symbols in the stdx archive and broke the link
+    // with duplicate definitions, see the Linux CI of !2336.
+    EXPECT_FALSE(IsFinalLinkUnitForPackageInternalSymbols(
+        MakeOptions(GlobalOptions::OutputMode::STATIC_LIB)));
+}
+
+TEST(IsFinalLinkUnitForPackageInternalSymbolsTest, ObjectFileIsNotFinal)
+{
+    EXPECT_FALSE(IsFinalLinkUnitForPackageInternalSymbols(MakeOptions(GlobalOptions::OutputMode::OBJ)));
+}
+
+TEST(IsFinalLinkUnitForPackageInternalSymbolsTest, ExportForTestKeepsGlobalBinding)
+{
+    auto options = MakeOptions(GlobalOptions::OutputMode::SHARED_LIB);
+    options.exportForTest = true;
+    EXPECT_FALSE(IsFinalLinkUnitForPackageInternalSymbols(options));
+}
+
+TEST(IsFinalLinkUnitForPackageInternalSymbolsTest, MockKeepsGlobalBinding)
+{
+    auto options = MakeOptions(GlobalOptions::OutputMode::SHARED_LIB);
+    options.mock = MockMode::ON;
+    EXPECT_FALSE(IsFinalLinkUnitForPackageInternalSymbols(options));
+    options.mock = MockMode::RUNTIME_ERROR;
+    EXPECT_FALSE(IsFinalLinkUnitForPackageInternalSymbols(options));
+    options.mock = MockMode::DEFAULT;
+    EXPECT_TRUE(IsFinalLinkUnitForPackageInternalSymbols(options));
 }

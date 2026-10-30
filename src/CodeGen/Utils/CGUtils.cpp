@@ -402,6 +402,18 @@ bool IsCHIRWrapper(const std::string& chirFuncName)
         endsWith(chirFuncName, "_cc_abstractFunc_wrapper");
 }
 
+bool IsFinalLinkUnitForPackageInternalSymbols(const GlobalOptions& options)
+{
+    if (options.outputMode != GlobalOptions::OutputMode::EXECUTABLE &&
+        options.outputMode != GlobalOptions::OutputMode::SHARED_LIB) {
+        return false;
+    }
+    if (options.exportForTest) {
+        return false;
+    }
+    return options.mock != MockMode::ON && options.mock != MockMode::RUNTIME_ERROR;
+}
+
 bool IsPackageInternalSymbol(const CHIR::GlobalValue& chirGV)
 {
     // A declaration is resolved in another DSO, there is nothing to localize.

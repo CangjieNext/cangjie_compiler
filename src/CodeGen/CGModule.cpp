@@ -307,6 +307,7 @@ void SetupGenericParamsMap(llvm::Function* function, std::unique_ptr<CGFunction>
         thisTiArg->setName("thisTI");
     }
 }
+
 } // namespace
 
 CGFunction* CGModule::GetOrInsertCGFunction(const CHIR::Value* func, bool forWithTIWrapper)
@@ -356,7 +357,8 @@ llvm::Function* CGModule::DeclareLLVMFunction(const CHIR::Value& func, const CGF
         // localized in the object file. The driver then applies `objcopy --localize-symbols` and the
         // linker resolves every call to it directly, without a PLT stub, a GOT slot and a dynamic
         // relocation. The symbol also disappears from the dynamic symbol table.
-        if (IsPackageInternalSymbol(*chirFunc)) {
+        if (IsFinalLinkUnitForPackageInternalSymbols(cgCtx->GetCompileOptions()) &&
+            IsPackageInternalSymbol(*chirFunc)) {
             cgCtx->AddLocalizedSymbol(function->getName().str());
         }
     } else if (chirLinkage == Linkage::EXTERNAL_WEAK) {
@@ -407,7 +409,8 @@ CGValue* CGModule::GetOrInsertGlobalVariable(const CHIR::GlobalVar* chirGV)
     if (!chirGV->TestAttr(CHIR::Attribute::IMPORTED) || chirGV->IsLocalConst()) {
         auto chirLinkage = chirGV->Get<CHIR::LinkTypeInfo>();
         AddLinkageTypeMetadata(*gv, CHIRLinkage2LLVMLinkage(chirLinkage), cgCtx->IsCGParallelEnabled());
-        if (IsPackageInternalSymbol(*chirGV)) {
+        if (IsFinalLinkUnitForPackageInternalSymbols(cgCtx->GetCompileOptions()) &&
+            IsPackageInternalSymbol(*chirGV)) {
             cgCtx->AddLocalizedSymbol(gv->getName().str());
         }
     }

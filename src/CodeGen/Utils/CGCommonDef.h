@@ -24,6 +24,7 @@
 #include "cangjie/CHIR/IR/Type/Type.h"
 
 namespace Cangjie {
+class GlobalOptions;
 namespace CHIR {
 class GlobalValue;
 } // namespace CHIR
@@ -249,6 +250,19 @@ llvm::GlobalValue::LinkageTypes CHIRLinkage2LLVMLinkage(Linkage chirLinkage);
  * a symbol that may be referenced from another package must stay visible.
  */
 bool IsPackageInternalSymbol(const CHIR::GlobalValue& chirGV);
+/**
+ * @brief Whether the current compilation is a final link unit, where localizing a package internal
+ * symbol is safe.
+ *
+ * @details An executable and a shared library are final: the package internal symbols are only used
+ * inside the generated DSO. A static archive and a standalone object file are inputs to a later link
+ * step, which may name those symbols from another object file. `--export-for-test` and mocking also
+ * link the package into a test binary by a separate link step that names and overrides the symbols.
+ *
+ * The legacy localization of `Linkage::INTERNAL` symbols does not use this predicate: those symbols
+ * are private by construction and keep their historical behaviour.
+ */
+bool IsFinalLinkUnitForPackageInternalSymbols(const GlobalOptions& options);
 void AddLinkageTypeMetadata(
     llvm::GlobalObject& globalObject, llvm::GlobalValue::LinkageTypes linkageType, bool markByMD);
 llvm::GlobalValue::LinkageTypes GetLinkageTypeOfGlobalObject(const llvm::GlobalObject& globalObject);
