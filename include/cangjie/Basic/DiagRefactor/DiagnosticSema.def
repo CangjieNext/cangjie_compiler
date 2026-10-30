@@ -264,6 +264,8 @@ ERROR(sema_not_matched, "'%s' %s can not find '%s' match")
 ERROR(sema_specific_var_not_match_let, "'specific' '%s' can not match 'common' '%s'")
 ERROR(sema_specific_init_common_primary_constructor, "'specific' init can not be used to implement primary 'common' constructor")
 ERROR(specific_has_different_kind, "'specific' decl kind(%s) is not equal to 'common'(%s)")
+ERROR(sema_specific_has_different_generic_parameter_count,
+    "'specific' %s '%s' type parameter count is %s, but its 'common' declaration requires %s")
 ERROR(sema_specific_primary_unmatched_var_decl,
     "parameter in 'specific' primary constructor must also be a member variable declaration "
     "if it's a member variable declaration in 'common' primary constructor")
