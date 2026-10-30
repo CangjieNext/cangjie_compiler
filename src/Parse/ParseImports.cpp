@@ -48,8 +48,8 @@ void ParserImpl::ParseMacroSingleImport(AST::PackageSpec& packageSpec, AST::Macr
 {
     // macroSingleImport := 'macro' 'import' importContent
     // importModifier is NOT allowed (no re-export). A leading modifier before
-    // 'macro import' is rejected by seeingMacroImport() and falls through to the
-    // normal import path, which reports the error.
+    // 'macro import' is rejected by seeingIllegalModifierMacroImport() with
+    // macro_import_no_modifier_allowed.
     // Syntax rule 5: @When may NOT directly prefix a single macro import. If a @When
     // was parsed into annos before reaching here, report macro_import_when_only_in_block.
     Skip(TokenKind::MACRO);
@@ -137,15 +137,12 @@ void ParserImpl::DeriveMacroImportPkgNames(const AST::ImportContent& content, AS
     // graph. Extracts the package prefix (strips the trailing symbol / wildcard).
     // Not persisted to cjo.
     if (content.kind == ImportKind::IMPORT_MULTI) {
+        // `a.b.{c, d}`: the package is the prefix; the per-item names are symbols
+        // inside it (GetImportedPackageName on an item returns the bare item name),
+        // so pushing them would create phantom cjpm dependencies on packages "c"/"d".
         auto prefix = content.GetPrefixPath();
         if (!prefix.empty()) {
             packageSpec.macroImportPkgNames.push_back(prefix);
-        }
-        for (const auto& item : content.items) {
-            auto itemPkg = item.GetImportedPackageName();
-            if (!itemPkg.empty()) {
-                packageSpec.macroImportPkgNames.push_back(itemPkg);
-            }
         }
     } else if (content.kind == ImportKind::IMPORT_ALL) {
         // prefix.* — package name is the prefix.
@@ -153,7 +150,9 @@ void ParserImpl::DeriveMacroImportPkgNames(const AST::ImportContent& content, AS
         if (!prefix.empty()) {
             packageSpec.macroImportPkgNames.push_back(prefix);
         }
-    } else if (content.kind == ImportKind::IMPORT_SINGLE) {
+    } else if (content.kind == ImportKind::IMPORT_SINGLE || content.kind == ImportKind::IMPORT_ALIAS) {
+        // Alias form keeps the original name in `identifier`, so the package
+        // prefix plus the imported symbol still identifies the target package.
         std::string pkgName = content.GetImportedPackageName();
         if (!pkgName.empty()) {
             packageSpec.macroImportPkgNames.push_back(std::move(pkgName));
@@ -167,8 +166,8 @@ void ParserImpl::ParseCommonImportSpec(PtrVector<ImportSpec>& imports, PtrVector
     auto seeingMacroSingle = [&]() -> bool {
         // macroImports do not allow an importModifier prefix. Only recognize the
         // bare 'macro' 'import' two-token lookahead. A form like
-        // 'public macro import xxx' is NOT recognized here: the leading modifier
-        // is consumed by the normal import path, which then errors on 'macro'.
+        // 'public macro import xxx' is NOT recognized here: it is rejected by
+        // seeingIllegalModifierMacroImport() with macro_import_no_modifier_allowed.
         if (!packageSpec || !packageSpec->hasMacro) {
             return false;
         }
@@ -180,8 +179,36 @@ void ParserImpl::ParseCommonImportSpec(PtrVector<ImportSpec>& imports, PtrVector
         }
         return Seeing({TokenKind::MACRO, TokenKind::LCURL});
     };
+    auto seeingIllegalMacroImport = [&]() -> bool {
+        // Syntax rule 3: a bare 'macro import' / 'macro {' in a non-macro package
+        // is illegal. Recognize it here to report the dedicated diagnostic
+        // macro_import_in_non_macro_package instead of a generic parse error.
+        if (packageSpec && packageSpec->hasMacro) {
+            return false;
+        }
+        return Seeing({TokenKind::MACRO, TokenKind::IMPORT}) || Seeing({TokenKind::MACRO, TokenKind::LCURL});
+    };
+    auto seeingIllegalModifierMacroImport = [&]() -> bool {
+        // Syntax rule 4: macro imports do not allow an import modifier prefix
+        // (no re-export), in any package. Detect 'modifier macro import' /
+        // 'modifier macro {' (three-token lookahead) and report
+        // macro_import_no_modifier_allowed.
+        static const std::vector<TokenKind> IMPORT_MODIFIERS = {TokenKind::PUBLIC, TokenKind::PROTECTED,
+            TokenKind::INTERNAL, TokenKind::PRIVATE};
+        if (!SeeingAny(IMPORT_MODIFIERS)) {
+            return false;
+        }
+        for (auto modifier : IMPORT_MODIFIERS) {
+            if (Seeing({modifier, TokenKind::MACRO, TokenKind::IMPORT}) ||
+                Seeing({modifier, TokenKind::MACRO, TokenKind::LCURL})) {
+                return true;
+            }
+        }
+        return false;
+    };
 
-    while (SeeingImport() || SeeingBuiltinAnnotation() || seeingMacroSingle() || seeingMacroBlock()) {
+    while (SeeingImport() || SeeingBuiltinAnnotation() || seeingMacroSingle() || seeingMacroBlock() ||
+        seeingIllegalMacroImport() || seeingIllegalModifierMacroImport()) {
         if (SeeingBuiltinAnnotation()) {
             ParseAnnotations(annos);
         }
@@ -201,6 +228,24 @@ void ParserImpl::ParseCommonImportSpec(PtrVector<ImportSpec>& imports, PtrVector
         if (seeingMacroBlock()) {
             annos.clear();
             ParseMacroImports(*packageSpec);
+            continue;
+        }
+        if (seeingIllegalMacroImport()) {
+            ParseDiagnoseRefactor(DiagKindRefactor::macro_import_in_non_macro_package, Peek().Begin());
+            ConsumeUntilAny({TokenKind::NL, TokenKind::SEMI, TokenKind::END});
+            annos.clear();
+            continue;
+        }
+        if (seeingIllegalModifierMacroImport()) {
+            // If the enclosing package is not a macro package, the statement is doubly
+            // illegal; report the more fundamental 'not a macro package' error.
+            if (!packageSpec || !packageSpec->hasMacro) {
+                ParseDiagnoseRefactor(DiagKindRefactor::macro_import_in_non_macro_package, Peek().Begin());
+            } else {
+                ParseDiagnoseRefactor(DiagKindRefactor::macro_import_no_modifier_allowed, Peek().Begin());
+            }
+            ConsumeUntilAny({TokenKind::NL, TokenKind::SEMI, TokenKind::END});
+            annos.clear();
             continue;
         }
         if (!SeeingImport()) {

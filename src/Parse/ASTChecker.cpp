@@ -234,6 +234,19 @@ void ASTChecker::CheckImportSpec(Ptr<Node> node)
     ZERO_POSITION_CHECK(node, is->importPos);
     VEC_AST_NULLPTR_CHECK(node, is->annotations);
 }
+void ASTChecker::CheckMacroImportSpec(Ptr<Node> node)
+{
+    auto mis = StaticAs<ASTKind::MACRO_IMPORT_SPEC>(node);
+    ZERO_POSITION_CHECK(node, mis->importPos);
+    CheckImportContent(&mis->content);
+    VEC_AST_NULLPTR_CHECK(node, mis->annotations);
+}
+void ASTChecker::CheckMacroImportList(Ptr<Node> node)
+{
+    auto mil = StaticAs<ASTKind::MACRO_IMPORT_LIST>(node);
+    ZERO_POSITION_CHECK(node, mil->macroPos);
+    VEC_AST_NULLPTR_CHECK(node, mil->items);
+}
 void ASTChecker::CheckInterfaceBody(Ptr<Node> node)
 {
     auto ib = StaticAs<ASTKind::INTERFACE_BODY>(node);
