@@ -452,6 +452,25 @@ void Gnu::LocalizePackageInternalSymbols(const std::string& objFile)
     if (driverOptions.symbolsNeedLocalized.empty() || driverOptions.IsLTOEnabled()) {
         return;
     }
+    // A static library is not the final link unit: the archive is handed to another link step, which
+    // may be a test executable built from a separate object file that names these symbols. Localizing
+    // them here would turn them into local symbols of the archive member and the later link would fail
+    // with an undefined reference. A static archive has no dynamic symbol table either, so there is
+    // nothing to gain.
+    if (driverOptions.outputMode == GlobalOptions::OutputMode::STATIC_LIB) {
+        return;
+    }
+    // A package compiled with `--export-for-test` is linked into the test binary by a separate link
+    // step that names these symbols, so the same reasoning applies even when the output is a shared
+    // library. Tests are instrumented builds, the optimization has nothing to win here.
+    if (driverOptions.exportForTest) {
+        return;
+    }
+    // Mocking is a test-only instrumentation as well: the mocked declaration keeps a globally bound
+    // symbol so that the test binary can override it.
+    if (driverOptions.mock == MockMode::ON || driverOptions.mock == MockMode::RUNTIME_ERROR) {
+        return;
+    }
     auto outputDir = FileUtil::GetAbsPath(FileUtil::GetDirPath(objFile));
     CJC_ASSERT(outputDir.has_value());
     auto name = FileUtil::JoinPath(outputDir.value(),
