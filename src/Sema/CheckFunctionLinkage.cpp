@@ -105,6 +105,10 @@ inline void MarkVarDeclAbstractLinkage(VarDeclAbstract& vda)
         MarkDeclAsSrcExported(vda);
     } else if (vda.IsExportedDecl()) {
         vda.linkage = Cangjie::Linkage::EXTERNAL;
+        // `IsExportedDecl` is true for a declaration without a modifier as well: the absence of
+        // `public` does not mean the declaration is private to the package object file. Code
+        // generation reads this mark back to decide whether the symbol may be localized.
+        MarkDeclAsSrcExported(vda);
     } else {
         vda.linkage = Cangjie::Linkage::INTERNAL;
     }
@@ -234,6 +238,10 @@ void AnalyzeToplevelFuncLinkage(FuncDecl& fd)
         MarkDeclAsSrcExported(fd);
     } else if (!fd.IsExportedDecl()) {
         MarkFunctionAsInternalLinkage(fd);
+    } else {
+        // Same as `MarkVarDeclAbstractLinkage`: a top level function without a modifier is exported,
+        // even though it carries neither `PUBLIC` nor `PROTECTED`, so its symbol has to stay global.
+        MarkDeclAsSrcExported(fd);
     }
 }
 

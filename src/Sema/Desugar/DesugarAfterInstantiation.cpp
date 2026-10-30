@@ -67,6 +67,12 @@ void UpdateDeclAttributes(Package& pkg, bool exportForTest)
                     return VisitAction::WALK_CHILDREN;
                 }
                 fd->linkage = Linkage::EXTERNAL;
+                // The test binary is a separate link unit, so a declaration it can name through
+                // `--export-for-test` has to keep the global binding in the object file of the package,
+                // even when the declaration itself is not public. Without this mark code generation
+                // localizes the symbol and linking the test executable fails with an undefined
+                // reference, see `IsPackageInternalSymbol` in `src/CodeGen/Utils/CGUtils.cpp`.
+                fd->EnableAttr(Attribute::SRC_EXPORTED);
                 if (fd->propDecl) {
                     fd->propDecl->linkage = Linkage::EXTERNAL;
                 }
