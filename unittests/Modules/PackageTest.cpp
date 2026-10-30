@@ -21,6 +21,7 @@
 
 #include "CompilationCacheSerialization.h"
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/Version.h"
@@ -1895,4 +1896,180 @@ TEST_F(PackageTest, TypeAliasRefExport)
         }
         return VisitAction::WALK_CHILDREN;
     }).Walk();
+}
+
+// ---------------------------------------------------------------------------
+// Macro import cjo tests (UT-S-04 ~ UT-S-07 in MacroImportDT.md §3.3).
+// The macro import targets below are existing fixture packages (vardecl /
+// funcdecl / math) so IMPORT_PACKAGE resolves them; a macro package does not
+// consume its own macro imports (visited preloaded with its own name), so no
+// macro plugin is needed at this stage.
+// ---------------------------------------------------------------------------
+
+// UT-S-04: macro imports survive the cjo round trip — parse-time aggregation
+// clones the statements into Package.macroImports, ASTWriter persists them as
+// structured nodes, and ASTLoader rebuilds them with kinds, alias and the @When
+// condExpr (resolved against allExprs via whenExprIndices) intact.
+TEST_F(PackageTest, MacroImportCjoRoundTrip)
+{
+    diag.ClearError();
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->code = R"(macro package macroimp
+macro {
+    import vardecl.*
+    @When[os == "Linux"] import funcdecl
+}
+macro import math as m
+)";
+    instance->Compile(CompileStage::IMPORT_PACKAGE);
+    ASSERT_FALSE(instance->GetSourcePackages().empty());
+    auto* srcPkg = &*instance->GetSourcePackages()[0];
+    // TestCompilerInstance::ParseCode bypasses the production parse assembler
+    // (CompileStrategy::CheckPackageConsistency), so replicate its macro-import
+    // aggregation here: mark the package macro and clone each statement from the
+    // file-level PackageSpec into the package-level macroImports vector.
+    srcPkg->isMacroPackage = true;
+    for (auto& file : srcPkg->files) {
+        for (auto& stmt : file->package->macroImports) {
+            srcPkg->macroImports.push_back(ASTCloner::CloneMacroImportList(*stmt));
+        }
+    }
+    ASSERT_EQ(srcPkg->macroImports.size(), 2U); // one list per statement
+    std::vector<uint8_t> cjoData;
+    instance->importManager->ExportAST(false, cjoData, *srcPkg);
+    ASSERT_FALSE(cjoData.empty());
+
+    auto cjoPath = FileUtil::JoinPath(packagePath, "macroimp.cjo");
+    ASSERT_TRUE(FileUtil::WriteBufferToASTFile(cjoPath, cjoData));
+    diag.Reset();
+    auto loaded = instance->importManager->LoadPackageFromCjo("macroimp", cjoPath);
+    ASSERT_NE(loaded, nullptr);
+    EXPECT_TRUE(loaded->isMacroPackage);
+    ASSERT_EQ(loaded->macroImports.size(), 2U);
+    // Block list: ALL form item + @When item with a rebuilt condExpr.
+    auto& block = *loaded->macroImports[0];
+    EXPECT_NE(block.lcurlPos, INVALID_POSITION);
+    ASSERT_EQ(block.items.size(), 2U);
+    EXPECT_EQ(block.items[0]->content.kind, ImportKind::IMPORT_ALL);
+    EXPECT_EQ(block.items[0]->content.identifier.Val(), "*");
+    ASSERT_EQ(block.items[1]->annotations.size(), 1U);
+    ASSERT_NE(block.items[1]->annotations.front()->condExpr.get(), nullptr);
+    EXPECT_EQ(block.items[1]->annotations.front()->condExpr->astKind, ASTKind::BINARY_EXPR);
+    // Single list: alias form survives with its alias name.
+    auto& single = *loaded->macroImports[1];
+    EXPECT_EQ(single.lcurlPos, INVALID_POSITION);
+    ASSERT_EQ(single.items.size(), 1U);
+    EXPECT_EQ(single.items[0]->content.kind, ImportKind::IMPORT_ALIAS);
+    EXPECT_EQ(single.items[0]->content.aliasName.Val(), "m");
+    diag.Reset();
+}
+
+// UT-S-05: the version gate rejects macro-import cjos from incompatible
+// compilers — minor newer than the compiler's (produced by a newer compiler)
+// and any foreign major are both refused on load.
+TEST_F(PackageTest, CjoVersionGate_Reject)
+{
+    diag.ClearError();
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->code = "macro package macroimp\nmacro import vardecl\n";
+    instance->Compile(CompileStage::IMPORT_PACKAGE);
+    ASSERT_FALSE(instance->GetSourcePackages().empty());
+    std::vector<uint8_t> cjoData;
+    instance->importManager->ExportAST(false, cjoData, *instance->GetSourcePackages()[0]);
+    ASSERT_FALSE(cjoData.empty());
+    auto cjoManager = instance->importManager->GetCjoManager();
+    ASSERT_NE(cjoManager, nullptr);
+
+    auto refuse = [this, &cjoManager](std::vector<uint8_t> data) {
+        auto loader = std::make_unique<ASTLoader>(std::move(data), "macroimp", *instance->typeManager, *cjoManager,
+            instance->invocation.globalOptions);
+        diag.Reset();
+        EXPECT_EQ(loader->LoadPackageDepInfo(), "");
+        EXPECT_GT(diag.GetErrorCount(), 0u);
+    };
+    // Same major, minor newer than the compiler -> refused.
+    {
+        std::vector<uint8_t> mutated = cjoData;
+        auto* ver = MutableCjoVersionBytes(mutated);
+        ASSERT_NE(ver, nullptr);
+        ver[1] = static_cast<uint8_t>(CJO_MINOR_VERSION + 1);
+        refuse(std::move(mutated));
+    }
+    // Foreign major -> refused (no cross-major compatibility).
+    {
+        std::vector<uint8_t> mutated = cjoData;
+        auto* ver = MutableCjoVersionBytes(mutated);
+        ASSERT_NE(ver, nullptr);
+        ver[0] = static_cast<uint8_t>(CJO_MAJOR_VERSION + 1);
+        refuse(std::move(mutated));
+    }
+    diag.Reset();
+}
+
+// UT-S-06: backward compatibility — a macro package cjo written by an older
+// compiler of the same major (downgraded minor, no macroImports payload) loads
+// cleanly and simply has no macro imports, i.e. it behaves like an old macro
+// package that never declared any.
+TEST_F(PackageTest, CjoVersionGate_BackCompat)
+{
+    diag.ClearError();
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->code = "macro package oldmacro\n";
+    instance->Compile(CompileStage::IMPORT_PACKAGE);
+    ASSERT_FALSE(instance->GetSourcePackages().empty());
+    // ParseCode bypasses CheckPackageConsistency, which is where the production
+    // path derives isMacroPackage from the file-level hasMacro flag.
+    instance->GetSourcePackages()[0]->isMacroPackage = true;
+    std::vector<uint8_t> cjoData;
+    instance->importManager->ExportAST(false, cjoData, *instance->GetSourcePackages()[0]);
+    ASSERT_FALSE(cjoData.empty());
+    auto* ver = MutableCjoVersionBytes(cjoData);
+    ASSERT_NE(ver, nullptr);
+    ver[1] = 0; // downgrade minor: simulate an old-compiler cjo
+    std::vector<uint8_t> fileData = cjoData;
+    auto cjoManager = instance->importManager->GetCjoManager();
+    auto loader = std::make_unique<ASTLoader>(
+        std::move(cjoData), "oldmacro", *instance->typeManager, *cjoManager, instance->invocation.globalOptions);
+    diag.Reset();
+    EXPECT_NE(loader->LoadPackageDepInfo(), "");
+    EXPECT_EQ(diag.GetErrorCount(), 0u);
+    EXPECT_TRUE(loader->IsCjoVersionExactly(CJO_MAJOR_VERSION, 0));
+    auto cjoPath = FileUtil::JoinPath(packagePath, "oldmacro.cjo");
+    ASSERT_TRUE(FileUtil::WriteBufferToASTFile(cjoPath, fileData));
+    auto loaded = instance->importManager->LoadPackageFromCjo("oldmacro", cjoPath);
+    ASSERT_NE(loaded, nullptr);
+    EXPECT_TRUE(loaded->isMacroPackage);
+    EXPECT_TRUE(loaded->macroImports.empty());
+    diag.Reset();
+}
+
+// UT-S-07: a plain (non-macro) package cjo carries no macroImports field at
+// all — absent in the flatbuffer and empty after the load (zero-overhead path).
+TEST_F(PackageTest, NonMacroPkgNoMacroImports)
+{
+    diag.ClearError();
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->code = "package plainpkg\nfunc Dummy() {}\n";
+    instance->Compile(CompileStage::IMPORT_PACKAGE);
+    ASSERT_FALSE(instance->GetSourcePackages().empty());
+    std::vector<uint8_t> cjoData;
+    instance->importManager->ExportAST(false, cjoData, *instance->GetSourcePackages()[0]);
+    ASSERT_FALSE(cjoData.empty());
+    auto* fbPkg = PackageFormat::GetPackage(cjoData.data());
+    ASSERT_NE(fbPkg, nullptr);
+    EXPECT_EQ(fbPkg->macroImports(), nullptr);
+    EXPECT_FALSE(fbPkg->kind() == PackageFormat::PackageKind_Macro);
+
+    auto cjoPath = FileUtil::JoinPath(packagePath, "plainpkg.cjo");
+    ASSERT_TRUE(FileUtil::WriteBufferToASTFile(cjoPath, cjoData));
+    diag.Reset();
+    auto loaded = instance->importManager->LoadPackageFromCjo("plainpkg", cjoPath);
+    ASSERT_NE(loaded, nullptr);
+    EXPECT_FALSE(loaded->isMacroPackage);
+    EXPECT_TRUE(loaded->macroImports.empty());
+    diag.Reset();
 }
