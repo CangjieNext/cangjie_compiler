@@ -6,6 +6,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include "gtest/gtest.h"
 
@@ -1477,4 +1478,144 @@ macro import std.collection.ArrayList
     const auto& strs = inst->importManager->GetMacroImportStrings();
     ASSERT_EQ(strs.size(), 1U);
     EXPECT_EQ(strs[0], "std.collection.ArrayList");
+}
+
+// ---------------------------------------------------------------------------
+// Macro import .macrocall injection tests (MacroImportDT UT-D-01 ~ UT-D-03).
+// These exercise the --debug-macro path: a downstream package with a real macro
+// call (define.M identity plugin, built exactly like ForeignBlockMacroExpansion)
+// is compiled through macro expansion with enableMacroDebug, and the generated
+// .macrocall file (file path + ".macrocall") is read back and inspected.
+// ---------------------------------------------------------------------------
+
+namespace {
+std::string ReadFileOrEmpty(const std::string& path)
+{
+    std::ifstream in(path);
+    std::string content{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>{}};
+    return content;
+}
+}
+
+// UT-D-01: the generated .macrocall carries one bare `import <entry>` line per
+// surviving macro import — placed after the package statement and before the
+// file's own imports and first macro call, with no @When, no modifier and no
+// 'macro import' wording left.
+TEST_F(MacroTest, MacroCall_InjectMacroImports)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    ASSERT_EQ(system(command.c_str()), 0);
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package d01src
+import std.ast.*
+macro import std.collection.ArrayList
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    invocation.globalOptions.enableMacroDebug = true;
+    auto srcFile = FileUtil::JoinPath(dir, "d01_downstream.cj");
+    {
+        std::ofstream out(srcFile);
+        out << "package d\nimport d01src\nimport define.*\n\n@M func dummy(): Unit {}\n";
+    }
+    auto inst = std::make_unique<TestCompilerInstance>(invocation, diag);
+    inst->invocation.globalOptions.implicitPrelude = true;
+    inst->compileOnePackageFromSrcFiles = true;
+    inst->srcFilePaths = {srcFile};
+    ASSERT_TRUE(inst->Compile(CompileStage::PARSE));
+    ASSERT_TRUE(inst->PerformImportPackage());
+    ASSERT_TRUE(inst->PerformMacroExpand());
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    // In --debug-macro mode the file node is replaced by one re-parsed from the
+    // .macrocall file (ReplaceEachFileNode), so read the .macrocall via the
+    // source file path instead of the (stale) File::macroCallFilePath.
+    auto content = ReadFileOrEmpty(srcFile + ".macrocall");
+    EXPECT_FALSE(content.empty());
+    auto pInj = content.find("import std.collection.ArrayList");
+    ASSERT_NE(pInj, std::string::npos);
+    EXPECT_EQ(content.find("@When"), std::string::npos);
+    EXPECT_EQ(content.find("macro import"), std::string::npos);
+    EXPECT_EQ(content.find("public import"), std::string::npos);
+    // After the package statement, before the file's own imports and the first
+    // (expanded) macro call.
+    EXPECT_GT(pInj, content.find("package d"));
+    EXPECT_LT(pInj, content.find("import d01src"));
+    EXPECT_LT(pInj, content.find("func dummy"));
+}
+
+// UT-D-02: duplicate macro import declarations (same import string twice) are
+// injected only once; multiple entries keep their evaluation survival order.
+TEST_F(MacroTest, MacroCall_InjectDedup)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    ASSERT_EQ(system(command.c_str()), 0);
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package d02src
+import std.ast.*
+macro import std.math
+macro import std.collection.ArrayList
+macro import std.math
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    invocation.globalOptions.enableMacroDebug = true;
+    auto srcFile = FileUtil::JoinPath(dir, "d02_downstream.cj");
+    {
+        std::ofstream out(srcFile);
+        out << "package d\nimport d02src\nimport define.*\n\n@M func dummy(): Unit {}\n";
+    }
+    auto inst = std::make_unique<TestCompilerInstance>(invocation, diag);
+    inst->invocation.globalOptions.implicitPrelude = true;
+    inst->compileOnePackageFromSrcFiles = true;
+    inst->srcFilePaths = {srcFile};
+    ASSERT_TRUE(inst->Compile(CompileStage::PARSE));
+    ASSERT_TRUE(inst->PerformImportPackage());
+    ASSERT_TRUE(inst->PerformMacroExpand());
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    auto content = ReadFileOrEmpty(srcFile + ".macrocall");
+    auto pMath = content.find("import std.math");
+    auto pArray = content.find("import std.collection.ArrayList");
+    ASSERT_NE(pMath, std::string::npos);
+    ASSERT_NE(pArray, std::string::npos);
+    // "std.math" declared twice, injected exactly once.
+    EXPECT_EQ(content.find("import std.math", pMath + 1), std::string::npos);
+    // Survival order follows the declaration order.
+    EXPECT_LT(pMath, pArray);
+}
+
+// UT-D-03: a macro import whose @When condition is false in the downstream
+// target never reaches GetMacroImportStrings, so the .macrocall has no line
+// for it (and never any @When wording).
+TEST_F(MacroTest, MacroCall_FilterFalseWhen)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    ASSERT_EQ(system(command.c_str()), 0);
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package d03src
+import std.ast.*
+macro {
+    @When[os == "Windows"] import std.reflect
+    @When[os == "Linux"] import std.math
+}
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    invocation.globalOptions.enableMacroDebug = true;
+    auto srcFile = FileUtil::JoinPath(dir, "d03_downstream.cj");
+    {
+        std::ofstream out(srcFile);
+        out << "package d\nimport d03src\nimport define.*\n\n@M func dummy(): Unit {}\n";
+    }
+    auto inst = std::make_unique<TestCompilerInstance>(invocation, diag);
+    inst->invocation.globalOptions.implicitPrelude = true;
+    inst->compileOnePackageFromSrcFiles = true;
+    inst->srcFilePaths = {srcFile};
+    ASSERT_TRUE(inst->Compile(CompileStage::PARSE));
+    ASSERT_TRUE(inst->PerformImportPackage());
+    ASSERT_TRUE(inst->PerformMacroExpand());
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    auto content = ReadFileOrEmpty(srcFile + ".macrocall");
+    EXPECT_NE(content.find("import std.math"), std::string::npos);
+    EXPECT_EQ(content.find("std.reflect"), std::string::npos);
+    EXPECT_EQ(content.find("@When"), std::string::npos);
 }
