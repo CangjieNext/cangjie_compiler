@@ -1,0 +1,150 @@
+src/Option/Option.cpp
+  s_3ac95f4a653d70::t_64830a065c24cf 1672
+src/Sema/InheritanceChecker/StructInheritanceChecker.cpp
+  h_7fa24ec5a32f2d 903-904,1031-1032
+src/CHIR/IR/Type/Type.cpp
+  h_7fa24ec5a32f2d 380-384,403-407
+src/Macro/MacroExpansion.cpp
+  h_7fa24ec5a32f2d 142,351
+include/cangjie/Basic/DiagRefactor/DiagnosticParser.def
+  s_3ac95f4a653d70::t_390f1bdbc2d558 383
+  s_3ac95f4a653d70::t_a4b43d6c3e8b17 384
+src/Parse/Parser.cpp
+  h_7fa24ec5a32f2d 55-56,61-62,67-68,202,514
+src/Basic/DiagnosticEmitter.cpp
+  s_4ceb238eb3aa7e::t_0ff78608f56ec1 96-99
+src/Option/OptionAction.cpp
+  s_3ac95f4a653d70::t_ec0f3c8d65830c 1082
+src/Macro/MacroEvaluation.cpp
+  h_7fa24ec5a32f2d 356,370,425,447,669,997,1029
+src/Sema/TypeCheckUtil.cpp
+  s_3ac95f4a653d70::t_6e0faabeb8a69f 742-744
+  s_3ac95f4a653d70::t_72fe07c4d102d5 601-603,606-608
+  s_3ac95f4a653d70::t_2731d9ca509a06 583-584
+  s_3ac95f4a653d70::t_70d7b94601b6ae 593
+  s_3ac95f4a653d70::t_0e4e68d14cfdf8 610-611
+  s_3ac95f4a653d70::t_be7a6e74d514eb 579,585
+  s_3ac95f4a653d70::t_1c09e4e68a988a 729-730
+  s_3ac95f4a653d70::t_3f202af4c98925 735-737
+  s_3ac95f4a653d70::t_a25aeb0d4183ea 739-740
+  s_3ac95f4a653d70::t_faea37740c0df6 598-599
+  s_3ac95f4a653d70::t_7b9cac0ea4961e 746-748
+  s_3ac95f4a653d70::t_3e95b3024d98cb 596
+  s_3ac95f4a653d70::t_a2f03e091c2dc9 600,726-728,731
+  s_3ac95f4a653d70::t_f3061ad7832c5f 586-588,591-592
+  s_3ac95f4a653d70::t_c800d77345e55c 613
+  s_3ac95f4a653d70::t_8080dd51e0830d 732-733
+  s_3ac95f4a653d70::t_22f0e66da4d2f5 575,578,582,594,609,725,734,741
+  s_3ac95f4a653d70::t_2edc78e00b55e2 576-577,597,612,738,745
+  h_7fa24ec5a32f2d 580-581,589-590,604-605
+  s_3ac95f4a653d70::t_97c4129c1797fc 724
+  s_3ac95f4a653d70::t_35cebf60fb688b 595
+src/Frontend/CompileStrategy.cpp
+  h_7fa24ec5a32f2d 349,554-556,558
+src/Sema/TypeCheckUtil.h
+  s_3ac95f4a653d70::t_5e7f267e2a4c1f 262-264
+  h_7fa24ec5a32f2d 201-202
+  s_3ac95f4a653d70::t_0e0ce0c0f87e2a 260-261
+unittests/Parse/ParserTest.cpp
+  h_7fa24ec5a32f2d 26-38,3172,3237,3259,3278,3293,3311,3322,3340,3360,3380,3398,3415,3434
+src/Parse/ParserImpl.h
+  s_3ac95f4a653d70::t_ae7e9b1dde40d6 239
+  s_3ac95f4a653d70::t_81376fa11032df 241
+  s_3ac95f4a653d70::t_ec3d9f06201f75 237
+  s_3ac95f4a653d70::t_f36dcf6eab3571 864
+  s_3ac95f4a653d70::t_d84e5350611dfa 231,233
+  s_75f5d8a371f6dc::t_0d088403502fcf 229
+  s_3ac95f4a653d70::t_3f3f4b9adb98f0 256
+  s_3ac95f4a653d70::t_cd92a77b8d4e25 234,236,238,240,242-253,255,257
+  s_3ac95f4a653d70::t_c02814ab20ec29 235
+  s_3ac95f4a653d70::t_9b599020ee376a 254
+  h_7fa24ec5a32f2d 65,67,69,227-228,230
+unittests/TestCompilerInstance/TestCompilerInstance.cpp
+  h_7fa24ec5a32f2d 79
+src/Parse/ParserDiag.cpp
+  h_7fa24ec5a32f2d 1064,1179,1206,1311,1330-1331,1333
+src/Sema/TypeCheckModal.cpp
+  h_7fa24ec5a32f2d 256,278-280,287-343,354-356,381,383-387,429-430,680,1354-1374,1566,1601-1603
+  h_7fa24ec5a32f2d 388,424,431,681,1341,1375,1515,1541,1545,1567,1604
+src/Parse/ParserUtils.cpp
+  h_7fa24ec5a32f2d 70
+src/Parse/ParseType.cpp
+  s_3ac95f4a653d70::t_735cdb7fda1700 360-362
+unittests/AST/ToStringTest.cpp
+  s_75f5d8a371f6dc::t_f751cbef24d140 58
+src/Parse/ParseAtom.cpp
+  h_7fa24ec5a32f2d 336
+  s_3ac95f4a653d70::t_4c0b581be84c58 339-341
+  s_3ac95f4a653d70::t_b008312b56fd47 1386-1390
+src/Sema/TypeCheckCall.cpp
+  h_7fa24ec5a32f2d 3231-3251,3410-3419
+src/Parse/ParseDecl.cpp
+  h_7fa24ec5a32f2d 540,964,1747,2073
+include/cangjie/Basic/DiagRefactor/DiagnosticSema.def
+  s_3ac95f4a653d70::t_4b482c0488dc9d 441
+  s_3ac95f4a653d70::t_51fe61e4d2bb04 440
+  h_7fa24ec5a32f2d 432
+include/cangjie/Lex/Lexer.h
+  s_3ac95f4a653d70::t_b12a9bca81bccc 143-149
+include/cangjie/Option/Options.inc
+  s_3ac95f4a653d70::t_e3a79fcc0e63d9 349-351
+src/Sema/TypeCheckExpr/NameReferenceExpr.cpp
+  h_7fa24ec5a32f2d 746-754
+include/cangjie/Parse/Parser.h
+  h_7fa24ec5a32f2d 69-70,72,75,78
+src/Lex/LexerImpl.cpp
+  s_3ac95f4a653d70::t_ceb0935bfe4d2d 76-80
+include/cangjie/Option/Option.h
+  s_3ac95f4a653d70::t_a13cf81394c5d5 596-597
+src/Lex/LexerImpl.h
+  h_7fa24ec5a32f2d 154
+src/Parse/ParserImpl.cpp
+  h_7fa24ec5a32f2d 177,180,183,190,193,196,201,204,207,211-225
+src/Sema/TypeCheckReference.cpp
+  h_7fa24ec5a32f2d 875-880
+unittests/AST/SearchTest.cpp
+  s_3ac95f4a653d70::t_56703c1458711f 74
+unittests/Parse/CheckCjdTest.cpp
+  h_7fa24ec5a32f2d 49-51
+src/Sema/TypeManager.cpp
+  h_7fa24ec5a32f2d 2870-2871
+src/Lex/Lexer.cpp
+  h_7fa24ec5a32f2d 324-326
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8822420f7b6dbe3854678f5192ca2be0e1241040",
+  "prompts": {},
+  "humans": {
+    "h_7fa24ec5a32f2d": {
+      "author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    }
+  },
+  "sessions": {
+    "s_3ac95f4a653d70": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cd483d82-2093-4abf-9fcb-f154347332de",
+        "model": "GLM-5.3"
+      },
+      "human_author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    },
+    "s_4ceb238eb3aa7e": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6ae151755d9c5b6f1f6b7b67",
+        "model": "DeepSeek-V4.1-Flash-1017__dev"
+      },
+      "human_author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    },
+    "s_75f5d8a371f6dc": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6ae3381f5d9c5b6f1f6b91e4",
+        "model": "DeepSeek-V4.1-Flash-1017__dev"
+      },
+      "human_author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    }
+  }
+}
