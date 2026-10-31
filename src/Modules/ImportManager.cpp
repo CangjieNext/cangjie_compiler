@@ -778,6 +778,17 @@ void ImportManager::ProcessMacroImports(AST::Package& pkg)
                 continue; // @When false in this target → skip
             }
             std::string macroImportStr = spec->content.ToString();
+            // An alias has no observable effect downstream: rule 1 keeps the owning macro
+            // package itself from consuming its macro imports, so the alias name never
+            // resolves anywhere. Strip it (`p as q` → `p`) so both the target package
+            // derivation below and the bare `import xxx` emitted to .macrocall see the
+            // plain import content — otherwise the alias leaks into downstream sources
+            // (`import p as q` forces q-qualified access, diverging from the
+            // ordinary-private-import equivalence of rule 2).
+            auto aliasPos = macroImportStr.find(" as ");
+            if (aliasPos != std::string::npos) {
+                macroImportStr = macroImportStr.substr(0, aliasPos);
+            }
             auto macroImportPkg = GetPackageNameFromMacroImport(macroImportStr);
             if (macroImportPkg.empty()) {
                 continue;

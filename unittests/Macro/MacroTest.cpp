@@ -1619,3 +1619,41 @@ macro {
     EXPECT_EQ(content.find("std.reflect"), std::string::npos);
     EXPECT_EQ(content.find("@When"), std::string::npos);
 }
+
+// UT-D-04: an alias on a macro import has no observable effect downstream (rule 1
+// keeps the owning macro package from consuming its own macro imports, so the alias
+// name never resolves anywhere). Both the target-package derivation and the bare
+// `import xxx` emitted to .macrocall must see the alias-stripped content — a leaked
+// `import p as q` would force q-qualified access downstream and break the
+// ordinary-private-import equivalence of rule 2.
+TEST_F(MacroTest, MacroCall_InjectStripsAlias)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    ASSERT_EQ(system(command.c_str()), 0);
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package d04src
+import std.ast.*
+macro import std.math as q
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    invocation.globalOptions.enableMacroDebug = true;
+    auto srcFile = FileUtil::JoinPath(dir, "d04_downstream.cj");
+    {
+        std::ofstream out(srcFile);
+        out << "package d\nimport d04src\nimport define.*\n\n@M func dummy(): Unit {}\n";
+    }
+    auto inst = std::make_unique<TestCompilerInstance>(invocation, diag);
+    inst->invocation.globalOptions.implicitPrelude = true;
+    inst->compileOnePackageFromSrcFiles = true;
+    inst->srcFilePaths = {srcFile};
+    ASSERT_TRUE(inst->Compile(CompileStage::PARSE));
+    ASSERT_TRUE(inst->PerformImportPackage());
+    ASSERT_TRUE(inst->PerformMacroExpand());
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    auto content = ReadFileOrEmpty(srcFile + ".macrocall");
+    EXPECT_FALSE(content.empty());
+    // The alias is stripped: bare `import std.math` is injected, no " as q" wording.
+    EXPECT_NE(content.find("import std.math"), std::string::npos);
+    EXPECT_EQ(content.find(" as "), std::string::npos);
+}
