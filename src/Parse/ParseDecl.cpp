@@ -869,11 +869,6 @@ void ParserImpl::ParseFuncDeclAnnos(std::vector<OwnedPtr<AST::Annotation>>& anno
         if (it->kind == AnnotationKind::ARKTS) {
             funcDecl.EnableAttr(Attribute::ARKTS);
         }
-        if (it->kind == AnnotationKind::JAVA) {
-            // We enable attribute JAVA_APP by default here to facilitate subsequent processing.
-            // It will be checked and reset to the final correct attribute in the Sema phase.
-            funcDecl.EnableAttr(Attribute::JAVA_APP);
-        }
         if (it->kind == AnnotationKind::INTRINSIC) {
             CheckIntrinsicFunc(funcDecl);
             funcDecl.EnableAttr(Attribute::INTRINSIC);
