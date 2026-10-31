@@ -73617,10 +73617,10 @@ index 000000000..f55d9b667
 +                "Cangjie Barriers Split", false, false)
 diff --git a/llvm/lib/Transforms/Scalar/CJDevirtualOpt.cpp b/llvm/lib/Transforms/Scalar/CJDevirtualOpt.cpp
 new file mode 100644
-index 000000000..9b2a99555
+index 000000000..7345f9a51
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJDevirtualOpt.cpp
-@@ -0,0 +1,497 @@
+@@ -0,0 +1,526 @@
 +//===- CJDevirtualOpt.cpp - -------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -73788,122 +73788,145 @@ index 000000000..9b2a99555
 +  return M->getGlobalVariable(ExtensionDefName, true);
 +}
 +
-+static bool isSubType(GlobalVariable *Klass0, GlobalVariable *Klass1) {
++// Result of the subtype inference that is done at compile time. `Unknown` means
++// that the relation can not be decided from the type info metadata that is
++// visible in this module, e.g. when a type info is declared in another module.
++// `Unknown` must never be folded, otherwise the runtime subtype check would be
++// replaced by a wrong answer, while `NotSubType` is a definitive answer.
++enum class SubTypeResult { SubType, NotSubType, Unknown };
++
++static SubTypeResult isSubType(GlobalVariable *Klass0, GlobalVariable *Klass1) {
 +  if (Klass0 == nullptr)
-+    return false;
++    return SubTypeResult::NotSubType;
 +
 +  if (Klass0 == Klass1)
-+    return true;
++    return SubTypeResult::SubType;
++
++  // The type info is declared in another module, its kind, fields, type args
++  // and super class are not available here.
++  if (!Klass0->hasInitializer() || !Klass1->hasInitializer())
++    return SubTypeResult::Unknown;
 +
 +  TypeInfo K0(Klass0);
 +  TypeInfo K1(Klass1);
++
++  // An interface involved in a nested comparison (function parameter/return
++  // type, tuple field, ...) can not be decided here: it depends on the
++  // extension data of the source type, which is only consulted by
++  // `tryInferSubType` for the subtype check itself. Returning `Unknown` keeps
++  // the runtime check instead of aborting or folding a wrong answer.
++  if (K0.isInterface() || K1.isInterface())
++    return SubTypeResult::Unknown;
++
 +  switch (K0.Kind) {
 +  case TK_NOTHING:
-+    return true;
++    return SubTypeResult::SubType;
 +  case TK_TUPLE: {
 +    if (!K1.isTuple())
-+      return false;
++      return SubTypeResult::NotSubType;
 +
 +    unsigned K0FieldNum = K0.getFieldNum();
 +    unsigned K1FieldNum = K1.getFieldNum();
 +    if (K0FieldNum != K1FieldNum)
-+      return false;
++      return SubTypeResult::NotSubType;
 +
 +    for (unsigned i = 0; i < K0FieldNum; ++i) {
-+      if (!K0.getField(i)->hasInitializer() ||
-+          !K1.getField(i)->hasInitializer()) {
-+        return false;
-+      }
-+      if (!isSubType(K0.getField(i), K1.getField(i))) {
-+        return false;
-+      }
++      SubTypeResult Result = isSubType(K0.getField(i), K1.getField(i));
++      if (Result != SubTypeResult::SubType)
++        return Result;
 +    }
-+    return true;
++    return SubTypeResult::SubType;
 +  }
 +  case TK_FUNC: {
 +    report_fatal_error("Should not reach here.");
-+    return false;
++    return SubTypeResult::NotSubType;
 +  }
 +  case TK_CFUNC: {
 +    if (K1.Kind != TK_CFUNC)
-+      return false;
++      return SubTypeResult::NotSubType;
 +
 +    unsigned TypeArgNum = K0.getTypeArgNum();
 +    if (TypeArgNum != K1.getTypeArgNum())
-+      return false;
++      return SubTypeResult::NotSubType;
 +
 +    assert(TypeArgNum > 0 &&
 +           "The number of the function type arg should be more than 0.");
 +
 +    // Note: the first of TypeArgs is the return type.
 +    constexpr unsigned ReturnTypeIdx = 0;
-+    if (!isSubType(K0.getTypeArg(ReturnTypeIdx), K1.getTypeArg(ReturnTypeIdx)))
-+      return false;
++    SubTypeResult Result =
++        isSubType(K0.getTypeArg(ReturnTypeIdx), K1.getTypeArg(ReturnTypeIdx));
++    if (Result != SubTypeResult::SubType)
++      return Result;
 +
++    // Note: the parameter type of a function is contra-variant.
 +    for (unsigned i = ReturnTypeIdx + 1; i < TypeArgNum; ++i) {
-+      GlobalVariable *Arg1 = K1.getTypeArg(i);
-+      GlobalVariable *Arg0 = K0.getTypeArg(i);
-+      if (!Arg1->hasInitializer() || !Arg0->hasInitializer()) {
-+        return false;
-+      }
-+      if (!isSubType(Arg1, Arg0)) {
-+        return false;
-+      }
++      Result = isSubType(K1.getTypeArg(i), K0.getTypeArg(i));
++      if (Result != SubTypeResult::SubType)
++        return Result;
 +    }
-+    return true;
++    return SubTypeResult::SubType;
 +  }
 +  case TK_RAWARRAY:
 +    // The array type has no subtype relationship.
-+    return false;
++    return SubTypeResult::NotSubType;
 +  case TK_CLASS:
 +  case TK_TEMP_ENUM: {
 +    if (!K1.isClass())
-+      return false;
++      return SubTypeResult::NotSubType;
 +
 +    GlobalVariable *SuperKlass = K0.getSuperOrComponent();
 +    while (SuperKlass != nullptr) {
 +      if (SuperKlass == Klass1)
-+        return true;
++        return SubTypeResult::SubType;
 +
 +      if (!SuperKlass->hasInitializer())
-+        return false;
++        return SubTypeResult::Unknown;
 +
 +      TypeInfo Super(SuperKlass);
 +      SuperKlass = Super.getSuperOrComponent();
 +    }
-+    return false;
++    return SubTypeResult::NotSubType;
 +  }
 +  default:
 +    if (K0.isInterface() || K1.isInterface())
 +      report_fatal_error("The interface type is processed in subtype.!");
 +
-+    return false;
++    return SubTypeResult::NotSubType;
 +  }
-+  return false;
++  return SubTypeResult::NotSubType;
 +}
 +
-+// Reture true if K0 is subtype of K1, otherwise, return false.
-+static bool isFunctionSubType(TypeInfo &K0, TypeInfo &K1) {
++// Return Yes if K0 is a subtype of K1, No if it is not, and Unknown if the
++// relation can not be decided from the metadata visible here.
++static SubTypeResult isFunctionSubType(TypeInfo &K0, TypeInfo &K1) {
 +  // The function type information is stored in the `SuperClass`
 +  // of the closure instance. Therefore, having SuperClass and
 +  // SuperClass->IsFunc are prerequisites for the instance to be
 +  // of the function type.
 +  auto Super = K0.getSuperOrComponent();
 +  if (!Super)
-+    return false;
++    return SubTypeResult::NotSubType;
++
++  // The super class can be declared in another module, then its content is
++  // unknown here.
++  if (!Super->hasInitializer())
++    return SubTypeResult::Unknown;
 +
 +  TypeInfo SuperTI(Super);
 +  if (!SuperTI.isFunction())
-+    return false;
++    return SubTypeResult::NotSubType;
 +
 +  // Now, `SuperTI` and `K1` both are Closure type.
 +  // Get function type from Closure type, i.e., typeArgs[0]:
-+  K0.resetTypeInfo(SuperTI.getTypeArg(0));
-+  K1.resetTypeInfo(K1.getTypeArg(0));
++  GlobalVariable *K0FuncTI = SuperTI.getTypeArg(0);
++  GlobalVariable *K1FuncTI = K1.getTypeArg(0);
++  K0.resetTypeInfo(K0FuncTI);
++  K1.resetTypeInfo(K1FuncTI);
 +  // In addition, it is necessary to have the same number of TypeArgNum.
 +  unsigned TypeArgNum = K0.getTypeArgNum();
 +  if (TypeArgNum != K1.getTypeArgNum())
-+    return false;
++    return SubTypeResult::NotSubType;
 +
 +  return isSubType(K0.GV, K1.GV);
 +}
@@ -73931,7 +73954,7 @@ index 000000000..9b2a99555
 +
 +    TypeInfo K0(Klass0);
 +    TypeInfo K1(Klass1);
-+    bool Result = true;
++    SubTypeResult Result = SubTypeResult::SubType;
 +    if (K0.isInterface() || K1.isInterface()) {
 +      // If it find the extensionDef of klass, the subType is true.
 +      // Otherwise, the subtype is unknown.
@@ -73949,7 +73972,13 @@ index 000000000..9b2a99555
 +      Result = isSubType(Klass0, Klass1);
 +    }
 +
-+    replaceIsSubType(CI, Result);
++    // A relation that could not be decided from the metadata must keep the
++    // runtime subtype check, otherwise -O2 would replace it with a wrong
++    // answer.
++    if (Result == SubTypeResult::Unknown)
++      continue;
++
++    replaceIsSubType(CI, Result == SubTypeResult::SubType);
 +    Changed = true;
 +  }
 +  return Changed;
@@ -110762,6 +110791,148 @@ index 000000000..8a544ea75
 +
 +!0 = !{!"default:A"}
 +!1 = !{!"default:A.ti"}
+diff --git a/llvm/test/Transforms/CJDevirtualOpt/subtype_external_super_chain.ll b/llvm/test/Transforms/CJDevirtualOpt/subtype_external_super_chain.ll
+new file mode 100644
+index 000000000..59dff0473
+--- /dev/null
++++ b/llvm/test/Transforms/CJDevirtualOpt/subtype_external_super_chain.ll
+@@ -0,0 +1,21 @@
++; RUN: opt '-passes=cj-devirtual-opt' --cangjie-pipeline -S < %s | FileCheck %s
++;
++; `a is B` where `a` is an `A` instance: walking the super class chain of `A`
++; reaches `std.core:Object`, which is declared in another module and has no
++; initializer here, so `A <: B` can not be decided from the metadata visible in
++; this module. The runtime call must be preserved instead of being folded.
++
++%TypeInfo = type { i8*, i8, i8, i16, i32, i8*, i32, i8, i8, i16, i32*, i8*, i8*, i8*, %TypeInfo*, i8**, i8*, i8* }
++
++@"std.core:Object.ti" = external global %TypeInfo
++@"default:A.ti" = internal global %TypeInfo { i8* null, i8 -128, i8 0, i16 0, i32 8, i8* null, i32 0, i8 8, i8 0, i16 -32768, i32* null, i8* null, i8* null, i8* null, %TypeInfo* @"std.core:Object.ti", i8** null, i8* null, i8* null }
++@"default:B.ti" = internal global %TypeInfo { i8* null, i8 -128, i8 0, i16 0, i32 8, i8* null, i32 0, i8 8, i8 0, i16 -32768, i32* null, i8* null, i8* null, i8* null, %TypeInfo* @"std.core:Object.ti", i8** null, i8* null, i8* null }
++
++; CHECK-LABEL: define i1 @test(
++; CHECK: call i1 @CJ_MCC_IsSubType
++define i1 @test() {
++  %r = call i1 @CJ_MCC_IsSubType(i8* bitcast (%TypeInfo* @"default:A.ti" to i8*), i8* bitcast (%TypeInfo* @"default:B.ti" to i8*))
++  ret i1 %r
++}
++
++declare i1 @CJ_MCC_IsSubType(i8*, i8*)
+diff --git a/llvm/test/Transforms/CJDevirtualOpt/subtype_external_super_class.ll b/llvm/test/Transforms/CJDevirtualOpt/subtype_external_super_class.ll
+new file mode 100644
+index 000000000..533416373
+--- /dev/null
++++ b/llvm/test/Transforms/CJDevirtualOpt/subtype_external_super_class.ll
+@@ -0,0 +1,27 @@
++; RUN: opt '-passes=cj-devirtual-opt' --cangjie-pipeline -S < %s | FileCheck %s
++;
++; `c is (Rune) -> Unit` where `c` is a `C` instance whose super class
++; (`std.core:Object`) is declared in another module. The super class must not
++; be read as if it had an initializer here (that used to crash the pass), and
++; the check must be kept because the closure relation can not be decided.
++
++%TypeInfo = type { i8*, i8, i8, i16, i32, i8*, i32, i8, i8, i16, i32*, i8*, i8*, i8*, %TypeInfo*, i8**, i8*, i8* }
++
++@"std.core:Object.ti" = external global %TypeInfo
++@"default:C.ti" = internal global %TypeInfo { i8* null, i8 -128, i8 0, i16 0, i32 8, i8* null, i32 0, i8 1, i8 0, i16 1, i32* null, i8* null, i8* null, i8* null, %TypeInfo* @"std.core:Object.ti", i8** null, i8* null, i8* null }
++
++@"Closure<(Rune)->Unit>.ti" = linkonce_odr global %TypeInfo { i8* null, i8 -125, i8 0, i16 2, i32 16, i8* null, i32 0, i8 8, i8 1, i16 -32768, i32* null, i8* null, i8* bitcast ([1 x %TypeInfo*]* @"Closure<(Rune)->Unit>.ti.typeArgs" to i8*), i8* null, %TypeInfo* null, i8** null, i8* null, i8* null }
++@"Closure<(Rune)->Unit>.ti.typeArgs" = private unnamed_addr constant [1 x %TypeInfo*] [%TypeInfo* @"(Rune)->Unit.ti"]
++@"(Rune)->Unit.ti" = linkonce_odr global %TypeInfo { i8* null, i8 19, i8 0, i16 0, i32 8, i8* null, i32 0, i8 8, i8 2, i16 -32768, i32* null, i8* null, i8* bitcast ([2 x %TypeInfo*]* @"(Rune)->Unit.ti.typeArgs" to i8*), i8* null, %TypeInfo* null, i8** null, i8* null, i8* null }
++@"(Rune)->Unit.ti.typeArgs" = private unnamed_addr constant [2 x %TypeInfo*] [%TypeInfo* @Unit.ti, %TypeInfo* @Rune.ti]
++@Unit.ti = external global %TypeInfo
++@Rune.ti = external global %TypeInfo
++
++; CHECK-LABEL: define i1 @test(
++; CHECK: call i1 @CJ_MCC_IsSubType
++define i1 @test() {
++  %r = call i1 @CJ_MCC_IsSubType(i8* bitcast (%TypeInfo* @"default:C.ti" to i8*), i8* bitcast (%TypeInfo* @"Closure<(Rune)->Unit>.ti" to i8*))
++  ret i1 %r
++}
++
++declare i1 @CJ_MCC_IsSubType(i8*, i8*)
+diff --git a/llvm/test/Transforms/CJDevirtualOpt/subtype_nested_interface.ll b/llvm/test/Transforms/CJDevirtualOpt/subtype_nested_interface.ll
+new file mode 100644
+index 000000000..2134557d1
+--- /dev/null
++++ b/llvm/test/Transforms/CJDevirtualOpt/subtype_nested_interface.ll
+@@ -0,0 +1,35 @@
++; RUN: opt '-passes=cj-devirtual-opt' --cangjie-pipeline -S < %s | FileCheck %s
++;
++; `Box(foo1)` where `foo1: (A) -> Unit` is checked at runtime against
++; `(I) -> Unit`, `I` being an interface defined in this module. The nested
++; comparison `I <: A` depends on the extension data of `A` and can not be
++; decided here, so the runtime call must be preserved. This used to hit
++; `report_fatal_error("The interface type is processed in subtype.!")` and
++; abort opt.
++
++%TypeInfo = type { i8*, i8, i8, i16, i32, i8*, i32, i8, i8, i16, i32*, i8*, i8*, i8*, %TypeInfo*, i8**, i8*, i8* }
++
++@Unit.ti = external global %TypeInfo
++
++@"I.ti" = linkonce_odr global %TypeInfo { i8* null, i8 -127, i8 0, i16 0, i32 8, i8* null, i32 0, i8 8, i8 0, i16 0, i32* null, i8* null, i8* null, i8* null, %TypeInfo* null, i8** null, i8* null, i8* null }
++@"A.ti" = linkonce_odr global %TypeInfo { i8* null, i8 -128, i8 0, i16 0, i32 8, i8* null, i32 0, i8 8, i8 0, i16 0, i32* null, i8* null, i8* null, i8* null, %TypeInfo* null, i8** null, i8* null, i8* null }
++
++@"(A)->Unit.ti" = linkonce_odr global %TypeInfo { i8* null, i8 19, i8 0, i16 0, i32 8, i8* null, i32 0, i8 8, i8 2, i16 -32768, i32* null, i8* null, i8* bitcast ([2 x %TypeInfo*]* @"(A)->Unit.ti.typeArgs" to i8*), i8* null, %TypeInfo* null, i8** null, i8* null, i8* null }
++@"(A)->Unit.ti.typeArgs" = private unnamed_addr constant [2 x %TypeInfo*] [%TypeInfo* @Unit.ti, %TypeInfo* @"A.ti"]
++@"(I)->Unit.ti" = linkonce_odr global %TypeInfo { i8* null, i8 19, i8 0, i16 0, i32 8, i8* null, i32 0, i8 8, i8 2, i16 -32768, i32* null, i8* null, i8* bitcast ([2 x %TypeInfo*]* @"(I)->Unit.ti.typeArgs" to i8*), i8* null, %TypeInfo* null, i8** null, i8* null, i8* null }
++@"(I)->Unit.ti.typeArgs" = private unnamed_addr constant [2 x %TypeInfo*] [%TypeInfo* @Unit.ti, %TypeInfo* @"I.ti"]
++
++@"default:$CN7default4foo1H1AE.ti" = internal global %TypeInfo { i8* null, i8 -128, i8 0, i16 2, i32 16, i8* null, i32 0, i8 8, i8 0, i16 -32768, i32* null, i8* null, i8* null, i8* null, %TypeInfo* @"Closure<(A)->Unit>.ti", i8** null, i8* null, i8* null }
++@"Closure<(A)->Unit>.ti" = linkonce_odr global %TypeInfo { i8* null, i8 -125, i8 0, i16 2, i32 16, i8* null, i32 0, i8 8, i8 1, i16 -32768, i32* null, i8* null, i8* bitcast ([1 x %TypeInfo*]* @"Closure<(A)->Unit>.ti.typeArgs" to i8*), i8* null, %TypeInfo* null, i8** null, i8* null, i8* null }
++@"Closure<(A)->Unit>.ti.typeArgs" = private unnamed_addr constant [1 x %TypeInfo*] [%TypeInfo* @"(A)->Unit.ti"]
++@"Closure<(I)->Unit>.ti" = linkonce_odr global %TypeInfo { i8* null, i8 -125, i8 0, i16 2, i32 16, i8* null, i32 0, i8 8, i8 1, i16 -32768, i32* null, i8* null, i8* bitcast ([1 x %TypeInfo*]* @"Closure<(I)->Unit>.ti.typeArgs" to i8*), i8* null, %TypeInfo* null, i8** null, i8* null, i8* null }
++@"Closure<(I)->Unit>.ti.typeArgs" = private unnamed_addr constant [1 x %TypeInfo*] [%TypeInfo* @"(I)->Unit.ti"]
++
++; CHECK-LABEL: define i1 @test(
++; CHECK: call i1 @CJ_MCC_IsSubType
++define i1 @test() {
++  %r = call i1 @CJ_MCC_IsSubType(i8* bitcast (%TypeInfo* @"default:$CN7default4foo1H1AE.ti" to i8*), i8* bitcast (%TypeInfo* @"Closure<(I)->Unit>.ti" to i8*))
++  ret i1 %r
++}
++
++declare i1 @CJ_MCC_IsSubType(i8*, i8*)
+diff --git a/llvm/test/Transforms/CJDevirtualOpt/subtype_unknown_external_ti.ll b/llvm/test/Transforms/CJDevirtualOpt/subtype_unknown_external_ti.ll
+new file mode 100644
+index 000000000..bb9aaa84d
+--- /dev/null
++++ b/llvm/test/Transforms/CJDevirtualOpt/subtype_unknown_external_ti.ll
+@@ -0,0 +1,35 @@
++; RUN: opt '-passes=cj-devirtual-opt' --cangjie-pipeline -S < %s | FileCheck %s
++;
++; `Box(foo2)` where `foo2: (Any) -> Unit` is checked at runtime against
++; `(Rune) -> Unit`. The check involves `Rune`/`Any` type infos which are
++; declared in `std.core` and therefore have no initializer in this module, so
++; the subtype relation can not be decided here and the runtime call must be
++; preserved. Folding it to `false` used to make -O2 return 1 while -O0 returns
++; 0 (the function parameter is contra-variant, so the runtime answers `true`).
++
++%TypeInfo = type { i8*, i8, i8, i16, i32, i8*, i32, i8, i8, i16, i32*, i8*, i8*, i8*, %TypeInfo*, i8**, i8*, i8* }
++
++@Unit.ti = external global %TypeInfo
++@Rune.ti = external global %TypeInfo
++@"std.core:Any.ti" = external global %TypeInfo
++
++@"(Rune)->Unit.ti" = linkonce_odr global %TypeInfo { i8* null, i8 19, i8 0, i16 0, i32 8, i8* null, i32 0, i8 8, i8 2, i16 -32768, i32* null, i8* null, i8* bitcast ([2 x %TypeInfo*]* @"(Rune)->Unit.ti.typeArgs" to i8*), i8* null, %TypeInfo* null, i8** null, i8* null, i8* null }
++@"(Rune)->Unit.ti.typeArgs" = private unnamed_addr constant [2 x %TypeInfo*] [%TypeInfo* @Unit.ti, %TypeInfo* @Rune.ti]
++@"(std.core:Any)->Unit.ti" = linkonce_odr global %TypeInfo { i8* null, i8 19, i8 0, i16 0, i32 8, i8* null, i32 0, i8 8, i8 2, i16 -32768, i32* null, i8* null, i8* bitcast ([2 x %TypeInfo*]* @"(std.core:Any)->Unit.ti.typeArgs" to i8*), i8* null, %TypeInfo* null, i8** null, i8* null, i8* null }
++@"(std.core:Any)->Unit.ti.typeArgs" = private unnamed_addr constant [2 x %TypeInfo*] [%TypeInfo* @Unit.ti, %TypeInfo* @"std.core:Any.ti"]
++
++@"Closure<(Rune)->Unit>.ti" = linkonce_odr global %TypeInfo { i8* null, i8 -125, i8 0, i16 2, i32 16, i8* null, i32 0, i8 8, i8 1, i16 -32768, i32* null, i8* null, i8* bitcast ([1 x %TypeInfo*]* @"Closure<(Rune)->Unit>.ti.typeArgs" to i8*), i8* null, %TypeInfo* null, i8** null, i8* null, i8* null }
++@"Closure<(Rune)->Unit>.ti.typeArgs" = private unnamed_addr constant [1 x %TypeInfo*] [%TypeInfo* @"(Rune)->Unit.ti"]
++@"Closure<(std.core:Any)->Unit>.ti" = linkonce_odr global %TypeInfo { i8* null, i8 -125, i8 0, i16 2, i32 16, i8* null, i32 0, i8 8, i8 1, i16 -32768, i32* null, i8* null, i8* bitcast ([1 x %TypeInfo*]* @"Closure<(std.core:Any)->Unit>.ti.typeArgs" to i8*), i8* null, %TypeInfo* null, i8** null, i8* null, i8* null }
++@"Closure<(std.core:Any)->Unit>.ti.typeArgs" = private unnamed_addr constant [1 x %TypeInfo*] [%TypeInfo* @"(std.core:Any)->Unit.ti"]
++
++@"default:$CfN7default4foo2HCNat3AnyE.ti" = internal global %TypeInfo { i8* null, i8 -128, i8 0, i16 2, i32 16, i8* null, i32 0, i8 8, i8 0, i16 -32768, i32* null, i8* null, i8* null, i8* null, %TypeInfo* @"Closure<(std.core:Any)->Unit>.ti", i8** null, i8* null, i8* null }
++
++; CHECK-LABEL: define i1 @test(
++; CHECK: call i1 @CJ_MCC_IsSubType
++define i1 @test() {
++  %r = call i1 @CJ_MCC_IsSubType(i8* bitcast (%TypeInfo* @"default:$CfN7default4foo2HCNat3AnyE.ti" to i8*), i8* bitcast (%TypeInfo* @"Closure<(Rune)->Unit>.ti" to i8*))
++  ret i1 %r
++}
++
++declare i1 @CJ_MCC_IsSubType(i8*, i8*)
 diff --git a/llvm/test/Transforms/CJExceptionTailOutline/outline-factory-tail.ll b/llvm/test/Transforms/CJExceptionTailOutline/outline-factory-tail.ll
 new file mode 100644
 index 000000000..b4b9b011b
