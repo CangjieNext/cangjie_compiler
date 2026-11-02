@@ -1878,16 +1878,6 @@ private:
     Ptr<AST::Node> strictDeprecatedContext = nullptr;
     // cjmp typechecker implementation class
     class MPTypeCheckerImpl* mpImpl;
-<<<<<<< HEAD
-||||||| constructed merge base
-    /**
-     * Will be passed as a reference in TypeChecker::TypeCheckerImpl::PerformDesugarAfterTypeCheck
-     * at Perform desugar after typecheck before generic instantiation stage.
-     *
-     * Needed for Java, Objective C interop Synthetic class wrappers generation.
-     */
-    std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap> structMemberMap;
-=======
     // checker impl of Modal type
     struct ModalTypeChecker* modalTypeChecker;
     /**
@@ -1897,7 +1887,6 @@ private:
      * Needed for Java, Objective C interop Synthetic class wrappers generation.
      */
     std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap> structMemberMap;
->>>>>>> feat: local mode
 };
 } // namespace Cangjie
 #endif

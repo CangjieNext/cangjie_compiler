@@ -194,16 +194,8 @@ void DesugarJArray::InsertConstructorBody(AfterTypeCheckContext& ctx, FuncDecl& 
     auto jarray = StaticAs<ASTKind::CLASS_LIKE_DECL>(constr.outerDecl);
     static auto generatedJavaRefInitConstr = GetJavaMirrorWrappingConstructor(*jarray);
     auto thisCall = CreateThisCall(
-<<<<<<< HEAD
-        *constr.outerDecl, *generatedJavaRefInitConstr, generatedJavaRefInitConstr->GetTy(), constr.curFile);
-    thisCall->args.push_back(CreateFuncArg(std::move(exclusiveScopeCall)));
-||||||| constructed merge base
-        *constr.outerDecl, *generatedJavaRefInitConstr, generatedJavaRefInitConstr->GetTy(), constr.curFile);
-    thisCall->args.push_back(CreateFuncArg(WrapReturningLambdaCall(typeManager, std::move(lambdaNodes))));
-=======
         *constr.outerDecl, *generatedJavaRefInitConstr, generatedJavaRefInitConstr->DataTy(), constr.curFile);
-    thisCall->args.push_back(CreateFuncArg(WrapReturningLambdaCall(typeManager, std::move(lambdaNodes))));
->>>>>>> feat: local mode
+    thisCall->args.push_back(CreateFuncArg(std::move(exclusiveScopeCall)));
     constr.funcBody->body->body.clear();
     constr.funcBody->body->body.push_back(std::move(thisCall));
 }
@@ -270,14 +262,8 @@ void DesugarJArray::ReplaceCallsWithArrayJavaEntityGet(File& file) const
                 std::move(newCallExpr));
             newCallExpr = ilib.CreateJavaEntityJobjectCall(std::move(newCallExpr));
         }
-        callExpr->desugarExpr = ilib.UnwrapJavaEntity(
-<<<<<<< HEAD
-            std::move(newCallExpr), arrayElementType, funcDecl->outerDecl);
-||||||| constructed merge base
-            std::move(newCallExpr), arrayElementType, *As<ASTKind::CLASS_LIKE_DECL>(funcDecl->outerDecl));
-=======
-            std::move(newCallExpr), arrayElementType.Ty(), *As<ASTKind::CLASS_LIKE_DECL>(funcDecl->outerDecl));
->>>>>>> feat: local mode
+        callExpr->desugarExpr =
+            ilib.UnwrapJavaEntity(std::move(newCallExpr), arrayElementType.Ty(), funcDecl->outerDecl);
         callExpr->desugarArgs = std::nullopt;
 
         return VisitAction::WALK_CHILDREN;

@@ -187,16 +187,6 @@ private:
     /**
      * Instantiate a generic decl @p genericDecl with type arguments @p instTys.
      */
-<<<<<<< HEAD
-    void InstantiateGenericDeclWithInstTys(AST::Decl& decl, const std::vector<Ptr<AST::Ty>>& instTys);
-||||||| constructed merge base
-    void InstantiateGenericDeclWithInstTys(AST::Decl& decl, const std::vector<Ptr<AST::Ty>>& instTys);
-    /**
-     * Walk inherited types which are used by non-generic be boxed extend decls.
-     * Used to guarantee all related generic types are instantiated.
-     */
-    void WalkNonGenericExtendedType();
-=======
     void InstantiateGenericDeclWithInstTys(AST::Decl& decl, const std::vector<AST::DataTy>& instTys);
     void InstantiateGenericDeclWithInstTys(AST::Decl& decl, const std::vector<AST::ModalTy>& instTys);
     /**
@@ -204,7 +194,6 @@ private:
      * Used to guarantee all related generic types are instantiated.
      */
     void WalkNonGenericExtendedType();
->>>>>>> feat: local mode
     /** Helper functions during clone instantiated decl. */
     void PerformTyInstantiationDuringClone(
         const AST::Node& genericNode, AST::Node& clonedNode, const GenericInfo& info, const TypeSubst& g2gTyMap);

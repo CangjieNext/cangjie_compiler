@@ -422,17 +422,9 @@ MemberMap StructInheritanceChecker::GetAndCheckInheritedInterfaces(const Inherit
     // Merge inherited interfaces' members.
     for (auto iTy : interfaceTys) {
         auto interfaceDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(iTy);
-<<<<<<< HEAD
         if (auto it = structInheritedMembers.find(interfaceDecl); it != structInheritedMembers.end()) {
             MergeInheritedMembers(members, it->second, *iTy, true);
         }
-||||||| constructed merge base
-        auto interfaceMembers = structInheritedMembers[interfaceDecl];
-        MergeInheritedMembers(members, interfaceMembers, *iTy, true);
-=======
-        auto interfaceMembers = structInheritedMembers[interfaceDecl];
-        MergeInheritedMembers(members, interfaceMembers, iTy.Ty(), true);
->>>>>>> feat: local mode
     }
     DiagnoseForConflictInheritance(decl, members);
     return members;
@@ -448,15 +440,9 @@ MemberMap StructInheritanceChecker::GetInheritedSuperMembers(
 {
     MemberMap members;
     // Merge inherited class members.
-<<<<<<< HEAD
     if (auto it = structInheritedMembers.find(&decl); it != structInheritedMembers.end()) {
-        MergeInheritedMembers(members, it->second, baseTy);
+        MergeInheritedMembers(members, it->second, baseTy.Ty());
     }
-||||||| constructed merge base
-    MergeInheritedMembers(members, structInheritedMembers[&decl], baseTy);
-=======
-    MergeInheritedMembers(members, structInheritedMembers[&decl], baseTy.Ty());
->>>>>>> feat: local mode
     RemoveInvisibleMember(members, curFile.curPackage->fullPackageName);
     if (ignoreExtends) {
         return members;
@@ -472,21 +458,11 @@ MemberMap StructInheritanceChecker::GetInheritedSuperMembers(
             continue;
         }
         CheckMembersWithInheritedDecls(*extend);
-<<<<<<< HEAD
         if (auto extendIt = structInheritedMembers.find(extend); extendIt != structInheritedMembers.end()) {
             auto allVisibleMember = extendIt->second;
             RemoveInvisibleMember(allVisibleMember, curFile.curPackage->fullPackageName);
-            MergeInheritedMembers(members, allVisibleMember, baseTy);
+            MergeInheritedMembers(members, allVisibleMember, baseTy.Ty());
         }
-||||||| constructed merge base
-        auto extendMembers = structInheritedMembers[extend];
-        RemoveInvisibleMember(members, curFile.curPackage->fullPackageName);
-        MergeInheritedMembers(members, extendMembers, baseTy);
-=======
-        auto extendMembers = structInheritedMembers[extend];
-        RemoveInvisibleMember(members, curFile.curPackage->fullPackageName);
-        MergeInheritedMembers(members, extendMembers, baseTy.Ty());
->>>>>>> feat: local mode
     }
     return members;
 }

@@ -165,14 +165,8 @@ OwnedPtr<Expr> DesugarJavaImplSuperConstructorCall::WrapExprWithExceptionHandlin
         ret = WithinFile(CreateRefExpr(*res), curFile);
     } else {
         // Cangjie Type -> JavaEntity -> jobject
-<<<<<<< HEAD
-        ret = ilib.UnwrapJavaEntity(ilib.WrapJavaEntity(WithinFile(CreateRefExpr(*res), curFile)), retTy, &decl, true);
-||||||| constructed merge base
-        ret = ilib.UnwrapJavaEntity(ilib.WrapJavaEntity(WithinFile(CreateRefExpr(*res), curFile)), retTy, decl, true);
-=======
         ret = ilib.UnwrapJavaEntity(
-            ilib.WrapJavaEntity(WithinFile(CreateRefExpr(*res), curFile)), retTy.Ty(), decl, true);
->>>>>>> feat: local mode
+            ilib.WrapJavaEntity(WithinFile(CreateRefExpr(*res), curFile)), retTy.Ty(), &decl, true);
     }
     nodes.push_back(std::move(res));
     nodes.push_back(std::move(ret));

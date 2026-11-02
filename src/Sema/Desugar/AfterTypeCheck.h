@@ -100,12 +100,7 @@ OwnedPtr<TypePattern> CreateRuntimePreparedTypePattern(
     TypeManager& typeManager, OwnedPtr<Pattern> pattern, OwnedPtr<Type>  type, Expr& selector);
 
 Ptr<Decl> LookupEnumMember(Ptr<Decl> decl, const std::string& identifier);
-<<<<<<< HEAD
-||||||| constructed merge base
-void UnitifyBlock(const Expr& posSrc, Block& b, Ty& unitTy);
-=======
 void UnitifyBlock(const Expr& posSrc, Block& b, ModalTy unitTy);
->>>>>>> feat: local mode
 void RearrangeRefLoop(const Expr& src, Expr& dst, Ptr<Node> loopBody);
 
 void PostProcessFuncParam(const FuncParam& fp, const GlobalOptions& options);

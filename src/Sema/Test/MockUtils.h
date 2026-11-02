@@ -223,16 +223,6 @@ private:
      */
     Ptr<AST::Decl> GetOuterDecl(AST::Decl& decl) const;
     Ptr<AST::Decl> GetExtendedTypeDecl(AST::FuncDecl& decl) const;
-<<<<<<< HEAD
-||||||| constructed merge base
-    void UpdateRefTypesTarget(
-        Ptr<AST::Type> type, Ptr<AST::Generic> oldGeneric, Ptr<AST::Generic> newGeneric) const;
-    int GetIndexOfGenericTypeParam(Ptr<AST::Ty> ty, Ptr<AST::Generic> generic) const;
-=======
-    void UpdateRefTypesTarget(
-        Ptr<AST::Type> type, Ptr<AST::Generic> oldGeneric, Ptr<AST::Generic> newGeneric) const;
-    int GetIndexOfGenericTypeParam(AST::DataTy ty, Ptr<AST::Generic> generic) const;
->>>>>>> feat: local mode
 
     friend class TestManager;
     friend class MockManager;

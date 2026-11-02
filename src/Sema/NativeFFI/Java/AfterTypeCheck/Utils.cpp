@@ -33,13 +33,7 @@ Utils::Utils(ImportManager& importManager, TypeManager& typeManager)
 
 ModalTy Utils::GetOptionTy(ModalTy ty)
 {
-<<<<<<< HEAD
     return Native::FFI::GetOptionTy(importManager, typeManager, ty);
-||||||| constructed merge base
-    return typeManager.GetEnumTy(*GetOptionDecl(), {ty});
-=======
-    return ModalTy{typeManager.GetEnumTy(*GetOptionDecl(), {ty.Ty()})};
->>>>>>> feat: local mode
 }
 
 Ptr<EnumDecl> Utils::GetOptionDecl()
@@ -59,36 +53,12 @@ Ptr<Decl> Utils::GetOptionNoneDecl()
 
 OwnedPtr<Expr> Utils::CreateOptionSomeRef(ModalTy ty)
 {
-<<<<<<< HEAD
     return Native::FFI::CreateOptionSomeRef(importManager, typeManager, ty);
-||||||| constructed merge base
-    auto someDeclRef = CreateRefExpr(*GetOptionSomeDecl());
-    auto optionActualTy = GetOptionTy(ty);
-    someDeclRef->SetTy(typeManager.GetFunctionTy({ty}, optionActualTy));
-    return someDeclRef;
-=======
-    auto someDeclRef = CreateRefExpr(*GetOptionSomeDecl());
-    auto optionActualTy = GetOptionTy(ty);
-    someDeclRef->SetTy({typeManager.GetFunctionTy({{ty}}, {optionActualTy})});
-    return someDeclRef;
->>>>>>> feat: local mode
 }
 
 OwnedPtr<Expr> Utils::CreateOptionNoneRef(ModalTy ty)
 {
-<<<<<<< HEAD
     return Native::FFI::CreateOptionNoneRef(importManager, typeManager, ty);
-||||||| constructed merge base
-    auto noneDeclRef = CreateRefExpr(*GetOptionNoneDecl());
-    auto optionActualTy = GetOptionTy(ty);
-    noneDeclRef->SetTy(optionActualTy);
-    return noneDeclRef;
-=======
-    auto noneDeclRef = CreateRefExpr(*GetOptionNoneDecl());
-    auto optionActualTy = GetOptionTy(ty);
-    noneDeclRef->SetTy({optionActualTy});
-    return noneDeclRef;
->>>>>>> feat: local mode
 }
 
 OwnedPtr<Expr> Utils::CreateOptionSomeCall(OwnedPtr<Expr> expr, ModalTy ty)
@@ -363,189 +333,11 @@ std::string Utils::GetJavaObjectTypeName(const Ty& ty)
  */
 std::string GetJavaJniClassName(const Ty& cjtype)
 {
-<<<<<<< HEAD
     if (IsJArray(cjtype)) {
         // arrays use full signatures and work for primitives
         return GetJniTypeSignature(cjtype);
-||||||| constructed merge base
-    std::string jsig;
-
-    switch (cjtype.kind) {
-        case TypeKind::TYPE_UNIT:
-            jsig = "V";
-            break;
-        case TypeKind::TYPE_BOOLEAN:
-            jsig = "Z";
-            break;
-        case TypeKind::TYPE_INT8:
-            jsig = "B";
-            break;
-        case TypeKind::TYPE_UINT16:
-            jsig = "C";
-            break;
-        case TypeKind::TYPE_INT16:
-            jsig = "S";
-            break;
-        case TypeKind::TYPE_INT32:
-            jsig = "I";
-            break;
-        case TypeKind::TYPE_INT64:
-            jsig = "J";
-            break;
-        case TypeKind::TYPE_FLOAT32:
-            jsig = "F";
-            break;
-        case TypeKind::TYPE_FLOAT64:
-            jsig = "D";
-            break;
-
-        case TypeKind::TYPE_STRUCT: {
-            if (cjtype.IsString()) {
-                jsig = "L" + NormalizeJavaSignature(GetJavaFQName(*GetJStringDecl())) + ";";
-                break;
-            }
-            if (!cjtype.IsStructArray()) {
-                break;
-            }
-            [[fallthrough]]; // for Array<T> - fallback
-        }
-        case TypeKind::TYPE_ARRAY:
-            jsig = "[" + GetJavaTypeSignature(*cjtype.typeArgs[0]);
-            break;
-        case TypeKind::TYPE_ENUM: {
-            if (!cjtype.IsCoreOptionType()) {
-                break;
-            };
-            CJC_ASSERT_WITH_MSG(!cjtype.typeArgs.empty(), "Option type must be generic");
-            auto& argTy = *cjtype.typeArgs[0];
-            if (IsJArray(argTy)) {
-                jsig = GetJavaTypeSignature(argTy);
-            } else {
-                jsig = "L" + NormalizeJavaSignature(GetJavaObjectTypeName(argTy)) + ";";
-            }
-            break;
-        }
-        case TypeKind::TYPE_CLASS:
-        case TypeKind::TYPE_INTERFACE:
-            if (IsJArray(*StaticCast<ClassLikeTy&>(cjtype).commonDecl)) {
-                jsig = "[" + GetJavaTypeSignature(*cjtype.typeArgs[0]);
-            } else {
-                jsig = "L" + NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(cjtype).commonDecl)) + ";";
-            }
-            break;
-        case TypeKind::TYPE_FUNC: {
-            auto& funcTy = *StaticCast<FuncTy>(&cjtype);
-            jsig = "(";
-            for (auto paramTy : funcTy.paramTys) {
-                jsig.append(GetJavaTypeSignature(*paramTy));
-            }
-            jsig.append(")");
-            jsig.append(GetJavaTypeSignature(*funcTy.retTy));
-            break;
-        }
-        default:
-            CJC_ABORT();
-            break; // method must be called only on java-compatible types
-=======
-    std::string jsig;
-
-    switch (cjtype.kind) {
-        case TypeKind::TYPE_UNIT:
-            jsig = "V";
-            break;
-        case TypeKind::TYPE_BOOLEAN:
-            jsig = "Z";
-            break;
-        case TypeKind::TYPE_INT8:
-            jsig = "B";
-            break;
-        case TypeKind::TYPE_UINT16:
-            jsig = "C";
-            break;
-        case TypeKind::TYPE_INT16:
-            jsig = "S";
-            break;
-        case TypeKind::TYPE_INT32:
-            jsig = "I";
-            break;
-        case TypeKind::TYPE_INT64:
-            jsig = "J";
-            break;
-        case TypeKind::TYPE_FLOAT32:
-            jsig = "F";
-            break;
-        case TypeKind::TYPE_FLOAT64:
-            jsig = "D";
-            break;
-
-        case TypeKind::TYPE_STRUCT: {
-            if (cjtype.IsString()) {
-                jsig = "L" + NormalizeJavaSignature(GetJavaFQName(*GetJStringDecl())) + ";";
-                break;
-            }
-            if (!cjtype.IsStructArray()) {
-                break;
-            }
-            [[fallthrough]]; // for Array<T> - fallback
-        }
-        case TypeKind::TYPE_ARRAY:
-            jsig = "[" + GetJavaTypeSignature(*cjtype.TyArg(0));
-            break;
-        case TypeKind::TYPE_ENUM: {
-            if (!cjtype.IsCoreOptionType()) {
-                break;
-            };
-            CJC_ASSERT_WITH_MSG(!cjtype.TyArgs().empty(), "Option type must be generic");
-            auto& argTy = *cjtype.TyArg(0);
-            if (IsJArray(argTy)) {
-                jsig = GetJavaTypeSignature(argTy);
-            } else {
-                jsig = "L" + NormalizeJavaSignature(GetJavaObjectTypeName(argTy)) + ";";
-            }
-            break;
-        }
-        case TypeKind::TYPE_CLASS:
-        case TypeKind::TYPE_INTERFACE:
-            if (IsJArray(*StaticCast<ClassLikeTy&>(cjtype).commonDecl)) {
-                jsig = "[" + GetJavaTypeSignature(*cjtype.TyArg(0));
-            } else {
-                jsig = "L" + NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(cjtype).commonDecl)) + ";";
-            }
-            break;
-        case TypeKind::TYPE_FUNC: {
-            auto& funcTy = *StaticCast<FuncTy>(&cjtype);
-            jsig = "(";
-            for (auto paramTy : funcTy.paramTys) {
-                jsig.append(GetJavaTypeSignature(*paramTy));
-            }
-            jsig.append(")");
-            jsig.append(GetJavaTypeSignature(*funcTy.retTy));
-            break;
-        }
-        default:
-            CJC_ABORT();
-            break; // method must be called only on java-compatible types
->>>>>>> feat: local mode
     }
-<<<<<<< HEAD
     return NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(cjtype).commonDecl));
-||||||| constructed merge base
-
-    return jsig;
-}
-
-std::string Utils::GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& params)
-{
-    return GetJavaTypeSignature(*typeManager.GetFunctionTy(params, &retTy));
-=======
-
-    return jsig;
-}
-
-std::string Utils::GetJavaTypeSignature(Ty& retTy, const std::vector<ModalTy>& params)
-{
-    return GetJavaTypeSignature(*typeManager.GetFunctionTy(params, {&retTy}));
->>>>>>> feat: local mode
 }
 
 OwnedPtr<CallExpr> Utils::CreateZeroValue(Ptr<Ty> ty, File& curFile) const

@@ -44,33 +44,6 @@ template <typename TypeDeclT> size_t HashNominalTy(const TypeDeclT& ty)
     ret = hash_combine<Ptr<const Decl>>(ret, ty.declPtr);
     return ret;
 }
-<<<<<<< HEAD
-||||||| constructed merge base
-
-bool IsJavaGeneric(const GenericParamDecl& gpd)
-{
-    if (gpd.outerDecl && HasJavaAttr(*gpd.outerDecl)) {
-        return true;
-    }
-    if (auto funcDecl = DynamicCast<FuncDecl*>(gpd.outerDecl); funcDecl && funcDecl->funcBody &&
-        funcDecl->funcBody->parentClassLike && HasJavaAttr(*funcDecl->funcBody->parentClassLike)) {
-        return true;
-    }
-    return false;
-}
-=======
-
-bool IsJavaGeneric(const GenericParamDecl& gpd)
-{
-    if (gpd.outerDecl && HasJavaAttr(*gpd.outerDecl)) {
-        return true;
-    }
-    if (auto funcDecl = DynamicCast<FuncDecl*>(gpd.outerDecl); funcDecl && funcDecl->funcBody &&
-        funcDecl->funcBody->parentClassLike && HasJavaAttr(*funcDecl->funcBody->parentClassLike)) {
-        return true;
-    }
-    return false;
-}
 
 bool TyArgsEqual(const std::vector<ModalTy>& lhs, const std::vector<ModalTy>& rhs)
 {
@@ -84,7 +57,6 @@ bool TyArgsEqual(const std::vector<ModalTy>& lhs, const std::vector<ModalTy>& rh
     }
     return true;
 }
->>>>>>> feat: local mode
 } // namespace
 
 size_t Ty::Hash() const
@@ -1121,14 +1093,9 @@ template <typename T> Ptr<T> Ty::GetDeclOfTy(ModalTy ty)
 /** Get ty's corresponding declaration, always be generic decl if has generic. */
 template Ptr<Decl> Ty::GetDeclPtrOfTy(Ptr<const AST::Ty> ty);
 template Ptr<InheritableDecl> Ty::GetDeclPtrOfTy(Ptr<const AST::Ty> ty);
-<<<<<<< HEAD
-template Ptr<ClassLikeDecl> Ty::GetDeclPtrOfTy(Ptr<const AST::Ty> ty);
-||||||| constructed merge base
-=======
 template Ptr<ClassLikeDecl> Ty::GetDeclPtrOfTy(Ptr<const AST::Ty> ty);
 template Ptr<Decl> Ty::GetDeclPtrOfTy(Ptr<AST::Ty> ty);
 template Ptr<InheritableDecl> Ty::GetDeclPtrOfTy(Ptr<AST::Ty> ty);
->>>>>>> feat: local mode
 template <typename T> Ptr<T> Ty::GetDeclPtrOfTy(Ptr<const Ty> ty)
 {
     if (!ty) {

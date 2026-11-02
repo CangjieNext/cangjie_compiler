@@ -12,7 +12,6 @@
 
 #include "cangjie/Modules/ImportManager.h"
 
-#include <fstream>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -27,6 +26,7 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/SourceManager.h"
+#include "cangjie/CHIR/Interpreter/BCHIR.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/ModulesUtils.h"
@@ -1597,6 +1597,15 @@ bool ImportManager::IsExtendMemberAccessible(
     }
 
     return IsExtendMemberImported(extend, file, member, builder);
+}
+
+ImportManager::ImportManager(DiagnosticEngine& d, TypeManager& typeManager, const GlobalOptions& opts)
+    : diag(d), opts(opts), typeManager(typeManager)
+{
+    cjoManager = MakeOwned<CjoManager>(CjoManager::Config{diag, typeManager, opts, importSrcCode});
+    CJC_NULLPTR_CHECK(cjoManager);
+    dependencyGraph = MakeOwned<DependencyGraph>(*cjoManager);
+    CJC_NULLPTR_CHECK(dependencyGraph);
 }
 
 ImportManager::~ImportManager()

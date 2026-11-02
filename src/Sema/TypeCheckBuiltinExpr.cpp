@@ -470,20 +470,12 @@ bool TypeChecker::TypeCheckerImpl::ChkVArrayExpr(ASTContext& ctx, ModalTy target
     }
     // check T and size.
     if (!typeManager.IsSubtype(ve.type->GetTy(), targetTy)) {
-<<<<<<< HEAD
         // When the desugared ArrayExpr has sourceExpr, ShouldDiagnose returns false
         // and the mismatch diagnostic is silently skipped. Fall back to sourceExpr
         // to ensure the error is reported on the original CallExpr.
         const Node& diagNode = ve.sourceExpr ? *ve.sourceExpr : ve;
-        DiagMismatchedTypesWithFoundTy(diag, diagNode, targetTy->String(), ve.type->GetTy()->String());
-        ve.SetTy(TypeManager::GetInvalidTy());
-||||||| constructed merge base
-        DiagMismatchedTypesWithFoundTy(diag, ve, targetTy->String(), ve.type->GetTy()->String());
-        ve.SetTy(TypeManager::GetInvalidTy());
-=======
-        DiagMismatchedTypesWithFoundTy(diag, ve, targetTy->String(), ve.type->GetTy().String());
+        DiagMismatchedTypesWithFoundTy(diag, diagNode, targetTy->String(), ve.type->GetTy().String());
         ve.SetTy({TypeManager::GetInvalidTy()});
->>>>>>> feat: local mode
         return false;
     }
     ve.SetTy(ve.type->GetTy());

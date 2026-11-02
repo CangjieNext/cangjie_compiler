@@ -17,12 +17,7 @@
 #include <utility>
 #include <vector>
 
-<<<<<<< HEAD
-||||||| constructed merge base
-#include "TypeCheckUtil.h"
-=======
 #include "ExtraScopes.h"
->>>>>>> feat: local mode
 #include "LocalTypeArgumentSynthesis.h"
 #include "OverrideFunctionResolver.h"
 #include "TypeCheckUtil.h"
@@ -2248,48 +2243,6 @@ DataTy TypeManager::GetTyForExtendMap(Ty& ty)
     return baseTy;
 }
 
-<<<<<<< HEAD
-||||||| constructed merge base
-void TypeManager::RestoreJavaGenericsTy(AST::Decl& decl) const
-{
-    CJC_ASSERT(decl.TestAttr(Attribute::GENERIC_INSTANTIATED) && HasJavaAttr(decl));
-    // When instantiated with erase mode, we make all same class's types pointing to unique
-    // instantiated decl.
-    for (auto& it : std::as_const(allocatedTys)) {
-        auto ty = it.Get();
-        if (Ty::GetDeclPtrOfTy(ty) == decl.genericDecl) {
-            if (auto cty = DynamicCast<ClassTy*>(ty)) {
-                cty->decl = StaticCast<ClassDecl*>(&decl);
-                cty->commonDecl = StaticCast<ClassDecl*>(&decl);
-            } else if (auto ity = DynamicCast<InterfaceTy*>(ty)) {
-                ity->decl = StaticCast<InterfaceDecl*>(&decl);
-                ity->commonDecl = StaticCast<InterfaceDecl*>(&decl);
-            }
-        }
-    }
-}
-
-=======
-void TypeManager::RestoreJavaGenericsTy(Decl& decl) const
-{
-    CJC_ASSERT(decl.TestAttr(Attribute::GENERIC_INSTANTIATED) && HasJavaAttr(decl));
-    // When instantiated with erase mode, we make all same class's types pointing to unique
-    // instantiated decl.
-    for (auto& it : std::as_const(allocatedTys)) {
-        auto ty = it.Get();
-        if (Ty::GetDeclPtrOfTy(ty) == decl.genericDecl) {
-            if (auto cty = DynamicCast<ClassTy*>(ty)) {
-                cty->decl = StaticCast<ClassDecl*>(&decl);
-                cty->commonDecl = StaticCast<ClassDecl*>(&decl);
-            } else if (auto ity = DynamicCast<InterfaceTy*>(ty)) {
-                ity->decl = StaticCast<InterfaceDecl*>(&decl);
-                ity->commonDecl = StaticCast<InterfaceDecl*>(&decl);
-            }
-        }
-    }
-}
-
->>>>>>> feat: local mode
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 
 bool TypeManager::IsFuncDeclSubType(const FuncDecl& decl, const FuncDecl& funcDecl)
@@ -2316,7 +2269,6 @@ bool TypeManager::IsFuncTySubType(const AST::FuncTy& type1, const AST::FuncTy& t
 
 bool TypeManager::IsFuncDeclEqualType(const FuncDecl& decl, const FuncDecl& funcDecl)
 {
-<<<<<<< HEAD
     return IsFuncDeclSubType(decl, funcDecl) && IsFuncDeclSubType(funcDecl, decl);
 }
 
@@ -2327,75 +2279,12 @@ Ptr<const AST::FuncDecl> TypeManager::GetTopOverriddenFuncDecl(const AST::FuncDe
     MemberFuncSet tops;
     {
         std::lock_guard<std::mutex> lock(overrideResolverImplMutex);
-        tops = OverrideFunctionResolver(*this).GetTopOverriddenFuncs(*funcDecl->outerDecl->GetTy(), *seed);
-    }
-    if (!tops.empty()) {
-        return *tops.begin();
-||||||| constructed merge base
-    return IsFuncDeclSubType(decl, funcDecl) && IsFuncDeclSubType(funcDecl, decl);
-}
-
-void TypeManager::UpdateTopOverriddenFuncDeclMap(const AST::Decl* src, const AST::Decl* target)
-{
-    if (src == target) {
-        return;
-    }
-    if (auto funcDecl = DynamicCast<AST::FuncDecl>(src)) {
-        auto& temp = overrideMap[funcDecl];
-        temp.emplace_back(StaticCast<AST::FuncDecl*>(target));
-    } else if (auto propDecl = DynamicCast<AST::PropDecl>(src)) {
-        auto targetPropDecl = StaticCast<AST::PropDecl*>(target);
-        if (!propDecl->getters.empty() && !targetPropDecl->getters.empty()) {
-            auto& temp = overrideMap[propDecl->getters.front().get()];
-            temp.emplace_back(targetPropDecl->getters.front().get());
-        }
-        if (!propDecl->setters.empty() && !targetPropDecl->setters.empty()) {
-            auto& temp = overrideMap[propDecl->setters.front().get()];
-            temp.emplace_back(targetPropDecl->setters.front().get());
-        }
-=======
-    if (HasThisParam(decl) && GetThisParamMode(decl) != GetThisParamMode(funcDecl)) {
-        return false;
->>>>>>> feat: local mode
-    }
-<<<<<<< HEAD
-    return funcDecl;
-||||||| constructed merge base
-}
-
-Ptr<const AST::FuncDecl> TypeManager::GetTopOverriddenFuncDecl(const AST::FuncDecl* funcDecl) const
-{
-    const auto& decls = overrideMap.find(funcDecl);
-    if (decls == overrideMap.end() || decls->second.empty()) {
-        return nullptr;
-    }
-    Ptr<const FuncDecl> ret = decls->second.front();
-    std::set<Ptr<const FuncDecl>> traversed;
-    while ((overrideMap.find(ret) != overrideMap.end()) && !(overrideMap.find(ret)->second.empty())) {
-        if (auto [_, succ] = traversed.emplace(ret); !succ) {
-            return nullptr; // cycle detected
-        }
-        ret = overrideMap.find(ret)->second.front();
-    }
-    return ret;
-=======
-    return IsFuncDeclSubType(decl, funcDecl) && IsFuncDeclSubType(funcDecl, decl);
-}
-
-Ptr<const AST::FuncDecl> TypeManager::GetTopOverriddenFuncDecl(const AST::FuncDecl* funcDecl)
-{
-    CJC_NULLPTR_CHECK(funcDecl);
-    auto seed = funcDecl->genericDecl ? StaticCast<const FuncDecl*>(funcDecl->genericDecl) : funcDecl;
-    MemberFuncSet tops;
-    {
-        std::lock_guard<std::mutex> lock(overrideResolverImplMutex);
-        tops = OverrideFunctionResolver(*this).GetTopOverriddenFuncs(*funcDecl->outerDecl->GetTy(), *seed);
+        tops = OverrideFunctionResolver(*this).GetTopOverriddenFuncs(funcDecl->outerDecl->DataTy(), *seed);
     }
     if (!tops.empty()) {
         return *tops.begin();
     }
     return funcDecl;
->>>>>>> feat: local mode
 }
 
 Ptr<Decl> TypeManager::GetOverrideDeclInClassLike(Decl& baseDecl, const FuncDecl& funcDecl, bool withAbstractOverrides)

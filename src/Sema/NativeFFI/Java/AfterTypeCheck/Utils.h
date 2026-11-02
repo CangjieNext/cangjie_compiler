@@ -50,16 +50,6 @@ public:
     // Decl of String
     StructDecl& GetStringDecl();
 
-<<<<<<< HEAD
-||||||| constructed merge base
-    std::string GetJavaClassNormalizeSignature(const Ty& cjtype) const;
-    std::string GetJavaTypeSignature(const Ty& cjtype);
-    std::string GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& args);
-=======
-    std::string GetJavaClassNormalizeSignature(const Ty& cjtype) const;
-    std::string GetJavaTypeSignature(const Ty& cjtype);
-    std::string GetJavaTypeSignature(Ty& retTy, const std::vector<ModalTy>& args);
->>>>>>> feat: local mode
     std::string GetJavaObjectTypeName(const Ty& ty);
 
     OwnedPtr<Expr> CreateOptionMatch(OwnedPtr<Expr> selector, std::function<OwnedPtr<Expr>(VarDecl&)> someBranch,

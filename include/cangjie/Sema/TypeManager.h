@@ -227,16 +227,9 @@ public:
     void GenerateGenericMapping(SubstPack& m, AST::Ty& baseType);
     TypeSubst GenerateGenericMappingFromGeneric(const AST::Decl& parentDecl, const AST::Decl& childDecl) const;
     MultiTypeSubst GenerateStructDeclTypeMapping(const AST::Decl& decl);
-<<<<<<< HEAD
-    Ptr<AST::Ty> ReplaceIdealTy(Ptr<AST::Ty> ty);
-||||||| constructed merge base
-    Ptr<AST::Ty> ReplaceIdealTy(Ptr<AST::Ty> ty);
-    void RestoreJavaGenericsTy(AST::Decl& decl) const;
-=======
     AST::DataTy ReplaceIdealTy(AST::DataTy ty);
     AST::ModalTy ReplaceIdealTy(AST::ModalTy ty);
     void RestoreJavaGenericsTy(AST::Decl& decl) const;
->>>>>>> feat: local mode
 
     /**
      * Get all extend interface types.
@@ -588,8 +581,6 @@ private:
     template <typename TypeT, typename... Args> TypeT* GetTypeTy(Args&&... args);
     bool IsClassTyEqual(AST::Ty& leaf, AST::Ty& root);
     AST::DataTy GetExtendInterfaceSuperTy(AST::ClassTy& classTy, const AST::Ty& interfaceTy);
-
-    mutable std::mutex overrideResolverImplMutex;
 
     mutable std::mutex overrideResolverImplMutex;
 

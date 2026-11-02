@@ -656,75 +656,7 @@ std::vector<TypeSubst> MockUtils::BuildGenericSubsts(const Ptr<InheritableDecl> 
     return genericSubsts;
 }
 
-<<<<<<< HEAD
 std::vector<Ptr<Ty>> MockUtils::AddGenericIfNeeded(Decl& originalDecl, Decl& mockedDecl) const
-||||||| constructed merge base
-int MockUtils::GetIndexOfGenericTypeParam(Ptr<Ty> ty, Ptr<Generic> generic) const
-{
-    int i = 0;
-    for (auto& typeParam : generic->typeParameters) {
-        if (typeParam->GetTy() == ty) {
-            return i;
-        }
-        i++;
-    }
-    return -1;
-}
-
-void MockUtils::UpdateRefTypesTarget(Ptr<Type> type, Ptr<Generic> oldGeneric, Ptr<Generic> newGeneric) const
-{
-    auto refType = As<ASTKind::REF_TYPE>(type);
-    if (!refType) {
-        return;
-    }
-
-    if (auto genericTy = DynamicCast<GenericsTy*>(refType->GetTy()); genericTy) {
-        auto typeParamIndex = GetIndexOfGenericTypeParam(genericTy, oldGeneric);
-        if (typeParamIndex != -1) {
-            refType->ref.target = newGeneric->typeParameters[static_cast<size_t>(typeParamIndex)].get();
-        }
-    }
-
-    for (auto& typeArg : refType->typeArguments) {
-        UpdateRefTypesTarget(typeArg.get(), oldGeneric, newGeneric);
-    }
-}
-
-std::vector<Ptr<Ty>> MockUtils::AddGenericIfNeeded(Decl& originalDecl, Decl& mockedDecl) const
-=======
-int MockUtils::GetIndexOfGenericTypeParam(DataTy ty, Ptr<Generic> generic) const
-{
-    int i = 0;
-    for (auto& typeParam : generic->typeParameters) {
-        if (typeParam->DataTy() == ty) {
-            return i;
-        }
-        i++;
-    }
-    return -1;
-}
-
-void MockUtils::UpdateRefTypesTarget(Ptr<Type> type, Ptr<Generic> oldGeneric, Ptr<Generic> newGeneric) const
-{
-    auto refType = As<ASTKind::REF_TYPE>(type);
-    if (!refType) {
-        return;
-    }
-
-    if (auto genericTy = DynamicCast<GenericsTy>(refType->DataTy()); genericTy) {
-        auto typeParamIndex = GetIndexOfGenericTypeParam(genericTy, oldGeneric);
-        if (typeParamIndex != -1) {
-            refType->ref.target = newGeneric->typeParameters[static_cast<size_t>(typeParamIndex)].get();
-        }
-    }
-
-    for (auto& typeArg : refType->typeArguments) {
-        UpdateRefTypesTarget(typeArg.get(), oldGeneric, newGeneric);
-    }
-}
-
-std::vector<DataTy> MockUtils::AddGenericIfNeeded(Decl& originalDecl, Decl& mockedDecl) const
->>>>>>> feat: local mode
 {
     if (!originalDecl.TestAttr(Attribute::GENERIC)) {
         return {};

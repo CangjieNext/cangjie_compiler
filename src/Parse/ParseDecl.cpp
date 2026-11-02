@@ -2072,16 +2072,8 @@ void ParserImpl::CheckFuncBody(ScopeKind scopeKind, FuncDecl& decl)
         Check here if a function could be abstract,
         and when the outerDecl will be known - clarify it for mirrors / common declarations
      */
-<<<<<<< HEAD
-    if (fb && !fb->body && !parseDeclFile && scopeKind != ScopeKind::UNKNOWN_SCOPE
-        && !decl.TestAnyAttr(Attribute::FOREIGN, Attribute::INTRINSIC, Attribute::OBJ_C_FOREIGN)) {
-||||||| constructed merge base
-    if (fb && !fb->body && !parseDeclFile && scopeKind != ScopeKind::UNKNOWN_SCOPE
-        && !decl.TestAnyAttr(Attribute::FOREIGN, Attribute::INTRINSIC, Attribute::OBJ_C_MIRROR)) {
-=======
-    if (fb && !fb->body && !IsParsingDeclFile() && scopeKind != ScopeKind::UNKNOWN_SCOPE
-        && !decl.TestAnyAttr(Attribute::FOREIGN, Attribute::INTRINSIC, Attribute::OBJ_C_MIRROR)) {
->>>>>>> feat: local mode
+    if (fb && !fb->body && !IsParsingDeclFile() && scopeKind != ScopeKind::UNKNOWN_SCOPE &&
+        !decl.TestAnyAttr(Attribute::FOREIGN, Attribute::INTRINSIC, Attribute::OBJ_C_FOREIGN)) {
         if (CanBeAbstract(decl, scopeKind)) {
             decl.EnableAttr(Attribute::ABSTRACT);
         } else if (!fb->TestAttr(Attribute::HAS_BROKEN) && !inClassLikeScope && !decl.TestAttr(Attribute::COMMON)) {

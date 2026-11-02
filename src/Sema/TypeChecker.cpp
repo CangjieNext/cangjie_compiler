@@ -144,16 +144,8 @@ bool TypeChecker::TypeCheckerImpl::CheckBodyRetType(ASTContext& ctx, FuncBody& f
         if (fb.retType->GetTy()->IsUnit()) {
             // The body eventually will be appended a 'return ()' expression, so we switch to the Synthesize mode.
             // Errors should be already reported during the synthesis.
-<<<<<<< HEAD
             isWellTyped = Ty::IsTyCorrect(Synthesize({ctx, SynPos::UNUSED}, fb.body.get()));
         } else {
-||||||| constructed merge base
-            isWellTyped = Ty::IsTyCorrect(Synthesize({ctx, SynPos::UNUSED}, fb.body.get()));
-        } else if (NeedCheckBodyReturn(fb)) {
-=======
-            isWellTyped = Synthesize({ctx, SynPos::UNUSED}, fb.body.get()).IsCorrect();
-        } else if (NeedCheckBodyReturn(fb)) {
->>>>>>> feat: local mode
             isWellTyped = Check(ctx, fb.retType->GetTy(), fb.body.get());
             if (!isWellTyped && fb.body->body.empty()) {
                 DiagMismatchedTypes(diag, *fb.body, *fb.retType, "return type");
@@ -449,23 +441,7 @@ bool TypeChecker::TypeCheckerImpl::CheckReturnThisInFuncBody(const FuncBody& fb)
 void TypeChecker::TypeCheckerImpl::CheckCtorFuncBody(ASTContext& ctx, FuncBody& fb)
 {
     CJC_ASSERT(fb.funcDecl); // Ctor must have related funcDecl.
-<<<<<<< HEAD
-    Ptr<Ty> ctorTy = TypeManager::GetInvalidTy();
-||||||| constructed merge base
-    if (fb.parentClassLike) {
-        if (auto attr = HasJavaAttr(*fb.parentClassLike); attr) {
-            fb.funcDecl->EnableAttr(attr.value());
-        }
-    }
-    Ptr<Ty> ctorTy = TypeManager::GetInvalidTy();
-=======
-    if (fb.parentClassLike) {
-        if (auto attr = HasJavaAttr(*fb.parentClassLike); attr) {
-            fb.funcDecl->EnableAttr(attr.value());
-        }
-    }
-    ModalTy ctorTy = {TypeManager::GetInvalidTy()};
->>>>>>> feat: local mode
+    DataTy ctorTy = TypeManager::GetInvalidTy();
     if (fb.funcDecl->TestAttr(Attribute::STATIC)) {
         // Static init always has type of 'Unit' as return type.
         ctorTy = {TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)};

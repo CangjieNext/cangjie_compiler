@@ -67,28 +67,14 @@ OwnedPtr<MatchCase> CreateMatchCase(OwnedPtr<Pattern> pattern, OwnedPtr<Expr> ex
 OwnedPtr<MatchExpr> CreateMatchExpr(OwnedPtr<Expr> selector, std::vector<OwnedPtr<MatchCase>> matchCases, ModalTy ty,
     Expr::SugarKind sugarKind = Expr::SugarKind::NO_SUGAR);
 OwnedPtr<LitConstExpr> CreateLitConstExpr(
-<<<<<<< HEAD
-    LitConstKind kind, const std::string& val, Ptr<Ty> ty, bool needToMakeRef = false
-);
-OwnedPtr<TupleLit> CreateTupleLit(std::vector<OwnedPtr<Expr>> elements, Ptr<Ty> ty);
-OwnedPtr<ArrayLit> CreateArrayLit(std::vector<OwnedPtr<Expr>> elements, Ptr<Ty> ty);
+    LitConstKind kind, const std::string& val, ModalTy ty, bool needToMakeRef = false);
+OwnedPtr<TupleLit> CreateTupleLit(std::vector<OwnedPtr<Expr>> elements, ModalTy ty);
+OwnedPtr<ArrayLit> CreateArrayLit(std::vector<OwnedPtr<Expr>> elements, ModalTy ty);
 /**
  * Create SubscriptExpr reading the \p index -th element of tuple \p expr, whose ty must be a TupleTy.
  * \p indexTy types the generated index literal.
  */
-OwnedPtr<SubscriptExpr> CreateTupleAccess(OwnedPtr<Expr> expr, size_t index, Ptr<Ty> indexTy);
-||||||| constructed merge base
-    LitConstKind kind, const std::string& val, Ptr<Ty> ty, bool needToMakeRef = false
-);
-OwnedPtr<TupleLit> CreateTupleLit(std::vector<OwnedPtr<Expr>> elements, Ptr<Ty> ty);
-OwnedPtr<ArrayLit> CreateArrayLit(std::vector<OwnedPtr<Expr>> elements, Ptr<Ty> ty);
-OwnedPtr<SubscriptExpr> CreateTupleAccess(OwnedPtr<Expr> expr, size_t index);
-=======
-    LitConstKind kind, const std::string& val, ModalTy ty, bool needToMakeRef = false);
-OwnedPtr<TupleLit> CreateTupleLit(std::vector<OwnedPtr<Expr>> elements, ModalTy ty);
-OwnedPtr<ArrayLit> CreateArrayLit(std::vector<OwnedPtr<Expr>> elements, ModalTy ty);
-OwnedPtr<SubscriptExpr> CreateTupleAccess(OwnedPtr<Expr> expr, size_t index);
->>>>>>> feat: local mode
+OwnedPtr<SubscriptExpr> CreateTupleAccess(OwnedPtr<Expr> expr, size_t index, ModalTy indexTy);
 OwnedPtr<UnaryExpr> CreateUnaryExpr(OwnedPtr<Expr> expr, TokenKind op);
 OwnedPtr<BinaryExpr> CreateBinaryExpr(
     OwnedPtr<Expr> leftExpr, OwnedPtr<Expr> rightExpr, TokenKind op);

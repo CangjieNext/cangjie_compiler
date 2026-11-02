@@ -56,18 +56,8 @@ ModalTy TypeChecker::TypeCheckerImpl::SynReturnExpr(ASTContext& ctx, ReturnExpr&
         }
     }
 
-<<<<<<< HEAD
     if (!isWellTyped) {
-        re.SetTy(TypeManager::GetInvalidTy());
-||||||| constructed merge base
-    // Generic decls imported from foreign code and created by auto-sdk have no body, no need to check return.
-    if (!isWellTyped && NeedCheckBodyReturn(*re.refFuncBody)) {
-        re.SetTy(TypeManager::GetInvalidTy());
-=======
-    // Generic decls imported from foreign code and created by auto-sdk have no body, no need to check return.
-    if (!isWellTyped && NeedCheckBodyReturn(*re.refFuncBody)) {
         re.SetTy({TypeManager::GetInvalidTy()});
->>>>>>> feat: local mode
     } else {
         re.SetTy({TypeManager::GetNothingTy()});
     }

@@ -280,7 +280,6 @@ Ptr<Ty> OverrideFunctionResolver::GetMatchedFuncInstTyByGivenTarget(
     }
     return matchedTy;
 }
-<<<<<<< HEAD
 
 bool OverrideFunctionResolver::IsImplementationFunc(const AST::FuncDecl& srcFunc, const AST::FuncDecl& superFunc)
 {
@@ -289,12 +288,12 @@ bool OverrideFunctionResolver::IsImplementationFunc(const AST::FuncDecl& srcFunc
     if (fastQuit) {
         return false;
     }
-    auto srcFuncTy = StaticCast<AST::FuncTy>(srcFunc.GetTy());
+    auto srcFuncTy = StaticCast<FuncTy>(srcFunc.DataTy());
     // Handle code: 'class B<T1> { func a(a: T1): Unit {} }; class A<T2> <: B<T2> { func a(a: T): Unit {} }', we need
     // get mapping if [T1 |-> T2], and substitute function type '(T1)->Unit' to '(T2)->Unit'.
     auto typeMappings =
-        Promotion(*typeManager).GetPromoteTypeMapping(*srcFunc.outerDecl->GetTy(), *superFunc.outerDecl->GetTy());
-    auto instSuperFuncTys = typeManager->GetInstantiatedTys(superFunc.GetTy(), typeMappings);
+        Promotion(*typeManager).GetPromoteTypeMapping(srcFunc.outerDecl->DataTy(), superFunc.outerDecl->DataTy());
+    auto instSuperFuncTys = typeManager->GetInstantiatedTys(superFunc.DataTy(), typeMappings);
     for (auto instSuperFuncTy : instSuperFuncTys) {
         if (IsImplementationFunc(srcFunc, superFunc, srcFuncTy, StaticCast<AST::FuncTy>(instSuperFuncTy))) {
             return true;
@@ -313,7 +312,7 @@ MemberFuncSet OverrideFunctionResolver::GetTopOverriddenFuncs(
     AST::Ty& instBaseTy, const AST::FuncDecl& funcDecl, TopOverriddenFuncsCache& cache)
 {
     CJC_NULLPTR_CHECK(typeManager);
-    auto key = std::make_pair(Ptr<AST::Ty>(&instBaseTy), Ptr<const AST::FuncDecl>(&funcDecl));
+    auto key = std::make_pair(DataTy(&instBaseTy), Ptr<const AST::FuncDecl>(&funcDecl));
     if (auto found = cache.find(key); found != cache.end()) {
         return found->second;
     }
@@ -353,66 +352,3 @@ MemberFuncSet OverrideFunctionResolver::GetTopOverriddenFuncs(
     cache.emplace(key, result);
     return result;
 }
-||||||| constructed merge base
-=======
-
-bool OverrideFunctionResolver::IsImplementationFunc(const AST::FuncDecl& srcFunc, const AST::FuncDecl& superFunc)
-{
-    auto fastQuit =
-        !srcFunc.outerDecl || !superFunc.outerDecl || !srcFunc.DataTy()->IsFunc() || !superFunc.DataTy()->IsFunc();
-    if (fastQuit) {
-        return false;
-    }
-    auto srcFuncTy = StaticCast<AST::FuncTy>(srcFunc.DataTy());
-    // Handle code: 'class B<T1> { func a(a: T1): Unit {} }; class A<T2> <: B<T2> { func a(a: T): Unit {} }', we need
-    // get mapping if [T1 |-> T2], and substitute function type '(T1)->Unit' to '(T2)->Unit'.
-    auto typeMappings =
-        Promotion(*typeManager).GetPromoteTypeMapping(srcFunc.outerDecl->DataTy(), superFunc.outerDecl->DataTy());
-    auto instSuperFuncTys = typeManager->GetInstantiatedTys(superFunc.DataTy(), typeMappings);
-    for (auto instSuperFuncTy : instSuperFuncTys) {
-        if (IsImplementationFunc(srcFunc, superFunc, srcFuncTy, StaticCast<AST::FuncTy>(instSuperFuncTy))) {
-            return true;
-        }
-    }
-    return false;
-}
-
-MemberFuncSet OverrideFunctionResolver::GetTopOverriddenFuncs(AST::Ty& instBaseTy, const AST::FuncDecl& funcDecl)
-{
-    CJC_NULLPTR_CHECK(typeManager);
-    auto baseDecl = AST::Ty::GetDeclPtrOfTy<AST::InheritableDecl>(&instBaseTy);
-    std::set<Ptr<ClassLikeDecl>> superDecls;
-    std::set<Ptr<AST::ExtendDecl>> extendDecls;
-    MemberFuncSet result;
-    if (baseDecl) {
-        auto superDeclsVec = baseDecl->GetAllSuperDecls(true);
-        superDecls.insert(superDeclsVec.begin(), superDeclsVec.end());
-        extendDecls = typeManager->GetDeclExtends(*baseDecl);
-    } else {
-        extendDecls = typeManager->GetAllExtendsByTy(instBaseTy);
-    }
-    for (auto extendDecl : extendDecls) {
-        auto superDeclsVec = extendDecl->GetAllSuperDecls(true);
-        superDecls.insert(superDeclsVec.begin(), superDeclsVec.end());
-    }
-    for (auto superDecl : superDecls) {
-        if (superDecl == baseDecl) {
-            continue;
-        }
-        auto visit = [this, &funcDecl, &superDecl, &result](AST::Decl& memberFunc) {
-            auto parentFunc = DynamicCast<FuncDecl>(&memberFunc);
-            if (!parentFunc || parentFunc == &funcDecl || !IsImplementationFunc(funcDecl, *parentFunc)) {
-                return;
-            }
-            auto parentTops = GetTopOverriddenFuncs(*superDecl->GetTy(), *parentFunc);
-            if (parentTops.empty()) {
-                result.emplace(parentFunc);
-            } else {
-                result.insert(parentTops.begin(), parentTops.end());
-            }
-        };
-        TypeCheckUtil::WorkForMembersOfDecl(*superDecl, visit);
-    }
-    return result;
-}
->>>>>>> feat: local mode

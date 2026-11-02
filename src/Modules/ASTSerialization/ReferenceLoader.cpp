@@ -11,15 +11,7 @@
 
 #include "ASTLoaderImpl.h"
 
-<<<<<<< HEAD
 #include "flatbuffers/CjoFormat_generated.h"
-||||||| constructed merge base
-#include "flatbuffers/ModuleFormat_generated.h"
-=======
-#include "ASTSerializeUtils.h"
-
-#include "flatbuffers/ModuleFormat_generated.h"
->>>>>>> feat: local mode
 
 #include "cangjie/AST/ASTCasting.h"
 #include "cangjie/AST/Utils.h"
@@ -609,13 +601,7 @@ void ASTLoader::ASTLoaderImpl::LoadDeclRefs(const PackageFormat::Decl& declObj, 
         ty = TypeManager::GetInvalidTy(); // happens only in incremental compilation.
     }
     // Load ty for all decls and try to load generic constraints.
-<<<<<<< HEAD
-    decl.SetTy(ty);
-||||||| constructed merge base
-    decl.SetTy(LoadType(declObj.type()));
-=======
     decl.SetTy(ApplyLoadedModal(LoadType(static_cast<FormattedIndex>(declObj.type())), declObj.tyMode()));
->>>>>>> feat: local mode
     if (!Ty::IsTyCorrect(decl.GetTy()) && isLoadCache) {
         return; // Skip following steps if ty is not correct during loading cache.
     }

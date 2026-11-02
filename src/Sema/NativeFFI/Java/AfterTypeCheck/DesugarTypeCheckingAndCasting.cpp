@@ -83,7 +83,7 @@ OwnedPtr<VarPattern> CreateTmpVarPattern(ModalTy ty)
 }
 
 OwnedPtr<Expr> DesugarTypeCheckingAndCasting::CreateIsInstanceCall(
-    Ptr<VarDecl> jObjectVar, ModalTy classTy, Ptr<File> curFile) const
+    Ptr<VarDecl> jObjectVar, DataTy classTy, Ptr<File> curFile) const
 {
     auto isInstanceOfDecl = ilib.GetIsInstanceOf();
 
@@ -119,18 +119,9 @@ OwnedPtr<Expr> DesugarTypeCheckingAndCasting::CreateJObjectCast(Ptr<VarDecl> jOb
     auto newJavarefExpr = CreateNewGlobalJavaRef(std::move(javarefExpr), curFile);
     // cast true => ...
     // wrap into mirror constructor or into wrapping constructor of java impl on the reference from registry
-<<<<<<< HEAD
     OwnedPtr<Expr> trueBranch = utils.CreateOptionSomeCall(
         ilib.UnwrapJavaEntity(std::move(newJavarefExpr), castTy, castDecl),
         castTy);
-||||||| constructed merge base
-    OwnedPtr<Expr> trueBranch = utils.CreateOptionSomeCall(
-        ilib.UnwrapJavaEntity(std::move(javarefExpr), castTy, *castDecl),
-        castTy);
-=======
-    OwnedPtr<Expr> trueBranch =
-        utils.CreateOptionSomeCall(ilib.UnwrapJavaEntity(std::move(javarefExpr), castTy.Ty(), *castDecl), castTy);
->>>>>>> feat: local mode
 
     // case false => None
     OwnedPtr<Expr> falseBranch = utils.CreateOptionNoneRef(castTy);
@@ -151,16 +142,10 @@ OwnedPtr<Block> DesugarTypeCheckingAndCasting::CastAndSubstituteVars(
         CJC_ASSERT(castDecl->IsJavaForeign() || castDecl->IsJavaExport());
 
         auto javarefExpr = CreateJavaRefCall(WithinFile(CreateRefExpr(*varDecl), curFile));
-<<<<<<< HEAD
         // blackBox(jObjectVar)
         auto newJavarefExpr = CreateNewGlobalJavaRef(std::move(javarefExpr), curFile);
 
-        OwnedPtr<Expr> initializer = ilib.UnwrapJavaEntity(std::move(newJavarefExpr), castTy, castDecl);
-||||||| constructed merge base
-        OwnedPtr<Expr> initializer = ilib.UnwrapJavaEntity(std::move(javarefExpr), castDecl->GetTy(), *castDecl);
-=======
-        OwnedPtr<Expr> initializer = ilib.UnwrapJavaEntity(std::move(javarefExpr), castDecl->DataTy(), *castDecl);
->>>>>>> feat: local mode
+        OwnedPtr<Expr> initializer = ilib.UnwrapJavaEntity(std::move(newJavarefExpr), castTy.Ty(), castDecl);
         auto castedVar = WithinFile(CreateTmpVarDecl(CreateType(castDecl->GetTy()), std::move(initializer)), curFile);
         varsMapping[varDecl] = castedVar;
         varsBlock->body.emplace_back(std::move(castedVar));
@@ -191,7 +176,7 @@ void DesugarTypeCheckingAndCasting::DesugarIsExpression(IsExpr& ie) const
 
     CJC_ASSERT(!ie.desugarExpr);
 
-    auto castTy = ie.isType->GetTy();
+    auto castTy = ie.isType->DataTy();
     auto jObjectDecl = utils.GetJObjectDecl();
     CJC_ASSERT(jObjectDecl);
 
@@ -221,7 +206,7 @@ void DesugarTypeCheckingAndCasting::DesugarAsExpression(AsExpr& ae) const
     CJC_NULLPTR_CHECK(curFile);
     CJC_ASSERT(!ae.desugarExpr);
 
-    auto castTy = ae.asType->GetTy();
+    auto castTy = ae.asType->DataTy();
     auto castDecl = DynamicCast<ClassLikeDecl>(Ty::GetDeclOfTy(castTy));
     auto jObjectDecl = utils.GetJObjectDecl();
 
@@ -241,7 +226,7 @@ void DesugarTypeCheckingAndCasting::DesugarAsExpression(AsExpr& ae) const
     typeMatchCases.emplace_back(CreateMatchCase(std::move(typePattern), std::move(isInstanceMatch)));
 
     // case _ => None
-    auto noneRef = utils.CreateOptionNoneRef(castTy);
+    auto noneRef = utils.CreateOptionNoneRef({castTy});
     typeMatchCases.emplace_back(CreateMatchCase(MakeOwned<WildcardPattern>(), std::move(noneRef)));
     ae.desugarExpr =
         WithinFile(CreateMatchExpr(std::move(ae.leftExpr), std::move(typeMatchCases), castResultTy), curFile);
@@ -268,7 +253,7 @@ void DesugarTypeCheckingAndCasting::DesugarMatchCase(MatchCase& matchCase) const
         auto varPat = DynamicCast<VarPattern>(pat->pattern.get());
         // Pattern under type pattern is always either wildcard or var
         CJC_ASSERT(varPat);
-        auto originalTy = varPat->GetTy();
+        auto originalTy = varPat->DataTy();
         CJC_NULLPTR_CHECK(originalTy);
 
         pat->type = CreateType(jObjectDecl->GetTy());

@@ -62,25 +62,6 @@ void HandleObjCPointerRead(InteropContext& ctx, CallExpr& callExpr)
     auto rawCType = ctx.typeMapper.Cj2CType(elementType);
     auto ptrFieldDecl = ctx.bridge.GetObjCPointerPointerField();
     CJC_ASSERT(ptrFieldDecl);
-<<<<<<< HEAD
-||||||| constructed merge base
-    Ptr<Ty> int64Type = ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_INT64);
-
-    auto readPointerFunc = ctx.importManager.GetCoreDecl<FuncDecl>(READ_POINTER_INTRINSIC);
-    CJC_NULLPTR_CHECK(readPointerFunc);
-    auto readPointerRef = CreateRefExpr(*readPointerFunc, callExpr);
-    readPointerRef->instTys.push_back(rawCType);
-    readPointerRef->SetTy(ctx.typeManager.GetFunctionTy(std::vector{pointerType, int64Type}, rawCType));
-=======
-    Ptr<Ty> int64Type = ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_INT64);
-
-    auto readPointerFunc = ctx.importManager.GetCoreDecl<FuncDecl>(READ_POINTER_INTRINSIC);
-    CJC_NULLPTR_CHECK(readPointerFunc);
-    auto readPointerRef = CreateRefExpr(*readPointerFunc, callExpr);
-    readPointerRef->instTys.push_back(rawCType);
-    readPointerRef->SetTy(
-        {ctx.typeManager.GetFunctionTy(std::vector<ModalTy>{{pointerType}, {int64Type}}, {rawCType})});
->>>>>>> feat: local mode
 
     auto ptrExpr =
         ctx.factory.CreateUnsafePointerCast(CreateMemberAccess(std::move(receiver), *ptrFieldDecl), rawCType);

@@ -89,7 +89,7 @@ void JFFIParserImpl::CheckJavaAnnoArgs(Annotation& anno) const
 void JFFIParserImpl::CheckMirrorSignature(AST::ClassLikeDecl& decl, const PtrVector<Annotation>& annos) const
 {
     CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::JAVA_MIRROR) ||
-        (p.HasAnnotation(annos, AnnotationKind::JAVA) && p.HasModifier(decl.modifiers, TokenKind::FOREIGN)));
+        (p.HasAnnotation(annos, AnnotationKind::JAVA) && HasModifier(decl, TokenKind::FOREIGN)));
     decl.MarkAsJavaForeign();
     decl.EnableAttr(Attribute::NO_REFLECT_INFO);
     
@@ -113,7 +113,7 @@ void JFFIParserImpl::CheckMirrorSignature(AST::ClassLikeDecl& decl, const PtrVec
 void JFFIParserImpl::CheckImplSignature(AST::ClassLikeDecl& decl, const PtrVector<Annotation>& annos) const
 {
     CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::JAVA_IMPL) ||
-        (p.HasAnnotation(annos, AnnotationKind::JAVA) && !p.HasModifier(decl.modifiers, TokenKind::FOREIGN)));
+        (p.HasAnnotation(annos, AnnotationKind::JAVA) && !HasModifier(decl, TokenKind::FOREIGN)));
     decl.MarkAsJavaExport();
     decl.EnableAttr(Attribute::NO_REFLECT_INFO);
 

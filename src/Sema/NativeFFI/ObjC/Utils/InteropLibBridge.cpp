@@ -114,7 +114,7 @@ Ptr<Ty> InteropLibBridge::GetNativeObjCIdTy() const noexcept
 
 Ptr<Ty> InteropLibBridge::GetNativeObjCIdMarkerTy() const noexcept
 {
-    return GetNativeObjCIdMarkerDecl()->GetTy();
+    return GetNativeObjCIdMarkerDecl()->DataTy();
 }
 
 Ptr<TypeAliasDecl> InteropLibBridge::GetNativeObjCSelDecl()
