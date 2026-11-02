@@ -18,6 +18,7 @@
 #include <queue>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "cangjie/AST/ASTCasting.h"
 #include "cangjie/AST/Node.h"
@@ -28,12 +29,19 @@
 
 #include "CjoManager.h"
 
+// Test fixtures granted read-only access to the macro-import bookkeeping.
+class MacroTest;
+class ConditionalCompilationTest;
+
 namespace Cangjie {
 class DefaultCompilerInstance;
 class TypeManager;
 class ASTLoader;
 class ASTWriter;
 class CjoManager;
+namespace AST {
+class ConditionalCompilation;
+}
 
 struct ExternalLibCfg {
     std::string name;
@@ -224,7 +232,9 @@ public:
         return importedMacroPackages;
     }
     /**
-     * Get the direct imported macro package name for macro expand
+     * Get the macro packages visible to the current package for macro expansion —
+     * its direct macro imports plus the lifted chain (rule 3.3), filled by
+     * UpdateMacroPackageUsage via CollectTransitiveMacroDeps.
      * ======================
      * // useMacro.cj
      * import macro_def_pkg1.*
@@ -331,6 +341,65 @@ public:
     void AddUsedMacroDecls(const Ptr<const AST::File> file, Ptr<const AST::Decl> decl);
     std::map<std::string, std::set<Ptr<const AST::Decl>, AST::CmpNodeByPos>>& GetUsedMacroDecls(const AST::File& file);
 
+    /**
+     * @brief Get the set of packages declared via macro import, for the given
+     * downstream package. Results are kept per package: with @When, the same macro
+     * package's imports evaluate differently per downstream target, so a multi-package
+     * BuildIndex must not share one global result.
+     */
+    const std::unordered_set<std::string>& GetMacroImportPkgsFromMacroDeps(
+        const std::string& pkgName) const
+    {
+        static const std::unordered_set<std::string> empty;
+        auto it = macroImportPkgsFromMacroDeps.find(pkgName);
+        return it != macroImportPkgsFromMacroDeps.end() ? it->second : empty;
+    }
+
+    /**
+     * @brief Get the macro import strings of the given package scoped to one file:
+     * only entries declared by a macro package that this file actually imports.
+     * Used by .macrocall generation so a file never gains imports of macro packages
+     * it does not depend on (file-level visibility, semantic rule 2).
+     */
+    std::vector<std::string> GetMacroImportStringsForFile(const std::string& pkgName, uint64_t fileHash) const
+    {
+        std::vector<std::string> result;
+        auto itS = macroImportStrings.find(pkgName);
+        auto itC = macroPkgConsumers.find(pkgName);
+        auto itR = macroImportStrSources.find(pkgName);
+        if (itS == macroImportStrings.end() || itC == macroPkgConsumers.end() ||
+            itR == macroImportStrSources.end()) {
+            return result;
+        }
+        auto consumer = itC->second.find(fileHash);
+        if (consumer == itC->second.end()) {
+            return result;
+        }
+        for (const auto& entry : itS->second) {
+            auto src = itR->second.find(entry);
+            if (src == itR->second.end()) {
+                continue;
+            }
+            for (const auto& macroPkg : src->second) {
+                if (consumer->second.count(macroPkg) != 0) {
+                    result.push_back(entry);
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @brief Inject a ConditionalCompilation evaluator for evaluating macro-imported
+     * @When conditions in the downstream package's context (semantic rule 1+2).
+     * Must be set before BuildIndex if any macro import carries a @When condition.
+     */
+    void SetConditionalCompilation(AST::ConditionalCompilation* cc)
+    {
+        condComp = cc;
+    }
+
 public:
     /**
      * Whether import prelude libraries by default, default value is false, and
@@ -367,6 +436,10 @@ public:
     }
 
 private:
+    // Read-only access for tests asserting on the macro-import bookkeeping.
+    friend class ::MacroTest;
+    friend class ::ConditionalCompilationTest;
+
     DiagnosticEngine& diag;
     const GlobalOptions& opts;
 
@@ -394,8 +467,31 @@ private:
     /** Store all standard package dependencies. Key is cjopath, value is pair of DepType and fullPackageName. */
     std::unordered_map<std::string, std::pair<DepType, std::string>> stdDepsMap;
 
-    /** Direct imported macro packages. */
+    /** Macro packages visible for expansion: transitive macro deps (see GetImportedPkgsForMacro). */
     std::unordered_set<Ptr<AST::Package>> directMacroDeps;
+    /** Packages declared via macro import in macro packages */
+    // Per downstream package (key: fullPackageName) — with @When the same macro
+    // package evaluates differently per target; see the getters above.
+    std::unordered_map<std::string, std::unordered_set<std::string>> macroImportPkgsFromMacroDeps;
+    // Per downstream package: its transitive macro-dep closure, cached by
+    // ProcessMacroImports and reused by UpdateMacroPackageUsage.
+    std::unordered_map<std::string, std::vector<std::string>> macroDepsCache;
+    /** Macro import strings that survived @When evaluation in the current downstream
+     *  target. Filled only by ProcessMacroImports (after evaluating @When on the
+     *  structured macro import nodes via the normal-import path). Each entry is a
+     *  bare import string emitted to .macrocall as `import <entry>`. Entries with a
+     *  false @When condition are skipped. */
+    std::unordered_map<std::string, std::vector<std::string>> macroImportStrings;
+    // Per downstream package: fileHash -> macro packages reachable from the file's
+    // imports (direct + rule 3.3 closure), and macro import string -> declaring macro
+    // package(s). Used by GetMacroImportStringsForFile.
+    std::unordered_map<std::string, std::unordered_map<uint64_t, std::unordered_set<std::string>>>
+        macroPkgConsumers;
+    std::unordered_map<std::string, std::unordered_map<std::string, std::unordered_set<std::string>>>
+        macroImportStrSources;
+    /** Conditional compilation evaluator injected by CompilerInstance before BuildIndex,
+     *  used to evaluate macro-imported @When conditions in the downstream context. */
+    AST::ConditionalCompilation* condComp{nullptr};
     /** Map of fullPackageName -> imported decl to the 'ImportSpec' which imports the decl. */
     std::unordered_map<std::string, DeclImportsMap> declsImportedByNodeMap;
     /** NOTE: Collect imported alias decl and alias-import only. */
@@ -475,6 +571,47 @@ private:
     bool IsDeclAccessible(const AST::File& file, AST::Decl& decl) const;
     const Ptr<AST::Type> FindImplmentInterface(
         const AST::File& file, const AST::Decl& member, const Ptr<AST::Type>& id) const;
+
+    /**
+     * @brief Resolve, load and inject one macro-import content of a downstream package
+     * (core logic for macro import).
+     *
+     * The target is resolved with the ordinary-import candidate order
+     * (ImportContent::GetPossiblePackageNames) and package-existence semantics.
+     * Symbols are injected at file level (fileImportedDeclsMap[fileHash][name]) rather
+     * than package level (importedDeclsMap) to uphold semantic rule 2: macro import is
+     * equivalent to a downstream ordinary private import, which is file-scoped. Only the
+     * files in consumerFileHashes (downstream files that actually import a macro package
+     * in the dependency closure) gain visibility — see design 4.5.4.
+     *
+     * @return false when the target cannot be resolved or loaded (diagnosed inside).
+     */
+    bool InjectMacroImportContent(AST::Package& pkg, const AST::ImportContent& content,
+        const std::string& sourcePkgName, const std::unordered_set<uint64_t>& consumerFileHashes,
+        const Position& diagPos);
+
+    /**
+     * @brief Record one macro-import content's written form (full form, alias kept,
+     * deduped) as a survivor for .macrocall generation, without resolving or injecting
+     * anything. Used by the defensive path when the conditional-compilation evaluator
+     * is absent.
+     */
+    void RecordMacroImportString(
+        AST::Package& pkg, const AST::ImportContent& content, const std::string& sourcePkgName);
+
+    /**
+     * @brief Inject the symbols named by one macro-import content into
+     * fileImportedDeclsMap for the consumer files.
+     *
+     * IMPORT_ALL and package-shaped imports inject the whole package; SINGLE/ALIAS
+     * inject only the named decls, aligned with AddImportedDeclsForFile. Visibility
+     * is that of an ordinary unmodified (private) file-level import written by the
+     * consumer package, so consumerPkgName is required to derive the package relation.
+     */
+    void AddMacroImportContentToImportMap(const std::string& consumerPkgName,
+        const std::string& fullPackageName, const AST::ImportContent& content,
+        const std::unordered_set<uint64_t>& consumerFileHashes);
+
     /**
      * Check if BuildIndex has been called.
      */
@@ -484,6 +621,51 @@ private:
      * Clear all caches for rebuild index in LSP.
      */
     void ClearCachesForRebuild();
+
+    /**
+     * @brief Process macro import declarations from all imported macro packages.
+     *
+     * When a macro package declares `macro import pkgA`, this method adds pkgA's
+     * symbols to importedDeclsMap after BuildIndex has loaded all package
+     * declarations.
+     *
+     * @param pkg The source package that imports macro packages
+     */
+    void ProcessMacroImports(AST::Package& pkg);
+
+    /**
+     * @brief Collect all macro packages in the transitive dependency closure of @p pkgName.
+     *
+     * A downstream non-macro package obtains the macroImports of ALL macro packages
+     * in its dependency closure (including indirectly imported ones), so nested-macro
+     * dependencies are statically covered. @p visited guards against cycles in the
+     * dependency graph.
+     */
+    std::vector<std::string> CollectTransitiveMacroDeps(
+        const std::string& pkgName, std::unordered_set<std::string>& visited) const;
+
+    /**
+     * @brief Walk the macro-import declaration chain of a macro package.
+     *
+     * `macro import` declarations form a propagation chain, not just the normal-import
+     * load chain. When a macro package declares `macro import X` and X is itself a
+     * macro package, X (and X's own chain) is lifted onto this package and propagates
+     * through it to downstream packages.
+     */
+    void CollectMacroImportChain(const AST::Package& macroPkg,
+        std::unordered_set<std::string>& visited, std::vector<std::string>& result) const;
+
+    /**
+     * @brief Test-only accessor: per-package macro import strings that survived
+     * @When evaluation. Production code must use GetMacroImportStringsForFile, which
+     * applies the file-level visibility filter.
+     */
+    const std::vector<std::string>& GetMacroImportStrings(const std::string& pkgName) const
+    {
+        static const std::vector<std::string> empty;
+        auto it = macroImportStrings.find(pkgName);
+        return it != macroImportStrings.end() ? it->second : empty;
+    }
 
     friend class PackageManager;
 

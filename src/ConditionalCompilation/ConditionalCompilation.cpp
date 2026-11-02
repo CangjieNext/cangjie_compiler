@@ -20,6 +20,7 @@
 #include "cangjie/Basic/Version.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Option/Option.h"
+#include "cangjie/Parse/Parser.h"
 #include "cangjie/Utils/FileUtil.h"
 #include "cangjie/ConditionalCompilation/ConditionalCompilation.h"
 
@@ -646,6 +647,42 @@ void ConditionalCompilation::HandleConditionalCompilation(const Package& root) c
 void ConditionalCompilation::HandleFileConditionalCompilation(File& file) const
 {
     impl->HandleFileConditionalCompilation(file);
+}
+
+bool ConditionalCompilation::EvalMacroImportWhenCond(MacroImportSpec& spec) const
+{
+    // Share the evaluator used for ordinary imports (EvalNodeCondition), so condition
+    // semantics stay identical: each @When's condExpr is evaluated in the current
+    // target's context, its annotation is erased, and the node survives only if the
+    // last condition holds.
+    return impl->EvalNodeCondition<MacroImportSpec>(&spec);
+}
+
+bool ConditionalCompilation::PeekMacroImportWhenCond(const MacroImportSpec& spec) const
+{
+    // Non-destructive evaluation: see ConditionalCompilationImpl::PeekMacroImportWhenCond.
+    return impl->PeekMacroImportWhenCond(spec);
+}
+
+bool ConditionalCompilationImpl::PeekMacroImportWhenCond(const MacroImportSpec& spec)
+{
+    // Same filter semantics as EvalNodeCondition (the last @When decides, empty
+    // condExpr is diagnosed), but reads the annotations without erasing them:
+    // EvalConditionExpr is read-only, so a cjo-backed shared node stays intact
+    // for the next consumer package.
+    auto evalResult = true;
+    for (const auto& anno : spec.annotations) {
+        if (anno->kind != AnnotationKind::WHEN) {
+            continue;
+        }
+        if (anno->condExpr == nullptr) {
+            (void)ci->diag.DiagnoseRefactor(
+                DiagKindRefactor::conditional_compilation_not_have_condition_expr, anno->begin);
+            continue;
+        }
+        evalResult = EvalConditionExpr(anno->condExpr.operator*());
+    }
+    return evalResult;
 }
 
 std::optional<std::string> ConditionalCompilationImpl::GetRelatedInfo(const std::string& target) const
