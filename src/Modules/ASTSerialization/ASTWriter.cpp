@@ -782,7 +782,6 @@ void ASTWriter::ASTWriterImpl::AST2FB(std::vector<uint8_t>& data, const PackageD
         vfileInfo = builder.CreateVector<TFileInfoOffset>(allFileInfo);
     }
     auto vdecls = builder.CreateVector<TDeclOffset>(allDecls);
-    auto vexprs = builder.CreateVector<TExprOffset>(allExprs);
     auto vtypes = builder.CreateVector<TTypeOffset>(allTypes);
     std::vector<TStringOffset> vpackageNames;
     for (auto& depStdPkg : package.srcPackage->GetAllDependentStdPkgs()) {
@@ -803,9 +802,64 @@ void ASTWriter::ASTWriterImpl::AST2FB(std::vector<uint8_t>& data, const PackageD
     auto moduleName =
         builder.CreateString(hasModuleName ? package.srcPackage->files.front()->decls.front()->moduleName : "");
     PackageFormat::CjoVersion cjoVersion(CJO_MAJOR_VERSION, CJO_MINOR_VERSION, CJO_PATCH_VERSION);
+    // Persist the macro package's macroImports as structured MacroImportList nodes;
+    // each spec is flat, with whenExprIndices (one index into allExprs per @When).
+    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<PackageFormat::MacroImportList>>> vmacroImports;
+    if (package.srcPackage->isMacroPackage && !package.srcPackage->macroImports.empty()) {
+        // Map the macro package's fileID to its 1-based fileIndex in allFiles
+        // (savedFileMap is populated by PreSaveFullExportDecls before AST2FB);
+        // the downstream remaps it back via allFileIds.
+        auto mapFileIdx = [this](unsigned int fid) -> uint32_t {
+            auto it = savedFileMap.find(fid);
+            return it == savedFileMap.end() ? INVALID_FORMAT_INDEX : it->second.second;
+        };
+        auto makePos = [&mapFileIdx](const Cangjie::Position& p) {
+            return TPosition(mapFileIdx(p.fileID), 0, p.line, p.column,
+                p.GetStatus() == PositionStatus::IGNORE);
+        };
+        std::vector<flatbuffers::Offset<PackageFormat::MacroImportList>> stmtOffsets;
+        stmtOffsets.reserve(package.srcPackage->macroImports.size());
+        for (const auto& list : package.srcPackage->macroImports) {
+            std::vector<flatbuffers::Offset<PackageFormat::MacroImportSpec>> itemOffsets;
+            itemOffsets.reserve(list->items.size());
+            for (const auto& spec : list->items) {
+                // Persist each @When condExpr via SaveExpr (index into allExprs).
+                std::vector<FormattedIndex> whenExprIndices;
+                whenExprIndices.reserve(spec->annotations.size());
+                for (const auto& anno : spec->annotations) {
+                    if (anno->kind == AnnotationKind::WHEN && anno->condExpr) {
+                        whenExprIndices.push_back(SaveExpr(*anno->condExpr));
+                    }
+                }
+                auto vwhenExprIndices = builder.CreateVector<FormattedIndex>(whenExprIndices);
+                auto vprefix = builder.CreateVectorOfStrings(spec->content.prefixPaths);
+                auto vident = builder.CreateString(spec->content.identifier.Val());
+                auto vasIdent = builder.CreateString(spec->content.aliasName.Val());
+                auto posBegin = makePos(spec->begin);
+                auto posEnd = makePos(spec->end);
+                auto posImport = makePos(spec->importPos);
+                itemOffsets.push_back(PackageFormat::CreateMacroImportSpec(builder, &posBegin, &posEnd,
+                    &posImport, vprefix, vident, vasIdent, spec->content.hasDoubleColon, spec->content.isDecl,
+                    vwhenExprIndices));
+            }
+            auto vitems = builder.CreateVector(itemOffsets);
+            auto lpos = makePos(list->macroPos);
+            auto llcurl = makePos(list->lcurlPos);
+            auto lrcurl = makePos(list->rcurlPos);
+            auto lbegin = makePos(list->begin);
+            auto lend = makePos(list->end);
+            stmtOffsets.push_back(PackageFormat::CreateMacroImportList(
+                builder, &lbegin, &lend, &lpos, &llcurl, &lrcurl, vitems));
+        }
+        vmacroImports = builder.CreateVector(stmtOffsets);
+    }
+    // Snapshot allExprs AFTER the macroImports block: their condExprs are saved via
+    // SaveExpr during AST2FB itself, so an earlier snapshot would leave whenExprIndices
+    // pointing past the serialized exprs (downstream LoadExpr reads out of bounds).
+    auto vexprs = builder.CreateVector<TExprOffset>(allExprs);
     auto root = PackageFormat::CreatePackage(builder, cjcVersion, &cjoVersion, packageName, dependencyInfo, vimports,
         vfiles, vfileImports, vtypes, vdecls, vexprs, INVALID_FORMAT_INDEX, kind, access, moduleName, vfileInfo,
-        vdependentStdPkgs, options.has_value() ? options.value() : INVALID_FORMAT_INDEX);
+        vdependentStdPkgs, vmacroImports, options.has_value() ? options.value() : INVALID_FORMAT_INDEX);
     FinishPackageBuffer(builder, root);
     auto size = static_cast<size_t>(builder.GetSize());
     data.resize(size);

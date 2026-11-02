@@ -3662,3 +3662,253 @@ main(): Int64 {
     ASSERT_NE(file, nullptr);
     EXPECT_EQ(diag.GetErrorCount(), 1);
 }
+
+// ---------------------------------------------------------------------------
+// Macro import (macro import / macro { ... }) parser tests.
+// Rule anchors: MacroImportDT.md §1.1 (S1-S7).
+// ---------------------------------------------------------------------------
+
+namespace {
+/// Parse @p code and return the parsed File; diagnostics are collected in @p diag.
+OwnedPtr<File> ParseMacroImportCode(const std::string& code, DiagnosticEngine& diag)
+{
+    SourceManager sm;
+    diag.SetSourceManager(&sm);
+    Parser parser(code, diag, sm);
+    return parser.ParseTopLevel();
+}
+
+/// Walk the file AST and return the first PackageSpec node (nullptr if absent).
+const PackageSpec* GetFirstPackageSpec(File& file)
+{
+    const PackageSpec* result = nullptr;
+    Walker walker(&file, [&result](Ptr<Node> node) -> VisitAction {
+        return match(*node)(
+            [&result](const PackageSpec& package) {
+                result = &package;
+                return VisitAction::WALK_CHILDREN;
+            },
+            []() { return VisitAction::WALK_CHILDREN; });
+    });
+    walker.Walk();
+    return result;
+}
+
+/// Collect the refactor diag kind of every emitted diagnostic (default handler is
+/// replaced, so nothing is printed; error/warning counting is replicated here since
+/// the compiler handler owns it). Uses the neutral HANDLER kind — claiming
+/// COMPILER_HANDLER would make the engine static_cast this object to
+/// CompilerDiagnosticHandler (e.g. in its destructor), which is UB.
+class DiagKindCollector : public DiagnosticHandler {
+public:
+    DiagKindCollector(DiagnosticEngine& diag, std::vector<DiagKindRefactor>& out)
+        : DiagnosticHandler(diag, DiagHandlerKind::HANDLER), kinds(out)
+    {
+    }
+    void HandleDiagnose(Diagnostic& d) override
+    {
+        if (d.diagSeverity == DiagSeverity::DS_ERROR) {
+            diag.IncreaseErrorCount(d.diagCategory);
+        } else if (d.diagSeverity == DiagSeverity::DS_WARNING) {
+            diag.IncreaseWarningCount(d.diagCategory);
+        }
+        kinds.push_back(d.rKind);
+    }
+
+private:
+    std::vector<DiagKindRefactor>& kinds;
+};
+}
+
+// UT-P-01 (S1): single form recognizes single/alias/all/multi import contents.
+TEST(ParserTest2, MacroImportSingleForms)
+{
+    std::string code = R"(macro package m
+macro import a.b.c
+macro import a.b.c as d
+macro import a.b.*
+macro import a.b.{c, d}
+)";
+    DiagnosticEngine diag{};
+    auto file = ParseMacroImportCode(code, diag);
+    ASSERT_NE(file, nullptr);
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    auto* pkgSpec = GetFirstPackageSpec(*file);
+    ASSERT_NE(pkgSpec, nullptr);
+    const auto& mis = pkgSpec->macroImports;
+    ASSERT_EQ(mis.size(), 4U);
+    const std::vector<ImportKind> expectKinds = {ImportKind::IMPORT_SINGLE, ImportKind::IMPORT_ALIAS,
+        ImportKind::IMPORT_ALL, ImportKind::IMPORT_MULTI};
+    for (size_t i = 0; i < mis.size(); ++i) {
+        ASSERT_EQ(mis[i]->items.size(), 1U);
+        EXPECT_EQ(mis[i]->items[0]->content.kind, expectKinds[i]);
+        // Single form has no block braces.
+        EXPECT_EQ(mis[i]->lcurlPos, INVALID_POSITION);
+        EXPECT_EQ(mis[i]->rcurlPos, INVALID_POSITION);
+    }
+    EXPECT_TRUE(mis[1]->items[0]->content.aliasName == "d");
+    ASSERT_EQ(mis[3]->items[0]->content.items.size(), 2U);
+}
+
+// UT-P-02 (S2): block form with plain / @When / alias items.
+TEST(ParserTest2, MacroImportBlockForms)
+{
+    std::string code = R"(macro package m
+macro {
+    import a.b.c
+    @When[os == "Linux"] import d.e.*
+    import f.g as h
+}
+)";
+    DiagnosticEngine diag{};
+    auto file = ParseMacroImportCode(code, diag);
+    ASSERT_NE(file, nullptr);
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    const auto& mis = GetFirstPackageSpec(*file)->macroImports;
+    ASSERT_EQ(mis.size(), 1U);
+    EXPECT_NE(mis[0]->lcurlPos, INVALID_POSITION);
+    EXPECT_NE(mis[0]->rcurlPos, INVALID_POSITION);
+    ASSERT_EQ(mis[0]->items.size(), 3U);
+    // Only the second item carries the @When annotation with a condExpr AST.
+    EXPECT_TRUE(mis[0]->items[0]->annotations.empty());
+    ASSERT_EQ(mis[0]->items[1]->annotations.size(), 1U);
+    EXPECT_EQ(mis[0]->items[1]->annotations[0]->kind, AnnotationKind::WHEN);
+    EXPECT_NE(mis[0]->items[1]->annotations[0]->condExpr, nullptr);
+    EXPECT_TRUE(mis[0]->items[2]->annotations.empty());
+    EXPECT_EQ(mis[0]->items[2]->content.kind, ImportKind::IMPORT_ALIAS);
+}
+
+// UT-P-03 (S6): multiple statements keep independent MacroImportList positions.
+TEST(ParserTest2, MacroImportMultiStatements)
+{
+    std::string code = R"(macro package m
+macro import a.b.c
+macro import d.e.*
+macro {
+    import f.g
+}
+)";
+    DiagnosticEngine diag{};
+    auto file = ParseMacroImportCode(code, diag);
+    ASSERT_NE(file, nullptr);
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    const auto& mis = GetFirstPackageSpec(*file)->macroImports;
+    ASSERT_EQ(mis.size(), 3U);
+    EXPECT_LT(mis[0]->macroPos, mis[1]->macroPos);
+    EXPECT_LT(mis[1]->macroPos, mis[2]->macroPos);
+    EXPECT_EQ(mis[0]->items.size(), 1U);
+    EXPECT_EQ(mis[1]->items.size(), 1U);
+    EXPECT_EQ(mis[2]->items.size(), 1U);
+    EXPECT_NE(mis[2]->lcurlPos, INVALID_POSITION);
+    EXPECT_NE(mis[2]->rcurlPos, INVALID_POSITION);
+}
+
+// UT-P-04 (S5): @When on single form reports macro_import_when_only_in_block.
+TEST(ParserTest2, MacroImportWhenOnlyInBlock)
+{
+    std::string code = R"(macro package m
+@When[os == "Linux"] macro import a.b.c
+)";
+    DiagnosticEngine diag{};
+    std::vector<DiagKindRefactor> kinds;
+    diag.RegisterHandler(std::make_unique<DiagKindCollector>(diag, kinds));
+    auto file = ParseMacroImportCode(code, diag);
+    ASSERT_NE(file, nullptr);
+    EXPECT_EQ(diag.GetErrorCount(), 1);
+    ASSERT_EQ(kinds.size(), 1U);
+    EXPECT_EQ(kinds[0], DiagKindRefactor::macro_import_when_only_in_block);
+}
+
+// UT-P-05 (S4): modifier prefix reports macro_import_no_modifier_allowed.
+TEST(ParserTest2, MacroImportModifierRejected)
+{
+    std::string code = R"(macro package m
+public macro import a.b.*
+)";
+    DiagnosticEngine diag{};
+    std::vector<DiagKindRefactor> kinds;
+    diag.RegisterHandler(std::make_unique<DiagKindCollector>(diag, kinds));
+    auto file = ParseMacroImportCode(code, diag);
+    ASSERT_NE(file, nullptr);
+    EXPECT_EQ(diag.GetErrorCount(), 1);
+    ASSERT_EQ(kinds.size(), 1U);
+    EXPECT_EQ(kinds[0], DiagKindRefactor::macro_import_no_modifier_allowed);
+}
+
+// UT-P-06 (S3): macro import in a non-macro package reports
+// macro_import_in_non_macro_package.
+TEST(ParserTest2, MacroImportNonMacroPkgRejected)
+{
+    std::string code = R"(package normal_pkg
+macro import a.b.*
+)";
+    DiagnosticEngine diag{};
+    std::vector<DiagKindRefactor> kinds;
+    diag.RegisterHandler(std::make_unique<DiagKindCollector>(diag, kinds));
+    auto file = ParseMacroImportCode(code, diag);
+    ASSERT_NE(file, nullptr);
+    EXPECT_EQ(diag.GetErrorCount(), 1);
+    ASSERT_EQ(kinds.size(), 1U);
+    EXPECT_EQ(kinds[0], DiagKindRefactor::macro_import_in_non_macro_package);
+}
+
+// UT-P-07 (S2): broken block items are diagnosed and recovered without crash.
+TEST(ParserTest2, MacroImportBlockBrokenItems)
+{
+    // Missing 'import' keyword in block item.
+    {
+        std::string code = R"(macro package m
+macro {
+    a.b.c
+}
+)";
+        DiagnosticEngine diag{};
+        auto file = ParseMacroImportCode(code, diag);
+        ASSERT_NE(file, nullptr);
+        EXPECT_EQ(diag.GetErrorCount(), 1);
+        EXPECT_TRUE(GetFirstPackageSpec(*file)->macroImports[0]->items.empty());
+    }
+    // Nested 'macro import' inside a block.
+    {
+        std::string code = R"(macro package m
+macro {
+    macro import x
+}
+)";
+        DiagnosticEngine diag{};
+        auto file = ParseMacroImportCode(code, diag);
+        ASSERT_NE(file, nullptr);
+        EXPECT_EQ(diag.GetErrorCount(), 1);
+        EXPECT_TRUE(GetFirstPackageSpec(*file)->macroImports[0]->items.empty());
+    }
+}
+
+// UT-P-08 (S7): package names derived for cjpm dependency graph.
+TEST(ParserTest2, MacroImportPkgNameDerive)
+{
+    // single -> a.b.c; all -> a.b; multi -> prefix + per-item packages;
+    // alias -> target package of the original name.
+    std::string code = R"(macro package m
+macro import a.b.c
+macro import a.b.*
+macro import a.b.{c, d}
+macro import a.b.c as e
+)";
+    DiagnosticEngine diag{};
+    auto file = ParseMacroImportCode(code, diag);
+    ASSERT_NE(file, nullptr);
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    const auto& names = GetFirstPackageSpec(*file)->macroImportPkgNames;
+    // Multi form `a.b.{c, d}`: items are symbols, so only the prefix "a.b" is derived.
+    const std::vector<std::string> expectNames = {"a.b.c", "a.b", "a.b", "a.b.c"};
+    EXPECT_EQ(names, expectNames);
+    // Normal (non-macro) packages never derive macro import package names.
+    std::string plainCode = R"(package normal_pkg
+import a.b.c
+)";
+    DiagnosticEngine diag2{};
+    auto file2 = ParseMacroImportCode(plainCode, diag2);
+    ASSERT_NE(file2, nullptr);
+    EXPECT_EQ(diag2.GetErrorCount(), 0);
+    EXPECT_TRUE(GetFirstPackageSpec(*file2)->macroImportPkgNames.empty());
+}

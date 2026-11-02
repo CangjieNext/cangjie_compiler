@@ -10,8 +10,10 @@
 
 #include "gtest/gtest.h"
 #include "TestCompilerInstance.h"
+#include "cangjie/AST/Clone.h"
 #include "cangjie/Basic/Version.h"
 #include "cangjie/ConditionalCompilation/ConditionalCompilation.h"
+#include "cangjie/Utils/FileUtil.h"
 
 using namespace Cangjie;
 
@@ -334,3 +336,123 @@ TEST_F(ConditionalCompilationTest, container_kinds_filtered)
     EXPECT_EQ(file->decls.size(), 10);
 }
 #endif
+
+// UT-W-01: EvalMacroImportWhenCond is the MacroImportSpec hookup of the generic
+// @When evaluator. Parse a macro-import block, then evaluate each item under an
+// explicitly constructed target OS: the matching guard survives with its @When
+// consumed (EraseIf), the non-matching guard is rejected (its annotation is
+// consumed as well), and an unguarded item survives under any target.
+TEST_F(ConditionalCompilationTest, EvalMacroImportWhenCond_Basic)
+{
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->code = R"(macro package p
+macro {
+    @When[os == "Linux"] import std.math
+    @When[os == "Windows"] import std.reflect
+    import std.convert
+}
+)";
+    ASSERT_TRUE(instance->Compile(CompileStage::PARSE));
+    ASSERT_FALSE(instance->GetSourcePackages().empty());
+    auto& file = *instance->GetSourcePackages()[0]->files[0];
+    ASSERT_NE(file.package, nullptr);
+    ASSERT_EQ(file.package->macroImports.size(), 1U);
+    ASSERT_EQ(file.package->macroImports[0]->items.size(), 3U);
+
+    auto evalWithOS = [this](Triple::OSType os, AST::MacroImportSpec& spec) {
+        invocation.globalOptions.target.os = os;
+        AST::ConditionalCompilation cc(instance.get());
+        return cc.EvalMacroImportWhenCond(spec);
+    };
+
+    {
+        auto spec = AST::ASTCloner::CloneMacroImportSpec(*file.package->macroImports[0]->items[0]);
+        ASSERT_NE(spec.get(), nullptr);
+        ASSERT_EQ(spec->annotations.size(), 1U);
+        EXPECT_TRUE(evalWithOS(Triple::OSType::LINUX, *spec));
+        EXPECT_TRUE(spec->annotations.empty());
+    }
+    {
+        // Same condition under a foreign target evaluates false; the annotation
+        // is consumed either way (EvalNodeCondition erases every @When it sees).
+        auto spec = AST::ASTCloner::CloneMacroImportSpec(*file.package->macroImports[0]->items[0]);
+        EXPECT_FALSE(evalWithOS(Triple::OSType::WINDOWS, *spec));
+        EXPECT_TRUE(spec->annotations.empty());
+    }
+    {
+        // Unguarded import survives under any target.
+        auto spec = AST::ASTCloner::CloneMacroImportSpec(*file.package->macroImports[0]->items[2]);
+        EXPECT_TRUE(spec->annotations.empty());
+        EXPECT_TRUE(evalWithOS(Triple::OSType::WINDOWS, *spec));
+    }
+}
+
+// UT-W-05: defensive path — when the conditional-compilation evaluator was never
+// injected (condComp == nullptr), ProcessMacroImports warns per macro import
+// (macro_import_condcomp_missing) and keeps every entry instead of silently
+// evaluating or dropping them. The production entry point
+// (CompilerInstance::ImportPackages) injects the evaluator immediately before
+// calling BuildIndex, so the only way to reach the un-injected state is calling
+// ImportManager::BuildIndex directly — exactly what a miswired embedder would do.
+TEST_F(ConditionalCompilationTest, ProcessMacroImports_CondCompMissing)
+{
+    diag.ClearError();
+    // Phase 1: produce a macro-package cjo whose macro-import block carries one
+    // unguarded entry and one @When-guarded entry.
+    std::string searchDir = projectPath + "/testTempFiles";
+    {
+        auto macroInst = std::make_unique<TestCompilerInstance>(invocation, diag);
+        macroInst->invocation.globalOptions.implicitPrelude = true;
+        macroInst->code = R"(macro package macroimp
+macro {
+    import vardecl.*
+    @When[os == "Linux"] import funcdecl
+}
+)";
+        (void)macroInst->Compile(CompileStage::IMPORT_PACKAGE);
+        ASSERT_FALSE(macroInst->GetSourcePackages().empty());
+        auto* srcPkg = &*macroInst->GetSourcePackages()[0];
+        // TestCompilerInstance::ParseCode bypasses CheckPackageConsistency; replicate
+        // its macro-import aggregation (see PackageTest.MacroImportCjoRoundTrip).
+        srcPkg->isMacroPackage = true;
+        for (auto& f : srcPkg->files) {
+            for (auto& stmt : f->package->macroImports) {
+                srcPkg->macroImports.push_back(AST::ASTCloner::CloneMacroImportList(*stmt));
+            }
+        }
+        ASSERT_EQ(srcPkg->macroImports.size(), 1U);
+        std::vector<uint8_t> cjoData;
+        macroInst->importManager->ExportAST(false, cjoData, *srcPkg);
+        ASSERT_FALSE(cjoData.empty());
+        FileUtil::CreateDirs(searchDir);
+        ASSERT_TRUE(FileUtil::WriteBufferToASTFile(FileUtil::JoinPath(searchDir, "macroimp.cjo"), cjoData));
+    }
+    diag.Reset();
+
+    // Phase 2: parse a downstream consumer, then run BuildIndex directly without
+    // the condComp injection — this drives the defensive branch in
+    // ProcessMacroImports during BuildIndex.
+    invocation.globalOptions.importPaths.push_back(searchDir);
+    auto inst = std::make_unique<TestCompilerInstance>(invocation, diag);
+    inst->invocation.globalOptions.implicitPrelude = true;
+    inst->code = "package downstream\nimport macroimp\nfunc Dummy(): Unit {}\n";
+    ASSERT_TRUE(inst->Compile(CompileStage::CONDITION_COMPILE));
+    std::vector<Ptr<AST::Package>> pkgs;
+    for (auto& it : inst->GetSourcePackages()) {
+        pkgs.push_back(it);
+    }
+    ASSERT_FALSE(pkgs.empty());
+    auto modulesDir = FileUtil::JoinPath(
+        FileUtil::JoinPath(inst->cangjieHome, "modules"), invocation.globalOptions.GetCangjieLibTargetPathName());
+    EXPECT_TRUE(inst->importManager->BuildIndex(modulesDir, invocation.globalOptions, pkgs));
+
+    // One warning per surviving spec; no error; every entry survives (kept for
+    // .macrocall generation) in evaluation order.
+    EXPECT_EQ(diag.GetWarningCount(), 2);
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    const auto& injected = inst->importManager->GetMacroImportStrings();
+    ASSERT_EQ(injected.size(), 2U);
+    EXPECT_EQ(injected[0], "vardecl.*");
+    EXPECT_EQ(injected[1], "funcdecl");
+}

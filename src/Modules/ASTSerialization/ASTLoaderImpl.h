@@ -245,6 +245,14 @@ private:
     OwnedPtr<AST::FuncParamList> LoadFuncParamList(const PackageFormat::FuncParamList* funcParamList);
     // Load Position Node according to Position object.
     Position LoadPos(const PackageFormat::Position* posObj);
+    // Tolerant LoadPos variant for macro-import nodes: null/invalid index maps to fileID 0.
+    Position RebuildMacroImportPos(const PackageFormat::Position* posObj) const;
+    // Rebuild the flat ImportContent of one macro import item (single/alias/all only).
+    void RebuildMacroImportContent(
+        AST::ImportContent& content, const PackageFormat::MacroImportSpec& spec) const;
+    // Rebuild the @When annotations from whenExprIndices (null → none).
+    void RebuildWhenAnnotations(
+        AST::MacroImportSpec& spec, const flatbuffers::Vector<FormattedIndex>* whenIndices) const;
     void LoadImportContent(AST::ImportContent& content, const PackageFormat::ImportSpec& is) const;
     std::vector<Ptr<AST::Ty>> LoadTypeArgs(const PackageFormat::SemaTy& typeObj);
     void SetGenericTy(FormattedIndex type, const PackageFormat::SemaTy& typeObj);

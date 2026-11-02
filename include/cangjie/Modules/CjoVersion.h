@@ -149,7 +149,10 @@
 
 namespace Cangjie {
 constexpr uint8_t CJO_MAJOR_VERSION = 0;
-constexpr uint8_t CJO_MINOR_VERSION = 1;
+// 0.2.0: macro import declarations persisted as structured MacroImportList nodes
+// (Package.macroImports, @When kept as condExpr AST) instead of a raw token stream.
+// Breaking change vs 0.1.0 — requires clean rebuild.
+constexpr uint8_t CJO_MINOR_VERSION = 2;
 constexpr uint8_t CJO_PATCH_VERSION = 0;
 } // namespace Cangjie
 
