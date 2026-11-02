@@ -248,13 +248,15 @@ std::unique_ptr<ToolFuture> Tool::Execute(bool verbose) const
     }
 
     if (useRsp) {
-        // Serialize with argv[0] skipped; style follows the host OS.
+        // Serialize with argv[0] skipped; the style matches the rsp reader of
+        // the host toolchain (see SerializeRspForHost).
         std::vector<std::string> fullArgs = execArgs;
         fullArgs.insert(fullArgs.end(), expandedArgs.begin(), expandedArgs.end());
         std::string content = SerializeRspForHost(fullArgs);
         std::string rspPath = TempFileManager::Instance().CreateRspFile(content);
-        if (rspPath.empty()) {
-            // Write failed; fall back to the original args.
+        if (content.empty() || rspPath.empty()) {
+            // No serializer on this host, or write failed; fall back to the
+            // original args.
             useRsp = false;
         } else {
             execArgs.push_back("@" + rspPath);
