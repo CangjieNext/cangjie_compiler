@@ -1032,21 +1032,31 @@ Translator::LeftValueInfo Translator::TranslateStructOrClassCtorCallAsLeftValue(
 Expression* Translator::CreateAndAppendApplyCallFromCallExpr(
     Value& callee, FuncCallContext& context, Type& instRetType, const AST::CallExpr& expr)
 {
-    auto funcCall = TryCreate<Apply>(currentBlock, &instRetType, &callee, context);
     const auto& loc = TranslateLocation(expr);
+    auto firstNothingArgIndex = GetFirstNothingTypeArgIndex(context.args);
+    if (context.args.size() == expr.args.size() && firstNothingArgIndex.has_value()) {
+        // The never-executed call is a separate unreachable source region from its terminating argument.
+        auto argumentRootLocation = currentBlock->GetDebugLocation();
+        CreateAndAppendTerminator<Exit>(currentBlock);
+        currentBlock = CreateBlock();
+        currentBlock->SetDebugLocation(argumentRootLocation);
+    }
+    auto funcCall = TryCreate<Apply>(currentBlock, &instRetType, &callee, context);
     funcCall->SetDebugLocation(loc);
     if (expr.callKind == AST::CallKind::CALL_SUPER_FUNCTION) {
-        if (auto apply = DynamicCast<Apply>(funcCall)) {
+        if (auto apply = DynamicCast<Apply*>(funcCall)) {
             apply->SetSuperCall();
         }
     }
-    if (HasNothingTypeArg(context.args)) {
-        if (expr.baseFunc != nullptr) {
-            const auto& warningLoc = TranslateLocation(*expr.baseFunc);
-            funcCall->Set<DebugLocationInfoForWarning>(warningLoc);
-        } else {
-            funcCall->Set<DebugLocationInfoForWarning>(loc);
-        }
+    const auto& warningLoc = expr.baseFunc != nullptr ? TranslateLocation(*expr.baseFunc) : loc;
+    if (firstNothingArgIndex.has_value()) {
+        FinalizeNothingCallArguments(*funcCall, loc, warningLoc);
+        return funcCall;
+    }
+    if (instRetType.IsNothing()) {
+        CreateAndAppendTerminator<Exit>(loc, currentBlock);
+        currentBlock = CreateBlock();
+        currentBlock->SetDebugLocation(loc);
     }
     return funcCall;
 }
@@ -1219,15 +1229,8 @@ Value* Translator::TranslateMemberFuncCall(const AST::CallExpr& expr)
     if (!resolvedFunction->TestAttr(AST::Attribute::STATIC)) {
         // for virtual func call, cast implicit `this` to instantiated parent type
         if (instCallInfo.isVirtualFuncCall) {
-<<<<<<< HEAD
-            expectedThisObjTy =
-                AddRefIfFuncIsMutOrClass(*instCallInfo.instParentCustomTy, *instCallInfo.originalFuncDecl, builder);
-||||||| constructed merge base
-            expectedThisObjTy = AddRefIfFuncIsMutOrClass(*instCallInfo.instParentCustomTy, *resolvedFunction, builder);
-=======
             expectedThisObjTy =
                 GetThisTypeWithModal(*instCallInfo.instParentCustomTy, *instCallInfo.originalFuncDecl);
->>>>>>> feat: local mode
         } else {
             expectedThisObjTy = expectedParamTys[0];
         }

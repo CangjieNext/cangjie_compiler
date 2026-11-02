@@ -665,37 +665,7 @@ void AST2CHIR::CreatePseudoImportedFuncSignatureAndSetGlobalCache(const AST::Fun
     fn->EnableAttr(Attribute::IMPORTED);
     SetFuncAttributeAndLinkageType(funcDecl, *fn);
     // NOTE: 'AnnoInfo' will be added during translating customDef.
-<<<<<<< HEAD
-    if (IsInstanceMember(funcDecl)) {
-        auto pType = funcTy->GetParamType(0);
-        auto chirParam = builder.CreateParameter(pType, INVALID_LOCATION, *fn);
-        chirParam->SetSrcCodeIdentifier("this");
-        fn->AddParam(*chirParam);
-    }
-    for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
-        auto pType = chirType.TranslateType(*param->GetTy());
-        auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), param->begin, param->end);
-        auto chirParam = builder.CreateParameter(pType, loc, *fn);
-        chirParam->SetSrcCodeIdentifier(param->identifier.GetRawText());
-        fn->AddParam(*chirParam);
-    }
-||||||| constructed merge base
-    if (IsInstanceMember(funcDecl)) {
-        auto pType = funcTy->GetParamTypes()[0];
-        auto chirParam = builder.CreateParameter(pType, INVALID_LOCATION, *fn);
-        chirParam->SetSrcCodeIdentifier("this");
-        fn->AddParam(*chirParam);
-    }
-    for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
-        auto pType = chirType.TranslateType(*param->GetTy());
-        auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), param->begin, param->end);
-        auto chirParam = builder.CreateParameter(pType, loc, *fn);
-        chirParam->SetSrcCodeIdentifier(param->identifier.GetRawText());
-        fn->AddParam(*chirParam);
-    }
-=======
     TranslateFuncParams(funcDecl, *fn);
->>>>>>> feat: local mode
     globalCache.Set(funcDecl, *fn);
 }
 
@@ -737,35 +707,7 @@ void AST2CHIR::CreateImportedFuncSignatureAndSetGlobalCache(const AST::FuncDecl&
     auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), funcDecl.begin, funcDecl.end);
     fn->SetDebugLocation(loc);
     SetFuncAttributeAndLinkageType(funcDecl, *fn);
-<<<<<<< HEAD
-    // set param infos of imported func
-    if (IsInstanceMember(funcDecl)) {
-        auto pType = StaticCast<FuncType*>(fnTy)->GetParamType(0);
-        auto chirParam = builder.CreateParameter(pType, INVALID_LOCATION, *fn);
-        chirParam->SetSrcCodeIdentifier("this");
-    }
-    for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
-        auto pType = chirType.TranslateType(*param->GetTy());
-        auto pLoc = TranslateLocationWithoutScope(builder.GetChirContext(), param->begin, param->end);
-        auto chirParam = builder.CreateParameter(pType, pLoc, *fn);
-        chirParam->SetSrcCodeIdentifier(param->identifier.GetRawText());
-    }
-||||||| constructed merge base
-    // set param infos of imported func
-    if (IsInstanceMember(funcDecl)) {
-        auto pType = StaticCast<FuncType*>(fnTy)->GetParamTypes()[0];
-        auto chirParam = builder.CreateParameter(pType, INVALID_LOCATION, *fn);
-        chirParam->SetSrcCodeIdentifier("this");
-    }
-    for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
-        auto pType = chirType.TranslateType(*param->GetTy());
-        auto pLoc = TranslateLocationWithoutScope(builder.GetChirContext(), param->begin, param->end);
-        auto chirParam = builder.CreateParameter(pType, pLoc, *fn);
-        chirParam->SetSrcCodeIdentifier(param->identifier.GetRawText());
-    }
-=======
     TranslateFuncParams(funcDecl, *fn);
->>>>>>> feat: local mode
     globalCache.Set(funcDecl, *fn);
 }
 

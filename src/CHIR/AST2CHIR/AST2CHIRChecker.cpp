@@ -108,45 +108,39 @@ bool CheckMethodType(AST::ModalTy astTy, const Type& chirTy)
     return true;
 }
 
-<<<<<<< HEAD
-// Compare parameter types only, ignoring the trailing return type.
-bool CheckFuncTypeSameParams(const Cangjie::AST::Ty& astTy, const Type& chirTy)
-{
-    auto astTyArgs = astTy.typeArgs;
-    auto chirTyArgs = chirTy.GetTypeArgs();
-    if (astTyArgs.empty() || astTyArgs.size() != chirTyArgs.size()) {
-        return false;
-    }
-    for (size_t loop = 0; loop + 1 < astTyArgs.size(); loop++) {
-        if (!CheckType(*astTyArgs[loop], *chirTyArgs[loop])) {
-            return false;
-        }
-    }
-    return true;
-}
-
 // Method variant: chir args are [this, params..., ret], ast args are [params..., ret].
-bool CheckMethodTypeSameParams(const Cangjie::AST::Ty& astTy, const Type& chirTy)
+bool CheckMethodTypeSameParams(const AST::ModalTy astTy, const Type& chirTy)
 {
-    auto astTyArgs = astTy.typeArgs;
+    auto astTyArgs = astTy->typeArgs;
     auto chirTyArgs = chirTy.GetTypeArgs();
     if (astTyArgs.empty() || astTyArgs.size() + 1 != chirTyArgs.size()) {
         return false;
     }
     for (size_t loop = 0; loop + 1 < astTyArgs.size(); loop++) {
-        if (!CheckType(*astTyArgs[loop], *chirTyArgs[loop + 1])) {
+        if (!CheckType(astTyArgs[loop], *chirTyArgs[loop + 1])) {
             return false;
         }
     }
     return true;
 }
 
-bool CheckStructType(const Cangjie::AST::Ty& astTy, const Type& chirTy)
-||||||| constructed merge base
-bool CheckStructType(const Cangjie::AST::Ty& astTy, const Type& chirTy)
-=======
+// Compare parameter types only, ignoring the trailing return type.
+bool CheckFuncTypeSameParams(const AST::ModalTy astTy, const Type& chirTy)
+{
+    auto astTyArgs = astTy->typeArgs;
+    auto chirTyArgs = chirTy.GetTypeArgs();
+    if (astTyArgs.empty() || astTyArgs.size() != chirTyArgs.size()) {
+        return false;
+    }
+    for (size_t loop = 0; loop + 1 < astTyArgs.size(); loop++) {
+        if (!CheckType(astTyArgs[loop], *chirTyArgs[loop])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool CheckStructType(AST::ModalTy astTy, const Type& chirTy)
->>>>>>> feat: local mode
 {
     if (!astTy->IsStruct()) {
         return false;
@@ -339,53 +333,31 @@ bool CheckInheritDeclGlobalMember(
             StaticCast<const AST::FuncDecl&>(decl).IsFinalizer()) {
             return true;
         }
-<<<<<<< HEAD
         // `specific` member function's return type may refine the `common` one (covariant return).
         // CHIR keeps the origin (common) type in the deserialized node while the AST type is the
         // refined one, so a return-type-only difference is not an error. Parameters must still match.
         bool specificOverCommon =
             decl.TestAttr(Cangjie::AST::Attribute::SPECIFIC) && chirCache->TestAttr(Attribute::DESERIALIZED);
         if (!decl.TestAttr(Cangjie::AST::Attribute::STATIC)) {
-            bool ok = CheckMethodType(*decl.GetTy(), *chirCache->GetType());
+            bool ok = CheckMethodType(decl.GetTy(), *chirCache->GetType());
             if (!ok && specificOverCommon) {
-                ok = CheckMethodTypeSameParams(*decl.GetTy(), *chirCache->GetType());
+                ok = CheckMethodTypeSameParams(decl.GetTy(), *chirCache->GetType());
             }
             if (!ok) {
                 Errorln(chirCache->GetIdentifier() + " is expected to be promoted " +
-                    Cangjie::AST::Ty::ToString(decl.GetTy()) + ".");
+                    Cangjie::AST::Ty::ToString(decl.DataTy()) + ".");
                 return false;
             }
         } else {
-            bool ok = CheckFuncType(*decl.GetTy(), *chirCache->GetType());
+            bool ok = CheckFuncType(decl.GetTy(), *chirCache->GetType());
             if (!ok && specificOverCommon) {
-                ok = CheckFuncTypeSameParams(*decl.GetTy(), *chirCache->GetType());
+                ok = CheckFuncTypeSameParams(decl.GetTy(), *chirCache->GetType());
             }
             if (!ok) {
                 Errorln(chirCache->GetIdentifier() + " is expected to be promoted " +
-                    Cangjie::AST::Ty::ToString(decl.GetTy()) + ".");
+                    Cangjie::AST::Ty::ToString(decl.DataTy()) + ".");
                 return false;
             }
-||||||| constructed merge base
-        if (!decl.TestAttr(Cangjie::AST::Attribute::STATIC) && !CheckMethodType(*decl.GetTy(), *chirCache->GetType())) {
-            Errorln(chirCache->GetIdentifier() + " is expected to be promoted " +
-                Cangjie::AST::Ty::ToString(decl.GetTy()) + ".");
-            return false;
-        }
-        if (decl.TestAttr(Cangjie::AST::Attribute::STATIC) && !CheckFuncType(*decl.GetTy(), *chirCache->GetType())) {
-            Errorln(chirCache->GetIdentifier() + " is expected to be promoted " +
-                Cangjie::AST::Ty::ToString(decl.GetTy()) + ".");
-            return false;
-=======
-        if (!decl.TestAttr(AST::Attribute::STATIC) && !CheckMethodType(decl.GetTy(), *chirCache->GetType())) {
-            Errorln(
-                chirCache->GetIdentifier() + " is expected to be promoted " + AST::Ty::ToString(decl.DataTy()) + ".");
-            return false;
-        }
-        if (decl.TestAttr(AST::Attribute::STATIC) && !CheckFuncType(decl.GetTy(), *chirCache->GetType())) {
-            Errorln(
-                chirCache->GetIdentifier() + " is expected to be promoted " + AST::Ty::ToString(decl.DataTy()) + ".");
-            return false;
->>>>>>> feat: local mode
         }
     }
     return true;

@@ -55,18 +55,10 @@ Ptr<Value> Translator::Visit(const AST::LambdaExpr& lambdaExpr)
 
 Translator Translator::Copy() const
 {
-<<<<<<< HEAD
-    return {builder, chirTy, opts, gim, globalSymbolTable, localConstVars, localConstFuncs, increKind,
-        deserializedVals, annoFactoryFuncs, isComputingAnnos, initFuncsForAnnoFactory, typeManager};
-||||||| constructed merge base
-    return {builder, chirTy, opts, gim, globalSymbolTable, localConstVars, localConstFuncs, increKind,
-        deserializedVals, annoFactoryFuncs, maybeUnreachable, isComputingAnnos, initFuncsForAnnoFactory, typeManager};
-=======
     auto trans = Translator{builder, chirTy, opts, gim, globalSymbolTable, localConstVars, localConstFuncs, increKind,
-        deserializedVals, annoFactoryFuncs, maybeUnreachable, isComputingAnnos, initFuncsForAnnoFactory, typeManager};
+        deserializedVals, annoFactoryFuncs, isComputingAnnos, initFuncsForAnnoFactory, typeManager};
     trans.topLevelDecl = topLevelDecl;
     return trans;
->>>>>>> feat: local mode
 }
 
 Translator Translator::SetupContextForLambda(const AST::Block& body)
