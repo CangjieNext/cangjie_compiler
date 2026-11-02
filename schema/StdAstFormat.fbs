@@ -970,6 +970,11 @@ table PackageSpec {
   accessible:AccessibleKind=ACCESSIBLE_PUBLIC;
   hasMacro:bool;
   hasDoubleColon: bool;
+  // Structured macro-import declarations (single or block form, @When kept as
+  // Annotation condExpr AST). A vector: each entry is one statement (single or
+  // block) as a MacroImportList node, so multiple statements keep their own
+  // macroPos / block braces. Persisted losslessly for the macro toolchain round-trip.
+  macroImports: [MacroImportList];
 }
 
 enum ImportKind:int8 {
@@ -1009,6 +1014,27 @@ table ImportSpec {
   reExport:ReExportKind=REEXPORT_PRIVATE;
   importPos:Position;
   content:ImportContent;
+}
+
+// One macro import statement (single form) or one item inside a `macro { }` block.
+// Carries no modifier (macro import forbids re-export). @When is kept as an
+// Annotation node (condExpr AST, not text-ified) so the macro toolchain
+// (parseProgram/toTokens) round-trips it losslessly, identical to ordinary ImportSpec.
+table MacroImportSpec {
+  base: NodeBase;
+  importPos: Position;
+  content: ImportContent;
+  annotations: [Annotation]; // @When (block items only); empty for single form.
+}
+
+// Top-level container of all macro import declarations in a macro package.
+// lcurl_pos/rcurl_pos are default for the single form; set for the block form.
+table MacroImportList {
+  base: NodeBase;
+  macroPos: Position;
+  lcurlPos: Position;
+  rcurlPos: Position;
+  items: [MacroImportSpec];
 }
 
 table NodeBase {

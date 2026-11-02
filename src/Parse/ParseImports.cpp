@@ -20,23 +20,211 @@ using namespace Cangjie;
 using namespace Cangjie::AST;
 using namespace Cangjie::Utils;
 
-void ParserImpl::ParseCommonImportSpec(PtrVector<ImportSpec>& imports, PtrVector<Annotation>& annos)
+void ParserImpl::ParseMacroImports(AST::PackageSpec& packageSpec)
 {
-    while (SeeingImport() || (SeeingBuiltinAnnotation())) {
+    // Each macro import statement (single form or one block) becomes its own
+    // MacroImportList in packageSpec.macroImports, so positions never collide.
+    auto list = MakeOwned<AST::MacroImportList>();
+    list->macroPos = Peek().Begin();
+    list->begin = list->macroPos;
+    AST::MacroImportList* listPtr = list.get();
+    packageSpec.macroImports.push_back(std::move(list));
+    if (Seeing({TokenKind::MACRO, TokenKind::LCURL})) {
+        ParseMacroBlockImport(packageSpec, listPtr);
+    } else {
+        ParseMacroSingleImport(packageSpec, listPtr);
+    }
+}
+
+void ParserImpl::ParseMacroSingleImport(AST::PackageSpec& packageSpec, AST::MacroImportList* list)
+{
+    // macroSingleImport := 'macro' 'import' importContent
+    // Syntax rule 5: @When may not prefix a single macro import (checked by the caller).
+    Skip(TokenKind::MACRO);
+    auto spec = MakeOwned<AST::MacroImportSpec>();
+    spec->importPos = Peek().Begin();
+    Skip(TokenKind::IMPORT);
+    ParseImportContent(spec->content);
+    // annotations stays empty — single form forbids @When (syntax rule 5).
+    spec->begin = spec->importPos;
+    spec->end = spec->content.end;
+    list->lcurlPos = INVALID_POSITION;
+    list->rcurlPos = INVALID_POSITION;
+    list->end = spec->end;
+    DeriveMacroImportPkgNames(spec->content, packageSpec);
+    list->items.push_back(std::move(spec));
+
+    if (!newlineSkipped) {
+        if (Seeing(TokenKind::END)) {
+            return;
+        }
+        if (!Skip(TokenKind::SEMI)) {
+            DiagExpectSemiOrNewline();
+            ConsumeUntilAny({TokenKind::NL, TokenKind::SEMI});
+        }
+    }
+    SkipBlank(TokenKind::SEMI);
+}
+
+void ParserImpl::ParseMacroBlockImport(AST::PackageSpec& packageSpec, AST::MacroImportList* list)
+{
+    // macroBlockImport := 'macro' '{' macroBlockItem* '}'
+    // macroBlockItem  := NewLine* (whenAnnotation)? 'import' importContent
+    Skip(TokenKind::MACRO);
+    list->lcurlPos = Peek().Begin();
+    Skip(TokenKind::LCURL);
+
+    while (true) {
+        SkipBlank(TokenKind::NL); // allow blank lines / newlines between items
+        if (Seeing(TokenKind::RCURL) || Seeing(TokenKind::END)) {
+            break;
+        }
+
+        auto spec = MakeOwned<AST::MacroImportSpec>();
+        // Syntax rule 3: a block item may carry a leading @When (kept as an
+        // Annotation node, evaluated downstream like ordinary ImportSpec).
+        if (SeeingAtWhen()) {
+            spec->annotations.push_back(ParseAnnotation()); // anno->kind == AnnotationKind::WHEN
+        }
+
+        spec->importPos = Peek().Begin();
+        if (!Skip(TokenKind::IMPORT)) {
+            DiagExpectCharacter(lastToken.End(), "'import'");
+            ConsumeUntilAny({TokenKind::NL, TokenKind::SEMI, TokenKind::RCURL});
+            continue;
+        }
+        ParseImportContent(spec->content);
+        spec->begin = spec->annotations.empty() ? spec->importPos : spec->annotations.front()->begin;
+        spec->end = spec->content.end;
+        DeriveMacroImportPkgNames(spec->content, packageSpec);
+        list->items.push_back(std::move(spec));
+
+        if (!newlineSkipped) {
+            if (Seeing(TokenKind::RCURL) || Seeing(TokenKind::END)) {
+                break;
+            }
+            if (!Skip(TokenKind::SEMI)) {
+                DiagExpectSemiOrNewline();
+                ConsumeUntilAny({TokenKind::NL, TokenKind::SEMI, TokenKind::RCURL});
+            }
+        }
+        SkipBlank(TokenKind::SEMI);
+    }
+    list->rcurlPos = Peek().Begin();
+    list->end = list->rcurlPos;
+    Skip(TokenKind::RCURL);
+}
+
+void ParserImpl::DeriveMacroImportPkgNames(const AST::ImportContent& content, AST::PackageSpec& packageSpec)
+{
+    // Derive the package prefix for the cjpm dependency graph (not persisted to cjo).
+    if (content.kind == ImportKind::IMPORT_MULTI) {
+        // `a.b.{c, d}`: per-item names are symbols, not packages — pushing them
+        // would create phantom cjpm dependencies on "c"/"d".
+        auto prefix = content.GetPrefixPath();
+        if (!prefix.empty()) {
+            packageSpec.macroImportPkgNames.push_back(prefix);
+        }
+    } else if (content.kind == ImportKind::IMPORT_ALL) {
+        // prefix.* — package name is the prefix.
+        auto prefix = content.GetPrefixPath();
+        if (!prefix.empty()) {
+            packageSpec.macroImportPkgNames.push_back(prefix);
+        }
+    } else if (content.kind == ImportKind::IMPORT_SINGLE || content.kind == ImportKind::IMPORT_ALIAS) {
+        // Alias form keeps the original name in `identifier`, so the package
+        // prefix plus the imported symbol still identifies the target package.
+        std::string pkgName = content.GetImportedPackageName();
+        if (!pkgName.empty()) {
+            packageSpec.macroImportPkgNames.push_back(std::move(pkgName));
+        }
+    }
+}
+
+void ParserImpl::ParseCommonImportSpec(PtrVector<ImportSpec>& imports, PtrVector<Annotation>& annos,
+    PackageSpec* packageSpec)
+{
+    auto seeingMacroSingle = [&]() -> bool {
+        // Only the bare 'macro' 'import' lookahead is recognized; a modifier prefix is
+        // handled by seeingIllegalModifierMacroImport (no re-export allowed).
+        if (!packageSpec || !packageSpec->hasMacro) {
+            return false;
+        }
+        return Seeing({TokenKind::MACRO, TokenKind::IMPORT});
+    };
+    auto seeingMacroBlock = [&]() -> bool {
+        if (!packageSpec || !packageSpec->hasMacro) {
+            return false;
+        }
+        return Seeing({TokenKind::MACRO, TokenKind::LCURL});
+    };
+    auto seeingIllegalMacroImport = [&]() -> bool {
+        // Recognize macro import syntax in a non-macro package to report the dedicated
+        // diagnostic instead of a generic parse error.
+        if (packageSpec && packageSpec->hasMacro) {
+            return false;
+        }
+        return Seeing({TokenKind::MACRO, TokenKind::IMPORT}) || Seeing({TokenKind::MACRO, TokenKind::LCURL});
+    };
+    auto seeingIllegalModifierMacroImport = [&]() -> bool {
+        // Syntax rule 4: no import modifier prefix (no re-export), in any package.
+        static const std::vector<TokenKind> IMPORT_MODIFIERS = {TokenKind::PUBLIC, TokenKind::PROTECTED,
+            TokenKind::INTERNAL, TokenKind::PRIVATE};
+        if (!SeeingAny(IMPORT_MODIFIERS)) {
+            return false;
+        }
+        for (auto modifier : IMPORT_MODIFIERS) {
+            if (Seeing({modifier, TokenKind::MACRO, TokenKind::IMPORT}) ||
+                Seeing({modifier, TokenKind::MACRO, TokenKind::LCURL})) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    while (SeeingImport() || SeeingBuiltinAnnotation() || seeingMacroSingle() || seeingMacroBlock() ||
+        seeingIllegalMacroImport() || seeingIllegalModifierMacroImport()) {
         if (SeeingBuiltinAnnotation()) {
             ParseAnnotations(annos);
+        }
+        if (seeingMacroSingle()) {
+            // Syntax rule 5: @When may not prefix a single macro import.
+            for (const auto& anno : annos) {
+                if (anno->kind == AnnotationKind::WHEN) {
+                    ParseDiagnoseRefactor(DiagKindRefactor::macro_import_when_only_in_block, anno->begin);
+                    break;
+                }
+            }
+            annos.clear();
+            ParseMacroImports(*packageSpec);
+            continue;
+        }
+        if (seeingMacroBlock()) {
+            annos.clear();
+            ParseMacroImports(*packageSpec);
+            continue;
+        }
+        if (seeingIllegalMacroImport()) {
+            ParseDiagnoseRefactor(DiagKindRefactor::macro_import_in_non_macro_package, Peek().Begin());
+            ConsumeUntilAny({TokenKind::NL, TokenKind::SEMI, TokenKind::END});
+            annos.clear();
+            continue;
+        }
+        if (seeingIllegalModifierMacroImport()) {
+            if (!packageSpec || !packageSpec->hasMacro) {
+                ParseDiagnoseRefactor(DiagKindRefactor::macro_import_in_non_macro_package, Peek().Begin());
+            } else {
+                ParseDiagnoseRefactor(DiagKindRefactor::macro_import_no_modifier_allowed, Peek().Begin());
+            }
+            ConsumeUntilAny({TokenKind::NL, TokenKind::SEMI, TokenKind::END});
+            annos.clear();
+            continue;
         }
         if (!SeeingImport()) {
             break;
         }
         ParseImportSpec(imports, annos);
         annos.clear();
-        /**
-         * importList
-         *     : (FROM NL* Identifier)? NL* IMPORT NL* importAllOrSpecified
-         *     (NL* COMMA NL* importAllOrSpecified)* end+
-         *     ;
-         * */
         if (!newlineSkipped) {
             if (Seeing(TokenKind::END)) {
                 break;
@@ -83,9 +271,10 @@ void ParserImpl::CheckImportSpec(PtrVector<ImportSpec>& imports)
     }
 }
 
-void ParserImpl::ParseImportSpecInTop(PtrVector<ImportSpec>& imports, PtrVector<Annotation>& annos)
+void ParserImpl::ParseImportSpecInTop(PtrVector<ImportSpec>& imports, PtrVector<Annotation>& annos,
+    PackageSpec* packageSpec)
 {
-    ParseCommonImportSpec(imports, annos);
+    ParseCommonImportSpec(imports, annos, packageSpec);
     CheckImportSpec(imports);
 }
 

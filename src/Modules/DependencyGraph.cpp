@@ -180,11 +180,39 @@ void ImportManager::DependencyGraph::AddDependency(
     }
 }
 
+// A macro import has no consumer-side ImportSpec, so the edge carries no spec.
+void ImportManager::DependencyGraph::AddDependency(const std::string& u, const std::string& v)
+{
+    dependencyMap[u].emplace(v, std::set<Ptr<const AST::ImportSpec>, AST::CmpNodeByPos>{});
+}
+
+void ImportManager::DependencyGraph::AddMacroImportDependency(const std::string& from, const std::string& to)
+{
+    if (from == to) {
+        return; // rule 1: a macro import never depends on its own package.
+    }
+    auto targetPkg = cjoManager.GetPackage(to);
+    if (cjoManager.GetPackage(from) == nullptr || targetPkg == nullptr) {
+        return;
+    }
+    AddDependency(from, to);
+    // Same transitive closure as an ordinary import. This may also fill in re-export
+    // edges of the target package, but never records `from` -> `to` as a re-export,
+    // because a macro import is not a re-export (rule 4).
+    AddDependenciesForPackage(*targetPkg);
+    InvalidateQueryCaches();
+}
+
+void ImportManager::DependencyGraph::InvalidateQueryCaches()
+{
+    cacheDirectDependencyPackageDecls.clear();
+    cacheDependencyPackageDecls.clear();
+    cacheDependencyPackageNames.clear();
+}
+
 void ImportManager::DependencyGraph::Clear()
 {
     dependencyMap.clear();
     pkgReExportMap.clear();
-    cacheDirectDependencyPackageDecls.clear();
-    cacheDependencyPackageDecls.clear();
-    cacheDependencyPackageNames.clear();
+    InvalidateQueryCaches();
 }

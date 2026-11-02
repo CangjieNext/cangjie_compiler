@@ -19,6 +19,7 @@
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Basic/Print.h"
 #include "cangjie/Basic/Version.h"
+#include "cangjie/ConditionalCompilation/ConditionalCompilation.h"
 #include "cangjie/CHIR/CHIR.h"
 #include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
 #include "cangjie/CHIR/Transformation/MetaTransform.h"
@@ -1144,7 +1145,14 @@ bool CompilerInstance::ImportPackages()
         return true;
     }
 
-    if (!importManager->BuildIndex(cangjieModules, invocation.globalOptions, pkgs)) {
+    // Inject a conditional compilation evaluator so macro-imported @When conditions
+    // are evaluated downstream during BuildIndex (not in the macro package, rule 1).
+    ConditionalCompilation macroImportCc{this};
+    importManager->SetConditionalCompilation(&macroImportCc);
+    bool indexOk = importManager->BuildIndex(cangjieModules, invocation.globalOptions, pkgs);
+    // macroImportCc is scope-local: drop the raw pointer before it dangles.
+    importManager->SetConditionalCompilation(nullptr);
+    if (!indexOk) {
         return false;
     }
     MergePackages();

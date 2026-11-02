@@ -42,6 +42,7 @@ struct VersionInfo {
 
 
 class ConditionalCompilationImpl {
+    friend class ConditionalCompilation;
 public:
     explicit ConditionalCompilationImpl(CompilerInstance* c);
     void HandleConditionalCompilation(const Package& root);
@@ -90,6 +91,13 @@ private:
     std::unordered_map<std::string, std::string> passedCondition;
 
     bool EvalConditionExpr(const Expr& condition);
+
+    /// Non-destructive twin of \ref EvalNodeCondition: evaluates the @When annotation(s)
+    /// without erasing them. Condition semantics are identical (the last @When decides,
+    /// empty condExpr is diagnosed). Used for cjo-backed MacroImportSpec nodes owned by
+    /// the CjoManager cache — they are shared across consumer packages, so an erasing
+    /// evaluation would corrupt the condition for subsequent consumers.
+    bool PeekMacroImportWhenCond(const MacroImportSpec& spec);
 
     bool ConditionCheck(const std::string& conditionStr, const Position& begin, const std::string& right);
 

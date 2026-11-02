@@ -4,13 +4,20 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+#include <algorithm>
 #include <cstdlib>
+#include <fstream>
+#include <iterator>
+#include <mutex>
 #include <string>
 #include "gtest/gtest.h"
 
 #include "TestCompilerInstance.h"
+#include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
+#include "cangjie/ConditionalCompilation/ConditionalCompilation.h"
+#include "cangjie/Utils/FileUtil.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -44,6 +51,17 @@ std::unordered_map<std::string, std::string> GetEnvironmentVars()
         ++env;
     }
     return envVars;
+}
+}
+
+namespace {
+std::unique_ptr<TestCompilerInstance> MakeInstance(
+    CompilerInvocation& invocation, DiagnosticEngine& diag, const std::string& code)
+{
+    auto inst = std::make_unique<TestCompilerInstance>(invocation, diag);
+    inst->invocation.globalOptions.implicitPrelude = true;
+    inst->code = code;
+    return inst;
 }
 }
 
@@ -142,12 +160,62 @@ protected:
     DiagnosticEngine diag;
     CompilerInvocation invocation;
     std::unique_ptr<TestCompilerInstance> instance;
+
+    // ImportManager friends this fixture; the TEST_F bodies live in derived classes
+    // (friendship is not inherited), so route the private accessor through here.
+    static const std::vector<std::string>& MacroImportStrings(
+        const ImportManager& im, const std::string& pkgName)
+    {
+        return im.GetMacroImportStrings(pkgName);
+    }
+
+    static bool IsDeclAccessibleIn(const ImportManager& im, const AST::File& file, AST::Decl& decl)
+    {
+        return im.IsDeclAccessible(file, decl);
+    }
+
+    // Compile `code` as one package in-process and export its cjo into `outDir`.
+    // TestCompilerInstance::ParseCode bypasses the production parse assembler
+    // (CompileStrategy::CheckPackageConsistency), so replicate its macro-import
+    // aggregation (and macro-package marking, see MacroImportCjoRoundTrip) before
+    // exporting. Returns the written cjo path.
+    std::string BuildCjo(const std::string& code, const std::string& outDir, bool markMacro = true)
+    {
+        auto inst = MakeInstance(invocation, diag, code);
+        (void)inst->Compile(CompileStage::IMPORT_PACKAGE);
+        auto* srcPkg = &*inst->GetSourcePackages()[0];
+        if (markMacro) {
+            srcPkg->isMacroPackage = true;
+        }
+        for (auto& f : srcPkg->files) {
+            for (auto& stmt : f->package->macroImports) {
+                srcPkg->macroImports.push_back(ASTCloner::CloneMacroImportList(*stmt));
+            }
+        }
+        std::vector<uint8_t> cjoData;
+        inst->importManager->ExportAST(false, cjoData, *srcPkg);
+        EXPECT_FALSE(cjoData.empty());
+        auto cjoPath = FileUtil::JoinPath(outDir, srcPkg->fullPackageName + ".cjo");
+        EXPECT_TRUE(FileUtil::WriteBufferToASTFile(cjoPath, cjoData));
+        return cjoPath;
+    }
+
+    // Compile the shared `define.cj` macro plugin exactly once per process: the
+    // plugin does not vary per test, so repeating the cjc invocation per test only
+    // adds runtime and a PATH dependency to every case (UT-D-01~04, ExpandDecl_*).
+    void BuildDefinePlugin()
+    {
+        static std::once_flag once;
+        std::call_once(once, [this]() {
+            std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+            EXPECT_EQ(std::system(command.c_str()), 0);
+        });
+    }
 };
 
 TEST_F(MacroTest, ForeignBlockMacroExpansion)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    ASSERT_EQ(system(command.c_str()), 0);
+    BuildDefinePlugin();
 
     instance = std::make_unique<TestCompilerInstance>(invocation, diag);
     instance->compileOnePackageFromSrcFiles = true;
@@ -528,9 +596,7 @@ TEST_F(MacroTest, MacroDiagReportForLsp)
 
 TEST_F(MacroTest, NoErrorInLSPMacro)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
  
     auto src = srcPath + "derive_enum.cj";
     invocation.globalOptions.enableMacroInLSP = true;
@@ -598,9 +664,7 @@ TEST_F(MacroTest, MacroCall_HighLight_LSP)
 // Single node expand to single node
 TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully01)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "test_gen.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -629,9 +693,7 @@ TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully01)
 // Single node expand to multiple node
 TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully02)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "test_gen.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -663,9 +725,7 @@ TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully02)
 // Multi node expand to multiple node
 TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully03)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "test_gen.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -693,9 +753,7 @@ TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully03)
 // Single node with multiple macro
 TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully04)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "test_gen.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -722,9 +780,7 @@ TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully04)
 // on mac, type_info emitted by cjc and dylib do not link to the same symbol so typecast failed.
 TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully05)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "test_gen.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -754,9 +810,7 @@ TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully05)
 // Generate new macro node
 TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully06)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "test_gen.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -781,9 +835,7 @@ TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully06)
 // Single Annotation
 TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully07)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "test_anno.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -810,9 +862,7 @@ TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully07)
 // Macro nest annotation
 TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully08)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "test_anno.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -838,9 +888,7 @@ TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully08)
 // Annotation nest macro
 TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully09)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "test_anno.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -867,9 +915,7 @@ TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully09)
 // Annotation nest child macro node
 TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully10)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "test_anno.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -898,9 +944,7 @@ TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully10)
 // Expand MacroExpandExpr
 TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully11)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "test_gen.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -934,9 +978,7 @@ TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully11)
 // Expand MacroExpandParam
 TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully12)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "test_gen.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -963,9 +1005,7 @@ TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully12)
 
 TEST_F(MacroTest, ExpandDecl_WithVarMacroCall_ExpandsSuccessfully)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "var.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -989,9 +1029,7 @@ TEST_F(MacroTest, ExpandDecl_WithVarMacroCall_ExpandsSuccessfully)
 
 TEST_F(MacroTest, ExpandDecl_WithNoMacroCall_ReturnsSameDecl)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "test_anno.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -1046,9 +1084,7 @@ TEST_F(MacroTest, ExpandDecl_WithMemberDecl_ReturnsEmpty)
 // Child macro expand failed, parent macro not expand
 TEST_F(MacroTest, ExpandDecl_WithFailedMacroCall_HandlesError01)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "test_failExpand.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -1072,9 +1108,7 @@ TEST_F(MacroTest, ExpandDecl_WithFailedMacroCall_HandlesError01)
 // One child macro expand failed, another child macro expand success
 TEST_F(MacroTest, ExpandDecl_WithFailedMacroCall_HandlesError02)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "test_failExpand.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -1102,9 +1136,7 @@ TEST_F(MacroTest, ExpandDecl_WithFailedMacroCall_HandlesError02)
 // One child MacroExpandExpr expand failed, another child macro expand success
 TEST_F(MacroTest, ExpandDecl_WithFailedMacroCall_HandlesError03)
 {
-    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
-    int err = system(command.c_str());
-    ASSERT_EQ(0, err);
+    BuildDefinePlugin();
 
     auto src = srcPath + "test_failExpand.cj";
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -1128,4 +1160,781 @@ TEST_F(MacroTest, ExpandDecl_WithFailedMacroCall_HandlesError03)
     EXPECT_EQ(varDecl->identifier, "a_gen_var");
 
     EXPECT_EQ(diag.GetErrorCount(), 1);
+}
+
+// ---------------------------------------------------------------------------
+// Macro import semantic tests (MacroImportDT UT-M-01 ~ UT-M-10).
+//
+// Strategy: macro packages and their cjos are built in-process (no external cjc
+// run, no plugin dlopen), then a downstream package is compiled through the
+// production import path (Compile(IMPORT_PACKAGE), which injects the conditional
+// compilation evaluator) and the injection effects are asserted via the
+// ImportManager observation getters. MakeInstance lives in the anonymous
+// namespace above the fixture; BuildCjo is a fixture method.
+
+// Compile `code` as one package in-process and export its cjo into `outDir`.
+// TestCompilerInstance::ParseCode bypasses the production parse assembler
+// (CompileStrategy::CheckPackageConsistency), so replicate its macro-import
+// aggregation (and macro-package marking, see MacroImportCjoRoundTrip) before
+// exporting. Returns the written cjo path.
+// (Implemented as a MacroTest fixture method above.)
+
+// UT-M-01: rule 1 — a macro package's own macro imports are never fed back into
+// itself. Replicates the production sequence (inject evaluator, then BuildIndex)
+// and asserts no warning is emitted and nothing is recorded for .macrocall.
+TEST_F(MacroTest, MacroImport_NotForSelf)
+{
+    instance = MakeInstance(invocation, diag, R"(macro package mself
+import std.ast.*
+macro import std.collection.ArrayList
+)");
+    ASSERT_TRUE(instance->Compile(CompileStage::CONDITION_COMPILE));
+    auto* srcPkg = &*instance->GetSourcePackages()[0];
+    srcPkg->isMacroPackage = true;
+    for (auto& f : srcPkg->files) {
+        for (auto& stmt : f->package->macroImports) {
+            srcPkg->macroImports.push_back(ASTCloner::CloneMacroImportList(*stmt));
+        }
+    }
+    ASSERT_EQ(srcPkg->macroImports.size(), 1U);
+    diag.Reset();
+    AST::ConditionalCompilation cc(instance.get());
+    instance->importManager->SetConditionalCompilation(&cc);
+    std::vector<Ptr<AST::Package>> pkgs;
+    for (auto& it : instance->GetSourcePackages()) {
+        pkgs.push_back(it);
+    }
+    auto modulesDir = FileUtil::JoinPath(FileUtil::JoinPath(instance->cangjieHome, "modules"),
+        invocation.globalOptions.GetCangjieLibTargetPathName());
+    EXPECT_TRUE(instance->importManager->BuildIndex(modulesDir, invocation.globalOptions, pkgs));
+    // Self-skip is rule-1 semantics (visited pre-seeding), not the defensive path.
+    EXPECT_EQ(diag.GetWarningCount(), 0);
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    EXPECT_TRUE(MacroImportStrings(*instance->importManager, pkgs[0]->fullPackageName).empty());
+}
+
+// UT-M-02: rule 2 — a downstream package importing a macro package obtains the
+// symbols named by the macro package's macro import declaration.
+TEST_F(MacroTest, MacroImport_InjectToDownstream)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package msrc
+import std.ast.*
+macro import std.collection.ArrayList
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    auto inst = MakeInstance(invocation, diag, "package app\nimport msrc\nmain(): Int64 { 0 }\n");
+    ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    const auto& strs = MacroImportStrings(*inst->importManager, "app");
+    ASSERT_EQ(strs.size(), 1U);
+    EXPECT_EQ(strs[0], "std.collection.ArrayList");
+    // The injected symbol is reachable from the consumer file's import map.
+    EXPECT_FALSE(
+        inst->importManager->GetImportedDeclsByName(*inst->GetSourcePackages()[0]->files[0], "ArrayList").empty());
+}
+
+// UT-M-03: rule 2 file-level visibility — only files that actually import the
+// macro package receive the injected symbols.
+TEST_F(MacroTest, MacroImport_FileScope)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package msrc
+import std.ast.*
+macro import std.collection.ArrayList
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    auto consumerPath = FileUtil::JoinPath(dir, "m03_consumer.cj");
+    auto plainPath = FileUtil::JoinPath(dir, "m03_plain.cj");
+    {
+        std::ofstream out(consumerPath);
+        out << "package app\nimport msrc\nmain(): Int64 { 0 }\n";
+    }
+    {
+        std::ofstream out(plainPath);
+        out << "package app\nfunc Dummy(): Unit {}\n";
+    }
+    auto inst = std::make_unique<TestCompilerInstance>(invocation, diag);
+    inst->invocation.globalOptions.implicitPrelude = true;
+    inst->compileOnePackageFromSrcFiles = true;
+    inst->srcFilePaths = {consumerPath, plainPath};
+    ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    auto& files = inst->GetSourcePackages()[0]->files;
+    ASSERT_EQ(files.size(), 2U);
+    // Identify the files by their source paths: parse order is not guaranteed and
+    // implicit-prelude imports make imports.empty() unreliable as a discriminator.
+    auto isFile = [&files](const char* tag) -> AST::File* {
+        for (auto& f : files) {
+            if (f->filePath.find(tag) != std::string::npos) {
+                return f.get();
+            }
+        }
+        return nullptr;
+    };
+    auto* consumer = isFile("m03_consumer");
+    auto* plain = isFile("m03_plain");
+    ASSERT_NE(consumer, nullptr);
+    ASSERT_NE(plain, nullptr);
+    auto hasArrayList = [&inst](const AST::File& f) {
+        return !inst->importManager->GetImportedDeclsByName(f, "ArrayList").empty();
+    };
+    EXPECT_TRUE(hasArrayList(*consumer));
+    EXPECT_FALSE(hasArrayList(*plain));
+}
+
+// UT-M-04: rule 3.3 lifter chain — downstream imports pkgB only; pkgB declares
+// `macro import pkgA` and pkgA declares `macro import std.collection.ArrayList`;
+// both targets must be lifted onto the downstream package.
+TEST_F(MacroTest, MacroImport_LiftChain)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package pkgA
+import std.ast.*
+macro import std.collection.ArrayList
+)", dir);
+    BuildCjo(R"(macro package pkgB
+import std.ast.*
+macro import pkgA
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    auto inst = MakeInstance(invocation, diag, "package app\nimport pkgB\nmain(): Int64 { 0 }\n");
+    ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    const auto& pkgs = inst->importManager->GetMacroImportPkgsFromMacroDeps("app");
+    EXPECT_NE(pkgs.find("pkgA"), pkgs.end());
+    EXPECT_NE(pkgs.find("std.collection"), pkgs.end());
+    const auto& strs = MacroImportStrings(*inst->importManager, "app");
+    ASSERT_EQ(strs.size(), 2U);
+    EXPECT_EQ(strs[0], "pkgA");
+    EXPECT_EQ(strs[1], "std.collection.ArrayList");
+}
+
+// UT-M-05: declaration-chain cycle — cycA `macro import cycB`, cycB `macro import
+// cycA`. Chain walking must terminate and neither side may be re-injected into
+// itself (rule 1); downstream obtains each side's declared import exactly once.
+TEST_F(MacroTest, MacroImport_Cycle)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package cycA
+import std.ast.*
+macro import cycB
+)", dir);
+    BuildCjo(R"(macro package cycB
+import std.ast.*
+macro import cycA
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    auto inst = MakeInstance(invocation, diag, "package app\nimport cycA\nmain(): Int64 { 0 }\n");
+    ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    const auto& strs = MacroImportStrings(*inst->importManager, "app");
+    ASSERT_EQ(strs.size(), 2U);
+    EXPECT_EQ(strs[0], "cycB");
+    EXPECT_EQ(strs[1], "cycA");
+}
+
+// UT-M-06: a block whose every entry is @When-false in the downstream target
+// injects nothing and loads nothing.
+TEST_F(MacroTest, MacroImport_AllConditionsFalse)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package mfalse
+import std.ast.*
+macro {
+    @When[os == "Windows"] import std.reflect
+    @When[os == "Windows"] import std.unittest
+}
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    auto inst = MakeInstance(invocation, diag, "package app\nimport mfalse\nmain(): Int64 { 0 }\n");
+    ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    EXPECT_TRUE(MacroImportStrings(*inst->importManager, "app").empty());
+    EXPECT_TRUE(inst->importManager->GetMacroImportPkgsFromMacroDeps("app").empty());
+}
+
+// UT-M-07: the same macro-package cjo evaluates differently per downstream
+// target — only the entry whose @When holds in the current target survives.
+TEST_F(MacroTest, MacroImport_PerTargetEval)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package mtgt
+import std.ast.*
+macro {
+    @When[os == "Linux"] import std.math
+    @When[os == "Windows"] import std.reflect
+}
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    {
+        // Fixture default target (Linux on unix hosts).
+        auto inst = MakeInstance(invocation, diag, "package app\nimport mtgt\nmain(): Int64 { 0 }\n");
+        ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+        EXPECT_EQ(diag.GetErrorCount(), 0);
+        const auto& strs = MacroImportStrings(*inst->importManager, "app");
+        ASSERT_EQ(strs.size(), 1U);
+        EXPECT_EQ(strs[0], "std.math");
+    }
+    diag.Reset();
+    {
+        invocation.globalOptions.target.os = Triple::OSType::WINDOWS;
+        auto inst = MakeInstance(invocation, diag, "package app2\nimport mtgt\nmain(): Int64 { 0 }\n");
+        ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+        const auto& strs = MacroImportStrings(*inst->importManager, "app2");
+        ASSERT_EQ(strs.size(), 1U);
+        EXPECT_EQ(strs[0], "std.reflect");
+    }
+}
+
+// UT-M-08: no dedicated macro-import conflict check — two macro packages whose
+// macro imports carry the same symbol name from different source packages
+// compile cleanly while unused; the clash surfaces at the use site as an
+// ordinary ambiguous-use diagnostic.
+TEST_F(MacroTest, MacroImport_UseTimeConflict)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo("package plain1\npublic func f(): Int64 { 1 }\n", dir, false);
+    BuildCjo("package plain2\npublic func f(): Int64 { 2 }\n", dir, false);
+    BuildCjo(R"(macro package mone
+import std.ast.*
+macro import plain1.f
+)", dir);
+    BuildCjo(R"(macro package mtwo
+import std.ast.*
+macro import plain2.f
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    {
+        // Declarations only, no use: no conflict is reported at import time.
+        auto inst = MakeInstance(invocation, diag, "package app\nimport mone\nimport mtwo\nmain(): Int64 { 0 }\n");
+        ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+        EXPECT_EQ(diag.GetErrorCount(), 0);
+    }
+    diag.Reset();
+    {
+        // Use site: two same-name decls injected into the same file map produce
+        // the ordinary ambiguity diagnostic in Sema.
+        auto inst = MakeInstance(invocation, diag,
+            "package app\nimport mone\nimport mtwo\nmain(): Int64 { let _ = f()\n 0 }\n");
+        (void)inst->Compile(CompileStage::SEMA);
+        EXPECT_GT(diag.GetErrorCount(), 0);
+    }
+}
+
+// UT-M-09: an empty macro-import block parses to one list with zero items and
+// injects nothing downstream.
+TEST_F(MacroTest, MacroImport_EmptyBlock)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    auto cjoPath = BuildCjo(R"(macro package mempty
+import std.ast.*
+macro {
+}
+)", dir);
+    // LoadPackageFromCjo resolves the cjo through the import search path, so the
+    // temp dir must be registered before loading.
+    invocation.globalOptions.importPaths.push_back(dir);
+    {
+        // LoadPackageFromCjo resolves the cjo through the import search path, which
+        // a fresh ImportManager only builds inside BuildIndex — seed it manually.
+        auto inst = std::make_unique<TestCompilerInstance>(invocation, diag);
+        auto modulesDir = FileUtil::JoinPath(FileUtil::JoinPath(inst->cangjieHome, "modules"),
+            invocation.globalOptions.GetCangjieLibTargetPathName());
+        inst->importManager->UpdateSearchPath(modulesDir);
+        auto loaded = inst->importManager->LoadPackageFromCjo("mempty", cjoPath);
+        ASSERT_NE(loaded, nullptr);
+        ASSERT_EQ(loaded->macroImports.size(), 1U);
+        EXPECT_TRUE(loaded->macroImports[0]->items.empty());
+    }
+    diag.Reset();
+    auto inst = MakeInstance(invocation, diag, "package app\nimport mempty\nmain(): Int64 { 0 }\n");
+    ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    EXPECT_TRUE(MacroImportStrings(*inst->importManager, "app").empty());
+}
+
+// UT-M-10: rule 2 does not exclude downstream macro packages — a downstream
+// `macro package` importing a macro package still receives its macro imports.
+TEST_F(MacroTest, MacroImport_DownstreamMacroPkg)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package msrc
+import std.ast.*
+macro import std.collection.ArrayList
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    auto inst = MakeInstance(invocation, diag,
+        "macro package dmacro\nimport msrc\n\n");
+    ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    const auto& strs = MacroImportStrings(*inst->importManager, "dmacro");
+    ASSERT_EQ(strs.size(), 1U);
+    EXPECT_EQ(strs[0], "std.collection.ArrayList");
+}
+
+// P1-7: an unresolvable macro-import target (no such package anywhere on the
+// search path) is diagnosed instead of silently dropped, and nothing is injected
+// or recorded for .macrocall generation. The compile itself still succeeds.
+TEST_F(MacroTest, MacroImport_UnresolvedTarget)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package mbad
+import std.ast.*
+macro import nosuchpkg.*
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    auto inst = MakeInstance(invocation, diag, "package app\nimport mbad\nmain(): Int64 { 0 }\n");
+    ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+    EXPECT_GT(diag.GetErrorCount(), 0);
+    EXPECT_TRUE(MacroImportStrings(*inst->importManager, "app").empty());
+    EXPECT_TRUE(inst->importManager->GetMacroImportPkgsFromMacroDeps("app").empty());
+}
+
+// P1-1: for `macro import pkg.sym as alias`, the alias rebinding is preserved
+// (aligned with ordinary imports): the injected symbols are keyed by the alias,
+// so the consumer reaches `alias` but never the original `sym`.
+TEST_F(MacroTest, MacroImport_AliasSymbolVisibility)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo("package vsrc\npublic var v: Int32 = 1\n", dir, /*markMacro=*/false);
+    BuildCjo(R"(macro package masrc
+import std.ast.*
+macro import vsrc.v as q
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    auto inst = MakeInstance(invocation, diag, "package app\nimport masrc\nmain(): Int64 { 0 }\n");
+    ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    auto& file = *inst->GetSourcePackages()[0]->files[0];
+    EXPECT_FALSE(inst->importManager->GetImportedDeclsByName(file, "q").empty());
+    EXPECT_TRUE(inst->importManager->GetImportedDeclsByName(file, "v").empty());
+}
+
+// A3-1: rule 2 visibility — a macro import behaves like an ordinary unmodified
+// (private) file-level import written by the consumer package. When the consumer
+// package is a CHILD of the target package, the target's internal decls are
+// visible and therefore injected.
+TEST_F(MacroTest, MacroImport_VisibilityChildInternal)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo("package vchg\ninternal var iv: Int32 = 1\n", dir,
+        /*markMacro=*/false);
+    BuildCjo(R"(macro package vchg.mac
+import std.ast.*
+macro import vchg.iv
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    auto inst = MakeInstance(invocation, diag, "package vchg.app\nimport vchg.mac\nmain(): Int64 { 0 }\n");
+    ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    const auto& file = *inst->GetSourcePackages()[0]->files[0];
+    EXPECT_FALSE(inst->importManager->GetImportedDeclsByName(file, "iv").empty());
+}
+
+// A3-2: same-module sibling packages (SAME_MODULE) do not see internals — the
+// consumer must not gain visibility that a private import would not grant.
+TEST_F(MacroTest, MacroImport_VisibilitySameModuleInternal)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo("package vsm.core\ninternal var iv: Int32 = 1\n", dir,
+        /*markMacro=*/false);
+    BuildCjo(R"(macro package vsm.mac
+import std.ast.*
+macro import vsm.core.iv
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    auto inst = MakeInstance(invocation, diag, "package vsm.app\nimport vsm.mac\nmain(): Int64 { 0 }\n");
+    ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    const auto& file = *inst->GetSourcePackages()[0]->files[0];
+    EXPECT_TRUE(inst->importManager->GetImportedDeclsByName(file, "iv").empty());
+}
+
+// A3-3: cross-module packages (NONE) do not see internals either — guards against
+// the fix leaking internals outside the module.
+TEST_F(MacroTest, MacroImport_VisibilityCrossModuleInternal)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo("package vnone\ninternal var iv: Int32 = 1\n", dir,
+        /*markMacro=*/false);
+    BuildCjo(R"(macro package vnone.mac
+import std.ast.*
+macro import vnone.iv
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    auto inst = MakeInstance(invocation, diag, "package vapp.other\nimport vnone.mac\nmain(): Int64 { 0 }\n");
+    ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    const auto& file = *inst->GetSourcePackages()[0]->files[0];
+    EXPECT_TRUE(inst->importManager->GetImportedDeclsByName(file, "iv").empty());
+}
+
+// P1-3: macro-import state is keyed per package — a second package indexed by
+// the same ImportManager (the LSP rebuild shape) must get its own survivors and
+// must not clobber the first package's recorded entries.
+TEST_F(MacroTest, MacroImport_MultiPackageIsolation)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package msrc
+import std.ast.*
+macro import std.collection.ArrayList
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    auto inst = MakeInstance(invocation, diag, "package isoa\nimport msrc\nmain(): Int64 { 0 }\n");
+    ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    const auto& strsA = MacroImportStrings(*inst->importManager, "isoa");
+    ASSERT_EQ(strsA.size(), 1U);
+    EXPECT_EQ(strsA[0], "std.collection.ArrayList");
+
+    // Re-index a second package through the same ImportManager.
+    auto inst2 = MakeInstance(invocation, diag, "package isob\nimport msrc\nmain(): Int64 { 0 }\n");
+    ASSERT_TRUE(inst2->Compile(CompileStage::CONDITION_COMPILE));
+    std::vector<Ptr<AST::Package>> pkgs;
+    for (auto& it : inst2->GetSourcePackages()) {
+        pkgs.push_back(it);
+    }
+    ASSERT_FALSE(pkgs.empty());
+    auto modulesDir = FileUtil::JoinPath(FileUtil::JoinPath(inst->cangjieHome, "modules"),
+        invocation.globalOptions.GetCangjieLibTargetPathName());
+    EXPECT_TRUE(inst->importManager->BuildIndex(modulesDir, invocation.globalOptions, pkgs));
+    // isob recorded its own survivor; isoa's entry was left untouched.
+    const auto& strsB = MacroImportStrings(*inst->importManager, "isob");
+    ASSERT_EQ(strsB.size(), 1U);
+    EXPECT_EQ(strsB[0], "std.collection.ArrayList");
+    const auto& strsA2 = MacroImportStrings(*inst->importManager, "isoa");
+    ASSERT_EQ(strsA2.size(), 1U);
+    EXPECT_EQ(strsA2[0], "std.collection.ArrayList");
+}
+
+// B1: a macro-imported package joins the consumer's dependency graph exactly as
+// an ordinary import would, so package-level dependency queries see the edge.
+TEST_F(MacroTest, MacroImport_DependencyGraphEdge)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo("package bdep\npublic func bf(): Int64 { 1 }\n", dir, /*markMacro=*/false);
+    BuildCjo(R"(macro package bmacro
+import std.ast.*
+macro import bdep.bf
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    auto inst = MakeInstance(invocation, diag, "package app\nimport bmacro\nmain(): Int64 { 0 }\n");
+    ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    const auto& deps = inst->importManager->GetAllDependentPackageNames("app");
+    EXPECT_NE(deps.find("bdep"), deps.end());
+}
+
+// B2: a std package reached only through a macro import is recorded as a direct
+// std dependency of the consumer package, so the cjo `dependentStdPkgs` and the
+// dep-info `std-dependencies` carry it exactly as for an ordinary import.
+TEST_F(MacroTest, MacroImport_StdDependencyRecorded)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package mstd
+import std.ast.*
+macro import std.collection.ArrayList
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    auto inst = MakeInstance(invocation, diag, "package app\nimport mstd\nmain(): Int64 { 0 }\n");
+    ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    const auto& stdDeps = inst->GetSourcePackages()[0]->GetAllDependentStdPkgs();
+    EXPECT_NE(std::find(stdDeps.begin(), stdDeps.end(), "std.collection"), stdDeps.end());
+}
+
+// B5: the package-name length limit is enforced at the consumption side only —
+// the declaring macro package compiles, and the downstream import reports the
+// same diagnostic an ordinary import would.
+TEST_F(MacroTest, MacroImport_PackageNameTooLong)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    const std::string longName(201, 'a');
+    BuildCjo("macro package mlong\nimport std.ast.*\nmacro import " + longName + "\n", dir);
+    // The declaring macro package is not validated: no error at this point.
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    invocation.globalOptions.importPaths.push_back(dir);
+    auto inst = MakeInstance(invocation, diag, "package app\nimport mlong\nmain(): Int64 { 0 }\n");
+    (void)inst->Compile(CompileStage::IMPORT_PACKAGE);
+    // The downstream import enforces the same limit as an ordinary import. The
+    // diagnostic is a parse-category one and error counting keeps the first error
+    // category only, so read it from the category store rather than GetStoredDiags
+    // (that one collects diagnostics suppressed by a disabled diagnose engine).
+    bool hasLenDiag = false;
+    for (const auto& d : diag.GetCategoryDiagnostic(DiagCategory::PARSE)) {
+        hasLenDiag = hasLenDiag || d.rKind == DiagKindRefactor::parse_package_name_length_overflow;
+    }
+    EXPECT_TRUE(hasLenDiag);
+}
+
+// B7: whole-package injection keeps the ordinary IMPORT_ALL member bookkeeping.
+// A package can expose re-exported decls under another name (`public import
+// base.A as B`). A macro import of that package is injected after its cjo was
+// already header-loaded, so the injection path must still build the target's
+// decl map and expose exactly the names an ordinary `import pkg.*` would.
+TEST_F(MacroTest, MacroImport_ReexportAliasMember)
+{
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo("package b7base\npublic class A {}\n", dir, /*markMacro=*/false);
+    invocation.globalOptions.importPaths.push_back(dir);
+    BuildCjo("package b7mid\npublic import b7base.A as B\n", dir, /*markMacro=*/false);
+    BuildCjo(R"(macro package b7mac
+import std.ast.*
+macro import b7mid.*
+)", dir);
+    // Benchmark: an ordinary whole-package import exposes the alias and not the
+    // original name.
+    auto ordinary = MakeInstance(invocation, diag, "package app2\nimport b7mid.*\nmain(): Int64 { 0 }\n");
+    ASSERT_TRUE(ordinary->Compile(CompileStage::IMPORT_PACKAGE));
+    const auto& ordinaryFile = *ordinary->GetSourcePackages()[0]->files[0];
+    auto ordinaryB = ordinary->importManager->GetImportedDeclsByName(ordinaryFile, "B");
+    auto ordinaryA = ordinary->importManager->GetImportedDeclsByName(ordinaryFile, "A");
+    ASSERT_EQ(ordinaryB.size(), 1U);
+    EXPECT_TRUE(ordinaryA.empty());
+    EXPECT_FALSE(IsDeclAccessibleIn(*ordinary->importManager, ordinaryFile, *ordinaryB.front()));
+
+    auto inst = MakeInstance(invocation, diag, "package app\nimport b7mac\nmain(): Int64 { 0 }\n");
+    ASSERT_TRUE(inst->Compile(CompileStage::IMPORT_PACKAGE));
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    const auto& file = *inst->GetSourcePackages()[0]->files[0];
+    auto imported = inst->importManager->GetImportedDeclsByName(file, "B");
+    ASSERT_EQ(imported.size(), ordinaryB.size());
+    EXPECT_EQ(imported.front()->identifier, ordinaryB.front()->identifier);
+    EXPECT_EQ(imported.front()->fullPackageName, ordinaryB.front()->fullPackageName);
+    EXPECT_EQ(inst->importManager->GetImportedDeclsByName(file, "A").size(), ordinaryA.size());
+    EXPECT_EQ(IsDeclAccessibleIn(*inst->importManager, file, *imported.front()),
+        IsDeclAccessibleIn(*ordinary->importManager, ordinaryFile, *ordinaryB.front()));
+}
+
+// ---------------------------------------------------------------------------
+// Macro import .macrocall injection tests (MacroImportDT UT-D-01 ~ UT-D-03).
+// These exercise the --debug-macro path: a downstream package with a real macro
+// call (define.M identity plugin, built exactly like ForeignBlockMacroExpansion)
+// is compiled through macro expansion with enableMacroDebug, and the generated
+// .macrocall file (file path + ".macrocall") is read back and inspected.
+// ---------------------------------------------------------------------------
+
+namespace {
+std::string ReadFileOrEmpty(const std::string& path)
+{
+    std::ifstream in(path);
+    std::string content{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>{}};
+    return content;
+}
+}
+
+// UT-D-01: the generated .macrocall carries one bare `import <entry>` line per
+// surviving macro import — placed after the package statement and before the
+// file's own imports and first macro call, with no @When, no modifier and no
+// 'macro import' wording left.
+TEST_F(MacroTest, MacroCall_InjectMacroImports)
+{
+    BuildDefinePlugin();
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package d01src
+import std.ast.*
+macro import std.collection.ArrayList
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    invocation.globalOptions.enableMacroDebug = true;
+    auto srcFile = FileUtil::JoinPath(dir, "d01_downstream.cj");
+    {
+        std::ofstream out(srcFile);
+        out << "package d\nimport d01src\nimport define.*\n\n@M func dummy(): Unit {}\n";
+    }
+    auto inst = std::make_unique<TestCompilerInstance>(invocation, diag);
+    inst->invocation.globalOptions.implicitPrelude = true;
+    inst->compileOnePackageFromSrcFiles = true;
+    inst->srcFilePaths = {srcFile};
+    ASSERT_TRUE(inst->Compile(CompileStage::PARSE));
+    ASSERT_TRUE(inst->PerformImportPackage());
+    ASSERT_TRUE(inst->PerformMacroExpand());
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    // In --debug-macro mode the file node is replaced by one re-parsed from the
+    // .macrocall file (ReplaceEachFileNode), so read the .macrocall via the
+    // source file path instead of the (stale) File::macroCallFilePath.
+    auto content = ReadFileOrEmpty(srcFile + ".macrocall");
+    EXPECT_FALSE(content.empty());
+    auto pInj = content.find("import std.collection.ArrayList");
+    ASSERT_NE(pInj, std::string::npos);
+    EXPECT_EQ(content.find("@When"), std::string::npos);
+    EXPECT_EQ(content.find("macro import"), std::string::npos);
+    EXPECT_EQ(content.find("public import"), std::string::npos);
+    // After the package statement, before the file's own imports and the first
+    // (expanded) macro call.
+    EXPECT_GT(pInj, content.find("package d"));
+    EXPECT_LT(pInj, content.find("import d01src"));
+    EXPECT_LT(pInj, content.find("func dummy"));
+}
+
+// UT-D-02: duplicate macro import declarations (same import string twice) are
+// injected only once; multiple entries keep their evaluation survival order.
+TEST_F(MacroTest, MacroCall_InjectDedup)
+{
+    BuildDefinePlugin();
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package d02src
+import std.ast.*
+macro import std.math
+macro import std.collection.ArrayList
+macro import std.math
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    invocation.globalOptions.enableMacroDebug = true;
+    auto srcFile = FileUtil::JoinPath(dir, "d02_downstream.cj");
+    {
+        std::ofstream out(srcFile);
+        out << "package d\nimport d02src\nimport define.*\n\n@M func dummy(): Unit {}\n";
+    }
+    auto inst = std::make_unique<TestCompilerInstance>(invocation, diag);
+    inst->invocation.globalOptions.implicitPrelude = true;
+    inst->compileOnePackageFromSrcFiles = true;
+    inst->srcFilePaths = {srcFile};
+    ASSERT_TRUE(inst->Compile(CompileStage::PARSE));
+    ASSERT_TRUE(inst->PerformImportPackage());
+    ASSERT_TRUE(inst->PerformMacroExpand());
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    auto content = ReadFileOrEmpty(srcFile + ".macrocall");
+    auto pMath = content.find("import std.math");
+    auto pArray = content.find("import std.collection.ArrayList");
+    ASSERT_NE(pMath, std::string::npos);
+    ASSERT_NE(pArray, std::string::npos);
+    // "std.math" declared twice, injected exactly once.
+    EXPECT_EQ(content.find("import std.math", pMath + 1), std::string::npos);
+    // Survival order follows the declaration order.
+    EXPECT_LT(pMath, pArray);
+}
+
+// UT-D-03: a macro import whose @When condition is false in the downstream
+// target never reaches GetMacroImportStrings, so the .macrocall has no line
+// for it (and never any @When wording).
+TEST_F(MacroTest, MacroCall_FilterFalseWhen)
+{
+    BuildDefinePlugin();
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package d03src
+import std.ast.*
+macro {
+    @When[os == "Windows"] import std.reflect
+    @When[os == "Linux"] import std.math
+}
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    invocation.globalOptions.enableMacroDebug = true;
+    auto srcFile = FileUtil::JoinPath(dir, "d03_downstream.cj");
+    {
+        std::ofstream out(srcFile);
+        out << "package d\nimport d03src\nimport define.*\n\n@M func dummy(): Unit {}\n";
+    }
+    auto inst = std::make_unique<TestCompilerInstance>(invocation, diag);
+    inst->invocation.globalOptions.implicitPrelude = true;
+    inst->compileOnePackageFromSrcFiles = true;
+    inst->srcFilePaths = {srcFile};
+    ASSERT_TRUE(inst->Compile(CompileStage::PARSE));
+    ASSERT_TRUE(inst->PerformImportPackage());
+    ASSERT_TRUE(inst->PerformMacroExpand());
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    auto content = ReadFileOrEmpty(srcFile + ".macrocall");
+    EXPECT_NE(content.find("import std.math"), std::string::npos);
+    EXPECT_EQ(content.find("std.reflect"), std::string::npos);
+    EXPECT_EQ(content.find("@When"), std::string::npos);
+}
+
+// UT-D-04: an alias on a macro import rebinding downstream (aligned with ordinary
+// imports). The alias survives both the injection keying and the `import xxx as q`
+// emitted to .macrocall, so downstream resolves the alias exactly as an ordinary
+// `import std.math as q` would — upholding the ordinary-private-import equivalence
+// of rule 2.
+TEST_F(MacroTest, MacroCall_InjectKeepsAlias)
+{
+    BuildDefinePlugin();
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package d04src
+import std.ast.*
+macro import std.math as q
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    invocation.globalOptions.enableMacroDebug = true;
+    auto srcFile = FileUtil::JoinPath(dir, "d04_downstream.cj");
+    {
+        std::ofstream out(srcFile);
+        out << "package d\nimport d04src\nimport define.*\n\n@M func dummy(): Unit {}\n";
+    }
+    auto inst = std::make_unique<TestCompilerInstance>(invocation, diag);
+    inst->invocation.globalOptions.implicitPrelude = true;
+    inst->compileOnePackageFromSrcFiles = true;
+    inst->srcFilePaths = {srcFile};
+    ASSERT_TRUE(inst->Compile(CompileStage::PARSE));
+    ASSERT_TRUE(inst->PerformImportPackage());
+    ASSERT_TRUE(inst->PerformMacroExpand());
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    auto content = ReadFileOrEmpty(srcFile + ".macrocall");
+    EXPECT_FALSE(content.empty());
+    // The alias is preserved: the full rebinding form `import std.math as q` is
+    // injected, matching ordinary import semantics.
+    EXPECT_NE(content.find("import std.math as q"), std::string::npos);
+}
+
+// P1-6: per-file consumer filtering reaches the .macrocall path too — only files
+// that import the declaring macro package get injected lines; a sibling file of
+// the same package with macro calls but no such import gets none.
+TEST_F(MacroTest, MacroCall_NonConsumerFileNoInject)
+{
+    BuildDefinePlugin();
+    auto dir = FileUtil::JoinPath(projectPath, "unittests/Macro/testTempFiles");
+    FileUtil::CreateDirs(dir);
+    BuildCjo(R"(macro package d05src
+import std.ast.*
+macro import std.collection.ArrayList
+)", dir);
+    invocation.globalOptions.importPaths.push_back(dir);
+    invocation.globalOptions.enableMacroDebug = true;
+    auto consumerFile = FileUtil::JoinPath(dir, "d05_consumer.cj");
+    auto plainFile = FileUtil::JoinPath(dir, "d05_plain.cj");
+    {
+        std::ofstream out(consumerFile);
+        out << "package d\nimport d05src\nimport define.*\n\n@M func dummy(): Unit {}\n";
+    }
+    {
+        std::ofstream out(plainFile);
+        out << "package d\nimport define.*\n\n@M func dummy2(): Unit {}\n";
+    }
+    auto inst = std::make_unique<TestCompilerInstance>(invocation, diag);
+    inst->invocation.globalOptions.implicitPrelude = true;
+    inst->compileOnePackageFromSrcFiles = true;
+    inst->srcFilePaths = {consumerFile, plainFile};
+    ASSERT_TRUE(inst->Compile(CompileStage::PARSE));
+    ASSERT_TRUE(inst->PerformImportPackage());
+    ASSERT_TRUE(inst->PerformMacroExpand());
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    auto consumer = ReadFileOrEmpty(consumerFile + ".macrocall");
+    auto plain = ReadFileOrEmpty(plainFile + ".macrocall");
+    ASSERT_FALSE(consumer.empty());
+    ASSERT_FALSE(plain.empty());
+    EXPECT_NE(consumer.find("import std.collection.ArrayList"), std::string::npos);
+    EXPECT_EQ(plain.find("import std.collection.ArrayList"), std::string::npos);
 }

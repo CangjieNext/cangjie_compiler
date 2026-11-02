@@ -298,6 +298,33 @@ void GenerateMacroCallFile(const std::vector<Ptr<File>>& fileSucVec,
         auto nodes = macroCallMap.at(file);
         auto curFilePosBase = file->begin;
         auto fileID = sm.AddSource(file->macroCallFilePath, "");
+
+        // Add macro-imported statements after the package statement.
+        // Rule 2: injected for all downstream packages including macro packages; rule 1
+        // (no self-import) is upheld by CollectTransitiveMacroDeps pre-seeding visited.
+        // Per-file filtering keeps entries only for files importing the declaring macro
+        // package, and entries with a false @When were already dropped, so emit a bare
+        // `import xxx`.
+        static const std::vector<std::string> noMacroImports;
+        const std::vector<std::string> macroImportStrings = ci.importManager && file->curPackage
+            ? ci.importManager->GetMacroImportStringsForFile(file->curPackage->fullPackageName, file->fileHash)
+            : noMacroImports;
+        bool skipLeadingNewline = false;
+        if (!macroImportStrings.empty()) {
+            std::string importHeader;
+            for (const auto& entry : macroImportStrings) {
+                importHeader += "import " + entry + "\n";
+            }
+            if (file->package) {
+                content = sm.GetContentBetween(curFilePosBase, file->package->end);
+                (void)sm.AppendSource(file->macroCallFilePath, content, isCjmpFile);
+                (void)sm.AppendSource(file->macroCallFilePath, "\n", isCjmpFile);
+                curFilePosBase = file->package->end;
+            }
+            (void)sm.AppendSource(file->macroCallFilePath, importHeader, isCjmpFile);
+            skipLeadingNewline = true;
+        }
+
         for (auto& node : nodes) {
             auto pMacroInvocation = node->GetInvocation();
             if (!pMacroInvocation) {
@@ -305,6 +332,10 @@ void GenerateMacroCallFile(const std::vector<Ptr<File>>& fileSucVec,
             }
             // Append source code between macroCalls to newFile.
             content = sm.GetContentBetween(curFilePosBase, node->begin);
+            if (skipLeadingNewline && !content.empty() && content[0] == '\n') {
+                content = content.substr(1);
+                skipLeadingNewline = false;
+            }
             (void)sm.AppendSource(file->macroCallFilePath, content, isCjmpFile);
             curFilePosBase = node->end;
             file->macroCallPosBase = sm.GetSource(fileID).GetEndPos();

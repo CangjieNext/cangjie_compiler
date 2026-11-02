@@ -8,6 +8,7 @@
 #include <string>
 #include "gtest/gtest.h"
 #include "cangjie/Macro/NodeSerialization.h"
+#include "cangjie/AST/Clone.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Parse/Parser.h"
@@ -369,4 +370,178 @@ TEST_F(NodeSerializationTest, LambdaExpr_Serialization)
     }
     EXPECT_EQ(expectNodeType, realNodeType);
     free(rawBuffer);
+}
+
+// ---------------------------------------------------------------------------
+// Macro import node tests (UT-A-01/02 in MacroImportDT.md §3.2, UT-S-01/02 in
+// §3.3). Macro imports hang off PackageSpec (file->package->macroImports), so
+// the NodeFormat round-trip serializes the File and reads back the package.
+// ---------------------------------------------------------------------------
+
+namespace {
+/// Parse a `macro package` source and return the parsed File.
+OwnedPtr<File> ParseMacroImportSource(const std::string& code)
+{
+    SourceManager sm;
+    DiagnosticEngine diag;
+    diag.SetSourceManager(&sm);
+    Parser parser(code, diag, sm);
+    return parser.ParseTopLevel();
+}
+} // namespace
+
+// UT-A-01: CloneMacroImportList deep-copies items, @When annotations and
+// positions; mutating the clone must not affect the source (independent ownership).
+TEST_F(NodeSerializationTest, MacroImportListClone)
+{
+    auto file = ParseMacroImportSource(
+        "macro package p\n"
+        "macro {\n"
+        "    import a.b.c\n"
+        "    @When[os == \"Linux\"] import d.e.*\n"
+        "}\n");
+    ASSERT_NE(file->package, nullptr);
+    const auto& src = file->package->macroImports;
+    ASSERT_EQ(src.size(), 1U);
+    const auto& list = *src.front();
+    ASSERT_EQ(list.items.size(), 2U);
+
+    auto cloned = ASTCloner::CloneMacroImportList(list);
+    EXPECT_EQ(cloned->macroPos, list.macroPos);
+    EXPECT_EQ(cloned->lcurlPos, list.lcurlPos);
+    EXPECT_EQ(cloned->rcurlPos, list.rcurlPos);
+    ASSERT_EQ(cloned->items.size(), list.items.size());
+    for (size_t i = 0; i < list.items.size(); ++i) {
+        EXPECT_EQ(cloned->items[i]->importPos, list.items[i]->importPos);
+        EXPECT_EQ(cloned->items[i]->content.kind, list.items[i]->content.kind);
+        EXPECT_EQ(cloned->items[i]->ToString(), list.items[i]->ToString());
+    }
+    // The @When annotation survives with its condExpr (BINARY_EXPR for os == "Linux").
+    ASSERT_EQ(cloned->items[1]->annotations.size(), 1U);
+    ASSERT_NE(cloned->items[1]->annotations.front()->condExpr.get(), nullptr);
+    EXPECT_EQ(cloned->items[1]->annotations.front()->condExpr->astKind, ASTKind::BINARY_EXPR);
+    // Ownership is independent: mutating the clone leaves the source untouched.
+    cloned->items.clear();
+    cloned->lcurlPos = INVALID_POSITION;
+    EXPECT_EQ(list.items.size(), 2U);
+    EXPECT_NE(list.lcurlPos, INVALID_POSITION);
+}
+
+// UT-A-02: ToString covers single form, block form (one statement per line) and
+// the degenerate empty single form.
+TEST_F(NodeSerializationTest, MacroImportListToString)
+{
+    auto single = ParseMacroImportSource("macro package p\nmacro import a.b.c as d\n");
+    ASSERT_EQ(single->package->macroImports.size(), 1U);
+    EXPECT_EQ(single->package->macroImports.front()->ToString(), "macro import a.b.c as d");
+
+    auto block = ParseMacroImportSource(
+        "macro package p\n"
+        "macro {\n"
+        "    import a.b.c\n"
+        "    import d.e.*\n"
+        "}\n");
+    ASSERT_EQ(block->package->macroImports.size(), 1U);
+    EXPECT_EQ(block->package->macroImports.front()->ToString(),
+        "{\nmacro import a.b.c\nmacro import d.e.*\n}");
+
+    MacroImportList emptyList;
+    EXPECT_EQ(emptyList.ToString(), "macro import");
+}
+
+// UT-S-01: MacroImportSpec NodeFormat round-trip — content kind, prefix paths,
+// identifier/alias, per-item @When annotations and importPos all survive.
+TEST_F(NodeSerializationTest, MacroImportSpec_Serialization)
+{
+    auto file = ParseMacroImportSource(
+        "macro package p\n"
+        "macro {\n"
+        "    import a.b.c\n"
+        "    import d.e.f as g\n"
+        "    import h.i.*\n"
+        "    import j.k.{m, n}\n"
+        "    @When[os == \"Linux\"] import x.y\n"
+        "}\n");
+    NodeWriter writer(file.get());
+    uint8_t* rawBuffer = writer.ExportNode();
+    ASSERT_NE(rawBuffer, nullptr);
+    uint8_t* buffer = rawBuffer + 4; // move the pointer to the real position of the flatbuffer
+    auto fbNode = ASTFormat::GetNode(buffer);
+    ASSERT_EQ(fbNode->root_type(), ASTFormat::AnyNode_FILE);
+    auto fbItems = fbNode->root_as_FILE()->package()->macroImports()->Get(0)->items();
+    ASSERT_EQ(fbItems->size(), 5U);
+
+    // single: a.b.c
+    auto single = fbItems->Get(0)->content();
+    EXPECT_EQ(single->kind(), ASTFormat::ImportKind_IMPORT_SINGLE);
+    ASSERT_EQ(single->prefixPaths()->size(), 2U);
+    EXPECT_EQ(single->prefixPaths()->Get(0)->str(), "a");
+    EXPECT_EQ(single->prefixPaths()->Get(1)->str(), "b");
+    EXPECT_EQ(single->identifier()->str(), "c");
+    EXPECT_EQ(single->asIdentifier()->str(), "");
+    EXPECT_EQ(fbItems->Get(0)->annotations()->size(), 0U);
+    // importPos on source line 3.
+    EXPECT_EQ(fbItems->Get(0)->importPos()->line(), 3U);
+
+    // alias: d.e.f as g
+    auto alias = fbItems->Get(1)->content();
+    EXPECT_EQ(alias->kind(), ASTFormat::ImportKind_IMPORT_ALIAS);
+    EXPECT_EQ(alias->identifier()->str(), "f");
+    EXPECT_EQ(alias->asIdentifier()->str(), "g");
+
+    // all: h.i.* — the star lands in identifier, prefix holds h.i
+    auto all = fbItems->Get(2)->content();
+    EXPECT_EQ(all->kind(), ASTFormat::ImportKind_IMPORT_ALL);
+    ASSERT_EQ(all->prefixPaths()->size(), 2U);
+    EXPECT_EQ(all->identifier()->str(), "*");
+
+    // multi: j.k.{m, n}
+    auto multi = fbItems->Get(3)->content();
+    EXPECT_EQ(multi->kind(), ASTFormat::ImportKind_IMPORT_MULTI);
+    ASSERT_EQ(multi->items()->size(), 2U);
+    EXPECT_EQ(multi->items()->Get(0)->identifier()->str(), "m");
+    EXPECT_EQ(multi->items()->Get(1)->identifier()->str(), "n");
+
+    // @When item: annotation with a condExpr survives the round-trip.
+    auto whenAnno = fbItems->Get(4)->annotations()->Get(0);
+    EXPECT_EQ(whenAnno->identifier()->str(), "When");
+    ASSERT_NE(whenAnno->condExpr(), nullptr);
+    EXPECT_EQ(whenAnno->condExpr()->expr_type(), ASTFormat::AnyExpr_BINARY_EXPR);
+    free(rawBuffer);
+}
+
+// UT-S-02: MacroImportList NodeFormat round-trip — macroPos/braces for the
+// block form; the single form keeps default (INVALID) brace positions.
+TEST_F(NodeSerializationTest, MacroImportList_Serialization)
+{
+    // Block form: brace positions round-trip.
+    auto block = ParseMacroImportSource(
+        "macro package p\n"
+        "macro {\n"
+        "    import a.b.c\n"
+        "}\n");
+    NodeWriter blockWriter(block.get());
+    uint8_t* rawBuffer = blockWriter.ExportNode();
+    ASSERT_NE(rawBuffer, nullptr);
+    uint8_t* buffer = rawBuffer + 4;
+    auto fbBlock = ASTFormat::GetNode(buffer)->root_as_FILE()->package()->macroImports()->Get(0);
+    EXPECT_EQ(fbBlock->macroPos()->line(), 2U);
+    EXPECT_EQ(fbBlock->lcurlPos()->line(), 2U);
+    EXPECT_NE(fbBlock->lcurlPos()->column(), 0U);
+    EXPECT_EQ(fbBlock->rcurlPos()->line(), 4U);
+    ASSERT_EQ(fbBlock->items()->size(), 1U);
+    free(rawBuffer);
+
+    // Single form: lcurl/rcurl are default (INVALID_POSITION -> all zeros).
+    auto single = ParseMacroImportSource("macro package p\nmacro import a.b.c\n");
+    NodeWriter singleWriter(single.get());
+    uint8_t* rawSingle = singleWriter.ExportNode();
+    ASSERT_NE(rawSingle, nullptr);
+    auto fbSingle = ASTFormat::GetNode(rawSingle + 4)->root_as_FILE()->package()->macroImports()->Get(0);
+    EXPECT_EQ(fbSingle->lcurlPos()->line(), 0U);
+    EXPECT_EQ(fbSingle->lcurlPos()->column(), 0U);
+    EXPECT_EQ(fbSingle->rcurlPos()->line(), 0U);
+    EXPECT_EQ(fbSingle->rcurlPos()->column(), 0U);
+    ASSERT_EQ(fbSingle->items()->size(), 1U);
+    free(rawSingle);
 }
