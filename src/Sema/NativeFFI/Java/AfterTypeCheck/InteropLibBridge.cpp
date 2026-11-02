@@ -863,7 +863,7 @@ OwnedPtr<Expr> InteropLibBridge::CreateJValueExpr(OwnedPtr<Expr> expr)
     if (ty->IsPrimitive()) {
         switch (ty->kind) {
             case TypeKind::TYPE_BOOLEAN: {
-                static auto jboolty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT8);
+                static ModalTy jboolty{DataTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT8))};
                 // Convert to jboolean (uint8)
                 return CreateIfExpr(std::move(expr),
                     CreateBlock(Nodes(CreateLitConstExpr(LitConstKind::INTEGER, "1", jboolty)), jboolty),
@@ -1322,14 +1322,14 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty>
 
 OwnedPtr<FuncDecl> InteropLibBridge::CreateDeletingGlobalRefFinalizer(ClassDecl& decl)
 {
-    static auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    static ModalTy unitTy{DataTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT))};
     auto curFile = decl.curFile;
     auto fbody = CreateFuncBody({}, nullptr, CreateBlock({}, {unitTy}), {unitTy});
     fbody->paramLists.emplace_back(MakeOwned<FuncParamList>());
     auto delCall = CreateDeleteGlobalRefCall(CreateGetJniEnvCall(curFile),
         CreateAsJniJobjectCall(CreateJavaRefCall(decl, curFile)));
     fbody->body->body.emplace_back(std::move(delCall));
-    auto fd = CreateFuncDecl("~init", std::move(fbody), typeManager.GetFunctionTy({}, {unitTy}));
+    auto fd = CreateFuncDecl("~init", std::move(fbody), DataTy(typeManager.GetFunctionTy({}, {unitTy})));
     fd->EnableAttr(Attribute::PRIVATE, Attribute::FINALIZER, Attribute::IN_CLASSLIKE, Attribute::DOES_NOT_THROW);
     fd->linkage = Linkage::EXTERNAL;
     fd->funcBody->funcDecl = fd.get();

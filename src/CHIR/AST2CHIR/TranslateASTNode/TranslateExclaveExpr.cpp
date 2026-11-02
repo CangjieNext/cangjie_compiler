@@ -42,6 +42,5 @@ Ptr<Value> Translator::Visit(const AST::ExclaveExpr& exclaveExpr)
     // statements are not emitted inside the Exclave body.
     blockGroupStack.pop_back();
     currentBlock = CreateBlock();
-    maybeUnreachable.emplace(currentBlock, exclave);
     return nullptr;
 }

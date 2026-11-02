@@ -672,7 +672,7 @@ OwnedPtr<IfExpr> CreateIfExpr(OwnedPtr<Expr> condExpr, OwnedPtr<Block> body, Own
     return ret;
 }
 
-OwnedPtr<SubscriptExpr> CreateTupleAccess(OwnedPtr<Expr> expr, size_t index, Ptr<Ty> indexTy)
+OwnedPtr<SubscriptExpr> CreateTupleAccess(OwnedPtr<Expr> expr, size_t index, ModalTy indexTy)
 {
     auto elem = MakeOwned<SubscriptExpr>();
     if (auto type = DynamicCast<TupleTy*>(expr->DataTy())) {

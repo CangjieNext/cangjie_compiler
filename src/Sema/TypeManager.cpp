@@ -2279,7 +2279,7 @@ Ptr<const AST::FuncDecl> TypeManager::GetTopOverriddenFuncDecl(const AST::FuncDe
     MemberFuncSet tops;
     {
         std::lock_guard<std::mutex> lock(overrideResolverImplMutex);
-        tops = OverrideFunctionResolver(*this).GetTopOverriddenFuncs(funcDecl->outerDecl->DataTy(), *seed);
+        tops = OverrideFunctionResolver(*this).GetTopOverriddenFuncs(*funcDecl->outerDecl->DataTy(), *seed);
     }
     if (!tops.empty()) {
         return *tops.begin();

@@ -1156,7 +1156,7 @@ void GIM::GenericInstantiationManagerImpl::RearrangeCallExprReference(CallExpr& 
     if (target->GetTy()->HasGeneric() || target->GetTy()->IsGeneric()) {
         return;
     }
-    ce.SetTy(StaticCast<FuncTy*>(target->GetTy())->retTy.With(ce.TyMode()));
+    ce.SetTy(StaticCast<FuncTy*>(target->DataTy())->retTy.With(ce.TyMode()));
     // Deal for dynamic 'This' binding call.
     // eg: tests/LLT/Sema/class/ThisType/class_generic_dynamic_binding_thistype_ok_2.cj
     if (auto thisTy = DynamicCast<ClassThisTy*>(ce.DataTy());
