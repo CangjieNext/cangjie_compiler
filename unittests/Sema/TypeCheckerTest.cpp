@@ -10,6 +10,7 @@
 #include <vector>
 #include "gtest/gtest.h"
 #include "TestCompilerInstance.h"
+#include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/PrintNode.h"
 #include "cangjie/AST/Walker.h"
@@ -210,7 +211,7 @@ main() {
     Walker walker(instance->GetSourcePackages()[0]->files[0].get(), [](Ptr<Node> node) -> VisitAction {
         Meta::match (*node)(
             [](const FuncDecl& decl) {
-                auto ty = dynamic_cast<FuncTy*>(decl.GetTy().get());
+                auto ty = DynamicCast<FuncTy>(decl.DataTy());
                 EXPECT_EQ(ty->retTy->kind, TypeKind::TYPE_INT64);
             },
             [](const VarDecl& decl) { EXPECT_EQ(decl.TyKind(), TypeKind::TYPE_INT32); });
@@ -642,7 +643,7 @@ TEST_F(TypeCheckerTest, MacroCallOfTopLevelInLSPTest)
             checkCount++;
             EXPECT_TRUE(fp->type != nullptr);
             if (fp->type != nullptr) {
-                EXPECT_EQ(fp->type->GetTy()->String(), "Struct-String");
+                EXPECT_EQ(fp->type->GetTy().String(), "Struct-String");
             }
         }
         return VisitAction::WALK_CHILDREN;
@@ -740,8 +741,8 @@ TEST_F(TypeCheckerTest, SpawnTest)
     auto var2 = As<ASTKind::VAR_DECL>(targetFutureObj2);
     EXPECT_TRUE(var1);
     EXPECT_TRUE(var2);
-    auto ty1 = dynamic_cast<ClassTy*>(var1->GetTy().get());
-    auto ty2 = dynamic_cast<ClassTy*>(var2->GetTy().get());
+    auto ty1 = DynamicCast<ClassTy>(var1->DataTy());
+    auto ty2 = DynamicCast<ClassTy>(var2->DataTy());
     EXPECT_TRUE(ty1 && ty2 && ty1 == ty2);
     EXPECT_TRUE(ty1->decl->identifier == "Future");
     EXPECT_TRUE(ty1->typeArgs.size() == 1);
@@ -975,4 +976,54 @@ main(): Int64 {
         return VisitAction::WALK_CHILDREN;
     });
     checker.Walk();
+}
+
+TEST_F(TypeCheckerTest, ImportedAccessorUsesResolvedSignature)
+{
+    TypeManager typeManager;
+    auto valueTy = ModalTy{TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64), ModalInfo{Mode::FULL}};
+    auto getter = MakeOwned<FuncDecl>();
+    getter->EnableAttr(Attribute::IMPORTED);
+    getter->isGetter = true;
+    getter->SetTy({typeManager.GetFunctionTy({}, valueTy)});
+    getter->funcBody = MakeOwned<FuncBody>();
+    getter->funcBody->retType = MakeOwned<PrimitiveType>();
+    getter->funcBody->retType->SetTy({TypeManager::GetInvalidTy()});
+    EXPECT_EQ(typeManager.GetAccessorTargetTy(*getter), valueTy);
+
+    auto setter = MakeOwned<FuncDecl>();
+    setter->EnableAttr(Attribute::IMPORTED);
+    setter->isSetter = true;
+    setter->SetTy({typeManager.GetFunctionTy({valueTy}, {TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)})});
+    setter->funcBody = MakeOwned<FuncBody>();
+    auto params = MakeOwned<FuncParamList>();
+    auto param = MakeOwned<FuncParam>();
+    param->type = MakeOwned<PrimitiveType>();
+    param->SetTy({TypeManager::GetInvalidTy()});
+    params->params.emplace_back(std::move(param));
+    setter->funcBody->paramLists.emplace_back(std::move(params));
+    EXPECT_EQ(typeManager.GetAccessorTargetTy(*setter), valueTy);
+}
+
+TEST_F(TypeCheckerTest, RepeatedStringPatternsResolveEquality)
+{
+    std::string code = "func classify(key: String): Int64 { match (key) {\n";
+    for (size_t i = 0; i < 256; ++i) {
+        code += "case \"key" + std::to_string(i) + "\" => " + std::to_string(i) + "\n";
+    }
+    code += "case _ => -1 } }\nmain(): Int64 { classify(\"key255\") - 255 }\n";
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    ASSERT_TRUE(instance->Compile(CompileStage::DESUGAR_AFTER_SEMA));
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    size_t patterns = 0;
+    Walker(instance->GetSourcePackages()[0].get(), [&patterns](Ptr<Node> node) {
+        if (auto pattern = DynamicCast<ConstPattern>(node)) {
+            ++patterns;
+            EXPECT_NE(pattern->operatorCallExpr, nullptr);
+            EXPECT_TRUE(pattern->GetTy().IsCorrect());
+        }
+        return VisitAction::WALK_CHILDREN;
+    }).Walk();
+    EXPECT_EQ(patterns, 256);
 }
