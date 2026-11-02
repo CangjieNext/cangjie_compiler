@@ -669,13 +669,7 @@ void MacroEvaluation::CreateChildMacroCall(
     }
     Parser parser{tokensToParse, diag, ci->diag.GetSourceManager(), false, &ci->invocation.globalOptions};
     parser.SetPrimaryDecl(primaryName).SetCurFile(macCall.GetNode()->curFile);
-<<<<<<< HEAD
     parser.SetForeignBlockModifiers(macCall.GetModifiers());
-    parser.SetCompileOptions(ci->invocation.globalOptions);
-||||||| constructed merge base
-    parser.SetCompileOptions(ci->invocation.globalOptions);
-=======
->>>>>>> feat: local mode
     auto decl = parser.ParseDecl(ScopeKind(scopeKind));
     if (!decl->IsMacroCallNode()) {
         // Filter decls such as builtin annotations.
