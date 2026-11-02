@@ -31,9 +31,15 @@ Utils::Utils(ImportManager& importManager, TypeManager& typeManager)
 {
 }
 
-Ptr<Ty> Utils::GetOptionTy(Ptr<Ty> ty)
+ModalTy Utils::GetOptionTy(ModalTy ty)
 {
+<<<<<<< HEAD
     return Native::FFI::GetOptionTy(importManager, typeManager, ty);
+||||||| constructed merge base
+    return typeManager.GetEnumTy(*GetOptionDecl(), {ty});
+=======
+    return ModalTy{typeManager.GetEnumTy(*GetOptionDecl(), {ty.Ty()})};
+>>>>>>> feat: local mode
 }
 
 Ptr<EnumDecl> Utils::GetOptionDecl()
@@ -51,17 +57,41 @@ Ptr<Decl> Utils::GetOptionNoneDecl()
     return Native::FFI::GetOptionNoneDecl(importManager);
 }
 
-OwnedPtr<Expr> Utils::CreateOptionSomeRef(Ptr<Ty> ty)
+OwnedPtr<Expr> Utils::CreateOptionSomeRef(ModalTy ty)
 {
+<<<<<<< HEAD
     return Native::FFI::CreateOptionSomeRef(importManager, typeManager, ty);
+||||||| constructed merge base
+    auto someDeclRef = CreateRefExpr(*GetOptionSomeDecl());
+    auto optionActualTy = GetOptionTy(ty);
+    someDeclRef->SetTy(typeManager.GetFunctionTy({ty}, optionActualTy));
+    return someDeclRef;
+=======
+    auto someDeclRef = CreateRefExpr(*GetOptionSomeDecl());
+    auto optionActualTy = GetOptionTy(ty);
+    someDeclRef->SetTy({typeManager.GetFunctionTy({{ty}}, {optionActualTy})});
+    return someDeclRef;
+>>>>>>> feat: local mode
 }
 
-OwnedPtr<Expr> Utils::CreateOptionNoneRef(Ptr<Ty> ty)
+OwnedPtr<Expr> Utils::CreateOptionNoneRef(ModalTy ty)
 {
+<<<<<<< HEAD
     return Native::FFI::CreateOptionNoneRef(importManager, typeManager, ty);
+||||||| constructed merge base
+    auto noneDeclRef = CreateRefExpr(*GetOptionNoneDecl());
+    auto optionActualTy = GetOptionTy(ty);
+    noneDeclRef->SetTy(optionActualTy);
+    return noneDeclRef;
+=======
+    auto noneDeclRef = CreateRefExpr(*GetOptionNoneDecl());
+    auto optionActualTy = GetOptionTy(ty);
+    noneDeclRef->SetTy({optionActualTy});
+    return noneDeclRef;
+>>>>>>> feat: local mode
 }
 
-OwnedPtr<Expr> Utils::CreateOptionSomeCall(OwnedPtr<Expr> expr, Ptr<Ty> ty)
+OwnedPtr<Expr> Utils::CreateOptionSomeCall(OwnedPtr<Expr> expr, ModalTy ty)
 {
     return Native::FFI::CreateOptionSomeCall(importManager, typeManager, std::move(expr), ty);
 }
@@ -145,7 +175,7 @@ OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr, FuncDecl& javaRefGetter)
     CJC_NULLPTR_CHECK(curFile);
 
     return CreateCallExpr(WithinFile(CreateMemberAccess(std::move(expr), javaRefGetter), curFile), {}, &javaRefGetter,
-        StaticCast<FuncTy*>(javaRefGetter.GetTy())->retTy, CallKind::CALL_DECLARED_FUNCTION);
+        StaticCast<FuncTy*>(javaRefGetter.DataTy())->retTy, CallKind::CALL_DECLARED_FUNCTION);
 }
 
 OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr, VarDecl& javaref)
@@ -174,14 +204,14 @@ OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr, ClassLikeDecl& mirrorLike)
 
 OwnedPtr<Expr> CreateJavaRefCall(ClassLikeDecl& mirrorLike, Ptr<File> curFile)
 {
-    auto thisExpr = CreateThisRef(Ptr(&mirrorLike), mirrorLike.GetTy(), curFile);
+    auto thisExpr = CreateThisRef(Ptr(&mirrorLike), mirrorLike.DataTy(), curFile);
     return CreateJavaRefCall(std::move(thisExpr), mirrorLike);
 }
 
 OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr)
 {
-    CJC_ASSERT(expr->GetTy()->IsClassLike());
-    auto classLikeTy = StaticCast<ClassLikeTy*>(expr->GetTy());
+    CJC_ASSERT(expr->DataTy()->IsClassLike());
+    auto classLikeTy = StaticCast<ClassLikeTy*>(expr->DataTy());
     CJC_ASSERT(classLikeTy->commonDecl);
     return CreateJavaRefCall(std::move(expr), *classLikeTy->commonDecl);
 }
@@ -284,7 +314,7 @@ bool HasPredefinedJavaName(const ClassLikeDecl& decl)
 std::string Utils::GetJavaObjectTypeName(const Ty& ty)
 {
     if (ty.IsCoreOptionType()) {
-        return GetJavaObjectTypeName(*ty.typeArgs[0]);
+        return GetJavaObjectTypeName(*ty.TyArg(0));
     }
     if (ty.kind == TypeKind::TYPE_BOOLEAN) {
         return "java.lang.Boolean";
@@ -314,8 +344,8 @@ std::string Utils::GetJavaObjectTypeName(const Ty& ty)
     if (ty.kind == TypeKind::TYPE_CLASS || ty.kind == TypeKind::TYPE_INTERFACE) {
         auto& cldecl = *StaticCast<ClassLikeTy&>(ty).commonDecl;
         if (IsJArray(cldecl)) {
-            CJC_ASSERT_WITH_MSG(!ty.typeArgs.empty(), "JArray type must be generic");
-            return GetJavaObjectTypeName(*ty.typeArgs[0]) + "[]";
+            CJC_ASSERT_WITH_MSG(!ty.TyArgs().empty(), "JArray type must be generic");
+            return GetJavaObjectTypeName(*ty.TyArg(0)) + "[]";
         }
         return GetJavaFQName(cldecl);
     }
@@ -333,11 +363,189 @@ std::string Utils::GetJavaObjectTypeName(const Ty& ty)
  */
 std::string GetJavaJniClassName(const Ty& cjtype)
 {
+<<<<<<< HEAD
     if (IsJArray(cjtype)) {
         // arrays use full signatures and work for primitives
         return GetJniTypeSignature(cjtype);
+||||||| constructed merge base
+    std::string jsig;
+
+    switch (cjtype.kind) {
+        case TypeKind::TYPE_UNIT:
+            jsig = "V";
+            break;
+        case TypeKind::TYPE_BOOLEAN:
+            jsig = "Z";
+            break;
+        case TypeKind::TYPE_INT8:
+            jsig = "B";
+            break;
+        case TypeKind::TYPE_UINT16:
+            jsig = "C";
+            break;
+        case TypeKind::TYPE_INT16:
+            jsig = "S";
+            break;
+        case TypeKind::TYPE_INT32:
+            jsig = "I";
+            break;
+        case TypeKind::TYPE_INT64:
+            jsig = "J";
+            break;
+        case TypeKind::TYPE_FLOAT32:
+            jsig = "F";
+            break;
+        case TypeKind::TYPE_FLOAT64:
+            jsig = "D";
+            break;
+
+        case TypeKind::TYPE_STRUCT: {
+            if (cjtype.IsString()) {
+                jsig = "L" + NormalizeJavaSignature(GetJavaFQName(*GetJStringDecl())) + ";";
+                break;
+            }
+            if (!cjtype.IsStructArray()) {
+                break;
+            }
+            [[fallthrough]]; // for Array<T> - fallback
+        }
+        case TypeKind::TYPE_ARRAY:
+            jsig = "[" + GetJavaTypeSignature(*cjtype.typeArgs[0]);
+            break;
+        case TypeKind::TYPE_ENUM: {
+            if (!cjtype.IsCoreOptionType()) {
+                break;
+            };
+            CJC_ASSERT_WITH_MSG(!cjtype.typeArgs.empty(), "Option type must be generic");
+            auto& argTy = *cjtype.typeArgs[0];
+            if (IsJArray(argTy)) {
+                jsig = GetJavaTypeSignature(argTy);
+            } else {
+                jsig = "L" + NormalizeJavaSignature(GetJavaObjectTypeName(argTy)) + ";";
+            }
+            break;
+        }
+        case TypeKind::TYPE_CLASS:
+        case TypeKind::TYPE_INTERFACE:
+            if (IsJArray(*StaticCast<ClassLikeTy&>(cjtype).commonDecl)) {
+                jsig = "[" + GetJavaTypeSignature(*cjtype.typeArgs[0]);
+            } else {
+                jsig = "L" + NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(cjtype).commonDecl)) + ";";
+            }
+            break;
+        case TypeKind::TYPE_FUNC: {
+            auto& funcTy = *StaticCast<FuncTy>(&cjtype);
+            jsig = "(";
+            for (auto paramTy : funcTy.paramTys) {
+                jsig.append(GetJavaTypeSignature(*paramTy));
+            }
+            jsig.append(")");
+            jsig.append(GetJavaTypeSignature(*funcTy.retTy));
+            break;
+        }
+        default:
+            CJC_ABORT();
+            break; // method must be called only on java-compatible types
+=======
+    std::string jsig;
+
+    switch (cjtype.kind) {
+        case TypeKind::TYPE_UNIT:
+            jsig = "V";
+            break;
+        case TypeKind::TYPE_BOOLEAN:
+            jsig = "Z";
+            break;
+        case TypeKind::TYPE_INT8:
+            jsig = "B";
+            break;
+        case TypeKind::TYPE_UINT16:
+            jsig = "C";
+            break;
+        case TypeKind::TYPE_INT16:
+            jsig = "S";
+            break;
+        case TypeKind::TYPE_INT32:
+            jsig = "I";
+            break;
+        case TypeKind::TYPE_INT64:
+            jsig = "J";
+            break;
+        case TypeKind::TYPE_FLOAT32:
+            jsig = "F";
+            break;
+        case TypeKind::TYPE_FLOAT64:
+            jsig = "D";
+            break;
+
+        case TypeKind::TYPE_STRUCT: {
+            if (cjtype.IsString()) {
+                jsig = "L" + NormalizeJavaSignature(GetJavaFQName(*GetJStringDecl())) + ";";
+                break;
+            }
+            if (!cjtype.IsStructArray()) {
+                break;
+            }
+            [[fallthrough]]; // for Array<T> - fallback
+        }
+        case TypeKind::TYPE_ARRAY:
+            jsig = "[" + GetJavaTypeSignature(*cjtype.TyArg(0));
+            break;
+        case TypeKind::TYPE_ENUM: {
+            if (!cjtype.IsCoreOptionType()) {
+                break;
+            };
+            CJC_ASSERT_WITH_MSG(!cjtype.TyArgs().empty(), "Option type must be generic");
+            auto& argTy = *cjtype.TyArg(0);
+            if (IsJArray(argTy)) {
+                jsig = GetJavaTypeSignature(argTy);
+            } else {
+                jsig = "L" + NormalizeJavaSignature(GetJavaObjectTypeName(argTy)) + ";";
+            }
+            break;
+        }
+        case TypeKind::TYPE_CLASS:
+        case TypeKind::TYPE_INTERFACE:
+            if (IsJArray(*StaticCast<ClassLikeTy&>(cjtype).commonDecl)) {
+                jsig = "[" + GetJavaTypeSignature(*cjtype.TyArg(0));
+            } else {
+                jsig = "L" + NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(cjtype).commonDecl)) + ";";
+            }
+            break;
+        case TypeKind::TYPE_FUNC: {
+            auto& funcTy = *StaticCast<FuncTy>(&cjtype);
+            jsig = "(";
+            for (auto paramTy : funcTy.paramTys) {
+                jsig.append(GetJavaTypeSignature(*paramTy));
+            }
+            jsig.append(")");
+            jsig.append(GetJavaTypeSignature(*funcTy.retTy));
+            break;
+        }
+        default:
+            CJC_ABORT();
+            break; // method must be called only on java-compatible types
+>>>>>>> feat: local mode
     }
+<<<<<<< HEAD
     return NormalizeJavaSignature(GetJavaFQName(*StaticCast<ClassLikeTy&>(cjtype).commonDecl));
+||||||| constructed merge base
+
+    return jsig;
+}
+
+std::string Utils::GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& params)
+{
+    return GetJavaTypeSignature(*typeManager.GetFunctionTy(params, &retTy));
+=======
+
+    return jsig;
+}
+
+std::string Utils::GetJavaTypeSignature(Ty& retTy, const std::vector<ModalTy>& params)
+{
+    return GetJavaTypeSignature(*typeManager.GetFunctionTy(params, {&retTy}));
+>>>>>>> feat: local mode
 }
 
 OwnedPtr<CallExpr> Utils::CreateZeroValue(Ptr<Ty> ty, File& curFile) const
@@ -461,19 +669,16 @@ OwnedPtr<Expr> CreateMirrorConstructorCall(
     return nullptr;
 }
 
-OwnedPtr<Expr> Utils::CreateOptionMatch(
-    OwnedPtr<Expr> selector,
-    std::function<OwnedPtr<Expr>(VarDecl&)> someBranch,
-    std::function<OwnedPtr<Expr>()> noneBranch,
-    Ptr<Ty> ty)
+OwnedPtr<Expr> Utils::CreateOptionMatch(OwnedPtr<Expr> selector, std::function<OwnedPtr<Expr>(VarDecl&)> someBranch,
+    std::function<OwnedPtr<Expr>()> noneBranch, ModalTy ty)
 {
     auto curFile = selector->curFile;
     CJC_NULLPTR_CHECK(curFile);
 
     auto& optTy = *selector->GetTy();
     CJC_ASSERT(optTy.IsCoreOptionType());
-    CJC_ASSERT_WITH_MSG(!optTy.typeArgs.empty(), "Option type must be generic");
-    auto optArgTy = optTy.typeArgs[0];
+    CJC_ASSERT_WITH_MSG(!optTy.TyArgs().empty(), "Option type must be generic");
+    ModalTy optArgTy{optTy.TyArg(0)};
 
     auto vp = CreateVarPattern(V_COMPILER, optArgTy);
     vp->curFile = curFile;
@@ -494,18 +699,18 @@ OwnedPtr<Expr> Utils::CreateOptionMatch(
     nonePattern->curFile = curFile;
     auto caseNone = CreateMatchCase(std::move(nonePattern), noneBranch());
 
-    return WithinFile(CreateMatchExpr(
-        std::move(selector),
-        Nodes<MatchCase>(std::move(caseSome), std::move(caseNone)), ty), curFile);
+    return WithinFile(
+        CreateMatchExpr(std::move(selector), Nodes<MatchCase>(std::move(caseSome), std::move(caseNone)), {ty}),
+        curFile);
 }
 
 OwnedPtr<FuncDecl> Utils::CreateNativeFunc(const std::string& name,
     std::vector<OwnedPtr<FuncParam>>&& params, Ptr<Ty> retTy, std::vector<OwnedPtr<Node>>&& nodes,
     File& curFile, std::string& moduleName, std::string& fullPackageName) const
 {
-    CJC_ASSERT(Ty::IsMetCType(*retTy));
+    CJC_ASSERT(retTy->IsMetCType());
     for (auto& param : params) {
-        CJC_ASSERT(Ty::IsMetCType(*param->GetTy()));
+        CJC_ASSERT(param->GetTy()->IsMetCType());
     }
 
     auto block = MakeOwned<Block>();
@@ -514,7 +719,7 @@ OwnedPtr<FuncDecl> Utils::CreateNativeFunc(const std::string& name,
     block->curFile = &curFile;
     std::move(nodes.begin(), nodes.end(), std::back_inserter(block->body));
 
-    std::vector<Ptr<Ty>> funcTyParams;
+    std::vector<ModalTy> funcTyParams;
     for (auto& param : params) {
         funcTyParams.push_back(param->GetTy());
     }
@@ -524,7 +729,7 @@ OwnedPtr<FuncDecl> Utils::CreateNativeFunc(const std::string& name,
     funcBody->paramLists.emplace_back(CreateFuncParamList(std::move(params)));
 
     auto funcTy = typeManager.GetFunctionTy(funcTyParams, retTy, {.isC = true});
-    auto fdecl = CreateFuncDecl(name, std::move(funcBody), funcTy);
+    auto fdecl = CreateFuncDecl(name, std::move(funcBody), {funcTy});
     fdecl->funcBody->funcDecl = fdecl.get();
     fdecl->EnableAttr(Attribute::C);
     fdecl->EnableAttr(Attribute::GLOBAL);
@@ -621,7 +826,7 @@ OwnedPtr<Expr> InteropLibBridge::CreateGetTypeForTypeParameterCall(const Ptr<Gen
 
     std::vector<OwnedPtr<FuncArg>> args;
     auto refExpr = WithinFile(CreateRefExpr(*getTypeForTypeParamDecl), genericParam->curFile);
-    refExpr->instTys.push_back(genericParam->GetTy());
+    refExpr->instTys.push_back(genericParam->DataTy());
 
     auto callExpr = CreateCallExpr(std::move(refExpr), std::move(args), getTypeForTypeParamDecl,
         getTypeForTypeParamDecl->funcBody->retType->GetTy(), CallKind::CALL_INTRINSIC_FUNCTION);
@@ -630,15 +835,14 @@ OwnedPtr<Expr> InteropLibBridge::CreateGetTypeForTypeParameterCall(const Ptr<Gen
     return callExpr;
 }
 
-OwnedPtr<MatchExpr> InteropLibBridge::CreateMatchByTypeArgument(
-    const Ptr<GenericParamDecl> genericParam,
-    std::map<std::string, OwnedPtr<Expr>> typeToCaseMap, Ptr<Ty> retTy, OwnedPtr<Expr> defaultCase)
+OwnedPtr<MatchExpr> InteropLibBridge::CreateMatchByTypeArgument(const Ptr<GenericParamDecl> genericParam,
+    std::map<std::string, OwnedPtr<Expr>> typeToCaseMap, ModalTy retTy, OwnedPtr<Expr> defaultCase)
 {
     static auto strTy = utils.GetStringDecl().GetTy();
     static auto cStrToStringDecl = FindCStringToStringDecl();
     static auto strEqualsDecl = FindStringEqualsDecl();
     static auto strStartsWithDecl = FindStringStartsWithDecl();
-    static auto boolTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
+    static const auto boolTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
 
     auto file = genericParam->curFile;
     auto cStrToStringCall = MakeOwned<CallExpr>();
@@ -668,7 +872,7 @@ OwnedPtr<MatchExpr> InteropLibBridge::CreateMatchByTypeArgument(
 
         std::vector<OwnedPtr<FuncArg>> caseCallArgs;
         caseCallArgs.emplace_back(CreateFuncArg(CreateLitConstExpr(LitConstKind::STRING, typeDesc, strTy)));
-        caseCall->SetTy(boolTy);
+        caseCall->SetTy({boolTy});
         caseCall->resolvedFunction = isOption ? strStartsWithDecl : strEqualsDecl;
         caseCall->baseFunc = std::move(caseMa);
         caseCall->args = std::move(caseCallArgs);

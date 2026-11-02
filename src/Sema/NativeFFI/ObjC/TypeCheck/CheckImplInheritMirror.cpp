@@ -23,7 +23,15 @@ void CheckImplInheritMirror::HandleImpl(TypeCheckContext& ctx)
         return;
     }
 
+<<<<<<< HEAD
     if (auto classTy = DynamicCast<ClassTy*>(ctx.target.GetTy()); classTy) {
+||||||| constructed merge base
+    // TODO: remove the whole if when hierarchy root @ObjCImpl is supported
+    if (auto classTy = DynamicCast<ClassTy*>(ctx.target.GetTy()); classTy) {
+=======
+    // TODO: remove the whole if when hierarchy root @ObjCImpl is supported
+    if (auto classTy = DynamicCast<ClassTy*>(ctx.target.DataTy()); classTy) {
+>>>>>>> feat: local mode
         auto hasOnlyMirrorSuperInterfaces = classTy->GetSuperInterfaceTys().size() > 0;
         for (auto superInterfaceTy : classTy->GetSuperInterfaceTys()) {
             if (!IsObjCForeign(*superInterfaceTy)) {

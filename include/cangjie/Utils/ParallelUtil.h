@@ -34,9 +34,22 @@ public:
         const ElementList<Ptr<const AST::Decl>>& localConstVars,
         const ElementList<Ptr<const AST::FuncDecl>>& localConstFuncs, IncreKind& kind,
         const std::unordered_map<std::string, Value*>& deserializedVals,
+<<<<<<< HEAD
         const TranslateASTNodeFunc& funcForTranlateASTNode, bool computeAnnotations,
         std::vector<CHIR::Function*>& initFuncsForAnnoFactory,
         Cangjie::TypeManager& typeManager, std::vector<std::pair<const AST::Decl*, Function*>>& annoFactoryFuncs)
+||||||| constructed merge base
+        const TranslateASTNodeFunc& funcForTranlateASTNode,
+        std::unordered_map<Block*, Expression*>& maybeUnreachable,
+        bool computeAnnotations,
+        std::vector<CHIR::Function*>& initFuncsForAnnoFactory,
+        const Cangjie::TypeManager& typeManager,
+        std::vector<std::pair<const AST::Decl*, Function*>>& annoFactoryFuncs)
+=======
+        const TranslateASTNodeFunc& funcForTranlateASTNode, std::unordered_map<Block*, Expression*>& maybeUnreachable,
+        bool computeAnnotations, std::vector<CHIR::Function*>& initFuncsForAnnoFactory,
+        Cangjie::TypeManager& typeManager, std::vector<std::pair<const AST::Decl*, Function*>>& annoFactoryFuncs)
+>>>>>>> feat: local mode
     {
         size_t funcNum = decls.size();
         std::vector<std::unique_ptr<CHIR::CHIRBuilder>> builderList = ConstructSubBuilders(funcNum);

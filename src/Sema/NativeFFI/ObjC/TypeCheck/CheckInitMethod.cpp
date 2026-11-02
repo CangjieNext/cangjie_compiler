@@ -10,6 +10,7 @@
  * This file implements checks of @ObjCInit annotated method.
  */
 
+#include "Diags.h"
 #include "Handlers.h"
 #include "NativeFFI/ObjC/Utils/ASTQuery.h"
 #include "cangjie/AST/Match.h"
@@ -28,8 +29,18 @@ void CheckInitMethod::HandleImpl(TypeCheckContext& ctx)
         if (!method || !IsObjCInitMethod(*method)) {
             continue;
         }
+<<<<<<< HEAD
         auto fTy = DynamicCast<FuncTy*>(method->GetTy());
         if (!fTy || !method->funcBody->retType) {
+||||||| constructed merge base
+        auto& method = *StaticAs<ASTKind::FUNC_DECL>(member);
+        auto fTy = DynamicCast<FuncTy*>(method.GetTy());
+        if (!fTy || !method.funcBody->retType) {
+=======
+        auto& method = *StaticAs<ASTKind::FUNC_DECL>(member);
+        auto fTy = DynamicCast<FuncTy*>(method.DataTy());
+        if (!fTy || !method.funcBody->retType) {
+>>>>>>> feat: local mode
             continue;
         }
         auto retTy = fTy->retTy;
@@ -38,8 +49,16 @@ void CheckInitMethod::HandleImpl(TypeCheckContext& ctx)
             continue;
         }
 
+<<<<<<< HEAD
         ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types, *method->funcBody->retType)
             .AddMainHintArguments(Ty::ToString(mirrorTy), Ty::ToString(retTy));
+||||||| constructed merge base
+        ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types, *method.funcBody->retType)
+            .AddMainHintArguments(Ty::ToString(mirrorTy), Ty::ToString(retTy));
+=======
+        Sema::DiagSemaMismatchedTypes(
+            ctx.diag, *method.funcBody->retType, Ty::ToString(mirrorTy.Ty()), Ty::ToString(retTy.Ty()));
+>>>>>>> feat: local mode
         ctx.target.EnableAttr(Attribute::IS_BROKEN);
     }
 }

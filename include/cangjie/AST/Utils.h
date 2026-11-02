@@ -15,8 +15,8 @@
 
 #include <functional>
 
-#include "cangjie/Utils/ConstantsUtils.h"
 #include "cangjie/AST/Node.h"
+#include "cangjie/Utils/ConstantsUtils.h"
 #include "cangjie/Utils/CastingTemplate.h"
 
 namespace Cangjie::AST {
@@ -232,6 +232,9 @@ void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet);
 void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet);
 
 void InsertMirrorVarProp(ClassDecl& decl, Attribute attrToBeSet);
+
+bool HasModifier(const std::set<Modifier>& modifiers, TokenKind kind);
+bool HasModifier(const Decl& decl, TokenKind kind);
 } // namespace Cangjie::AST
 
 namespace Cangjie::Interop::Java {
@@ -253,4 +256,44 @@ bool IsSyntheticMirrorWrapper(const AST::Node& node);
 bool IsObject(const Node& node);
 } // namespace Cangjie::Interop::Java
 
+<<<<<<< HEAD
+||||||| constructed merge base
+namespace Cangjie::Interop::ObjC {
+
+bool IsDeclAppropriateForSyntheticClassGeneration(const AST::Decl& decl);
+
+/**
+ * Generates and inserts the synthetic class declaration.
+ * The synthetic class implements the given interface and has the following structure:
+ *
+ * Example of generated synthetic
+ * ```
+ * interface CL <: ObjCId {}
+ *
+ * class CL$impl <: CL {}
+ * ```
+ */
+void InsertSyntheticClassDecl(AST::ClassLikeDecl& decl, AST::File& file);
+
+}
+
+=======
+namespace Cangjie::Interop::ObjC {
+
+bool IsDeclAppropriateForSyntheticClassGeneration(const AST::Decl& decl);
+
+/**
+ * Generates and inserts the synthetic class declaration.
+ * The synthetic class implements the given interface and has the following structure:
+ *
+ * Example of generated synthetic
+ * ```
+ * interface CL <: ObjCId {}
+ *
+ * class CL$impl <: CL {}
+ * ```
+ */
+void InsertSyntheticClassDecl(AST::ClassLikeDecl& decl, AST::File& file);
+}
+>>>>>>> feat: local mode
 #endif

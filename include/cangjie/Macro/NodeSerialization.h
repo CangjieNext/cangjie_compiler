@@ -93,6 +93,7 @@ private:
         const AST::MacroInvocation& macroInvocation);
     std::vector<flatbuffers::Offset<ASTFormat::Token>> TokensVectorCreateHelper(
         std::vector<Cangjie::Token> tokenVector);
+<<<<<<< HEAD
     flatbuffers::Offset<ASTFormat::NodeBase> SerializeNodeBase(AstNode node);
 
     flatbuffers::Offset<ASTFormat::Pattern> SerializePattern(AstPattern pattern);
@@ -198,7 +199,223 @@ private:
     flatbuffers::Offset<ASTFormat::FuncDecl> SerializeFuncDecl(const AST::FuncDecl* funcDecl);
     flatbuffers::Offset<ASTFormat::MacroDecl> SerializeMacroDecl(const AST::MacroDecl* macroDecl);
     flatbuffers::Offset<ASTFormat::MacroExpandDecl> SerializeMacroExpandDecl(
+||||||| constructed merge base
+    flatbuffers::Offset<NodeFormat::NodeBase> SerializeNodeBase(AstNode node);
+
+    flatbuffers::Offset<NodeFormat::Pattern> SerializePattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeConstPattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeWildcardPattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeVarPattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeExceptTypePattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeCommandTypePattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeResumptionTypePattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeTypePattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeEnumPattern(const AST::Pattern* pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeMultiEnumPattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeVarOrEnumPattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeTuplePattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::EnumPattern> SerializeEnumPattern(const AST::EnumPattern* enumPattern);
+    flatbuffers::Offset<NodeFormat::MatchCase> SerializeMatchCase(AstMatchCase matchcase);
+    flatbuffers::Offset<NodeFormat::MatchCaseOther> SerializeMatchCaseOther(AstMatchCaseOther matchcaseother);
+
+    flatbuffers::Offset<NodeFormat::Expr> SerializeExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeWildcardExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeBinaryExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeIsExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeAsExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeLitConstExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeUnaryExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeParenExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeCallExpr(const AST::Expr* expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeRefExpr(const AST::Expr* expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeReturnExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeAssignExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeMemberAccess(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeLambdaExpr(const AST::Expr* expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeTrailingClosureExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeTypeConvExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeTryExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeMatchExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeTokenPart(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeQuoteExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeThrowExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializePerformExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeResumeExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeForInExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeIfExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeLetPatternDestructor(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeBlockExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeWhileExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeDoWhileExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeJumpExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeIncOrDecExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializePrimitiveTypeExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeSpawnExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeSynchronizedExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeArrayLit(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeTupleLit(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeSubscriptExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeRangeExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::CallExpr> SerializeCallExpr(const AST::CallExpr* callExpr);
+    flatbuffers::Offset<NodeFormat::LambdaExpr> SerializeLambdaExpr(const AST::LambdaExpr* lambdaExpr);
+    flatbuffers::Offset<NodeFormat::Block> SerializeBlock(AstBlock block);
+    flatbuffers::Offset<NodeFormat::FuncArg> SerializeFuncArg(AstFuncArg funcArg);
+    flatbuffers::Offset<NodeFormat::RefExpr> SerializeRefExpr(const AST::RefExpr* refExpr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeOptionalExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeOptionalChainExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeMacroExpandExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeArrayExpr(AstExpr expr);
+
+    flatbuffers::Offset<NodeFormat::TypeBase> SerializeTypeBase(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeType(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeRefType(const AST::Type* type);
+    flatbuffers::Offset<NodeFormat::Type> SerializePrimitiveType(const AST::Type* type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeArrayType(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeFuncType(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeThisType(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeParenType(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeQualifiedType(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeOptionType(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeTupleType(AstType type);
+    flatbuffers::Offset<NodeFormat::RefType> SerializeRefType(const AST::RefType* refType);
+    flatbuffers::Offset<NodeFormat::PrimitiveType> SerializePrimitiveType(const AST::PrimitiveType* primitiveType);
+    flatbuffers::Offset<NodeFormat::Type> SerializeVArrayType(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeConstantType(AstType type);
+
+    flatbuffers::Offset<NodeFormat::Annotation> SerializeAnnotation(AstAnnotation annotation);
+    flatbuffers::Offset<NodeFormat::Modifier> SerializeModifier(AstModifier modifier);
+    flatbuffers::Offset<NodeFormat::DeclBase> SerializeDeclBase(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeVarWithPatternDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeVarDecl(const AST::Decl* decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeMainDecl(const AST::Decl* decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeFuncDecl(const AST::Decl* decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeMacroDecl(const AST::Decl* decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeMacroExpandDecl(const AST::Decl* decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeStructDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializePropDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeTypeAliasDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeExtendDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeClassDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeInterfaceDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeEnumDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializePrimaryCtorDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::VarDecl> SerializeVarDecl(const AST::VarDecl* varDecl);
+    flatbuffers::Offset<NodeFormat::MainDecl> SerializeMainDecl(const AST::MainDecl* mainDecl);
+    flatbuffers::Offset<NodeFormat::FuncDecl> SerializeFuncDecl(const AST::FuncDecl* funcDecl);
+    flatbuffers::Offset<NodeFormat::MacroDecl> SerializeMacroDecl(const AST::MacroDecl* macroDecl);
+    flatbuffers::Offset<NodeFormat::MacroExpandDecl> SerializeMacroExpandDecl(
+=======
+    flatbuffers::Offset<NodeFormat::NodeBase> SerializeNodeBase(AstNode node);
+    flatbuffers::Offset<NodeFormat::ModalInfo> SerializeModalInfo(const Cangjie::AST::ASTModalInfo& modal);
+
+    flatbuffers::Offset<NodeFormat::Pattern> SerializePattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeConstPattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeWildcardPattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeVarPattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeExceptTypePattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeCommandTypePattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeResumptionTypePattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeTypePattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeEnumPattern(const AST::Pattern* pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeMultiEnumPattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeVarOrEnumPattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::Pattern> SerializeTuplePattern(AstPattern pattern);
+    flatbuffers::Offset<NodeFormat::EnumPattern> SerializeEnumPattern(const AST::EnumPattern* enumPattern);
+    flatbuffers::Offset<NodeFormat::MatchCase> SerializeMatchCase(AstMatchCase matchcase);
+    flatbuffers::Offset<NodeFormat::MatchCaseOther> SerializeMatchCaseOther(AstMatchCaseOther matchcaseother);
+
+    flatbuffers::Offset<NodeFormat::Expr> SerializeExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeWildcardExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeBinaryExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeIsExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeAsExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeLitConstExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeUnaryExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeParenExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeCallExpr(const AST::Expr* expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeRefExpr(const AST::Expr* expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeReturnExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeAssignExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeMemberAccess(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeLambdaExpr(const AST::Expr* expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeTrailingClosureExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeTypeConvExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeTryExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeMatchExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeTokenPart(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeQuoteExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeThrowExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializePerformExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeResumeExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeForInExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeIfExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeLetPatternDestructor(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeBlockExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeWhileExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeDoWhileExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeJumpExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeIncOrDecExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializePrimitiveTypeExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeSpawnExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeSynchronizedExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeExclaveExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeArrayLit(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeTupleLit(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeSubscriptExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeRangeExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::CallExpr> SerializeCallExpr(const AST::CallExpr* callExpr);
+    flatbuffers::Offset<NodeFormat::LambdaExpr> SerializeLambdaExpr(const AST::LambdaExpr* lambdaExpr);
+    flatbuffers::Offset<NodeFormat::Block> SerializeBlock(AstBlock block);
+    flatbuffers::Offset<NodeFormat::FuncArg> SerializeFuncArg(AstFuncArg funcArg);
+    flatbuffers::Offset<NodeFormat::RefExpr> SerializeRefExpr(const AST::RefExpr* refExpr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeOptionalExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeOptionalChainExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeMacroExpandExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeArrayExpr(AstExpr expr);
+
+    flatbuffers::Offset<NodeFormat::TypeBase> SerializeTypeBase(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeType(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeRefType(const AST::Type* type);
+    flatbuffers::Offset<NodeFormat::Type> SerializePrimitiveType(const AST::Type* type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeArrayType(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeFuncType(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeThisType(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeParenType(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeQualifiedType(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeOptionType(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeTupleType(AstType type);
+    flatbuffers::Offset<NodeFormat::RefType> SerializeRefType(const AST::RefType* refType);
+    flatbuffers::Offset<NodeFormat::PrimitiveType> SerializePrimitiveType(const AST::PrimitiveType* primitiveType);
+    flatbuffers::Offset<NodeFormat::Type> SerializeVArrayType(AstType type);
+    flatbuffers::Offset<NodeFormat::Type> SerializeConstantType(AstType type);
+
+    flatbuffers::Offset<NodeFormat::Annotation> SerializeAnnotation(AstAnnotation annotation);
+    flatbuffers::Offset<NodeFormat::Modifier> SerializeModifier(AstModifier modifier);
+    flatbuffers::Offset<NodeFormat::DeclBase> SerializeDeclBase(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeVarWithPatternDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeVarDecl(const AST::Decl* decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeMainDecl(const AST::Decl* decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeFuncDecl(const AST::Decl* decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeMacroDecl(const AST::Decl* decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeMacroExpandDecl(const AST::Decl* decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeStructDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializePropDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeTypeAliasDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeExtendDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeClassDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeInterfaceDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeEnumDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializePrimaryCtorDecl(AstDecl decl);
+    flatbuffers::Offset<NodeFormat::VarDecl> SerializeVarDecl(const AST::VarDecl* varDecl);
+    flatbuffers::Offset<NodeFormat::MainDecl> SerializeMainDecl(const AST::MainDecl* mainDecl);
+    flatbuffers::Offset<NodeFormat::FuncDecl> SerializeFuncDecl(const AST::FuncDecl* funcDecl);
+    flatbuffers::Offset<NodeFormat::MacroDecl> SerializeMacroDecl(const AST::MacroDecl* macroDecl);
+    flatbuffers::Offset<NodeFormat::MacroExpandDecl> SerializeMacroExpandDecl(
+>>>>>>> feat: local mode
         const AST::MacroExpandDecl* macroExpandDecl);
+<<<<<<< HEAD
     flatbuffers::Offset<ASTFormat::Decl> SerializeDeclOfFuncParam(const AST::Decl* decl);
     flatbuffers::Offset<ASTFormat::Decl> SerializeDeclOfMacroExpandParam(const AST::Decl* decl);
     flatbuffers::Offset<ASTFormat::FuncBody> SerializeFuncBody(AstFuncBody funcBody);
@@ -210,6 +427,33 @@ private:
     flatbuffers::Offset<ASTFormat::Generic> SerializeGeneric(AstGeneric generic);
     flatbuffers::Offset<ASTFormat::GenericParamDecl> SerializeGenericParamDecl(AstGenericParamDecl genericParamDecl);
     flatbuffers::Offset<ASTFormat::GenericConstraint> SerializeGenericConstraint(
+||||||| constructed merge base
+    flatbuffers::Offset<NodeFormat::Decl> SerializeDeclOfFuncParam(const AST::Decl* decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeDeclOfMacroExpandParam(const AST::Decl* decl); 
+    flatbuffers::Offset<NodeFormat::FuncBody> SerializeFuncBody(AstFuncBody funcBody);
+    flatbuffers::Offset<NodeFormat::FuncParam> SerializeFuncParam(AstFuncParam funcParam);
+    flatbuffers::Offset<NodeFormat::FuncParam> SerializeMacroExpandParam(AstMacroExpandParam mep);
+    flatbuffers::Offset<NodeFormat::StructBody> SerializeStructBody(AstStructBody structBody);
+    flatbuffers::Offset<NodeFormat::InterfaceBody> SerializeInterfaceBody(AstInterfaceBody interfaceBody);
+    flatbuffers::Offset<NodeFormat::ClassBody> SerializeClassBody(AstClassBody classBody);
+    flatbuffers::Offset<NodeFormat::Generic> SerializeGeneric(AstGeneric generic);
+    flatbuffers::Offset<NodeFormat::GenericParamDecl> SerializeGenericParamDecl(AstGenericParamDecl genericParamDecl);
+    flatbuffers::Offset<NodeFormat::GenericConstraint> SerializeGenericConstraint(
+=======
+    flatbuffers::Offset<NodeFormat::Decl> SerializeDeclOfFuncParam(const AST::Decl* decl);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeDeclOfMacroExpandParam(const AST::Decl* decl);
+    flatbuffers::Offset<NodeFormat::ThisParam> SerializeThisParam(const AST::ThisParam* thisParam);
+    flatbuffers::Offset<NodeFormat::Decl> SerializeDeclOfThisParam(const AST::Decl* decl);
+    flatbuffers::Offset<NodeFormat::FuncBody> SerializeFuncBody(AstFuncBody funcBody);
+    flatbuffers::Offset<NodeFormat::FuncParam> SerializeFuncParam(AstFuncParam funcParam);
+    flatbuffers::Offset<NodeFormat::FuncParam> SerializeMacroExpandParam(AstMacroExpandParam mep);
+    flatbuffers::Offset<NodeFormat::StructBody> SerializeStructBody(AstStructBody structBody);
+    flatbuffers::Offset<NodeFormat::InterfaceBody> SerializeInterfaceBody(AstInterfaceBody interfaceBody);
+    flatbuffers::Offset<NodeFormat::ClassBody> SerializeClassBody(AstClassBody classBody);
+    flatbuffers::Offset<NodeFormat::Generic> SerializeGeneric(AstGeneric generic);
+    flatbuffers::Offset<NodeFormat::GenericParamDecl> SerializeGenericParamDecl(AstGenericParamDecl genericParamDecl);
+    flatbuffers::Offset<NodeFormat::GenericConstraint> SerializeGenericConstraint(
+>>>>>>> feat: local mode
         AstGenericConstraint genericConstraint);
 
     flatbuffers::Offset<ASTFormat::File> SerializeFile(AstFile file);
