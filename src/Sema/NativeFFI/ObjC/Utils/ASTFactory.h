@@ -232,10 +232,19 @@ public:
         const std::string& selector, const Ptr<AST::File> curFile);
     static std::vector<OwnedPtr<AST::FuncParamList>> CreateParamLists(std::vector<OwnedPtr<AST::FuncParam>>&& params);
     static std::vector<OwnedPtr<AST::FuncParam>>& GetParams(const AST::FuncDecl& fn);
+<<<<<<< HEAD
     static OwnedPtr<AST::VarDecl> CreateVar(
         const std::string& name, Ptr<AST::Ty> ty, bool isVar, OwnedPtr<AST::Expr> initializer = nullptr);
     static OwnedPtr<AST::FuncDecl> CreateFunc(const std::string& name, Ptr<AST::FuncTy> fnTy,
         std::vector<OwnedPtr<AST::FuncParam>>&& params, std::vector<OwnedPtr<AST::Node>>&& nodes);
+||||||| constructed merge base
+    static OwnedPtr<AST::VarDecl> CreateVar(const std::string& name, Ptr<AST::Ty> ty, bool isVar, OwnedPtr<AST::Expr> initializer = nullptr);
+    static OwnedPtr<AST::FuncDecl> CreateFunc(const std::string& name, Ptr<AST::FuncTy> fnTy, std::vector<OwnedPtr<AST::FuncParam>>&& params, std::vector<OwnedPtr<AST::Node>>&& nodes);
+=======
+    static OwnedPtr<AST::VarDecl> CreateVar(
+        const std::string& name, AST::ModalTy ty, bool isVar, OwnedPtr<AST::Expr> initializer = nullptr);
+    static OwnedPtr<AST::FuncDecl> CreateFunc(const std::string& name, Ptr<AST::FuncTy> fnTy, std::vector<OwnedPtr<AST::FuncParam>>&& params, std::vector<OwnedPtr<AST::Node>>&& nodes);
+>>>>>>> feat: local mode
     static OwnedPtr<AST::ParenExpr> CreateParenExpr(OwnedPtr<AST::Expr> expr);
 
     OwnedPtr<AST::Expr> CreateNativeLambdaForBlockType(AST::Ty& ty, Ptr<AST::File> curFile);

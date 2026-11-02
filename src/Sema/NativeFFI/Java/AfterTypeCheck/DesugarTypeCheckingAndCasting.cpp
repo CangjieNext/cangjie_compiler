@@ -70,7 +70,7 @@ std::vector<Ptr<TypePattern>> CollectTypePatternsWithJavaClass(const std::vector
     return res;
 }
 
-OwnedPtr<VarPattern> CreateTmpVarPattern(Ptr<Ty> ty)
+OwnedPtr<VarPattern> CreateTmpVarPattern(ModalTy ty)
 {
     auto var = CreateTmpVarDecl();
     auto varPat = MakeOwned<VarPattern>();
@@ -82,8 +82,8 @@ OwnedPtr<VarPattern> CreateTmpVarPattern(Ptr<Ty> ty)
 }
 }
 
-OwnedPtr<Expr> DesugarTypeCheckingAndCasting::CreateIsInstanceCall(Ptr<VarDecl> jObjectVar,
-    Ptr<Ty> classTy, Ptr<File> curFile) const
+OwnedPtr<Expr> DesugarTypeCheckingAndCasting::CreateIsInstanceCall(
+    Ptr<VarDecl> jObjectVar, ModalTy classTy, Ptr<File> curFile) const
 {
     auto isInstanceOfDecl = ilib.GetIsInstanceOf();
 
@@ -119,9 +119,18 @@ OwnedPtr<Expr> DesugarTypeCheckingAndCasting::CreateJObjectCast(Ptr<VarDecl> jOb
     auto newJavarefExpr = CreateNewGlobalJavaRef(std::move(javarefExpr), curFile);
     // cast true => ...
     // wrap into mirror constructor or into wrapping constructor of java impl on the reference from registry
+<<<<<<< HEAD
     OwnedPtr<Expr> trueBranch = utils.CreateOptionSomeCall(
         ilib.UnwrapJavaEntity(std::move(newJavarefExpr), castTy, castDecl),
         castTy);
+||||||| constructed merge base
+    OwnedPtr<Expr> trueBranch = utils.CreateOptionSomeCall(
+        ilib.UnwrapJavaEntity(std::move(javarefExpr), castTy, *castDecl),
+        castTy);
+=======
+    OwnedPtr<Expr> trueBranch =
+        utils.CreateOptionSomeCall(ilib.UnwrapJavaEntity(std::move(javarefExpr), castTy.Ty(), *castDecl), castTy);
+>>>>>>> feat: local mode
 
     // case false => None
     OwnedPtr<Expr> falseBranch = utils.CreateOptionNoneRef(castTy);
@@ -131,7 +140,7 @@ OwnedPtr<Expr> DesugarTypeCheckingAndCasting::CreateJObjectCast(Ptr<VarDecl> jOb
 }
 
 OwnedPtr<Block> DesugarTypeCheckingAndCasting::CastAndSubstituteVars(
-    Expr& expr, const std::vector<std::tuple<Ptr<VarDecl>, Ptr<Ty>>>& patternVars) const
+    Expr& expr, const std::vector<std::tuple<Ptr<VarDecl>, ModalTy>>& patternVars) const
 {
     auto curFile = expr.curFile;
     auto varsBlock = WithinFile(MakeOwned<Block>(), curFile);
@@ -142,10 +151,16 @@ OwnedPtr<Block> DesugarTypeCheckingAndCasting::CastAndSubstituteVars(
         CJC_ASSERT(castDecl->IsJavaForeign() || castDecl->IsJavaExport());
 
         auto javarefExpr = CreateJavaRefCall(WithinFile(CreateRefExpr(*varDecl), curFile));
+<<<<<<< HEAD
         // blackBox(jObjectVar)
         auto newJavarefExpr = CreateNewGlobalJavaRef(std::move(javarefExpr), curFile);
 
         OwnedPtr<Expr> initializer = ilib.UnwrapJavaEntity(std::move(newJavarefExpr), castTy, castDecl);
+||||||| constructed merge base
+        OwnedPtr<Expr> initializer = ilib.UnwrapJavaEntity(std::move(javarefExpr), castDecl->GetTy(), *castDecl);
+=======
+        OwnedPtr<Expr> initializer = ilib.UnwrapJavaEntity(std::move(javarefExpr), castDecl->DataTy(), *castDecl);
+>>>>>>> feat: local mode
         auto castedVar = WithinFile(CreateTmpVarDecl(CreateType(castDecl->GetTy()), std::move(initializer)), curFile);
         varsMapping[varDecl] = castedVar;
         varsBlock->body.emplace_back(std::move(castedVar));
@@ -172,7 +187,7 @@ void DesugarTypeCheckingAndCasting::DesugarIsExpression(IsExpr& ie) const
 {
     auto curFile = ie.curFile;
     CJC_NULLPTR_CHECK(curFile);
-    static const auto BOOL_TY = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
+    static const ModalTy BOOL_TY{TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN)};
 
     CJC_ASSERT(!ie.desugarExpr);
 
@@ -243,7 +258,7 @@ void DesugarTypeCheckingAndCasting::DesugarMatchCase(MatchCase& matchCase) const
     static auto jObjectDecl = utils.GetJObjectDecl();
 
     std::vector<OwnedPtr<Expr>> isInstanceGuards;
-    std::vector<std::tuple<Ptr<VarDecl>, Ptr<Ty>>> patternVars;
+    std::vector<std::tuple<Ptr<VarDecl>, ModalTy>> patternVars;
     for (auto pat : typePatterns) {
         if (DynamicCast<WildcardPattern>(pat->pattern.get())) {
             pat->pattern = CreateTmpVarPattern(pat->type->GetTy());

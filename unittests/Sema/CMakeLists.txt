@@ -56,6 +56,7 @@ target_link_libraries(
     GTest::gtest_main
     TestCompilerInstanceObject)
 add_test(NAME APILevelVersionTest COMMAND APILevelVersionTest)
+<<<<<<< HEAD
 
 add_executable(GetTopOverriddenFuncDeclTest GetTopOverriddenFuncDeclTest.cpp)
 target_link_libraries(
@@ -78,3 +79,17 @@ target_link_libraries(
     GTest::gtest_main
     TestCompilerInstanceObject)
 add_test(NAME OverrideFunctionResolverTest COMMAND OverrideFunctionResolverTest)
+||||||| constructed merge base
+=======
+
+add_executable(GetTopOverriddenFuncDeclTest GetTopOverriddenFuncDeclTest.cpp)
+target_link_libraries(
+    GetTopOverriddenFuncDeclTest
+    cangjie-lsp
+    ${LINK_LIBS}
+    boundscheck-static
+    GTest::gtest
+    GTest::gtest_main
+    TestCompilerInstanceObject)
+add_test(NAME GetTopOverriddenFuncDeclTest COMMAND GetTopOverriddenFuncDeclTest)
+>>>>>>> feat: local mode

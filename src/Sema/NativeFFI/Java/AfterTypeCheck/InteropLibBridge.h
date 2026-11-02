@@ -21,6 +21,102 @@
 namespace Cangjie::Interop::Java {
 using namespace AST;
 
+<<<<<<< HEAD
+||||||| constructed merge base
+
+/**
+ * method or field jni signature
+ */
+struct MemberJNISignature {
+    std::string classTypeSignature;
+    std::string name;
+    std::string signature;
+
+    MemberJNISignature(std::string classTypeSignature, std::string name, std::string signature)
+        : classTypeSignature(classTypeSignature), name(name), signature(signature) {}
+
+    MemberJNISignature(Utils& utils, FuncDecl& member)
+        : MemberJNISignature(utils, member, StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
+    {
+        auto& retTy = *member.funcBody->retType->GetTy();
+        std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
+        signature = utils.GetJavaTypeSignature(retTy, paramTys);
+    }
+
+    MemberJNISignature(Utils& utils, PropDecl& member)
+        : MemberJNISignature(utils, member, StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
+    {
+        signature = utils.GetJavaTypeSignature(*member.GetTy());
+    }
+
+    MemberJNISignature(Utils& utils, Decl& member, Ptr<ClassLikeDecl> jobject)
+    {
+        CJC_ASSERT(jobject);
+        Ptr<Ty> ty = jobject->GetTy();
+
+        if (Java::IsSyntheticMirrorWrapper(*jobject)) {
+            if (jobject->inheritedTypes.size() > 1) {
+                ty = jobject->inheritedTypes[1]->GetTy(); // take interface ty
+            } else {
+                CJC_ASSERT_WITH_MSG(!jobject->inheritedTypes.empty(), "JObject must inherit Cangjie Object");
+                ty = jobject->inheritedTypes[0]->GetTy(); // take superclass ty
+            }
+        }
+        classTypeSignature = utils.GetJavaClassNormalizeSignature(*ty);
+        name = GetJavaMemberName(member);
+        CJC_ASSERT(member.astKind == ASTKind::FUNC_DECL || member.astKind == ASTKind::PROP_DECL);
+        signature = utils.GetJavaTypeSignature(*member.GetTy());
+    }
+};
+
+=======
+
+/**
+ * method or field jni signature
+ */
+struct MemberJNISignature {
+    std::string classTypeSignature;
+    std::string name;
+    std::string signature;
+
+    MemberJNISignature(std::string classTypeSignature, std::string name, std::string signature)
+        : classTypeSignature(classTypeSignature), name(name), signature(signature) {}
+
+    MemberJNISignature(Utils& utils, FuncDecl& member)
+        : MemberJNISignature(utils, member, StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
+    {
+        auto& retTy = *member.funcBody->retType->GetTy();
+        std::vector<ModalTy> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
+        signature = utils.GetJavaTypeSignature(retTy, paramTys);
+    }
+
+    MemberJNISignature(Utils& utils, PropDecl& member)
+        : MemberJNISignature(utils, member, StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
+    {
+        signature = utils.GetJavaTypeSignature(*member.GetTy());
+    }
+
+    MemberJNISignature(Utils& utils, Decl& member, Ptr<ClassLikeDecl> jobject)
+    {
+        CJC_ASSERT(jobject);
+        Ptr<Ty> ty = jobject->DataTy();
+
+        if (Java::IsSyntheticMirrorWrapper(*jobject)) {
+            if (jobject->inheritedTypes.size() > 1) {
+                ty = jobject->inheritedTypes[1]->DataTy(); // take interface ty
+            } else {
+                CJC_ASSERT_WITH_MSG(!jobject->inheritedTypes.empty(), "JObject must inherit Cangjie Object");
+                ty = jobject->inheritedTypes[0]->DataTy(); // take superclass ty
+            }
+        }
+        classTypeSignature = utils.GetJavaClassNormalizeSignature(*ty);
+        name = GetJavaMemberName(member);
+        CJC_ASSERT(member.astKind == ASTKind::FUNC_DECL || member.astKind == ASTKind::PROP_DECL);
+        signature = utils.GetJavaTypeSignature(*member.GetTy());
+    }
+};
+
+>>>>>>> feat: local mode
 class InteropLibBridge {
 public:
     InteropLibBridge(
@@ -428,9 +524,8 @@ public:
      */
     OwnedPtr<Expr> UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty, Ptr<const Decl> scope, bool toRaw = false);
 
-    OwnedPtr<AST::MatchExpr> CreateMatchByTypeArgument(
-        const Ptr<AST::GenericParamDecl> genericParam,
-        std::map<std::string, OwnedPtr<Expr>> typeToCaseMap, Ptr<Ty> retTy, OwnedPtr<Expr> defaultCase);
+    OwnedPtr<AST::MatchExpr> CreateMatchByTypeArgument(const Ptr<AST::GenericParamDecl> genericParam,
+        std::map<std::string, OwnedPtr<Expr>> typeToCaseMap, ModalTy retTy, OwnedPtr<Expr> defaultCase);
     OwnedPtr<AST::MatchExpr> CreateMatchWithTypeCast(OwnedPtr<Expr> exprToCast, Ptr<Ty> castTy);
     OwnedPtr<Expr> CreateGetTypeForTypeParameterCall(const Ptr<GenericParamDecl> genericParam) const;
 

@@ -181,6 +181,60 @@ std::string NameGenerator::GetObjCDeclName(const Decl& target)
     if (auto fd = DynamicCast<const FuncDecl*>(&target); fd) {
         // No params case
         if (!fd->funcBody || fd->funcBody->paramLists.empty() || fd->funcBody->paramLists[0]->params.empty()) {
+<<<<<<< HEAD
+||||||| constructed merge base
+            /*
+                public enum GenericEnum<T> {
+                    | Red(T) | Green(T) | Blue(T)
+                    public prop value: T {
+                        get() {
+                            match (this) {
+                                case Red(n) => n
+                                case Green(n) => n
+                                case Blue(n) => n
+                            }
+                        }
+                    }
+                }
+                There exists Genericenum prop func get(): target->identifier = "$valueget",
+                but it actually needs to be named using "value_get" method.
+            */
+            if (target.GetTy()->HasGeneric() && !target.identifierForLsp.empty()) {
+                std::string actualEnumName = target.identifier;
+                actualEnumName.erase(std::remove(actualEnumName.begin(), actualEnumName.end(), '$'), actualEnumName.end());
+                size_t pos = actualEnumName.find(target.identifierForLsp);
+                if (pos != std::string::npos) {
+                    actualEnumName.insert(pos, "_");
+                }
+                return actualEnumName;
+            }
+=======
+            /*
+                public enum GenericEnum<T> {
+                    | Red(T) | Green(T) | Blue(T)
+                    public prop value: T {
+                        get() {
+                            match (this) {
+                                case Red(n) => n
+                                case Green(n) => n
+                                case Blue(n) => n
+                            }
+                        }
+                    }
+                }
+                There exists Genericenum prop func get(): target->identifier = "$valueget",
+                but it actually needs to be named using "value_get" method.
+            */
+            if (target.DataTy()->HasGeneric() && !target.identifierForLsp.empty()) {
+                std::string actualEnumName = target.identifier;
+                actualEnumName.erase(std::remove(actualEnumName.begin(), actualEnumName.end(), '$'), actualEnumName.end());
+                size_t pos = actualEnumName.find(target.identifierForLsp);
+                if (pos != std::string::npos) {
+                    actualEnumName.insert(pos, "_");
+                }
+                return actualEnumName;
+            }
+>>>>>>> feat: local mode
             return target.identifier;
         }
 

@@ -25,9 +25,8 @@ OwnedPtr<FuncParam> GenerateNativeBridgeForJavaImpl::ConvertJavaCompatibleToCTyp
     FuncParam& sample, File& curFile) const
 {
     auto& jniTy = jni.ConvertCangjieToJniTy(*sample.GetTy());
-    OwnedPtr<FuncParam> param = WithinFile(
-        CreateFuncParam(sample.identifier.GetRawText(), nullptr, nullptr, &jniTy),
-        &curFile);
+    OwnedPtr<FuncParam> param =
+        WithinFile(CreateFuncParam(sample.identifier.GetRawText(), nullptr, nullptr, {&jniTy}), &curFile);
     return param;
 }
 
@@ -121,6 +120,7 @@ OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateConstructorBridge(
             // Proxy user parameters as CTypes converted to java-compatible types
             // into reference wrapper constructor parameters.
             for (auto [userParam, ctypeParam] = std::tuple{userParams.begin(), cTypeUserParams.begin()};
+<<<<<<< HEAD
                 userParam != userParams.end();
                 userParam++, ctypeParam++) {
                     auto& userTy = *(*userParam)->GetTy();
@@ -145,6 +145,20 @@ OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateConstructorBridge(
                             WithinFile(CreateRefExpr(**ctypeParam), &curFile),
                             userParam->get()->GetTy(), &companion)));
                     }
+||||||| constructed merge base
+                 userParam != userParams.end();
+                 userParam++, ctypeParam++) {
+                    refWrapperCtorArgs.push_back(CreateFuncArg(
+                        UnwrapCTypeExprAsJavaCompatible(
+                            WithinFile(CreateRefExpr(*ctypeParam->get()), &curFile),
+                            userParam->get()->GetTy(), &companion)
+                    ));
+=======
+                 userParam != userParams.end();
+                 userParam++, ctypeParam++) {
+                refWrapperCtorArgs.push_back(CreateFuncArg(UnwrapCTypeExprAsJavaCompatible(
+                    WithinFile(CreateRefExpr(*ctypeParam->get()), &curFile), userParam->get()->DataTy(), &companion)));
+>>>>>>> feat: local mode
             }
 
             auto& refWrapper = *refWrapperUserCtor.outerDecl;
@@ -175,7 +189,7 @@ OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateInstanceMethodBridge(A
     FuncDecl& refWrapperFunc, ClassDecl& companion) const
 {
     File& curFile = *companion.curFile;
-    Ptr<Ty> retTy = StaticCast<FuncTy*>(refWrapperFunc.GetTy())->retTy;
+    ModalTy retTy = StaticCast<FuncTy*>(refWrapperFunc.DataTy())->retTy;
     auto& userParams = refWrapperFunc.funcBody->paramLists[0]->params;
 
     auto ctypeParams = ConvertJavaCompatibleToCTypeParams(userParams, curFile);
@@ -204,6 +218,7 @@ OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateInstanceMethodBridge(A
                 for (auto [userParam, ctypeParam] = std::tuple{userParams.begin(), ctypeUserParams.begin() + 1};
                     userParam != userParams.end();
                     userParam++, ctypeParam++) {
+<<<<<<< HEAD
                         auto& userTy = *(*userParam)->GetTy();
                         if (IsMirror(userTy) || IsImpl(userTy) || userTy.IsCoreOptionType()) {
                             /*
@@ -225,6 +240,16 @@ OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateInstanceMethodBridge(A
                                 WithinFile(CreateRefExpr(**ctypeParam), &curFile),
                                 (*userParam)->GetTy(), &companion)));
                         }
+||||||| constructed merge base
+                        methodCallArgs.push_back(CreateFuncArg(
+                            UnwrapCTypeExprAsJavaCompatible(
+                                WithinFile(CreateRefExpr(*ctypeParam->get()), &curFile),
+                                (*userParam)->GetTy(), &companion)
+                        ));
+=======
+                    methodCallArgs.push_back(CreateFuncArg(UnwrapCTypeExprAsJavaCompatible(
+                        WithinFile(CreateRefExpr(*ctypeParam->get()), &curFile), (*userParam)->DataTy(), &companion)));
+>>>>>>> feat: local mode
                 }
 
                 auto& ctor = ctx.GetJavaImplWrappingConstructor(refWrapper);
@@ -266,7 +291,7 @@ OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateStaticMethodBridge(
     FuncDecl& refWrapperFunc, ClassDecl& companion) const
 {
     File& curFile = *companion.curFile;
-    Ptr<Ty> retTy = StaticCast<FuncTy*>(refWrapperFunc.GetTy())->retTy;
+    ModalTy retTy = StaticCast<FuncTy*>(refWrapperFunc.DataTy())->retTy;
     auto& userParams = refWrapperFunc.funcBody->paramLists[0]->params;
     auto nativeFuncName = jni.GetJniMethodName(refWrapperFunc);
 
@@ -290,6 +315,7 @@ OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateStaticMethodBridge(
                 for (auto [userParam, ctypeParam] = std::tuple{userParams.begin(), ctypeUserParams.begin()};
                     userParam != userParams.end();
                     userParam++, ctypeParam++) {
+<<<<<<< HEAD
                         auto& userTy = *(*userParam)->GetTy();
                         if (IsMirror(userTy) || IsImpl(userTy) || userTy.IsCoreOptionType()) {
                             /*
@@ -313,6 +339,16 @@ OwnedPtr<FuncDecl> GenerateNativeBridgeForJavaImpl::CreateStaticMethodBridge(
                                     (*userParam)->GetTy(), &companion)
                             ));
                         }
+||||||| constructed merge base
+                        methodCallArgs.push_back(CreateFuncArg(
+                            UnwrapCTypeExprAsJavaCompatible(
+                                WithinFile(CreateRefExpr(*ctypeParam->get()), &curFile),
+                                (*userParam)->GetTy(), &companion)
+                        ));
+=======
+                    methodCallArgs.push_back(CreateFuncArg(UnwrapCTypeExprAsJavaCompatible(
+                        WithinFile(CreateRefExpr(*ctypeParam->get()), &curFile), (*userParam)->DataTy(), &companion)));
+>>>>>>> feat: local mode
                 }
 
                 auto methodAccess = CreateMemberAccess(WithinFile(CreateRefExpr(refWrapper), &curFile), refWrapperFunc);

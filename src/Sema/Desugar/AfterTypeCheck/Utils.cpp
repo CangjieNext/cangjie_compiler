@@ -25,6 +25,32 @@ Ptr<Decl> LookupEnumMember(Ptr<Decl> decl, const std::string& identifier)
     return nullptr;
 }
 
+<<<<<<< HEAD
+||||||| constructed merge base
+void UnitifyBlock(const Expr& posSrc, Block& b, Ty& unitTy)
+{
+    auto unitExpr = CreateUnitExpr();
+    unitExpr->begin = posSrc.begin;
+    unitExpr->begin.Mark(PositionStatus::IGNORE);
+    unitExpr->end = posSrc.end;
+    unitExpr->SetTy(&unitTy);
+    b.body.push_back(std::move(unitExpr));
+    b.SetTy(&unitTy);
+}
+
+=======
+void UnitifyBlock(const Expr& posSrc, Block& b, ModalTy unitTy)
+{
+    auto unitExpr = CreateUnitExpr();
+    unitExpr->begin = posSrc.begin;
+    unitExpr->begin.Mark(PositionStatus::IGNORE);
+    unitExpr->end = posSrc.end;
+    unitExpr->SetTy(unitTy);
+    b.body.push_back(std::move(unitExpr));
+    b.SetTy(unitTy);
+}
+
+>>>>>>> feat: local mode
 void RearrangeRefLoop(const Expr& src, Expr& dst, Ptr<Node> loopBody)
 {
     if (loopBody == nullptr) {

@@ -89,8 +89,16 @@ void DesugarSuperCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
         args.push_back(CreateFuncArg(ASTCloner::Clone(regDataParamRef.get())));
         args.insert(args.end(), std::make_move_iterator(ce->args.begin()), std::make_move_iterator(ce->args.end()));
 
+<<<<<<< HEAD
         auto realTarget = GetObjCImplRegDataCtor(*superClass, *targetFd);
         auto realTargetTy = StaticCast<FuncTy>(realTarget->GetTy());
+||||||| constructed merge base
+        auto realTarget = ctx.factory.GetGeneratedImplCtor(*GetImplSuperClass(impl), *targetFd);
+        auto realTargetTy = StaticCast<FuncTy>(realTarget->GetTy());
+=======
+        auto realTarget = ctx.factory.GetGeneratedImplCtor(*GetImplSuperClass(impl), *targetFd);
+        auto realTargetTy = StaticCast<FuncTy>(realTarget->DataTy());
+>>>>>>> feat: local mode
         auto superCall = CreateSuperCall(*realTarget->outerDecl, *realTarget, realTargetTy);
         superCall->args = std::move(args);
         superCall->sourceExpr = ce;
@@ -127,14 +135,80 @@ void DesugarSuperCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
         ce->desugarExpr = std::move(baseCtorCall);
     }
 
+<<<<<<< HEAD
     // set $reg field just after the super(...) expr
     auto lhs = CreateRefExpr(*GetObjCImplRegCompanionField(impl));
     auto rhs = WithinFile(
         CreateTupleAccess(std::move(regDataParamRef), 1, ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_INT64)),
+||||||| constructed merge base
+    auto withObjCSuper = WithinFile(
+        ctx.factory.CreateWithObjCSuperScope(std::move(objCSelf), impl, impl.GetTy(),
+            [&](auto&& receiver, auto&& objCSuper) {
+                std::vector<OwnedPtr<Expr>> superInitArgs;
+                std::transform(ce->args.begin(), ce->args.end(), std::back_inserter(superInitArgs), [&](auto& arg) {
+                    return ctx.factory.UnwrapEntity(WithinFile(ASTCloner::Clone(arg->expr.get()), curFile));
+                });
+                auto superInit = ctx.factory.CreateMethodCallViaMsgSendSuper(
+                    *targetFd, std::move(receiver), std::move(objCSuper), std::move(superInitArgs));
+
+                auto tmpSelf = WithinFile(CreateTmpVarDecl(nullptr, std::move(superInit)), curFile);
+                auto selfRef = WithinFile(CreateRefExpr(*tmpSelf), curFile);
+                auto putToRegistry =
+                    ctx.factory.CreatePutToRegistryCall(CreateThisRef(Ptr(&impl), impl.GetTy(), curFile));
+                auto setRegistryId =
+                    ctx.factory.CreateObjCMsgSendCall(ASTCloner::Clone(selfRef.get()), REGISTRY_ID_SETTER_SELECTOR,
+                        TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT), Nodes<Expr>(std::move(putToRegistry)));
+
+                return Nodes<Node>(std::move(tmpSelf), std::move(setRegistryId), std::move(selfRef));
+            }),
+=======
+    auto withObjCSuper = WithinFile(
+        ctx.factory.CreateWithObjCSuperScope(std::move(objCSelf), impl, impl.DataTy(),
+            [&](auto&& receiver, auto&& objCSuper) {
+                std::vector<OwnedPtr<Expr>> superInitArgs;
+                std::transform(ce->args.begin(), ce->args.end(), std::back_inserter(superInitArgs), [&](auto& arg) {
+                    return ctx.factory.UnwrapEntity(WithinFile(ASTCloner::Clone(arg->expr.get()), curFile));
+                });
+                auto superInit = ctx.factory.CreateMethodCallViaMsgSendSuper(
+                    *targetFd, std::move(receiver), std::move(objCSuper), std::move(superInitArgs));
+
+                auto tmpSelf = WithinFile(CreateTmpVarDecl(nullptr, std::move(superInit)), curFile);
+                auto selfRef = WithinFile(CreateRefExpr(*tmpSelf), curFile);
+                auto putToRegistry =
+                    ctx.factory.CreatePutToRegistryCall(CreateThisRef(Ptr(&impl), impl.DataTy(), curFile));
+                auto setRegistryId =
+                    ctx.factory.CreateObjCMsgSendCall(ASTCloner::Clone(selfRef.get()), REGISTRY_ID_SETTER_SELECTOR,
+                        TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT), Nodes<Expr>(std::move(putToRegistry)));
+
+                return Nodes<Node>(std::move(tmpSelf), std::move(setRegistryId), std::move(selfRef));
+            }),
+>>>>>>> feat: local mode
         curFile);
+<<<<<<< HEAD
     static auto unitTy = ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT);
     auto setRegCompField = CreateAssignExpr(std::move(lhs), std::move(rhs), unitTy);
     ctorBody.insert(std::next(ctorBody.begin()), std::move(setRegCompField));
+||||||| constructed merge base
+
+    // We use objc_retainAutoreleasedReturnValue instead of objc_retain here, because
+    // we assume that ARC applied objc_autoreleaseReturnValue on the result of the init method
+    auto withObjCSuperRetained = ctx.factory.CreateObjCRetainAutoreleasedReturnValueCall(std::move(withObjCSuper));
+    auto baseCtor = ctx.factory.GetGeneratedBaseCtor(impl);
+    CJC_NULLPTR_CHECK(baseCtor);
+    auto baseCtorCall = WithinFile(CreateSuperCall(*baseCtor->outerDecl, *baseCtor, baseCtor->GetTy()), curFile);
+    baseCtorCall->args.push_back(CreateFuncArg(std::move(withObjCSuperRetained)));
+    ce->desugarExpr = std::move(baseCtorCall);
+=======
+
+    // We use objc_retainAutoreleasedReturnValue instead of objc_retain here, because
+    // we assume that ARC applied objc_autoreleaseReturnValue on the result of the init method
+    auto withObjCSuperRetained = ctx.factory.CreateObjCRetainAutoreleasedReturnValueCall(std::move(withObjCSuper));
+    auto baseCtor = ctx.factory.GetGeneratedBaseCtor(impl);
+    CJC_NULLPTR_CHECK(baseCtor);
+    auto baseCtorCall = WithinFile(CreateSuperCall(*baseCtor->outerDecl, *baseCtor, baseCtor->DataTy()), curFile);
+    baseCtorCall->args.push_back(CreateFuncArg(std::move(withObjCSuperRetained)));
+    ce->desugarExpr = std::move(baseCtorCall);
+>>>>>>> feat: local mode
 }
 
 void DesugarThisCtorCall(ClassDecl& impl, FuncDecl& ctor)
@@ -157,6 +231,7 @@ void DesugarThisCtorCall(ClassDecl& impl, FuncDecl& ctor)
      * -->
      * this($regData, ...args)
      */
+<<<<<<< HEAD
     auto curFile = ce->curFile;
     auto targetFd = ce->resolvedFunction;
     CJC_ASSERT_WITH_MSG(!ctor.funcBody->paramLists.empty(), "expected at least one param list");
@@ -172,6 +247,35 @@ void DesugarThisCtorCall(ClassDecl& impl, FuncDecl& ctor)
     CJC_ASSERT_WITH_MSG(realTarget, "expected a reg data ctor generated from the delegated user ctor");
     auto realTargetTy = StaticCast<FuncTy>(realTarget->GetTy());
     ce->desugarExpr = CreateThisCall(impl, *realTarget, realTargetTy, curFile, std::move(args));
+||||||| constructed merge base
+     auto curFile = ce->curFile;
+     auto targetFd = ce->resolvedFunction;
+     auto& methodParams = ctor.funcBody->paramLists[0]->params;
+     CJC_ASSERT(methodParams.size() > 0);
+     auto objCSelf = CreateRefExpr(*methodParams[0]);
+
+     std::vector<OwnedPtr<FuncArg>> args;
+     args.push_back(CreateFuncArg(std::move(objCSelf)));
+     args.insert(args.end(), std::make_move_iterator(ce->args.begin()), std::make_move_iterator(ce->args.end()));
+
+     auto realTarget = ctx.factory.GetGeneratedImplCtor(impl, *targetFd);
+     auto realTargetTy = StaticCast<FuncTy>(realTarget->GetTy());
+     ce->desugarExpr = CreateThisCall(impl, *realTarget, realTargetTy, curFile, std::move(args));
+=======
+     auto curFile = ce->curFile;
+     auto targetFd = ce->resolvedFunction;
+     auto& methodParams = ctor.funcBody->paramLists[0]->params;
+     CJC_ASSERT(methodParams.size() > 0);
+     auto objCSelf = CreateRefExpr(*methodParams[0]);
+
+     std::vector<OwnedPtr<FuncArg>> args;
+     args.push_back(CreateFuncArg(std::move(objCSelf)));
+     args.insert(args.end(), std::make_move_iterator(ce->args.begin()), std::make_move_iterator(ce->args.end()));
+
+     auto realTarget = ctx.factory.GetGeneratedImplCtor(impl, *targetFd);
+     auto realTargetTy = StaticCast<FuncTy>(realTarget->DataTy());
+     ce->desugarExpr = CreateThisCall(impl, *realTarget, realTargetTy, curFile, std::move(args));
+>>>>>>> feat: local mode
 }
 } // namespace
 
@@ -233,7 +337,7 @@ void DesugarImpls::DesugarCallExpr(InteropContext& ctx, ClassDecl& impl, CallExp
         return;
     }
 
-    auto targetFdTy = StaticCast<FuncTy>(targetFd->GetTy());
+    auto targetFdTy = StaticCast<FuncTy>(targetFd->DataTy());
     auto curFile = ce.curFile;
 
     // method/prop branch
@@ -249,7 +353,7 @@ void DesugarImpls::DesugarCallExpr(InteropContext& ctx, ClassDecl& impl, CallExp
 
     auto nativeHandle = ctx.factory.CreateNativeHandleExpr(impl, false, ce.curFile);
     auto withObjCSuperCall = ctx.factory.CreateWithObjCSuperScope(
-        std::move(nativeHandle), impl, targetFdTy->retTy, [&](auto&& receiver, auto&& objCSuper) {
+        std::move(nativeHandle), impl, targetFdTy->retTy.Ty(), [&](auto&& receiver, auto&& objCSuper) {
             OwnedPtr<Expr> msgSendSuperCall;
             if (targetFd->propDecl) {
                 if (!msgSendSuperArgs.empty()) {
@@ -310,9 +414,19 @@ void DesugarImpls::DesugarGetForPropDecl(InteropContext& ctx, ClassDecl& impl, M
     }
     auto nativeHandle = ctx.factory.CreateNativeHandleExpr(impl, false, ma.curFile);
     auto withObjCSuperCall = ctx.factory.CreateWithObjCSuperScope(
+<<<<<<< HEAD
         std::move(nativeHandle), impl, ma.GetTy(), [&](auto&& receiver, auto&& objCSuper) {
             auto msgSendSuperCall = ctx.factory.CreatePropGetterCallViaMsgSendSuper(
                 *pd, std::move(receiver), std::move(objCSuper));
+||||||| constructed merge base
+        std::move(nativeHandle), impl, ma.GetTy(), [&](auto&& receiver, auto&& objCSuper) {
+            auto msgSendSuperCall =
+                ctx.factory.CreatePropGetterCallViaMsgSendSuper(*pd, std::move(receiver), std::move(objCSuper));
+=======
+        std::move(nativeHandle), impl, ma.DataTy(), [&](auto&& receiver, auto&& objCSuper) {
+            auto msgSendSuperCall =
+                ctx.factory.CreatePropGetterCallViaMsgSendSuper(*pd, std::move(receiver), std::move(objCSuper));
+>>>>>>> feat: local mode
 
             return Nodes<Node>(std::move(msgSendSuperCall));
         });
