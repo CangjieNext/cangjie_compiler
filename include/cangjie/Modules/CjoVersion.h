@@ -149,7 +149,14 @@
 
 namespace Cangjie {
 constexpr uint8_t CJO_MAJOR_VERSION = 0;
-constexpr uint8_t CJO_MINOR_VERSION = 1;
+// 0.2.0: macro import declarations persisted as structured MacroImportList nodes
+// (Package.macroImports, @When kept as condExpr AST) instead of a raw token stream;
+// its field was inserted before options, shifting existing slots and breaking
+// same-major backward compatibility.
+// 0.3.0: Package.macroImports moved after options (slot compatible with 0.1.0 again);
+// MacroImportSpec gained the items sub-table for the multi form. 0.2.0 buffers (never
+// released; only stale local files) collide options/macroImports slots and are rejected.
+constexpr uint8_t CJO_MINOR_VERSION = 3;
 constexpr uint8_t CJO_PATCH_VERSION = 0;
 } // namespace Cangjie
 

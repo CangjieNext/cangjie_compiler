@@ -10,9 +10,14 @@
  * This file implements the CompileStrategy related classes.
  */
 
+#include <map>
+#include <set>
+#include <unordered_set>
+
 #include "cangjie/Frontend/CompileStrategy.h"
 
 #include "MergeAnnoFromCjd.h"
+#include "cangjie/AST/Clone.h"
 #include "cangjie/AST/PrintNode.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/ConditionalCompilation/ConditionalCompilation.h"
@@ -204,6 +209,29 @@ public:
             }
         }
         package.isMacroPackage = package.files[0]->package->hasMacro;
+        if (package.isMacroPackage) {
+            // Deliberately no lexical conflict check across macro import statements: it
+            // cannot evaluate @When (not processed in the macro package) and would
+            // falsely reject mutually-exclusive conditions (e.g. os.linux vs
+            // os.windows) — conflicts are reported by the downstream aggregate
+            // diagnostic instead.
+            package.macroImports.clear();
+            package.macroImportPkgNames.clear();
+            std::unordered_set<std::string> seenPkgNames;
+            for (const auto& file : package.files) {
+                if (!file->package) {
+                    continue;
+                }
+                for (const auto& stmt : file->package->macroImports) {
+                    package.macroImports.push_back(ASTCloner::CloneMacroImportList(*stmt));
+                }
+                for (const auto& pkgName : file->package->macroImportPkgNames) {
+                    if (seenPkgNames.insert(pkgName).second) {
+                        package.macroImportPkgNames.push_back(pkgName);
+                    }
+                }
+            }
+        }
     }
 
     /**

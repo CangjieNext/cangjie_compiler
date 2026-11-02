@@ -44,6 +44,14 @@ public:
         return OwnedPtr<T>(static_cast<T*>(clonedNode.release()));
     }
 
+    static OwnedPtr<MacroImportSpec> CloneMacroImportSpec(
+        const MacroImportSpec& mis, const VisitFunc& visitor = DefaultVisitFunc);
+    // One macro import statement (single form or one block).
+    static OwnedPtr<MacroImportList> CloneMacroImportList(
+        const MacroImportList& mil, const VisitFunc& visitor = DefaultVisitFunc);
+    // Deep-copy an ImportContent, shared by CloneImportSpec and CloneMacroImportSpec.
+    static void CloneImportContent(const ImportContent& src, ImportContent& dst);
+
 private:
     /** Map between 'pointer to source node pointer' to 'pointer to cloned node pointer'. */
     std::unordered_map<Ptr<Node>*, Ptr<Node>*> targetAddr2targetAddr;

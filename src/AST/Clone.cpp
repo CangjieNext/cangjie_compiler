@@ -1456,29 +1456,56 @@ OwnedPtr<ImportSpec> ASTCloner::CloneImportSpec(const ImportSpec& is, const Visi
         CopyNodeField(ret->modifier.get(), *is.modifier);
         ret->modifier->isExplicit = is.modifier->isExplicit;
     }
-    std::function<void(const ImportContent&, ImportContent&)> cloneContent
-        = [&cloneContent](const ImportContent& src, ImportContent& dst) {
-        CopyNodeField(&dst, src);
-        dst.kind = src.kind;
-        dst.prefixPaths = src.prefixPaths;
-        dst.prefixPoses = src.prefixPoses;
-        dst.prefixDotPoses = src.prefixDotPoses;
-        dst.identifier = src.identifier;
-        dst.asPos = src.asPos;
-        dst.aliasName = src.aliasName;
-        dst.leftCurlPos = src.leftCurlPos;
-        if (!src.items.empty()) {
-            dst.items.resize(src.items.size());
-            for (size_t i = 0; i < src.items.size(); ++i) {
-                cloneContent(src.items[i], dst.items[i]);
-            }
-        }
-        dst.commaPoses = src.commaPoses;
-        dst.rightCurlPos = src.rightCurlPos;
-    };
-    cloneContent(is.content, ret->content);
+    CloneImportContent(is.content, ret->content);
     for (auto& it : is.annotations) {
         ret->annotations.emplace_back(CloneNode(it.get(), visitor));
+    }
+    return ret;
+}
+
+void ASTCloner::CloneImportContent(const ImportContent& src, ImportContent& dst)
+{
+    CopyNodeField(&dst, src);
+    dst.kind = src.kind;
+    dst.prefixPaths = src.prefixPaths;
+    dst.prefixPoses = src.prefixPoses;
+    dst.prefixDotPoses = src.prefixDotPoses;
+    dst.identifier = src.identifier;
+    dst.asPos = src.asPos;
+    dst.aliasName = src.aliasName;
+    dst.leftCurlPos = src.leftCurlPos;
+    if (!src.items.empty()) {
+        dst.items.resize(src.items.size());
+        for (size_t i = 0; i < src.items.size(); ++i) {
+            CloneImportContent(src.items[i], dst.items[i]);
+        }
+    }
+    dst.commaPoses = src.commaPoses;
+    dst.rightCurlPos = src.rightCurlPos;
+}
+
+OwnedPtr<MacroImportSpec> ASTCloner::CloneMacroImportSpec(const MacroImportSpec& mis, const VisitFunc& visitor)
+{
+    auto ret = MakeOwned<MacroImportSpec>();
+    CopyNodeField(ret.get(), mis);
+    CloneImportContent(mis.content, ret->content);
+    ret->importPos = mis.importPos;
+    for (auto& it : mis.annotations) {
+        ret->annotations.emplace_back(CloneNode(it.get(), visitor));
+    }
+    return ret;
+}
+
+OwnedPtr<MacroImportList> ASTCloner::CloneMacroImportList(const MacroImportList& mil, const VisitFunc& visitor)
+{
+    auto ret = MakeOwned<MacroImportList>();
+    CopyNodeField(ret.get(), mil);
+    ret->macroPos = mil.macroPos;
+    ret->lcurlPos = mil.lcurlPos;
+    ret->rcurlPos = mil.rcurlPos;
+    ret->items.reserve(mil.items.size());
+    for (auto& it : mil.items) {
+        ret->items.emplace_back(CloneMacroImportSpec(*it, visitor));
     }
     return ret;
 }

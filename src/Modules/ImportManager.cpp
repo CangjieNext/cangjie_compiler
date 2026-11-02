@@ -11,8 +11,10 @@
  */
 
 #include "cangjie/Modules/ImportManager.h"
+#include "cangjie/Parse/Parser.h"
 
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -27,6 +29,7 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/SourceManager.h"
+#include "cangjie/ConditionalCompilation/ConditionalCompilation.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/ModulesUtils.h"
@@ -548,11 +551,21 @@ bool ImportManager::ResolveImportedPackageHeaders(const Package& package, bool i
 
 void ImportManager::UpdateMacroPackageUsage(const AST::Package& pkg)
 {
-    for (auto& pd : GetCurImportedPackages(pkg.fullPackageName)) {
-        // Collect dependent cangjie packages.
-        if (!pd->srcPackage->TestAttr(Attribute::TOOL_ADD) && pd->srcPackage->isMacroPackage) {
-            (void)directMacroDeps.emplace(pd->srcPackage);
+    // Rule 2: no early-return for macro packages. macroImportStrings /
+    // macroImportPkgsFromMacroDeps are filled solely by ProcessMacroImports (post-@When).
+    std::vector<std::string> macroDeps;
+    if (auto it = macroDepsCache.find(pkg.fullPackageName); it != macroDepsCache.end()) {
+        macroDeps = it->second;
+    } else {
+        std::unordered_set<std::string> visited;
+        macroDeps = CollectTransitiveMacroDeps(pkg.fullPackageName, visited);
+    }
+    for (const auto& macroDepPkgName : macroDeps) {
+        auto pd = cjoManager->GetPackage(macroDepPkgName);
+        if (!pd || !pd->isMacroPackage) {
+            continue;
         }
+        (void)directMacroDeps.emplace(pd);
     }
 }
 
@@ -668,6 +681,272 @@ void ImportManager::CheckImports(const AST::Package& pkg)
     }
 }
 
+void ImportManager::ProcessMacroImports(AST::Package& pkg)
+{
+    // Iterate the cjo-persisted macroImports of every macro package in the dependency
+    // closure, evaluate each @When in the downstream target, and inject the survivors.
+    // Rule 2: applies to downstream macro packages too; rule 1 (no self-import) is
+    // upheld by CollectTransitiveMacroDeps pre-seeding `visited` with pkgName itself.
+
+    // Reset this package's entry: @When evaluates differently per target, and a
+    // multi-package BuildIndex fills each package's result independently.
+    macroImportStrings[pkg.fullPackageName].clear();
+    macroImportPkgsFromMacroDeps[pkg.fullPackageName].clear();
+    macroPkgConsumers[pkg.fullPackageName].clear();
+    macroImportStrSources[pkg.fullPackageName].clear();
+    curPackage = &pkg;
+
+    std::unordered_set<std::string> visited;
+    auto macroDeps = CollectTransitiveMacroDeps(pkg.fullPackageName, visited);
+    // Cache the closure: UpdateMacroPackageUsage needs the same walk per package, and
+    // the import graph does not change between the two (injected loads add packages,
+    // not import edges).
+    macroDepsCache[pkg.fullPackageName] = macroDeps;
+
+    // No dedicated conflict check: symbols go into the same fileImportedDeclsMap as
+    // ordinary imports, so clashes surface at use time as ordinary ambiguous-use
+    // diagnostics. Dedup of identical imports is handled below at injection time.
+    bool anyMacroImport = false;
+    for (const auto& macroDepPkgName : macroDeps) {
+        auto pd = cjoManager->GetPackage(macroDepPkgName);
+        if (pd && pd->isMacroPackage && !pd->macroImports.empty()) {
+            anyMacroImport = true;
+            break;
+        }
+    }
+    if (!anyMacroImport) {
+        return;
+    }
+
+    // Rule 2: macro import is equivalent to a downstream ordinary private import
+    // (file-scoped). Collect the files that import a macro package; calling a macro
+    // implies importing its package, so real consumers are never missed (design 4.5.4).
+    // Per file, record the reachable macro packages: direct imports plus their
+    // transitive macro-dep closure, so a lifted chain source (rule 3.3) stays visible
+    // to files that import only the chain head.
+    std::unordered_set<std::string> macroDepSet(macroDeps.begin(), macroDeps.end());
+    std::unordered_set<uint64_t> macroConsumerFileHashes;
+    for (const auto& file : pkg.files) {
+        for (const auto& import : file->imports) {
+            auto fullPkgName = cjoManager->GetPackageNameByImport(*import);
+            if (macroDepSet.find(fullPkgName) == macroDepSet.end()) {
+                continue;
+            }
+            macroConsumerFileHashes.insert(file->fileHash);
+            auto& reachable = macroPkgConsumers[pkg.fullPackageName][file->fileHash];
+            if (reachable.insert(fullPkgName).second) {
+                std::unordered_set<std::string> closureVisited {fullPkgName};
+                auto closure = CollectTransitiveMacroDeps(fullPkgName, closureVisited);
+                reachable.insert(closure.begin(), closure.end());
+            }
+        }
+    }
+
+    for (const auto& macroDepPkgName : macroDeps) {
+        auto pd = cjoManager->GetPackage(macroDepPkgName);
+        if (!pd || !pd->isMacroPackage || pd->macroImports.empty()) {
+            continue;
+        }
+        for (auto& stmt : pd->macroImports) {
+            for (auto& spec : stmt->items) {
+                // Evaluate @When in the downstream context; false conditions are erased.
+                if (condComp == nullptr) {
+                    // Defensive: if condComp was not injected, @When is not evaluated — warn
+                    // instead of silently importing everything, and keep the entry verbatim
+                    // (recorded for .macrocall generation); no symbol injection, since the
+                    // embedder mis-wired BuildIndex and evaluation results are unreliable.
+                    diag.DiagnoseRefactor(DiagKindRefactor::macro_import_condcomp_missing,
+                        spec->begin == DEFAULT_POSITION ? (pkg.files.empty() ? DEFAULT_POSITION : pkg.files[0]->begin)
+                                                        : spec->begin,
+                        pkg.fullPackageName);
+                    RecordMacroImportString(pkg, spec->content, macroDepPkgName);
+                    continue;
+                } else if (!condComp->EvalMacroImportWhenCond(*spec)) {
+                    continue; // @When false in this target → skip
+                }
+                // A block-item @When guards the whole spec, so MULTI items are
+                // injected individually below it.
+                if (spec->content.kind == AST::ImportKind::IMPORT_MULTI) {
+                    for (const auto& item : spec->content.items) {
+                        (void)InjectMacroImportContent(
+                            pkg, item, macroDepPkgName, macroConsumerFileHashes);
+                    }
+                } else {
+                    (void)InjectMacroImportContent(
+                        pkg, spec->content, macroDepPkgName, macroConsumerFileHashes);
+                }
+            }
+        }
+    }
+}
+
+bool ImportManager::InjectMacroImportContent(AST::Package& pkg, const AST::ImportContent& content,
+    const std::string& sourcePkgName, const std::unordered_set<uint64_t>& consumerFileHashes)
+{
+    // Resolve the target with the ordinary-import candidate order
+    // (GetPossiblePackageNames) and package-existence semantics: for `a.b.c`,
+    // the full path wins when it is a real package, else symbol `c` resolves
+    // against `a.b`.
+    const auto candidates = content.GetPossiblePackageNames();
+    std::string macroImportPkg;
+    std::string cjoPath;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (cjoManager->GetPackage(candidates[i]) != nullptr) {
+            macroImportPkg = candidates[i];
+            break;
+        }
+        cjoPath = FileUtil::FindSerializationFile(candidates[i], SERIALIZED_FILE_EXTENSION, GetSearchPath());
+        if (!cjoPath.empty()) {
+            macroImportPkg = candidates[i];
+            break;
+        }
+    }
+    if (macroImportPkg.empty()) {
+        // The @When condition was true, so the import is required: report the
+        // written form (first candidate) instead of failing silently.
+        diag.DiagnoseRefactor(DiagKindRefactor::macro_import_pkg_unresolved, content.begin, candidates.front());
+        return false;
+    }
+
+    auto& importedSet = macroImportPkgsFromMacroDeps[pkg.fullPackageName];
+    if (importedSet.insert(macroImportPkg).second) {
+        auto existingPkg = cjoManager->GetPackage(macroImportPkg);
+        if (existingPkg == nullptr) {
+            // cjoPath was found during resolution, so a null here means load failure:
+            // report and roll back so the @IfAvailable checks
+            // (GetMacroImportPkgsFromMacroDeps) do not treat the package as imported.
+            auto loadedPkg = LoadPackageFromCjo(macroImportPkg, cjoPath);
+            if (loadedPkg == nullptr) {
+                diag.DiagnoseRefactor(
+                    DiagKindRefactor::macro_import_pkg_unresolved, content.begin, macroImportPkg);
+                importedSet.erase(macroImportPkg);
+                return false;
+            }
+            loadedPkg->EnableAttr(AST::Attribute::IMPORTED);
+            cjoManager->SetOnlyUsedByMacro(macroImportPkg, false);
+            SaveDepPkgCjoPath(macroImportPkg, cjoPath);
+            for (auto depStdPkg : loadedPkg->GetAllDependentStdPkgs()) {
+                if (cjoFilePaths.find(depStdPkg) == cjoFilePaths.end()) {
+                    std::string depCjoPath = FileUtil::FindSerializationFile(
+                        depStdPkg, SERIALIZED_FILE_EXTENSION, GetSearchPath());
+                    HandleStdPackage(depStdPkg, depCjoPath, true);
+                }
+            }
+        } else {
+            existingPkg->EnableAttr(AST::Attribute::IMPORTED);
+            cjoManager->SetOnlyUsedByMacro(macroImportPkg, false);
+            auto members = cjoManager->GetPackageMembers(macroImportPkg);
+            if (members.empty()) {
+                cjoManager->LoadPackageDeclsAndRefs(macroImportPkg);
+                cjoManager->AddPackageDeclMap(macroImportPkg);
+            }
+        }
+    }
+
+    // File-level symbol injection upholds the private-import scoping (rule 2);
+    // runs per content so several specs hitting one package inject their own symbols.
+    AddMacroImportContentToImportMap(macroImportPkg, content, consumerFileHashes);
+
+    // Survivors are recorded for .macrocall generation, with the declaring
+    // macro package as source for per-file filtering.
+    RecordMacroImportString(pkg, content, sourcePkgName);
+    return true;
+}
+
+void ImportManager::RecordMacroImportString(
+    AST::Package& pkg, const AST::ImportContent& content, const std::string& sourcePkgName)
+{
+    std::string macroImportStr = content.ToString();
+    // Strip the alias (`p as q` → `p`): it has no observable effect downstream
+    // (rule 1) and would leak into .macrocall, forcing q-qualified access.
+    auto aliasPos = macroImportStr.find(" as ");
+    if (aliasPos != std::string::npos) {
+        macroImportStr = macroImportStr.substr(0, aliasPos);
+    }
+    auto& strings = macroImportStrings[pkg.fullPackageName];
+    if (std::find(strings.begin(), strings.end(), macroImportStr) == strings.end()) {
+        strings.push_back(macroImportStr);
+    }
+    macroImportStrSources[pkg.fullPackageName][macroImportStr].insert(sourcePkgName);
+}
+
+std::vector<std::string> ImportManager::CollectTransitiveMacroDeps(
+    const std::string& pkgName, std::unordered_set<std::string>& visited) const
+{
+    // Pre-seed visited with pkgName itself (rule 1): without it, a declaration-chain
+    // cycle (A macro import B, B macro import A) would let pkg re-enter the result
+    // and pollute its own importedDeclsMap with its own macroImports.
+    visited.insert(pkgName);
+
+    std::vector<std::string> result;
+    for (auto& pd : GetCurImportedPackages(pkgName)) {
+        if (!pd->srcPackage || pd->srcPackage->TestAttr(Attribute::TOOL_ADD)) {
+            continue;
+        }
+        const auto& depName = pd->srcPackage->fullPackageName;
+        if (!visited.insert(depName).second) {
+            continue; // avoid cycles in the dependency graph + block loops back to pkg
+        }
+        if (pd->srcPackage->isMacroPackage) {
+            result.push_back(depName);
+            // Rule 3.3 (lifter semantics): X's macro-import chain propagates through
+            // M2 to downstream packages.
+            CollectMacroImportChain(*pd->srcPackage, visited, result);
+        }
+        // recurse into transitive dependencies (along normal import load chain)
+        auto sub = CollectTransitiveMacroDeps(depName, visited);
+        result.insert(result.end(), sub.begin(), sub.end());
+    }
+    return result;
+}
+
+void ImportManager::CollectMacroImportChain(const AST::Package& macroPkg,
+    std::unordered_set<std::string>& visited, std::vector<std::string>& result) const
+{
+    // Walk the cjo-persisted `macroImports` (rule 3.3): macroImportPkgNames is
+    // Parse-time only and empty on cjo-loaded packages, so it cannot be used here.
+    auto targetName = [](const AST::MacroImportSpec& spec) {
+        std::string name;
+        for (const auto& p : spec.content.prefixPaths) {
+            name += p + ".";
+        }
+        if (spec.content.kind == AST::ImportKind::IMPORT_ALL) {
+            if (!name.empty()) {
+                name.pop_back(); // "a.b.*" targets package "a.b"
+            }
+        } else {
+            name += spec.content.identifier.Val();
+        }
+        return name;
+    };
+    for (const auto& stmt : macroPkg.macroImports) {
+        for (const auto& spec : stmt->items) {
+            auto targetPkgName = targetName(*spec);
+            if (targetPkgName.empty() || targetPkgName == macroPkg.fullPackageName) {
+                continue;
+            }
+            auto targetPkg = cjoManager->GetPackage(targetPkgName);
+            if (targetPkg == nullptr) {
+                // The chain target's cjo may not be loaded yet; load its header on
+                // demand so ProcessMacroImports can inject its macroImports.
+                auto cjoPath = cjoManager->GetPackageCjoPath(targetPkgName);
+                if (cjoPath.empty() || !cjoManager->LoadPackageHeader(targetPkgName, cjoPath)) {
+                    continue;
+                }
+                targetPkg = cjoManager->GetPackage(targetPkgName);
+            }
+            if (!targetPkg || !targetPkg->isMacroPackage) {
+                continue; // only macro packages carry a macro-import declaration chain
+            }
+            if (!visited.insert(targetPkgName).second) {
+                continue; // avoid cycles in the declaration chain
+            }
+            result.push_back(targetPkgName);
+            CollectMacroImportChain(*targetPkg, visited, result);
+        }
+    }
+}
+
 void ImportManager::CheckRedefinition(const AST::Package& pkg)
 {
     std::unordered_map<std::string, Range> pkgImportNamePos;
@@ -752,8 +1031,16 @@ std::string ImportManager::GeneratePkgDepInfo(const Package& pkg, bool exportCJO
         << "\"accessLevel\":\"" << Jsonfy(pkg.accessible) << "\","
         << "\"dependencies\":" << Jsonfy(dependencies, exportCJO) << ","
         << "\"std-dependencies\":" << Jsonfy(GetStdDependency(dependencies, pkg, exportCJO, *this, *cjoManager)) << ","
-        << "\"features\":" << Jsonfy(refSet) << ","
-        << "\"product\":" << Jsonfy(isProduct) << "}";
+        << "\"features\":" << Jsonfy(refSet) << ",";
+    // For cjpm: report macro-import package names without @When evaluation —
+    // downstream targets differ, and under-reporting deadlocks the build. The actual
+    // evaluation happens in ProcessMacroImports at downstream compile time.
+    if (pkg.isMacroPackage && !pkg.macroImportPkgNames.empty()) {
+        std::set<std::string> macroImportPkgSet(pkg.macroImportPkgNames.begin(),
+            pkg.macroImportPkgNames.end()); // dedup
+        out << "\"macroImports\":" << Jsonfy(macroImportPkgSet) << ",";
+    }
+    out << "\"product\":" << Jsonfy(isProduct) << "}";
     return out.str();
 }
 
@@ -969,6 +1256,12 @@ bool ImportManager::BuildIndex(
     }
     Utils::ProfileRecorder::Stop("BuildIndex", "AddImportedDeclsForSourcePackage");
 
+    Utils::ProfileRecorder::Start("BuildIndex", "ProcessMacroImports");
+    for (auto pkg : packages) {
+        ProcessMacroImports(*pkg);
+    }
+    Utils::ProfileRecorder::Stop("BuildIndex", "ProcessMacroImports");
+
     Utils::ProfileRecorder::Start("BuildIndex", "ResolveImports");
     for (auto pkg : packages) {
         ResolveImports(*pkg);
@@ -1056,11 +1349,13 @@ void ImportManager::UpdateFileNodeImportInfo(Package& package, const File& file,
             import->content.isDecl = true;
         }
     }
-    // MacroExpansion will never change import declarations, just copy file import map for new file and remove old one.
+    // MacroExpansion never changes import declarations; copy the map to the new file
+    // and keep the old entry — macro-expanded nodes may still reference the old file.
+    // Keys never collide: fileHash is derived from distinct paths (asserted above), so
+    // emplace cannot shadow the new entry with a stale mapping.
     auto found = fileImportedDeclsMap.find(file.fileHash);
     if (found != fileImportedDeclsMap.end()) {
-        (void)fileImportedDeclsMap.emplace(newFile->fileHash, std::move(found->second));
-        (void)fileImportedDeclsMap.erase(file.fileHash);
+        (void)fileImportedDeclsMap.emplace(newFile->fileHash, found->second);
     }
     auto index = file.indexOfPackage;
     newFile->indexOfPackage = index;
@@ -1629,6 +1924,7 @@ void ImportManager::ClearCachesForRebuild()
     declToTypeAlias.clear();
     // clear for ResolveImports.
     directMacroDeps.clear();
+    macroDepsCache.clear();
 }
 
 bool ImportManager::AnalyzeDepStdPkgsOfBC(const std::string& fullPackageName)
@@ -1656,4 +1952,54 @@ bool ImportManager::AnalyzeDepStdPkgsOfBC(const std::string& fullPackageName)
         }
     }
     return true;
+}
+
+void ImportManager::AddMacroImportContentToImportMap(const std::string& fullPackageName,
+    const AST::ImportContent& content, const std::unordered_set<uint64_t>& consumerFileHashes)
+{
+    if (consumerFileHashes.empty()) {
+        return;
+    }
+    const auto importLevel = AccessLevel::PUBLIC;
+    const auto relation = Modules::PackageRelation::NONE;
+
+    // File-level injection upholds rule 2 (ordinary-private-import equivalence):
+    // only the files in consumerFileHashes gain visibility; query side is unchanged.
+    // The whole package is injected when the import targets the package itself
+    // (IMPORT_ALL, or a full path that resolved as a real package); SINGLE/ALIAS
+    // inject only the named decls, aligned with AddImportedDeclsForFile.
+    bool isPkgImport = content.GetPossiblePackageNames().front() == fullPackageName;
+    if (isPkgImport) {
+        auto members = cjoManager->GetPackageMembers(fullPackageName);
+        for (const auto& [name, declSet] : members) {
+            auto visibleDecls = Modules::GetVisibleDeclToMap(declSet, importLevel, relation);
+            for (auto fileHash : consumerFileHashes) {
+                auto& targetMap = fileImportedDeclsMap[fileHash][name];
+                for (auto decl : visibleDecls) {
+                    targetMap.insert(decl);
+                }
+            }
+        }
+        return;
+    }
+
+    auto members = cjoManager->GetPackageMembersByName(fullPackageName, content.identifier);
+    // Key on the original name: the alias is stripped downstream (rule 1), so the
+    // re-parsed .macrocall form (`import a.b`) also exposes the original name.
+    const auto& name = content.identifier.Val();
+    auto visibleDecls = Modules::GetVisibleDeclToMap(members, importLevel, relation);
+    for (auto member : members) {
+        if (auto tad = DynamicCast<TypeAliasDecl>(member); tad && tad->type) {
+            declToTypeAlias[tad->type->GetTarget()].emplace(name);
+        } else if (member->identifier != name) {
+            declToTypeAlias[member].emplace(name);
+            declToTypeAlias[member].emplace(member->identifier);
+        }
+    }
+    for (auto fileHash : consumerFileHashes) {
+        auto& targetMap = fileImportedDeclsMap[fileHash][name];
+        for (auto decl : visibleDecls) {
+            targetMap.insert(decl);
+        }
+    }
 }
