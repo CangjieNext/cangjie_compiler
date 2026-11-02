@@ -29,6 +29,21 @@ public:
     /// file entrance of conditional compilation stage. Used by \ref HandleConditionalCompilation and macro expansion
     void HandleFileConditionalCompilation(File& file) const;
 
+    /// Evaluate the @When annotation(s) on a structured MacroImportSpec in the current
+    /// target's context. Condition semantics are identical to ordinary imports
+    /// (evaluated against target options, never a scope lookup) — EvalNodeCondition is
+    /// shared, change one, affect both. False conditions are erased from
+    /// node->annotations. Returns true when the import survives (no @When, or condition
+    /// holds).
+    bool EvalMacroImportWhenCond(MacroImportSpec& spec) const;
+
+    /// Non-destructive twin of \ref EvalMacroImportWhenCond: evaluates the @When
+    /// annotation(s) without erasing them. Use for cjo-backed MacroImportSpec nodes
+    /// owned by the CjoManager cache — they are shared across consumer packages, so
+    /// an erasing evaluation would corrupt the condition for subsequent consumers.
+    /// Condition semantics are identical to \ref EvalMacroImportWhenCond.
+    bool PeekMacroImportWhenCond(const MacroImportSpec& spec) const;
+
 private:
     class ConditionalCompilationImpl* impl;
 };

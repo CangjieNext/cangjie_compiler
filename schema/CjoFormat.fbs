@@ -713,6 +713,47 @@ table Package {
   // record all std full package name dependencies.
   allDependentStdPkgs:[string];
   options: CompilationOptions;
+  // macroImports declarations in a macro package (no importModifier allowed). Each
+  // entry is one macro import statement (single form `macro import xxx` or block form
+  // `macro { ... }`) as a MacroImportList node — a vector so multiple statements each
+  // keep their own macroPos / block braces (positions are never overwritten). Each
+  // MacroImportSpec holds flat ImportContent fields (+ recursive items for the
+  // multi form) + whenExprIndices for the @When condExprs (one @When → one index).
+  // Appended after options: FlatBuffers assigns field slots by declaration order,
+  // so inserting before existing fields would break slot compatibility with old cjo.
+  macroImports: [MacroImportList];
+}
+
+// One macro import statement (single form `macro import xxx`) or one item inside a
+// `macro { }` block. Carries no modifier (macro import forbids re-export). Flat
+// ImportContent fields mirror ImportSpec (single/alias/all/multi); multi items are
+// stored recursively in `items` (each item is itself a MacroImportSpec, single form,
+// with its own @When). whenExprIndices holds the indices into the package's allExprs
+// for the @When annotation condExprs (one @When → one index, mirroring the AST
+// `annotations` vector); empty when there is no @When.
+table MacroImportSpec {
+  begin:Position;
+  end:Position;
+  importPos:Position;
+  prefixPaths:[string];
+  identifier:string;
+  asIdentifier:string;
+  hasDoubleColon:bool;
+  isDecl:bool=false;
+  whenExprIndices:[uint32];  // indices into allExprs; empty if no @When
+  items:[MacroImportSpec];   // IMPORT_MULTI only: nested single-form items
+}
+
+// Top-level container of all macro import declarations in a macro package.
+// lcurlPos/rcurlPos are default for the single form (macro import xxx); set for the
+// block form (macro { ... }). items preserve source order.
+table MacroImportList {
+  begin:Position;
+  end:Position;
+  macroPos:Position;
+  lcurlPos:Position;
+  rcurlPos:Position;
+  items:[MacroImportSpec];
 }
 
 root_type Package;

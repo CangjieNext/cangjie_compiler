@@ -641,7 +641,99 @@ OwnedPtr<AST::Package> ASTLoader::ASTLoaderImpl::PreLoadImportedPackageNode()
             packageNode->AddDependentStdPkg(depStdPkg);
         }
     }
+    if (package->macroImports()) {
+        // Reconstruct the persisted macroImports; positions are remapped to the
+        // downstream's fileIDs so diagnostics point at the macro package's sources.
+        uoffset_t nStmts = package->macroImports()->size();
+        for (uoffset_t s = 0; s < nStmts; s++) {
+            const auto* listFmt = package->macroImports()->Get(s);
+            auto list = MakeOwned<AST::MacroImportList>();
+            list->macroPos = RebuildMacroImportPos(listFmt->macroPos());
+            list->lcurlPos = RebuildMacroImportPos(listFmt->lcurlPos());
+            list->rcurlPos = RebuildMacroImportPos(listFmt->rcurlPos());
+            list->begin = RebuildMacroImportPos(listFmt->begin());
+            list->end = RebuildMacroImportPos(listFmt->end());
+            uoffset_t nItems = listFmt->items() ? listFmt->items()->size() : 0;
+            for (uoffset_t i = 0; i < nItems; i++) {
+                const auto* specFmt = listFmt->items()->Get(i);
+                auto spec = MakeOwned<AST::MacroImportSpec>();
+                spec->begin = RebuildMacroImportPos(specFmt->begin());
+                spec->end = RebuildMacroImportPos(specFmt->end());
+                spec->importPos = RebuildMacroImportPos(specFmt->importPos());
+                RebuildMacroImportContent(spec->content, *specFmt);
+                RebuildWhenAnnotations(*spec, specFmt->whenExprIndices());
+                list->items.push_back(std::move(spec));
+            }
+            packageNode->macroImports.push_back(std::move(list));
+        }
+    }
     return packageNode;
+}
+
+Position ASTLoader::ASTLoaderImpl::RebuildMacroImportPos(const PackageFormat::Position* posObj) const
+{
+    if (posObj == nullptr) {
+        return Position(0, 0, 0);
+    }
+    auto idx = posObj->file();
+    unsigned int fileId = 0;
+    if (idx != INVALID_FORMAT_INDEX && idx != 0) {
+        auto i = static_cast<unsigned long>(idx - 1);
+        fileId = i < allFileIds.size() ? allFileIds[i] : 0;
+    }
+    return Position(fileId, posObj->line(), posObj->column());
+}
+
+void ASTLoader::ASTLoaderImpl::RebuildMacroImportContent(
+    AST::ImportContent& content, const PackageFormat::MacroImportSpec& spec)
+{
+    content.hasDoubleColon = spec.hasDoubleColon();
+    content.isDecl = spec.isDecl();
+    if (spec.prefixPaths()) {
+        for (const auto* path : *spec.prefixPaths()) {
+            content.prefixPaths.emplace_back(path->str());
+        }
+        content.prefixPoses.resize(content.prefixPaths.size(), DEFAULT_POSITION);
+        content.prefixDotPoses.resize(content.prefixPaths.size(), DEFAULT_POSITION);
+    }
+    content.identifier = spec.identifier()->str();
+    content.identifier.SetPos(DEFAULT_POSITION, DEFAULT_POSITION);
+    if (!spec.asIdentifier()->string_view().empty()) {
+        content.kind = ImportKind::IMPORT_ALIAS;
+        content.aliasName = spec.asIdentifier()->str();
+        content.aliasName.SetPos(DEFAULT_POSITION, DEFAULT_POSITION);
+    } else if (content.identifier.Val() == "*") {
+        content.kind = ImportKind::IMPORT_ALL;
+    } else {
+        content.kind = ImportKind::IMPORT_SINGLE;
+    }
+    content.begin = DEFAULT_POSITION;
+    content.end = DEFAULT_POSITION;
+    // IMPORT_MULTI: nested single-form items (recursion terminates: items are single).
+    if (spec.items() != nullptr && spec.items()->size() > 0) {
+        content.kind = ImportKind::IMPORT_MULTI;
+        for (const auto* itemFmt : *spec.items()) {
+            auto& item = content.items.emplace_back();
+            RebuildMacroImportContent(item, *itemFmt);
+            item.begin = RebuildMacroImportPos(itemFmt->begin());
+            item.end = RebuildMacroImportPos(itemFmt->end());
+        }
+    }
+}
+
+void ASTLoader::ASTLoaderImpl::RebuildWhenAnnotations(
+    AST::MacroImportSpec& spec, const flatbuffers::Vector<FormattedIndex>* whenIndices)
+{
+    if (whenIndices == nullptr) {
+        return;
+    }
+    for (uoffset_t w = 0; w < whenIndices->size(); w++) {
+        auto anno = MakeOwned<AST::Annotation>("When", AST::AnnotationKind::WHEN, spec.begin);
+        anno->condExpr = LoadExpr(whenIndices->Get(w));
+        anno->begin = spec.begin;
+        anno->end = anno->condExpr ? anno->condExpr->end : spec.begin;
+        spec.annotations.push_back(std::move(anno));
+    }
 }
 
 void ASTLoader::ASTLoaderImpl::LoadImportContent(ImportContent& content, const PackageFormat::ImportSpec& is) const
