@@ -346,7 +346,7 @@ void ToCHIR::UselessAllocateElimination()
         return;
     }
     Utils::ProfileRecorder recorder("CHIR Opt", "UselessAllocateElimination");
-    UselessAllocateElimination::RunOnPackage(*chirPkg, opts.chirDebugOptimizer);
+    UselessAllocateElimination::RunOnPackage(*chirPkg, builder);
     DumpCHIRToFile("UselessAllocateElimination");
 }
 
@@ -404,8 +404,8 @@ void ToCHIR::RedundantGetOrThrowElimination()
         return;
     }
     Utils::ProfileRecorder recorder("CHIR Opt", "RedundantGetOrThrowElimination");
-    auto rGetOrThrowE = CHIR::RedundantGetOrThrowElimination();
-    rGetOrThrowE.RunOnPackage(chirPkg, opts.chirDebugOptimizer);
+    auto rGetOrThrowE = CHIR::RedundantGetOrThrowElimination(builder);
+    rGetOrThrowE.RunOnPackage(chirPkg);
     DumpCHIRToFile("RedundantGetOrThrowElimination");
 }
 
@@ -604,7 +604,7 @@ void ToCHIR::RunSanitizerCoverage()
     }
     Utils::ProfileRecorder recorder("CHIR", "Sanitizer Coverage");
     auto sanCovOpt = CHIR::SanitizerCoverage(opts, builder);
-    sanCovOpt.RunOnPackage(chirPkg, diag, opts.chirDebugOptimizer);
+    sanCovOpt.RunOnPackage(chirPkg, diag);
     DumpCHIRToFile("Sanitizer_Coverage");
 }
 
@@ -615,7 +615,7 @@ void ToCHIR::RunUnitUnify()
     }
     Utils::ProfileRecorder recorder("CHIR Opt", "Unit Unify");
     auto unitUnify = CHIR::UnitUnify(builder);
-    unitUnify.RunOnPackage(chirPkg, opts.chirDebugOptimizer);
+    unitUnify.RunOnPackage(chirPkg);
     DumpCHIRToFile("Unit_Unify");
 }
 
