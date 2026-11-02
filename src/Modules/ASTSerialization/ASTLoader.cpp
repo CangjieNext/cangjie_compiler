@@ -636,6 +636,86 @@ OwnedPtr<AST::Package> ASTLoader::ASTLoaderImpl::PreLoadImportedPackageNode()
             packageNode->AddDependentStdPkg(depStdPkg);
         }
     }
+    if (package->macroImports()) {
+        // Structured scheme: reconstruct each MacroImportList node (one per macro
+        // import statement) persisted by the macro package. Position `file` holds the
+        // macro package's 1-based fileIndex into allFiles (same scheme as LoadPos);
+        // remap to the downstream's fileID via allFileIds so diagnostics point at the
+        // macro package's source file path. whenExprIndices (a vector, one entry per
+        // @When) are resolved against allExprs to rebuild the @When condExprs.
+        auto remapFileId = [&ids = this->allFileIds](const PackageFormat::Position* p) -> unsigned int {
+            if (p == nullptr) {
+                return 0;
+            }
+            auto idx = p->file();
+            if (idx == INVALID_FORMAT_INDEX || idx == 0) {
+                return 0;
+            }
+            auto i = static_cast<unsigned long>(idx - 1);
+            return i < ids.size() ? ids[i] : 0;
+        };
+        auto makePos = [&remapFileId](const PackageFormat::Position* p) {
+            Position pos(remapFileId(p), p ? p->line() : 0, p ? p->column() : 0);
+            return pos;
+        };
+        uoffset_t nStmts = package->macroImports()->size();
+        for (uoffset_t s = 0; s < nStmts; s++) {
+            const auto* listFmt = package->macroImports()->Get(s);
+            auto list = MakeOwned<AST::MacroImportList>();
+            list->macroPos = makePos(listFmt->macroPos());
+            list->lcurlPos = makePos(listFmt->lcurlPos());
+            list->rcurlPos = makePos(listFmt->rcurlPos());
+            list->begin = makePos(listFmt->begin());
+            list->end = makePos(listFmt->end());
+            uoffset_t nItems = listFmt->items() ? listFmt->items()->size() : 0;
+            for (uoffset_t i = 0; i < nItems; i++) {
+                const auto* specFmt = listFmt->items()->Get(i);
+                auto spec = MakeOwned<AST::MacroImportSpec>();
+                spec->begin = makePos(specFmt->begin());
+                spec->end = makePos(specFmt->end());
+                spec->importPos = makePos(specFmt->importPos());
+                // Rebuild ImportContent (single/alias/all only — macro import has no multi).
+                auto& content = spec->content;
+                content.hasDoubleColon = specFmt->hasDoubleColon();
+                content.isDecl = specFmt->isDecl();
+                if (specFmt->prefixPaths()) {
+                    for (const auto* path : *specFmt->prefixPaths()) {
+                        content.prefixPaths.emplace_back(path->str());
+                    }
+                    content.prefixPoses.resize(content.prefixPaths.size(), DEFAULT_POSITION);
+                    content.prefixDotPoses.resize(content.prefixPaths.size(), DEFAULT_POSITION);
+                }
+                content.identifier = specFmt->identifier()->str();
+                content.identifier.SetPos(DEFAULT_POSITION, DEFAULT_POSITION);
+                if (!specFmt->asIdentifier()->string_view().empty()) {
+                    content.kind = ImportKind::IMPORT_ALIAS;
+                    content.aliasName = specFmt->asIdentifier()->str();
+                    content.aliasName.SetPos(DEFAULT_POSITION, DEFAULT_POSITION);
+                } else if (content.identifier.Val() == "*") {
+                    content.kind = ImportKind::IMPORT_ALL;
+                } else {
+                    content.kind = ImportKind::IMPORT_SINGLE;
+                }
+                content.begin = DEFAULT_POSITION;
+                content.end = DEFAULT_POSITION;
+                // Rebuild each @When annotation from whenExprIndices (empty → none).
+                // A spec may carry more than one @When; one Annotation node per index,
+                // mirroring the AST annotations vector that EvalNodeCondition walks.
+                auto whenIndices = specFmt->whenExprIndices();
+                if (whenIndices) {
+                    for (uoffset_t w = 0; w < whenIndices->size(); w++) {
+                        auto anno = MakeOwned<AST::Annotation>("When", AST::AnnotationKind::WHEN, spec->begin);
+                        anno->condExpr = LoadExpr(whenIndices->Get(w));
+                        anno->begin = spec->begin;
+                        anno->end = anno->condExpr ? anno->condExpr->end : spec->begin;
+                        spec->annotations.push_back(std::move(anno));
+                    }
+                }
+                list->items.push_back(std::move(spec));
+            }
+            packageNode->macroImports.push_back(std::move(list));
+        }
+    }
     return packageNode;
 }
 

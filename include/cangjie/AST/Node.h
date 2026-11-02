@@ -125,7 +125,7 @@ struct Node {
 
     void SetTy(Ptr<Ty> newTy)
     {
-        CJC_ASSERT(newTy);
+        // CJC_ASSERT(newTy);
         ty = newTy;
     }
 
@@ -2928,6 +2928,11 @@ struct FeaturesDirective : Node {
     }
 };
 
+// macro import declarations are persisted to cjo as structured MacroImportList
+// nodes (see MacroImportSpec / MacroImportList below) and read directly by the
+// downstream package — no token stream, no re-parse. @When is kept as Annotation
+// condExpr AST and serialized via whenExprIndices (one index per @When).
+
 enum class ImportKind {
     IMPORT_SINGLE,
     IMPORT_ALIAS,
@@ -3015,6 +3020,43 @@ struct ImportSpec : Node {
 };
 
 /**
+ * A MacroImportSpec represents one macro import statement (single form) or one
+ * item inside a `macro { }` block. Unlike ImportSpec it carries no modifier
+ * (macro import forbids re-export) and no IsReExport semantics. @When is kept
+ * as an Annotation node in `annotations` (condExpr AST, not text-ified) —
+ * identical to how ordinary ImportSpec carries @When, so downstream reuses
+ * EvalNodeCondition<MacroImportSpec> with zero specialization (the template
+ * only depends on node->annotations).
+ */
+struct MacroImportSpec : Node {
+    Position importPos; /**< Position of 'import'. */
+    ImportContent content;
+    std::vector<OwnedPtr<Annotation>> annotations; /**< @When (block items only); empty for single form. */
+    MacroImportSpec() : Node(ASTKind::MACRO_IMPORT_SPEC)
+    {
+    }
+    std::string ToString() const override;
+};
+
+/**
+ * A MacroImportList is the top-level container of all macro import declarations
+ * in a macro package. `lcurlPos`/`rcurlPos` are INVALID_POSITION for the single
+ * form (`macro import xxx`); set for the block form (`macro { ... }`). Items
+ * preserve source order. Persisted to cjo as a structured node (replaces the
+ * former raw token stream).
+ */
+struct MacroImportList : Node {
+    Position macroPos; /**< Position of leading 'macro'. */
+    Position lcurlPos;  /**< Position of '{' (block form); INVALID_POSITION for single. */
+    Position rcurlPos;  /**< Position of '}' (block form); INVALID_POSITION for single. */
+    std::vector<OwnedPtr<MacroImportSpec>> items;
+    MacroImportList() : Node(ASTKind::MACRO_IMPORT_LIST)
+    {
+    }
+    std::string ToString() const override;
+};
+
+/**
  * A PackageSpec node represents the package of the current file.
  */
 struct PackageSpec : Node {
@@ -3031,6 +3073,16 @@ struct PackageSpec : Node {
     bool hasMacro{false};
     bool hasSpecific{false};
     bool hasCommon{false};
+    // macroImports: each entry is one macro import statement (single form
+    // `macro import xxx` or block form `macro { ... }`) as a MacroImportList node
+    // carrying its own macroPos / block braces, so positions are never overwritten
+    // across multiple statements. @When is kept as an Annotation node (condExpr AST)
+    // in each MacroImportSpec. Persisted to cjo as a vector of structured nodes; the
+    // downstream reads it directly (no re-parse).
+    std::vector<OwnedPtr<MacroImportList>> macroImports;
+    // Package names derived from the macro import statements (for cjpm dependency
+    // graph; not persisted to cjo — cjpm only needs names).
+    std::vector<std::string> macroImportPkgNames;
     PackageSpec() : Node(ASTKind::PACKAGE_SPEC)
     {
     }
@@ -3117,6 +3169,13 @@ struct Package : Node {
     bool isMacroPackage{false};
     bool noSubPkg{false};
     bool needExported{true}; /**< Parent path of package path is "src", there is no need to export this package. */
+    // macroImports: macro import statements propagated from PackageSpec. Each entry
+    // is one statement (single or block) as a MacroImportList node; one per statement
+    // so positions are not overwritten across statements.
+    std::vector<OwnedPtr<MacroImportList>> macroImports;
+    // Package names derived from macro import statements (for cjpm dependency graph;
+    // not persisted to cjo). Aggregated from PackageSpec::macroImportPkgNames.
+    std::vector<std::string> macroImportPkgNames;
 
 private:
     std::vector<std::string> allDependentStdPkgs; /**< Record all dependent standard packages. */

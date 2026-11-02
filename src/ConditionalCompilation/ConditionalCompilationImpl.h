@@ -42,6 +42,7 @@ struct VersionInfo {
 
 
 class ConditionalCompilationImpl {
+    friend class ConditionalCompilation;
 public:
     explicit ConditionalCompilationImpl(CompilerInstance* c);
     void HandleConditionalCompilation(const Package& root);

@@ -10,9 +10,14 @@
  * This file implements the CompileStrategy related classes.
  */
 
+#include <map>
+#include <set>
+#include <unordered_set>
+
 #include "cangjie/Frontend/CompileStrategy.h"
 
 #include "MergeAnnoFromCjd.h"
+#include "cangjie/AST/Clone.h"
 #include "cangjie/AST/PrintNode.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/ConditionalCompilation/ConditionalCompilation.h"
@@ -204,6 +209,38 @@ public:
             }
         }
         package.isMacroPackage = package.files[0]->package->hasMacro;
+        if (package.isMacroPackage) {
+            // Structured scheme: aggregate every macro import statement (each a
+            // MacroImportList node — single form or one block) from every file of
+            // the macro package into the package-level macroImports vector (clone the
+            // whole statement, so the file-level PackageSpec retains ownership of its
+            // parse-time nodes). Each statement keeps its own macroPos / block braces.
+            // Dedup of identical imports is handled downstream (per-package
+            // loaded-macro-import-pkg set in ProcessMacroImports + .macrocall std::find).
+            // macroImportPkgNames (cjpm dependency graph, Parse-derived package names)
+            // is deduped by string here. No conflict check here — the macro-package-
+            // level lexical check was removed (it cannot consider @When conditions,
+            // which are not evaluated in the macro package per semantic rule 1, and
+            // would falsely flag mutually-exclusive conditions like @When[os.linux]
+            // vs @When[os.windows]). All conflicts are reported by the downstream
+            // aggregate diagnostic.
+            package.macroImports.clear();
+            package.macroImportPkgNames.clear();
+            std::unordered_set<std::string> seenPkgNames;
+            for (const auto& file : package.files) {
+                if (!file->package) {
+                    continue;
+                }
+                for (const auto& stmt : file->package->macroImports) {
+                    package.macroImports.push_back(ASTCloner::CloneMacroImportList(*stmt));
+                }
+                for (const auto& pkgName : file->package->macroImportPkgNames) {
+                    if (seenPkgNames.insert(pkgName).second) {
+                        package.macroImportPkgNames.push_back(pkgName);
+                    }
+                }
+            }
+        }
     }
 
     /**
