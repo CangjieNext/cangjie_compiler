@@ -8,6 +8,7 @@
 #define CANGJIE_CHIR_ANALYSIS_ACTIVE_STATE_POOL_H
 
 #include <unordered_map>
+#include <unordered_set>
 
 #include "cangjie/CHIR/Analysis/Utils.h"
 #include "cangjie/CHIR/Analysis/ValueDomain.h"
@@ -187,6 +188,7 @@ public:
     ActiveStatePool(const ActiveStatePool<ValueDomain>& other)
     {
         init();
+        dropped = other.dropped;
         if (other.first == nullptr) {
             return;
         }
@@ -217,6 +219,7 @@ public:
     ActiveStatePool& operator=(const ActiveStatePool<ValueDomain>& other)
     {
         init();
+        dropped = other.dropped;
         if (other.first == nullptr) {
             return *this;
         }
@@ -253,6 +256,7 @@ public:
 
         data = std::move(other.data);
         obj2StateNode = std::move(other.obj2StateNode);
+        dropped = std::move(other.dropped);
     }
 
     /**
@@ -268,6 +272,7 @@ public:
 
         data = std::move(other.data);
         obj2StateNode = std::move(other.obj2StateNode);
+        dropped = std::move(other.dropped);
         return *this;
     }
 
@@ -395,8 +400,8 @@ public:
     bool Join(const ActiveStatePool<ValueDomain>& other)
     {
         bool changed = false;
-        for (const auto& [k, v] : data) {
-            if (v.IsRef()) {
+        for (auto& [k, v] : data) {
+            if (v.IsRef() && !v.GetRef()->IsTopRefInstance()) {
                 /* state will despair in long blocks, state of an ref is not trusted
                     block #1
                         %a: Allocate
@@ -411,17 +416,37 @@ public:
                     block #3              // state of a should be top, can be %x or %x2,
                         ...               // but state %2 discards in block #2, state %x is non-trusted.
                 */
-                data.at(k) = TOP_REF_STATE;
+                v = TOP_REF_STATE;
+                // Widening a ref to Top is a real state change: report it so that the block will be
+                // re-analysed. Otherwise the values derived from this ref (e.g. the result of a Load)
+                // would keep the stale constant computed on the first visit and later be folded wrongly.
+                changed = true;
             }
         }
         for (const auto& [k2, v2] : other.data) {
             if (auto it = data.find(k2); it != data.end()) {
                 auto& v1 = it->second;
                 changed |= v1.Join(v2);
-            } else {
+            } else if (dropped.count(k2) == 0) {
                 if (!v2.IsRef()) {
                     // non-trusted states discard.
                     Insert(k2, v2);
+                }
+            }
+            // else: this pool evicted the value earlier, so its state here is Top and any
+            // information coming from `other` must not be trusted either.
+        }
+        // Values which exist in this pool but are missing from `other` are not Bottom if
+        // `other` had evicted them: widen them to Top, otherwise a stale (too precise)
+        // constant would survive the join forever.
+        for (auto& [k, v] : data) {
+            if (other.data.find(k) == other.data.end() && other.dropped.count(k) != 0) {
+                // Only report a change when the value is not already top, to keep the
+                // fixpoint iteration monotone and terminating.
+                bool alreadyTop = v.IsTop() || (v.IsRef() && v.GetRef()->IsTopRefInstance());
+                if (!alreadyTop) {
+                    v = GetTopState(*k);
+                    changed = true;
                 }
             }
         }
@@ -438,6 +463,7 @@ private:
         tails = nullptr;
         data.clear();
         obj2StateNode.clear();
+        dropped.clear();
     }
 
     /**
@@ -460,6 +486,10 @@ private:
             
             obj2StateNode.erase(obj);
             data.erase(obj);
+            // Remember that this value is no longer tracked by this pool. A missing key is
+            // otherwise indistinguishable from a Bottom state, which would let Join keep a
+            // stale constant that was computed before the eviction.
+            dropped.insert(obj);
         }
     }
 
@@ -480,6 +510,15 @@ private:
     // can not merge ValueDomain and stateNode to one, because keep same api with default one.
     std::unordered_map<Value*, ValueDomain> data;            /**< mapping Value* -> ValueDomain */
     std::unordered_map<Value*, ActiveStateNode> obj2StateNode; /**< mapping Value* -> node */
+
+    /**
+     * @brief Values evicted from this pool.
+     *
+     * For an evicted value the pool no longer tracks any state, i.e. the state is Top.
+     * Unlike a value that was never inserted (Bottom), an evicted value must widen the
+     * states it is joined with instead of being simply ignored.
+     */
+    std::unordered_set<Value*> dropped;
 
     ActiveStateNode* first = nullptr; /**< oldest node (head) */
     ActiveStateNode* tails = nullptr; /**< newest node (tail) */
