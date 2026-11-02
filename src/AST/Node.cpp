@@ -2045,6 +2045,31 @@ std::string ImportSpec::ToString() const
     return ret;
 }
 
+std::string MacroImportSpec::ToString() const
+{
+    std::string ret = "macro import ";
+    ret += content.ToString();
+    return ret;
+}
+
+std::string MacroImportList::ToString() const
+{
+    if (lcurlPos == INVALID_POSITION) {
+        // single form: exactly one item
+        return items.empty() ? "macro import" : items.front()->ToString();
+    }
+    // block form, one statement per line (same style as ClassBody::ToString)
+    std::string ret = "{";
+    for (const auto& it : items) {
+        ret += "\n" + it->ToString();
+    }
+    if (!items.empty()) {
+        ret += "\n";
+    }
+    ret += "}";
+    return ret;
+}
+
 std::string PackageSpec::ToString() const
 {
     return "package " + GetPackageName();
