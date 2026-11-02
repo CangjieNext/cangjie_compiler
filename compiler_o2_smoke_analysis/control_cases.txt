@@ -1,0 +1,1 @@
+compiler/cjnative/Chir/dispatch/negative/NEG_diamond_default_conflict/main.cj

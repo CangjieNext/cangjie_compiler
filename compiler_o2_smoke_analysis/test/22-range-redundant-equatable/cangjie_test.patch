@@ -1,0 +1,36 @@
+From cf04a2b8038b05f9f0acd0465b09c2a0688dbe8d Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Thu, 5 Nov 2026 10:10:56 +0000
+Subject: [PATCH] [patch 22] test: remove redundant Equatable inheritance from
+ range fixture
+
+Comparable already inherits Equatable. Avoid inheriting the local-mode default comparison members through both paths while preserving the range type constraints and test behavior.
+
+Validation: all 26 original compiler O2 cases and the existing diamond-default rejection control pass with -O2. All 28 cjc invocations were audited to contain -O2.
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ .../TypesAndVariables/immutable/immutable_range_02.cj         | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/testsuites/HLT/compiler/cjnative/TypesAndVariables/immutable/immutable_range_02.cj b/testsuites/HLT/compiler/cjnative/TypesAndVariables/immutable/immutable_range_02.cj
+index 27cf1a5e3d6e12ede80bd5b1656d649a6c085977..853a06b9ee6e4e936fef28297ed443594ef4db44 100644
+--- a/testsuites/HLT/compiler/cjnative/TypesAndVariables/immutable/immutable_range_02.cj
++++ b/testsuites/HLT/compiler/cjnative/TypesAndVariables/immutable/immutable_range_02.cj
+@@ -31,7 +31,7 @@ class Aoo {
+     }
+ }
+ 
+-extend Aoo <: Countable<Aoo> & Comparable<Aoo> & Equatable<Aoo> {
++extend Aoo <: Countable<Aoo> & Comparable<Aoo> {
+     public func compare(rhs: Aoo): Ordering {
+         match {
+             case this.a < rhs.a => Ordering.LT
+@@ -68,7 +68,7 @@ extend Aoo <: Countable<Aoo> & Comparable<Aoo> & Equatable<Aoo> {
+     }
+ }
+ 
+-extend Coo <: Countable<Coo> & Comparable<Coo> & Equatable<Coo> {
++extend Coo <: Countable<Coo> & Comparable<Coo> {
+     public func compare(rhs: Coo): Ordering {
+         match {
+             case this.a < rhs.a => Ordering.LT

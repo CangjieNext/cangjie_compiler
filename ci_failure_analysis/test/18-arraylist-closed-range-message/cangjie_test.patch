@@ -1,0 +1,25 @@
+From c85975e76749394452694e982da5a8d8fe7de253 Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Thu, 5 Nov 2026 07:09:59 +0000
+Subject: [PATCH] [patch 18] test: match the ArrayList closed-range diagnostic
+
+Match the existing closed-range check at end >= logical size. Validation: the complete 58-case ArrayList suite passes.
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ testsuites/LLT/API/std/collection/test_ArrayList.cj | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/testsuites/LLT/API/std/collection/test_ArrayList.cj b/testsuites/LLT/API/std/collection/test_ArrayList.cj
+index a41d5e5348a240abf41411d3028d65b2fb0109e7..91b3c89960e2dc229482498d55cfd4d284b839a5 100644
+--- a/testsuites/LLT/API/std/collection/test_ArrayList.cj
++++ b/testsuites/LLT/API/std/collection/test_ArrayList.cj
+@@ -264,7 +264,7 @@ class ArrayListTest {
+             var _ = arr.slice(range)
+             @Expect("Should throw exception", "")
+         } catch (e: IndexOutOfBoundsException) {
+-            @Expect(e.message, "Closed range end '5' is greater than size '1'.")
++            @Expect(e.message, "Closed range end '5' is greater than or equal to size '1'.")
+         }
+     }
+ 

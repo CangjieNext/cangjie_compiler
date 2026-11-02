@@ -1,0 +1,51 @@
+From 01a0a67650cfefb7be716fa6a0870c8cf5097c96 Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Thu, 5 Nov 2026 07:10:04 +0000
+Subject: [PATCH] [patch 21] test: bound worker stack growth in the overflow
+ handler regression
+
+Use a 1MB initial stack and disable growth on the worker through the existing runtime API. Preserve SDK stack-map mode and both real stack-overflow error paths. Validation: LLT comparison and 10/10 repetitions pass; maximum RSS is 8960 KB.
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ .../error_handler_stackoverflow_throws_error.cj     | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/testsuites/LLT/API/std/core/error_handler_stackoverflow_throws_error.cj b/testsuites/LLT/API/std/core/error_handler_stackoverflow_throws_error.cj
+index 437b4ab5bbcab6ae675cbe571e55c7881916bd16..3df01ba67ad827f9560c25b11200815cffa0db05 100644
+--- a/testsuites/LLT/API/std/core/error_handler_stackoverflow_throws_error.cj
++++ b/testsuites/LLT/API/std/core/error_handler_stackoverflow_throws_error.cj
+@@ -6,7 +6,10 @@
+  * See https://cangjie-lang.cn/pages/LICENSE for license information.
+  */
+ // EXEC: %compiler %cmp_opt %disableFuncInlining -o %n.%suffix %f
+-// EXEC: %run %run_opt %n.%suffix %run_args 2>&1 | compare %f
++// Use a fixed initial stack; disable growth only on the worker that triggers overflow.
++// (Unix) EXEC: export cjStackSize=1mb && %run %run_opt %n.%suffix %run_args 2>&1 | compare %f
++// (Windows) EXEC: (set cjStackSize=1mb) && %run %run_opt %n.%suffix %run_args 2>&1 | compare %f
++// ASSERT: scan StackOverflowError
+ // ASSERT: scan throws an error in the error handler
+ 
+ /* Output will be like: 
+@@ -30,6 +33,10 @@ Thread id: 2 throws an error in the error handler
+ 
+ import std.runtime.*
+ 
++foreign {
++    func CJ_CJThreadSetStackGrow(enabled: Bool): Int32
++}
++
+ var a = 0
+ 
+ main() {
+@@ -41,6 +48,10 @@ main() {
+   Thread.handleUncaughtErrorBy(handler)
+ 
+   let fut = spawn {
++    // Preserve the SDK stack-map mode while bounding this worker's real stack overflow.
++    if (unsafe { CJ_CJThreadSetStackGrow(false) } != 0) {
++      throw Exception("Failed to disable worker stack growth")
++    }
+     test()
+   }
+   

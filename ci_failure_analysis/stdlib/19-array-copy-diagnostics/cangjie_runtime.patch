@@ -1,0 +1,85 @@
+From 119e0ef5868e08e85f018f2d0b2da7df3689bb88 Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Thu, 5 Nov 2026 07:09:59 +0000
+Subject: [PATCH] [patch 19] fix: preserve Array.copyTo diagnostics across
+ receiver modes
+
+Match current main diagnostics for all six copyTo receiver overloads while preserving guard order and copy intrinsics. Validation: three ByteArrayStream suites and local copy-boundary checks pass after rebuilding and installing the standard library.
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ stdlib/libs/std/core/array.cj | 24 ++++++++++++------------
+ 1 file changed, 12 insertions(+), 12 deletions(-)
+
+diff --git a/stdlib/libs/std/core/array.cj b/stdlib/libs/std/core/array.cj
+index bd32ca43f62e27bf4b0600252eba6247c3af1cc7..7164c2f3a985ab80e33ff3b4188ebbc0bad3348a 100644
+--- a/stdlib/libs/std/core/array.cj
++++ b/stdlib/libs/std/core/array.cj
+@@ -765,19 +765,19 @@ public struct Array<T> {
+             return
+         }
+         if (copyLen < 0) {
+-            throw IllegalArgumentException("Negative copy length.")
++            throw IllegalArgumentException("Invalid argument 'copyLen': expected a non-negative value, got '${copyLen}'.")
+         }
+         if (srcStart < 0 || dstStart < 0) {
+-            throw IndexOutOfBoundsException("Array negative index access.")
++            throw IndexOutOfBoundsException("Index out of bounds: negative index, srcStart is '${srcStart}', dstStart is '${dstStart}'.")
+         }
+         if (srcStart >= this.len) {
+-            throw IndexOutOfBoundsException("SrcStart is greater than or equal to the size of this array.")
++            throw IndexOutOfBoundsException("Index out of bounds: srcStart '${srcStart}' is greater than or equal to array size '${this.len}'.")
+         }
+         if (dstStart >= dst.size) {
+-            throw IndexOutOfBoundsException("DstStart is greater than or equal to the size of the target array.")
++            throw IndexOutOfBoundsException("Index out of bounds: dstStart '${dstStart}' is greater than or equal to target array size '${dst.size}'.")
+         }
+         if (copyLen > this.len - srcStart || copyLen > dst.size - dstStart) {
+-            throw IndexOutOfBoundsException("Copy length out of bounds.")
++            throw IndexOutOfBoundsException("Copy length out of bounds: copyLen is '${copyLen}', but available source length is '${this.len - srcStart}' and available destination length is '${dst.size - dstStart}'.")
+         }
+         intrinsicBuiltInCopyTo<T>(this.rawptr, dst.rawptr, this.start + srcStart, dst.start + dstStart, copyLen)
+     }
+@@ -823,7 +823,7 @@ public struct Array<T> {
+             return
+         }
+         if (dst.size < this.len) {
+-            throw IllegalArgumentException("Dst size is less than the size of this array.")
++            throw IllegalArgumentException("Destination array size '${dst.size}' is less than source array size '${this.len}'.")
+         }
+         intrinsicBuiltInCopyTo2<T>(this.rawptr, dst.rawptr, this.start, dst.start, this.len)
+         }
+@@ -1659,7 +1659,7 @@ extend<T> Array<T> where T <: Copyable {
+             return
+         }
+         if (dst.size < this.len) {
+-            throw IllegalArgumentException("Dst size is less than the size of this array.")
++            throw IllegalArgumentException("Destination array size '${dst.size}' is less than source array size '${this.len}'.")
+         }
+         intrinsicBuiltInCopyTo3<T>(this.rawptr, dst.rawptr, this.start, dst.start, this.len)
+     }
+@@ -1670,19 +1670,19 @@ extend<T> Array<T> where T <: Copyable {
+             return
+         }
+         if (copyLen < 0) {
+-            throw IllegalArgumentException("Negative copy length.")
++            throw IllegalArgumentException("Invalid argument 'copyLen': expected a non-negative value, got '${copyLen}'.")
+         }
+         if (srcStart < 0 || dstStart < 0) {
+-            throw IndexOutOfBoundsException("Array negative index access.")
++            throw IndexOutOfBoundsException("Index out of bounds: negative index, srcStart is '${srcStart}', dstStart is '${dstStart}'.")
+         }
+         if (srcStart >= this.len) {
+-            throw IndexOutOfBoundsException("SrcStart is greater than or equal to the size of this array.")
++            throw IndexOutOfBoundsException("Index out of bounds: srcStart '${srcStart}' is greater than or equal to array size '${this.len}'.")
+         }
+         if (dstStart >= dst.size) {
+-            throw IndexOutOfBoundsException("DstStart is greater than or equal to the size of the target array.")
++            throw IndexOutOfBoundsException("Index out of bounds: dstStart '${dstStart}' is greater than or equal to target array size '${dst.size}'.")
+         }
+         if (copyLen > this.len - srcStart || copyLen > dst.size - dstStart) {
+-            throw IndexOutOfBoundsException("Copy length out of bounds.")
++            throw IndexOutOfBoundsException("Copy length out of bounds: copyLen is '${copyLen}', but available source length is '${this.len - srcStart}' and available destination length is '${dst.size - dstStart}'.")
+         }
+         intrinsicBuiltInCopyTo3<T>(this.rawptr, dst.rawptr, this.start + srcStart, dst.start + dstStart, copyLen)
+     }

@@ -1,0 +1,379 @@
+{
+  "configuration": "testsuites/HLT/configs/cjnative/linux_x64-linux_x64/O2.cfg",
+  "compiler_override": "cjc -O2",
+  "baseline": {
+    "original_cases": 26,
+    "PASS": 25,
+    "FAIL": 1
+  },
+  "final": {
+    "original_cases": 26,
+    "original_PASS": 26,
+    "control_cases": 1,
+    "control_PASS": 1
+  },
+  "compiler_sha256": "b49e9dee18c0eeff37c51f28b6725b1c033e5e66ccb77b386d003e2aa92f26b1",
+  "compiler_identical_to_baseline": true,
+  "all_cjc_commands_explicit_O2": true,
+  "compilation_command_count": 28,
+  "commands": [
+    {
+      "case": "compiler/cjnative/Chir/dispatch/negative/NEG_diamond_default_conflict/main.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std main.cj --diagnostic-format=json -o main.out 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Expressions/AssignmentExpressions/assign005/assign50001.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std assign50001.cj -o assign50001.out 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Expressions/AssignmentExpressions/assign005/assign50003.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std assign50003.cj -o assign50003.out 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Expressions/AssignmentExpressions/assign005/assign50004.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std assign50004.cj -o assign50004.out 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Expressions/ConditionalExpressions/IfExpression/if002/if00215.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std if00215.cj 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Expressions/FlowExpression/support_type/007/flow_type_70001.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std flow_type_70001.cj -o flow_type_70001.out 2>&1 1>/dev/null ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Expressions/PatternMatching/MatchExpression/match002/match00256.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std match00256.cj 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Expressions/Relational_Operators/Relate_bitwise/bitwise002/bitwise00217.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std bitwise00217.cj 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Expressions/Relational_Operators/Relate_logical/logical002/logical00211.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std logical00211.cj 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Expressions/Relational_Operators/Relate_logical/logical004/logical00411.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std logical00411.cj 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Extend/interface/direct_generic_enum_007.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std direct_generic_enum_007.cj -o direct_generic_enum_007.out 2>&1 1>/dev/null ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Extend/interface/direct_generic_enum_00701.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std direct_generic_enum_00701.cj -o direct_generic_enum_00701.out 2>&1 1>/dev/null ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Extend/property/extend_prop_shadow_11_generic.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std extend_prop_shadow_11_generic.cj -o extend_prop_shadow_11_generic.out 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/FFI/cffi/c_ffi_011/c_ffi_01182/c_ffi.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std -L . -l c_ffi c_ffi.cj -o c_ffi.out 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Generics/where/where_type_08.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std where_type_08.cj -o where_type_08.out 2>&1 1>/dev/null ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/MetaProgramming/Macro/Attribute/Invoke/005/macro_attri_invoke_50100.cj",
+      "command": "cjc -O2 -O2 --error-count-limit=all --diagnostic-format=json --compile-macro test.cj",
+      "return_code": 0,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/MetaProgramming/Macro/Attribute/Invoke/005/macro_attri_invoke_50100.cj",
+      "command": "export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH && cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std  macro_attri_invoke_50100.cj -o macro_attri_invoke_50100.out 2>&1 |  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" macro_attri_invoke_50100.cj",
+      "return_code": 0,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Property/abstract/property_abstract_class_14.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std property_abstract_class_14.cj -o property_abstract_class_14.out 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Property/abstract/property_abstract_class_15.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std property_abstract_class_15.cj -o property_abstract_class_15.out 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Property/abstract/property_abstract_interface_09.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std property_abstract_interface_09.cj -o property_abstract_interface_09.out 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Property/property_def_0203.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std property_def_0203.cj -o property_def_0203.out 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/Property/property_modifier_letvartype02.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std property_modifier_letvartype02.cj -o property_modifier_letvartype02.out 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/TypesAndVariables/CompositeType/NewEnum/Member/Prop/001/enum_prop_10004.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std enum_prop_10004.cj -o enum_prop_10004.out 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/TypesAndVariables/CompositeType/NewEnum/Option/005/enum_option_50050.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std enum_option_50050.cj 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/TypesAndVariables/TypeConversion/PrimitiveTypeConversion/conversion007/conversion00702.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std conversion00702.cj -o conversion00702.out 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/TypesAndVariables/TypeConversion/PrimitiveTypeConversion/conversion007/conversion00703.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std conversion00703.cj -o conversion00703.out 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    },
+    {
+      "case": "compiler/cjnative/TypesAndVariables/immutable/immutable_range_02.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std immutable_range_02.cj -o immutable_range_02.out",
+      "return_code": 0,
+      "case_result": "PASS"
+    },
+    {
+      "case": "regression/testcase_645.cj",
+      "command": "cjc -O2 --error-count-limit=all --diagnostic-format=json  -O2 --dy-std testcase_645.cj -o testcase_645.out 2>&1 ",
+      "return_code": 1,
+      "case_result": "PASS"
+    }
+  ],
+  "results": [
+    {
+      "case": "compiler/cjnative/Chir/dispatch/negative/NEG_diamond_default_conflict/main.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" main.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Expressions/AssignmentExpressions/assign005/assign50001.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" assign50001.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Expressions/AssignmentExpressions/assign005/assign50003.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" assign50003.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Expressions/AssignmentExpressions/assign005/assign50004.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" assign50004.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Expressions/ConditionalExpressions/IfExpression/if002/if00215.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" if00215.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Expressions/FlowExpression/support_type/007/flow_type_70001.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" flow_type_70001.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Expressions/PatternMatching/MatchExpression/match002/match00256.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" match00256.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Expressions/Relational_Operators/Relate_bitwise/bitwise002/bitwise00217.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" bitwise00217.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Expressions/Relational_Operators/Relate_logical/logical002/logical00211.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" logical00211.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Expressions/Relational_Operators/Relate_logical/logical004/logical00411.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" logical00411.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Extend/interface/direct_generic_enum_007.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" direct_generic_enum_007.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Extend/interface/direct_generic_enum_00701.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" direct_generic_enum_00701.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Extend/property/extend_prop_shadow_11_generic.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" extend_prop_shadow_11_generic.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/FFI/cffi/c_ffi_011/c_ffi_01182/c_ffi.cj",
+      "result": "PASS",
+      "run_commands": [
+        "clang -shared -fPIC c_ffi.c -o libc_ffi.so",
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" c_ffi.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Generics/where/where_type_08.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" where_type_08.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/MetaProgramming/Macro/Attribute/Invoke/005/macro_attri_invoke_50100.cj",
+      "result": "PASS",
+      "run_commands": []
+    },
+    {
+      "case": "compiler/cjnative/Property/abstract/property_abstract_class_14.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" property_abstract_class_14.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Property/abstract/property_abstract_class_15.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" property_abstract_class_15.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Property/abstract/property_abstract_interface_09.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" property_abstract_interface_09.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Property/property_def_0203.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" property_def_0203.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/Property/property_modifier_letvartype02.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" property_modifier_letvartype02.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/TypesAndVariables/CompositeType/NewEnum/Member/Prop/001/enum_prop_10004.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" enum_prop_10004.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/TypesAndVariables/CompositeType/NewEnum/Option/005/enum_option_50050.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" enum_option_50050.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/TypesAndVariables/TypeConversion/PrimitiveTypeConversion/conversion007/conversion00702.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" conversion00702.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/TypesAndVariables/TypeConversion/PrimitiveTypeConversion/conversion007/conversion00703.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" conversion00703.cj"
+      ]
+    },
+    {
+      "case": "compiler/cjnative/TypesAndVariables/immutable/immutable_range_02.cj",
+      "result": "PASS",
+      "run_commands": [
+        "export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH &&  immutable_range_02.out "
+      ]
+    },
+    {
+      "case": "regression/testcase_645.cj",
+      "result": "PASS",
+      "run_commands": [
+        "  /usr/bin/python3 /home/kangyi/code/Manifest-main1/cangjie_test_framework/maple_test/compare.py --comment=//  --condition=\"'target_linux', 'target_x86_64', 'CJNATIVE', 'host_x86_64', 'host_linux', 'O2', 'x86', 'native_compilation'\" testcase_645.cj"
+      ]
+    }
+  ]
+}

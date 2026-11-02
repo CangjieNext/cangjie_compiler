@@ -1,0 +1,26 @@
+From c2627e11603be99ef651b96f7b823adaa9f2111d Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Thu, 5 Nov 2026 07:10:02 +0000
+Subject: [PATCH] [patch 20] test: preserve literal tilde in trace security
+ checks
+
+Quote ~/secret.trace so the shell passes the invalid literal path to the trace validator. Validation: all four commands pass and the tilde rejection marker is emitted.
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ testsuites/LLT/API/std/runtime/test_trace_security.cj | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/testsuites/LLT/API/std/runtime/test_trace_security.cj b/testsuites/LLT/API/std/runtime/test_trace_security.cj
+index 8b16a13ebf8fb2484f4abf6811bdda3cae79c3db..acac261f8a71a6552c7644dbfbe244c3b6f6cbd4 100644
+--- a/testsuites/LLT/API/std/runtime/test_trace_security.cj
++++ b/testsuites/LLT/API/std/runtime/test_trace_security.cj
+@@ -9,7 +9,7 @@
+ // (CJNATIVE and Linux) EXEC: %compiler %cmp_opt %f -o %output
+ // (CJNATIVE and Linux) EXEC: cjTracePath=../../../tmp/malicious.trace %run %run_opt %output %run_args
+ // ASSERT: scan Trace not started with path traversal
+-// (CJNATIVE and Linux) EXEC: cjTracePath=~/secret.trace %run %run_opt %output %run_args
++// (CJNATIVE and Linux) EXEC: cjTracePath='~/secret.trace' %run %run_opt %output %run_args
+ // ASSERT: scan Trace not started with tilde
+ // (CJNATIVE and Linux) EXEC: cjTracePath=tmp/relative.trace %run %run_opt %output %run_args
+ // ASSERT: scan Trace not started with relative path without ./

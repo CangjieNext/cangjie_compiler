@@ -1,0 +1,42 @@
+From ed606e82311cb14dc00981aa942d73bc4abfdfc6 Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Thu, 5 Nov 2026 07:10:00 +0000
+Subject: [PATCH] [patch 19] test: verify local array copy error messages
+
+Match current main diagnostics for all six copyTo receiver overloads while preserving guard order and copy intrinsics. Validation: three ByteArrayStream suites and local copy-boundary checks pass after rebuilding and installing the standard library.
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ .../local_mode/test_local_array_copy_boundaries.cj   | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/testsuites/LLT/API/std/core/local_mode/test_local_array_copy_boundaries.cj b/testsuites/LLT/API/std/core/local_mode/test_local_array_copy_boundaries.cj
+index 58c4900606af42faa28893e7447e72e7d6fed03b..b4cada0810d0fff97f06913d7943b609c1c23dc3 100644
+--- a/testsuites/LLT/API/std/core/local_mode/test_local_array_copy_boundaries.cj
++++ b/testsuites/LLT/API/std/core/local_mode/test_local_array_copy_boundaries.cj
+@@ -23,7 +23,11 @@ func checkSharedErrors(source: Array<Int64> @local?, target: Array<Int64> @local
+     checkContents(target, [9, 9, 9, 9])
+     var illegal = false
+     try { source.copyTo(target, 0, 0, -1) }
+-    catch (_: IllegalArgumentException) { illegal = true }
++    catch (e: IllegalArgumentException) {
++        check(e.message == "Invalid argument 'copyLen': expected a non-negative value, got '-1'.",
++            "negative copy length diagnostic")
++        illegal = true
++    }
+     check(illegal, "negative copy length")
+     let invalid = [(-1, 0, 1), (0, -1, 1), (source.size, 0, 1),
+         (0, target.size, 1), (2, 0, 2), (0, 3, 2), (0, 0, Int64.Max)]
+@@ -41,7 +45,11 @@ func checkOwnedErrors(source: Array<Int64> @local!, target: Array<Int64> @local!
+         source.copyTo(target, -1, Int64.Max, 0)
+         var illegal = false
+         try { source.copyTo(target, 0, 0, -1) }
+-        catch (_: IllegalArgumentException) { illegal = true }
++        catch (e: IllegalArgumentException) {
++            check(e.message == "Invalid argument 'copyLen': expected a non-negative value, got '-1'.",
++                "negative copy length diagnostic")
++            illegal = true
++        }
+         check(illegal, "owned negative copy length")
+         for ((src, dst, size) in [(-1, 0, 1), (0, -1, 1), (3, 0, 1),
+             (0, 4, 1), (2, 0, 2), (0, 3, 2)]) {
