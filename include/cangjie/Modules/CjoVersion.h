@@ -150,7 +150,7 @@
 namespace Cangjie {
 constexpr uint8_t CJO_MAJOR_VERSION = 0;
 constexpr uint8_t CJO_MINOR_VERSION = 1;
-constexpr uint8_t CJO_PATCH_VERSION = 0;
+constexpr uint8_t CJO_PATCH_VERSION = 1;
 } // namespace Cangjie
 
 #endif // CANGJIE_MODULES_CJO_VERSION_H
