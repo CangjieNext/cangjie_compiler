@@ -1,0 +1,36 @@
+From 0f1522aa18d595bcf0628200dcdaac6910219e5c Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Wed, 4 Nov 2026 03:02:50 +0000
+Subject: [PATCH] [patch 02] test: assert AST fragment parse exceptions without
+ obsolete diagnostics
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ testsuites/HLT/API/std/ast/parse/parseExprFragmentError.cj    | 1 -
+ testsuites/HLT/API/std/ast/parse/parseExprFragmentError_01.cj | 1 -
+ 2 files changed, 2 deletions(-)
+
+diff --git a/testsuites/HLT/API/std/ast/parse/parseExprFragmentError.cj b/testsuites/HLT/API/std/ast/parse/parseExprFragmentError.cj
+index f1ef0ce5ac59ad668ddf1a64a55e0de704f141ef..7b39a04c77f8aeaf524c474053835fe1621677f9 100644
+--- a/testsuites/HLT/API/std/ast/parse/parseExprFragmentError.cj
++++ b/testsuites/HLT/API/std/ast/parse/parseExprFragmentError.cj
+@@ -10,7 +10,6 @@
+ // EXEC: %compiler %cmp_opt %f -o %output
+ // RUN-EXEC-PIPE-1: %run %run_opt %output %run_args 2>&1 | compare %f
+ 
+-// ASSERT: scan expected expression after '', found '+'
+ // ASSERT: scan An exception has occurred:
+ // ASSERT: scan ParseASTException: Failed to parse expr fragment.
+ internal import std.ast.*
+diff --git a/testsuites/HLT/API/std/ast/parse/parseExprFragmentError_01.cj b/testsuites/HLT/API/std/ast/parse/parseExprFragmentError_01.cj
+index a3b91626c3d604762fbeeefc9519a7d297337820..ccab5a682bb36e3d68139371a9e5d4fe4e4f4315 100644
+--- a/testsuites/HLT/API/std/ast/parse/parseExprFragmentError_01.cj
++++ b/testsuites/HLT/API/std/ast/parse/parseExprFragmentError_01.cj
+@@ -11,7 +11,6 @@
+ // EXEC: %compiler %cmp_macro parseExprFragment_define.cj
+ // EXEC-PIPE-1: %compiler %cmp_opt %f -o %output 2>&1 | compare %f
+ 
+-// ASSERT: scan expected expression after '', found '+'
+ // ASSERT: scan An exception has occurred:
+ // ASSERT: scan ParseASTException: Failed to parse expr fragment.
+ internal import std.ast.*

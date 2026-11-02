@@ -1,0 +1,84 @@
+From c79c9c1bc406284b9fb05c5164b6fee8d7999475 Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Wed, 4 Nov 2026 03:02:54 +0000
+Subject: [PATCH] [patch 11] test: update diagnostic SCAN-IN baselines
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ .../test_arraylist_local_zip_neg_q_other.cj         |  4 +++-
+ .../local_mode/test_json_format_local_neg_indent.cj |  6 +++---
+ .../inherit_same_interface_sema_error.cj            | 13 ++++++++++++-
+ 3 files changed, 18 insertions(+), 5 deletions(-)
+
+diff --git a/testsuites/LLT/API/std/collection/local_mode/test_arraylist_local_zip_neg_q_other.cj b/testsuites/LLT/API/std/collection/local_mode/test_arraylist_local_zip_neg_q_other.cj
+index f6c028c325758b6d70226286ad8666d6c77de620..d34ae4e9239b81ca47a02175137c227278712d3b 100644
+--- a/testsuites/LLT/API/std/collection/local_mode/test_arraylist_local_zip_neg_q_other.cj
++++ b/testsuites/LLT/API/std/collection/local_mode/test_arraylist_local_zip_neg_q_other.cj
+@@ -37,11 +37,13 @@ error: unable to infer generic argument of this function
+    |                                                       ^^^^^^^^ 
+    | 
+ note: for function type '(Class-ArrayList<Generics-R> @local!) -> Class-ArrayList<Tuple<Generics-T, Generics-R>> @local!' in context type 'Class-ArrayList<Int64> @local!'
+-    ==> (package std.collection)array_list.cj:1929:25:
++    ==> (package std.collection)array_list.cj:1925:25:
+ note: mismatched types
+   ==> test_arraylist_local_zip_neg_q_other.cj:24:64:
+    | 
+ 24 |     let invalid: ArrayList<(Int64, String)> @local! = left.zip(rightQ)
+    |                                                                ^^^^^^ of type 'Class-ArrayList<Struct-String>', impossible to match parameter type 'Class-ArrayList<Generics-R>'
+    | 
++
++1 error generated, 1 error printed.
+ */
+diff --git a/testsuites/LLT/API/stdx/encoding/json/local_mode/test_json_format_local_neg_indent.cj b/testsuites/LLT/API/stdx/encoding/json/local_mode/test_json_format_local_neg_indent.cj
+index dc6e3c618b0f1e83ae4256f198ec5a2c2570eff2..85840693da61d81fb77b758c609a7122bcfa28c3 100644
+--- a/testsuites/LLT/API/stdx/encoding/json/local_mode/test_json_format_local_neg_indent.cj
++++ b/testsuites/LLT/API/stdx/encoding/json/local_mode/test_json_format_local_neg_indent.cj
+@@ -18,7 +18,7 @@ main(): Int64 {
+     return 0
+ }
+ 
+-/* SCAN
++/* SCAN-IN
+ error: mismatched types
+   ==> test_json_format_local_neg_indent.cj:17:32:
+    | 
+@@ -33,9 +33,9 @@ error: no matching function declaration for function call 'toJsonString'
+    |                                      ^ 
+    | 
+ note: found function member of 'Class-JsonArray'
+-   ==> (package stdx.encoding.json)json_object.cj:819:25:
++   ==> (package stdx.encoding.json)json_object.cj:829:25:
+ note: found function member of 'Class-JsonArray'
+-   ==> (package stdx.encoding.json)json_object.cj:823:17:
++   ==> (package stdx.encoding.json)json_object.cj:833:17:
+ 
+ 2 errors generated, 2 errors printed.
+ */
+diff --git a/testsuites/LLT/compiler/CHIROpt/Devirtualization/inherit_same_interface_sema_error.cj b/testsuites/LLT/compiler/CHIROpt/Devirtualization/inherit_same_interface_sema_error.cj
+index 7489b52f2d350d5e4f96bb7800cc276f3040f8ab..5cd1d5c9916f31366a14385235ae3d90d7a44c50 100644
+--- a/testsuites/LLT/compiler/CHIROpt/Devirtualization/inherit_same_interface_sema_error.cj
++++ b/testsuites/LLT/compiler/CHIROpt/Devirtualization/inherit_same_interface_sema_error.cj
+@@ -6,7 +6,7 @@
+ 
+ // LEVEL: 0
+ // EXEC: %compiler %cmp_opt %enableDevirtualization -Woff all %f -o %n.%suffix 2>&1 | compare %f
+-// ASSERT: scan interface function 'f1' must be implemented in 'A1'
++
+ 
+ interface I1 {
+     func f1(a: Int64): Unit {
+@@ -43,3 +43,14 @@ main() {
+     Test2(A1())
+     Test(A1())
+ }
++
++/* SCAN-IN
++error: interface function 'f1(a: Int64): Unit' must be implemented in 'A1'
++  ==> inherit_same_interface_sema_error.cj:27:1:
++   | 
++27 | open class A1 <: A & I2 & I3 {}
++   | ^ 
++   | 
++
++1 error generated, 1 error printed.
++*/

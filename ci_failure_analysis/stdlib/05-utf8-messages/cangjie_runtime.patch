@@ -1,0 +1,32 @@
+From 304252ec3b73c4ff9c6e62f7dc3bbbd13cbd2cd0 Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Wed, 4 Nov 2026 03:02:50 +0000
+Subject: [PATCH] [patch 05] fix: synchronize UTF-8 validation diagnostics
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ stdlib/libs/std/core/string_common.cj | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/stdlib/libs/std/core/string_common.cj b/stdlib/libs/std/core/string_common.cj
+index 0a6419a50810527e00bc624846e908266a0a8419..d7e9a780b042043169da848736904740869eb4a6 100644
+--- a/stdlib/libs/std/core/string_common.cj
++++ b/stdlib/libs/std/core/string_common.cj
+@@ -227,7 +227,7 @@ func checkInvalid(arr: RawArray<Byte>, startIndex: Int64, endIndex: Int64): Unit
+         var nowByte: UInt8 = arrayGetUnchecked3<UInt8>(arr, i)
+         match {
+             case nowByte < HIGH_1_UInt8 => i += 1
+-            case nowByte < HIGH_2_UInt8 => throw IllegalArgumentException("Invalid utf8 byte sequence.")
++            case nowByte < HIGH_2_UInt8 => throw IllegalArgumentException("Invalid UTF-8: unexpected continuation byte '${nowByte}' at index '${i}' (missing leading byte).")
+             case nowByte < HIGH_3_UInt8 =>
+                 checkUtf8Of2Bytes(arr, i, endIndex)
+                 i += 2
+@@ -237,7 +237,7 @@ func checkInvalid(arr: RawArray<Byte>, startIndex: Int64, endIndex: Int64): Unit
+             case nowByte < HIGH_5_UInt8 =>
+                 checkUtf8Of4Bytes(arr, i, endIndex)
+                 i += 4
+-            case _ => throw IllegalArgumentException("Invalid unicode scalar value.")
++            case _ => throw IllegalArgumentException("Invalid UTF-8: byte '${nowByte}' at index '${i}' is not a valid UTF-8 leading byte.")
+         }
+     }
+ }

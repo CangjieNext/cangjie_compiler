@@ -1,0 +1,26 @@
+From 2ddd31937eb4823e6d0cc6cec0bcb564cbb4c0a5 Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Wed, 4 Nov 2026 08:57:08 +0000
+Subject: [PATCH] [patch 13] fix: propagate effect handler options to the AST
+ lexer
+
+Forward enableEH alongside enableLocalMode in SetLexerOptions so macro lexing and error reparsing preserve effect-handler keywords.
+
+Validation: incremental standard library build and SDK installation; 27/27 LLT cases pass, including test_cangjieLex_eh.cj and the disabled-EH negative case.
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ stdlib/libs/std/ast/native/ast_api.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/stdlib/libs/std/ast/native/ast_api.cpp b/stdlib/libs/std/ast/native/ast_api.cpp
+index 2b6a2e10192fb03b5e4f7d249f0c44edfc39c9d0..c6204f980a89f6b4cdab1b51514cb5ad440d5f53 100644
+--- a/stdlib/libs/std/ast/native/ast_api.cpp
++++ b/stdlib/libs/std/ast/native/ast_api.cpp
+@@ -55,6 +55,7 @@ const GlobalOptions* GetGlobalOptions(void* fptr)
+ void SetLexerOptions(Lexer& lex, const GlobalOptions* opts)
+ {
+     lex.SetLocalModeEnabled(!opts || opts->enableLocalMode);
++    lex.SetEHEnabled(opts && opts->enableEH);
+ }
+ 
+ std::string ParseWithError(

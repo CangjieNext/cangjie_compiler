@@ -1,0 +1,24 @@
+From cd1e10565d83c8051b4b417c2d5eb13d33b774ed Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Wed, 4 Nov 2026 03:02:58 +0000
+Subject: [PATCH] [patch 14] test: verify Nothing region cleanup after
+ unreachable block elimination
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ .../LLT/compiler/CHIR/ModalType/nothing_type_region_pair01.cj   | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/testsuites/LLT/compiler/CHIR/ModalType/nothing_type_region_pair01.cj b/testsuites/LLT/compiler/CHIR/ModalType/nothing_type_region_pair01.cj
+index 50ad3b74924067a885d10c7af5a988d15d01dbe7..27199f91b9f0f663470f8f7047d92e4c3fca215d 100644
+--- a/testsuites/LLT/compiler/CHIR/ModalType/nothing_type_region_pair01.cj
++++ b/testsuites/LLT/compiler/CHIR/ModalType/nothing_type_region_pair01.cj
+@@ -8,7 +8,7 @@
+ // DEPENDENCE: ../pick_defination.py
+ // EXEC: %compiler %local %n.cj %dumpCHIRDebug %disableFuncInlining -Woff unused -o %output
+ // RUN-EXEC: %run %run_opt %output
+-// EXEC: %python pick_defination.py nothing_type_region_pair01_CHIR/[0-9]*_NothingTypeExprElimination.chirtxt "Func @_CN7default3fooHv" | compare %f
++// EXEC: %python pick_defination.py nothing_type_region_pair01_CHIR/[0-9]*_UnreachableBlockElimination.chirtxt "Func @_CN7default3fooHv" | compare %f
+ // ASSERT: scan-1 StartRegion()
+ // ASSERT: scan-1 EndRegion()
+ 

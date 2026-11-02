@@ -1,0 +1,49 @@
+From 7dc0859df3b0378ba17e3fe9e97fd34203f24077 Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Wed, 4 Nov 2026 03:03:58 +0000
+Subject: [PATCH] [patch 09] fix: reject nonfinite JSON floats in local
+ serialization
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ src/stdx/encoding/json/json_object.cj  | 5 ++++-
+ src/stdx/encoding/json/write_buffer.cj | 3 +++
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/stdx/encoding/json/json_object.cj b/src/stdx/encoding/json/json_object.cj
+index e4e948f2125d3840888b6a7d11329826c1dcb0cb..2f405c00bc23cf7a7588971822032851de883562 100644
+--- a/src/stdx/encoding/json/json_object.cj
++++ b/src/stdx/encoding/json/json_object.cj
+@@ -529,6 +529,9 @@ public class JsonFloat <: JsonValue {
+     }
+ 
+     public exclave func toString(this @local?): String @local! {
++        if (isJsonFloatInfinite(value)) {
++            throw JsonException("Failed to serialize JSON float.")
++        }
+         value.toString()
+     }
+ 
+@@ -557,7 +560,7 @@ public class JsonFloat <: JsonValue {
+     }
+ 
+     public exclave func toStringWithoutEscaping(this @local!): String @local! {
+-        value.toString()
++        toString()
+     }
+ 
+     /**
+diff --git a/src/stdx/encoding/json/write_buffer.cj b/src/stdx/encoding/json/write_buffer.cj
+index 1467371bb009de5ca9f2d24771425bcd9b49b774..1edc2bad748ab3d150a79cda9380e877863be6b5 100644
+--- a/src/stdx/encoding/json/write_buffer.cj
++++ b/src/stdx/encoding/json/write_buffer.cj
+@@ -266,6 +266,9 @@ class WriteBuffer {
+     }
+ 
+     public exclave func append(this @local!, fl: Float64): WriteBuffer @local! {
++        if (isJsonFloatInfinite(fl)) {
++            throw JsonException("Failed to serialize JSON float.")
++        }
+         unsafe {
+             let p: CPointer<UInt8> = CJ_CORE_Float64ToCPointer(fl)
+             if (p.isNull()) {

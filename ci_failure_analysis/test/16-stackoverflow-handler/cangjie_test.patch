@@ -1,0 +1,47 @@
+From b5c5c05a5e735c65524f95f6ae52c09373385f66 Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Wed, 4 Nov 2026 03:03:00 +0000
+Subject: [PATCH] [patch 16] test: bound recursive frame count in stack
+ overflow handler coverage
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ .../core/error_handler_stackoverflow_throws_error.cj  | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/testsuites/LLT/API/std/core/error_handler_stackoverflow_throws_error.cj b/testsuites/LLT/API/std/core/error_handler_stackoverflow_throws_error.cj
+index 018a0163dbf9259ad9788dfbd1fc183c5e887849..437b4ab5bbcab6ae675cbe571e55c7881916bd16 100644
+--- a/testsuites/LLT/API/std/core/error_handler_stackoverflow_throws_error.cj
++++ b/testsuites/LLT/API/std/core/error_handler_stackoverflow_throws_error.cj
+@@ -5,7 +5,7 @@
+  *
+  * See https://cangjie-lang.cn/pages/LICENSE for license information.
+  */
+-// EXEC: %compiler %cmp_opt -o %n.%suffix %f
++// EXEC: %compiler %cmp_opt %disableFuncInlining -o %n.%suffix %f
+ // EXEC: %run %run_opt %n.%suffix %run_args 2>&1 | compare %f
+ // ASSERT: scan throws an error in the error handler
+ 
+@@ -28,6 +28,8 @@ Thread id: 2 throws an error in the error handler
+ [1]    147289 segmentation fault  ./errorHandlerSOF
+ */
+ 
++import std.runtime.*
++
+ var a = 0
+ 
+ main() {
+@@ -52,6 +54,11 @@ main() {
+ }
+ 
+ func test(): Unit {
++    // Reach the stack limit with a bounded number of frames. Tiny recursive
++    // frames otherwise spend the test timeout scanning millions of stack maps.
++    let padding = VArray<Int64, $8192>(repeat: 0)
++    blackBox(padding)
+     test()
++    blackBox(padding)
+     a++
+-}
+\ No newline at end of file
++}

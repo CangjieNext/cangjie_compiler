@@ -1,0 +1,35 @@
+From c1a524aeaab8ef680a7840eac0bf7b2d0bcca783 Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Wed, 4 Nov 2026 03:03:58 +0000
+Subject: [PATCH] [patch 08] fix: support local JsonArray indexing
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ src/stdx/encoding/json/json_object.cj | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/src/stdx/encoding/json/json_object.cj b/src/stdx/encoding/json/json_object.cj
+index 0fa94ae7bb45e87feee83cb5ecdfafd2bb8e512b..e4e948f2125d3840888b6a7d11329826c1dcb0cb 100644
+--- a/src/stdx/encoding/json/json_object.cj
++++ b/src/stdx/encoding/json/json_object.cj
+@@ -964,6 +964,20 @@ public class JsonArray <: JsonValue {
+         }
+     }
+ 
++    public exclave operator func [](this @local!, index: Int64): JsonValue @local! {
++        match (get(index)) {
++            case Some(v) => v
++            case None => throw JsonException("Index '${index}' does not exist in JsonArray.")
++        }
++    }
++
++    public exclave operator func [](this @local?, index: Int64): JsonValue @local? {
++        match (get(index)) {
++            case Some(v) => v
++            case None => throw JsonException("Index '${index}' does not exist in JsonArray.")
++        }
++    }
++
+     /**
+      * Get the items data of JsonArray.
+      *

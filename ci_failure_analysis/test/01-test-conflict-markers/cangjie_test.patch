@@ -1,0 +1,945 @@
+From 94a3f6ed45782c08988b651fefe1deca1e4443ff Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Wed, 4 Nov 2026 02:36:24 +0000
+Subject: [PATCH] [patch 01] test: resolve imported conflict markers and
+ stabilize macro token checks
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ .../decls/classdecl/test_annotation_001.cj    | 160 ------------------
+ .../test_macro_expand_param.cj                |  42 -----
+ .../nodes/test_annotation_exception_001.cj    | 112 ------------
+ .../libast/nodes/test_body_exception_001.cj   |  36 ----
+ .../nodes/test_constructor_exception_001.cj   |  50 ------
+ .../test_generic_constraint_exception_001.cj  |  30 ----
+ .../nodes/test_generic_param_exception_001.cj |  54 ------
+ .../toTokens/test_primitive_totokens_001.cj   |  76 ---------
+ .../toTokens/test_string_totokens_001.cj      |  38 -----
+ .../types/reftype/test_exception_001.cj       |  36 ----
+ .../debuginfo_zero_size_static_var.cj         |  31 ----
+ .../inQuoteDollarInterpolate/test_macro_1.cj  |  14 +-
+ .../inQuoteDollarInterpolate/test_macro_2.cj  |  14 +-
+ .../inQuoteDollarInterpolate/test_macro_3.cj  |  14 +-
+ .../inQuoteDollarInterpolate/test_macro_6.cj  |  14 +-
+ 15 files changed, 12 insertions(+), 709 deletions(-)
+
+diff --git a/testsuites/LLT/API/std/libast/decls/classdecl/test_annotation_001.cj b/testsuites/LLT/API/std/libast/decls/classdecl/test_annotation_001.cj
+index 2bbc2ee8b7586516f27145f0202bfe52c03c623b..d2a186dd20e68fa3c2ce9cc8a4e1a3c86cf287aa 100644
+--- a/testsuites/LLT/API/std/libast/decls/classdecl/test_annotation_001.cj
++++ b/testsuites/LLT/API/std/libast/decls/classdecl/test_annotation_001.cj
+@@ -26,7 +26,6 @@ main() {
+     classDecl.hasAttr("a2") |> println
+ }
+ 
+-<<<<<<< HEAD
+ // ASSERT: scan ClassDecl {
+ // ASSERT: scan -annotations: 0, Annotation {
+ // ASSERT: scan -identifier: Attribute
+@@ -76,162 +75,3 @@ main() {
+ // ASSERT: scan true
+ // ASSERT: scan true
+ // ASSERT: scan true
+-||||||| constructed merge base
+-/* SCAN
+-ClassDecl {
+-  -annotations: 0, Annotation {
+-    -identifier: Attribute
+-    -attributes: 0,     a0: Token {
+-      value: "a0"
+-      kind: IDENTIFIER
+-    }
+-    -attributes: 1,     a1: Token {
+-      value: "a1"
+-      kind: IDENTIFIER
+-    }
+-    -attributes: 2,     a2: Token {
+-      value: "a2"
+-      kind: IDENTIFIER
+-    }
+-  }
+-  -annotations: 1, Annotation {
+-    -identifier: Anno
+-  }
+-  -keyword: Token {
+-    value: "class"
+-    kind: CLASS
+-    pos: 16: 32
+-  }
+-  -identifier: Token {
+-    value: "A"
+-    kind: IDENTIFIER
+-    pos: 16: 38
+-  }
+-  -genericParam: GenericParam {
+-    -parameters: 0, T: Token {
+-      value: "T"
+-      kind: IDENTIFIER
+-      pos: 16: 40
+-    }
+-  }
+-  -genericConstraint: 0, GenericConstraint {
+-    -keyword: Token {
+-      value: "where"
+-      kind: WHERE
+-      pos: 16: 43
+-    }
+-    -typeArgument: RefType {
+-      -identifier: Token {
+-        value: "T"
+-        kind: IDENTIFIER
+-        pos: 16: 49
+-      }
+-    }
+-    -upperBound: Token {
+-      value: "<:"
+-      kind: UPPERBOUND
+-      pos: 16: 51
+-    }
+-    -upperBounds: 0, RefType {
+-      -identifier: Token {
+-        value: "Hashable"
+-        kind: IDENTIFIER
+-        pos: 16: 54
+-      }
+-    }
+-  }
+-  -body: Body {
+-  }
+-}
+-@Attribute[a0, a1, a2]
+-@!Anno
+-class A < T > where T <: Hashable {
+-}
+-
+-description: identifier, token_id: 137, token_literal_value: a0, fileID: 16, line: 177, column: 22
+-description: identifier, token_id: 137, token_literal_value: a1, fileID: 16, line: 177, column: 22
+-description: identifier, token_id: 137, token_literal_value: a2, fileID: 16, line: 177, column: 22
+-true
+-true
+-true
+-*/
+-=======
+-/* SCAN
+-ClassDecl {
+-  -annotations: 0, Annotation {
+-    -identifier: Attribute
+-    -attributes: 0,     a0: Token {
+-      value: "a0"
+-      kind: IDENTIFIER
+-    }
+-    -attributes: 1,     a1: Token {
+-      value: "a1"
+-      kind: IDENTIFIER
+-    }
+-    -attributes: 2,     a2: Token {
+-      value: "a2"
+-      kind: IDENTIFIER
+-    }
+-  }
+-  -annotations: 1, Annotation {
+-    -identifier: Anno
+-  }
+-  -keyword: Token {
+-    value: "class"
+-    kind: CLASS
+-    pos: 16: 32
+-  }
+-  -identifier: Token {
+-    value: "A"
+-    kind: IDENTIFIER
+-    pos: 16: 38
+-  }
+-  -genericParam: GenericParam {
+-    -parameters: 0, T: Token {
+-      value: "T"
+-      kind: IDENTIFIER
+-      pos: 16: 40
+-    }
+-  }
+-  -genericConstraint: 0, GenericConstraint {
+-    -keyword: Token {
+-      value: "where"
+-      kind: WHERE
+-      pos: 16: 43
+-    }
+-    -typeArgument: RefType {
+-      -identifier: Token {
+-        value: "T"
+-        kind: IDENTIFIER
+-        pos: 16: 49
+-      }
+-    }
+-    -upperBound: Token {
+-      value: "<:"
+-      kind: UPPERBOUND
+-      pos: 16: 51
+-    }
+-    -upperBounds: 0, RefType {
+-      -identifier: Token {
+-        value: "Hashable"
+-        kind: IDENTIFIER
+-        pos: 16: 54
+-      }
+-    }
+-  }
+-  -body: Body {
+-  }
+-}
+-@Attribute[a0, a1, a2]
+-@!Anno
+-class A < T > where T <: Hashable {
+-}
+-
+-description: identifier, token_id: 137, token_literal_value: a0, fileID: 17, line: 177, column: 22
+-description: identifier, token_id: 137, token_literal_value: a1, fileID: 17, line: 177, column: 22
+-description: identifier, token_id: 137, token_literal_value: a2, fileID: 17, line: 177, column: 22
+-true
+-true
+-true
+-*/
+->>>>>>> feat: local mode
+diff --git a/testsuites/LLT/API/std/libast/decls/macroexpandparam/test_macro_expand_param.cj b/testsuites/LLT/API/std/libast/decls/macroexpandparam/test_macro_expand_param.cj
+index 7018091113d2a3ec6982308eb22ff6813d70e0e1..37c2de59b2b0e2b855aebb0d3298bbc3af289445 100644
+--- a/testsuites/LLT/API/std/libast/decls/macroexpandparam/test_macro_expand_param.cj
++++ b/testsuites/LLT/API/std/libast/decls/macroexpandparam/test_macro_expand_param.cj
+@@ -26,7 +26,6 @@ main() {
+     return 0
+ }
+ 
+-<<<<<<< HEAD
+ // ASSERT: scan description: at_exclamation, token_id: 155, token_literal_value: @!
+ // ASSERT: scan description: identifier, token_id: 137, token_literal_value: Anno1
+ // ASSERT: scan description: l_square, token_id: 4, token_literal_value: [
+@@ -36,44 +35,3 @@ main() {
+ // ASSERT: scan description: identifier, token_id: 137, token_literal_value: a
+ // ASSERT: scan description: colon, token_id: 28, token_literal_value: :
+ // ASSERT: scan description: Int64, token_id: 65, token_literal_value: Int64
+-||||||| constructed merge base
+-/* SCAN
+-description: at_exclamation, token_id: 155, token_literal_value: @!, fileID: 1, line: 9, column: 45
+-description: identifier, token_id: 137, token_literal_value: Anno1, fileID: 1, line: 9, column: 47
+-description: l_square, token_id: 4, token_literal_value: [, fileID: 1, line: 9, column: 52
+-description: double_quoted_string_literal, token_id: 147, token_literal_value: 1, fileID: 1, line: 9, column: 53
+-description: r_square, token_id: 5, token_literal_value: ], fileID: 1, line: 9, column: 56
+-description: newline, token_id: 143, token_literal_value: \n, fileID: 13, line: 164, column: 28
+-description: identifier, token_id: 137, token_literal_value: a, fileID: 1, line: 9, column: 58
+-description: colon, token_id: 28, token_literal_value: :, fileID: 1, line: 9, column: 59
+-description: Int64, token_id: 65, token_literal_value: Int64, fileID: 1, line: 9, column: 61
+-*/
+-
+-/*
+- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+- * This source file is part of the Cangjie project, licensed under Apache-2.0
+- * with Runtime Library Exception.
+- *
+- * See https://cangjie-lang.cn/pages/LICENSE for license information.
+- */
+-=======
+-/* SCAN
+-description: at_exclamation, token_id: 155, token_literal_value: @!, fileID: 1, line: 9, column: 45
+-description: identifier, token_id: 137, token_literal_value: Anno1, fileID: 1, line: 9, column: 47
+-description: l_square, token_id: 4, token_literal_value: [, fileID: 1, line: 9, column: 52
+-description: double_quoted_string_literal, token_id: 147, token_literal_value: 1, fileID: 1, line: 9, column: 53
+-description: r_square, token_id: 5, token_literal_value: ], fileID: 1, line: 9, column: 56
+-description: newline, token_id: 143, token_literal_value: \n, fileID: 14, line: 164, column: 28
+-description: identifier, token_id: 137, token_literal_value: a, fileID: 1, line: 9, column: 58
+-description: colon, token_id: 28, token_literal_value: :, fileID: 1, line: 9, column: 59
+-description: Int64, token_id: 65, token_literal_value: Int64, fileID: 1, line: 9, column: 61
+-*/
+-
+-/*
+- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+- * This source file is part of the Cangjie project, licensed under Apache-2.0
+- * with Runtime Library Exception.
+- *
+- * See https://cangjie-lang.cn/pages/LICENSE for license information.
+- */
+->>>>>>> feat: local mode
+diff --git a/testsuites/LLT/API/std/libast/nodes/test_annotation_exception_001.cj b/testsuites/LLT/API/std/libast/nodes/test_annotation_exception_001.cj
+index 597fb6aee3f5a5741f022c78eb865893b0019e70..7ae30782a6943522614ff205bb0ebb768c7df6a6 100644
+--- a/testsuites/LLT/API/std/libast/nodes/test_annotation_exception_001.cj
++++ b/testsuites/LLT/API/std/libast/nodes/test_annotation_exception_001.cj
+@@ -104,7 +104,6 @@ main(): Int64 {
+     return 0
+ }
+ 
+-<<<<<<< HEAD
+ // ASSERT: scan Cannot construct the 'Annotation' node
+ // ASSERT: scan description: at, token_id: 51, token_literal_value: @
+ // ASSERT: scan Illegal token kind: expected 'AT' or 'AT_EXCLAMATION', got 'OR'.
+@@ -137,114 +136,3 @@ main(): Int64 {
+ // ASSERT: scan value: "c"
+ // ASSERT: scan kind: IDENTIFIER
+ // ASSERT: scan cnt = 3
+-||||||| constructed merge base
+-/* SCAN-IN
+-Cannot construct the 'Annotation' node.
+-description: at, token_id: 51, token_literal_value: @, fileID: 13, line: 81, column: 30
+-Illegal TokenKind, TokenKind should be AT or AT_EXCLAMATION
+-description: or, token_id: 17, token_literal_value: ||, fileID: 1, line: 35, column: 33
+-1
+-description: or, token_id: 17, token_literal_value: ||, fileID: 1, line: 54, column: 49
+-Current Annotation node is not `When` annotation
+-BinaryExpr {
+-  -leftExpr: RefExpr {
+-    -identifier: Token {
+-      value: "a"
+-      kind: IDENTIFIER
+-      pos: 71: 50
+-    }
+-  }
+-  -op: Token {
+-    value: "=="
+-    kind: EQUAL
+-    pos: 71: 52
+-  }
+-  -rightExpr: LitConstExpr {
+-    -literal: Token {
+-      value: "0"
+-      kind: INTEGER_LITERAL
+-      pos: 71: 55
+-    }
+-  }
+-}
+-3
+-Annotation {
+-  -identifier: Attribute
+-  -attributes: 0,   a: Token {
+-    value: "a"
+-    kind: IDENTIFIER
+-  }
+-  -attributes: 1,   b: Token {
+-    value: "b"
+-    kind: IDENTIFIER
+-  }
+-  -attributes: 2,   c: Token {
+-    value: "c"
+-    kind: IDENTIFIER
+-  }
+-}
+-cnt = 3
+- */
+-/*
+- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+- * This source file is part of the Cangjie project, licensed under Apache-2.0
+- * with Runtime Library Exception.
+- *
+- * See https://cangjie-lang.cn/pages/LICENSE for license information.
+- */
+-=======
+-/* SCAN-IN
+-Cannot construct the 'Annotation' node.
+-description: at, token_id: 51, token_literal_value: @, fileID: 14, line: 81, column: 30
+-Illegal TokenKind, TokenKind should be AT or AT_EXCLAMATION
+-description: or, token_id: 17, token_literal_value: ||, fileID: 1, line: 35, column: 33
+-1
+-description: or, token_id: 17, token_literal_value: ||, fileID: 1, line: 54, column: 49
+-Current Annotation node is not `When` annotation
+-BinaryExpr {
+-  -leftExpr: RefExpr {
+-    -identifier: Token {
+-      value: "a"
+-      kind: IDENTIFIER
+-      pos: 71: 50
+-    }
+-  }
+-  -op: Token {
+-    value: "=="
+-    kind: EQUAL
+-    pos: 71: 52
+-  }
+-  -rightExpr: LitConstExpr {
+-    -literal: Token {
+-      value: "0"
+-      kind: INTEGER_LITERAL
+-      pos: 71: 55
+-    }
+-  }
+-}
+-3
+-Annotation {
+-  -identifier: Attribute
+-  -attributes: 0,   a: Token {
+-    value: "a"
+-    kind: IDENTIFIER
+-  }
+-  -attributes: 1,   b: Token {
+-    value: "b"
+-    kind: IDENTIFIER
+-  }
+-  -attributes: 2,   c: Token {
+-    value: "c"
+-    kind: IDENTIFIER
+-  }
+-}
+-cnt = 3
+- */
+-/*
+- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+- * This source file is part of the Cangjie project, licensed under Apache-2.0
+- * with Runtime Library Exception.
+- *
+- * See https://cangjie-lang.cn/pages/LICENSE for license information.
+- */
+->>>>>>> feat: local mode
+diff --git a/testsuites/LLT/API/std/libast/nodes/test_body_exception_001.cj b/testsuites/LLT/API/std/libast/nodes/test_body_exception_001.cj
+index 0e29413456740a9a82035a200afd1f265b0387ad..0c10ccd372bd8fe38917f31efd3a7b4f2821cbcd 100644
+--- a/testsuites/LLT/API/std/libast/nodes/test_body_exception_001.cj
++++ b/testsuites/LLT/API/std/libast/nodes/test_body_exception_001.cj
+@@ -46,45 +46,9 @@ main(): Int64 {
+     return 0
+ }
+ 
+-<<<<<<< HEAD
+ // ASSERT: scan 1
+ // ASSERT: scan description: l_curl, token_id: 6, token_literal_value: {
+ // ASSERT: scan Illegal token kind: expected 'LCURL', got 'SENTINEL'.
+ // ASSERT: scan description: r_curl, token_id: 7, token_literal_value: }
+ // ASSERT: scan Illegal token kind: expected 'RCURL', got 'SENTINEL'.
+ // ASSERT: scan cnt = 2
+-||||||| constructed merge base
+-/* SCAN
+-1
+-description: l_curl, token_id: 6, token_literal_value: {, fileID: 13, line: 455, column: 34
+-Illegal TokenKind, TokenKind should be LCURL
+-description: r_curl, token_id: 7, token_literal_value: }, fileID: 13, line: 457, column: 34
+-Illegal TokenKind, TokenKind should be RCURL
+-cnt = 2
+-*/
+-
+-/*
+- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+- * This source file is part of the Cangjie project, licensed under Apache-2.0
+- * with Runtime Library Exception.
+- *
+- * See https://cangjie-lang.cn/pages/LICENSE for license information.
+- */
+-=======
+-/* SCAN
+-1
+-description: l_curl, token_id: 6, token_literal_value: {, fileID: 14, line: 455, column: 34
+-Illegal TokenKind, TokenKind should be LCURL
+-description: r_curl, token_id: 7, token_literal_value: }, fileID: 14, line: 457, column: 34
+-Illegal TokenKind, TokenKind should be RCURL
+-cnt = 2
+-*/
+-
+-/*
+- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+- * This source file is part of the Cangjie project, licensed under Apache-2.0
+- * with Runtime Library Exception.
+- *
+- * See https://cangjie-lang.cn/pages/LICENSE for license information.
+- */
+->>>>>>> feat: local mode
+diff --git a/testsuites/LLT/API/std/libast/nodes/test_constructor_exception_001.cj b/testsuites/LLT/API/std/libast/nodes/test_constructor_exception_001.cj
+index 4afb1f35493b96c0b07e137b2d379bbefa987275..109f51094145eacd3f71f5ef43568cf6a7a09f14 100644
+--- a/testsuites/LLT/API/std/libast/nodes/test_constructor_exception_001.cj
++++ b/testsuites/LLT/API/std/libast/nodes/test_constructor_exception_001.cj
+@@ -49,7 +49,6 @@ main(): Int64 {
+     return 0
+ }
+ 
+-<<<<<<< HEAD
+ // ASSERT: scan ident(() ->,())
+ // ASSERT: scan traversed!
+ // ASSERT: scan Constructor {
+@@ -67,52 +66,3 @@ main(): Int64 {
+ // ASSERT: scan 10
+ // ASSERT: scan description: identifier, token_id: 137, token_literal_value:
+ // ASSERT: scan cnt = 0
+-||||||| constructed merge base
+-/* SCAN-IN
+-ident(() ->,())
+-traversed!
+-Constructor {
+-  -identifier: Token {
+-    value: "ident"
+-    kind: IDENTIFIER
+-    pos: 31: 34
+-  }
+-  -typeArguments: 0, FuncType {
+-    -ARROW: Token {
+-      value: "->"
+-      kind: ARROW
+-    }
+-    -returnType:   }
+-  -typeArguments: 1, ParenType {
+-    -parenthesizedType:   }
+-}
+-description: l_paren, token_id: 2, token_literal_value: (, fileID: 1, line: 44, column: 43
+-10
+-description: identifier, token_id: 137, token_literal_value: , fileID: 13, line: 82, column: 38
+-cnt = 0
+- */
+-=======
+-/* SCAN-IN
+-ident(() ->,())
+-traversed!
+-Constructor {
+-  -identifier: Token {
+-    value: "ident"
+-    kind: IDENTIFIER
+-    pos: 31: 34
+-  }
+-  -typeArguments: 0, FuncType {
+-    -ARROW: Token {
+-      value: "->"
+-      kind: ARROW
+-    }
+-    -returnType:   }
+-  -typeArguments: 1, ParenType {
+-    -parenthesizedType:   }
+-}
+-description: l_paren, token_id: 2, token_literal_value: (, fileID: 1, line: 44, column: 43
+-10
+-description: identifier, token_id: 137, token_literal_value: , fileID: 14, line: 82, column: 38
+-cnt = 0
+- */
+->>>>>>> feat: local mode
+diff --git a/testsuites/LLT/API/std/libast/nodes/test_generic_constraint_exception_001.cj b/testsuites/LLT/API/std/libast/nodes/test_generic_constraint_exception_001.cj
+index 04c337f46e474a3f2f43ae4c9c753f3c46b845a8..acad0398e7c737beafe294b0c75569cf647f8aba 100644
+--- a/testsuites/LLT/API/std/libast/nodes/test_generic_constraint_exception_001.cj
++++ b/testsuites/LLT/API/std/libast/nodes/test_generic_constraint_exception_001.cj
+@@ -29,36 +29,6 @@ main(): Int64 {
+     return 0
+ }
+ 
+-<<<<<<< HEAD
+ // ASSERT: scan description: upperbound, token_id: 135, token_literal_value: <:
+ // ASSERT: scan Illegal token kind: expected 'BITAND', got 'AND'.
+ // ASSERT: scan cnt = 1
+-||||||| constructed merge base
+-/* SCAN
+-description: upperbound, token_id: 135, token_literal_value: <:, fileID: 13, line: 342, column: 35
+-Illegal TokenKind, TokenKind should be BITAND
+-cnt = 1
+-*/
+-
+-/*
+- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+- * This source file is part of the Cangjie project, licensed under Apache-2.0
+- * with Runtime Library Exception.
+- *
+- * See https://cangjie-lang.cn/pages/LICENSE for license information.
+- */
+-=======
+-/* SCAN
+-description: upperbound, token_id: 135, token_literal_value: <:, fileID: 14, line: 342, column: 35
+-Illegal TokenKind, TokenKind should be BITAND
+-cnt = 1
+-*/
+-
+-/*
+- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+- * This source file is part of the Cangjie project, licensed under Apache-2.0
+- * with Runtime Library Exception.
+- *
+- * See https://cangjie-lang.cn/pages/LICENSE for license information.
+- */
+->>>>>>> feat: local mode
+diff --git a/testsuites/LLT/API/std/libast/nodes/test_generic_param_exception_001.cj b/testsuites/LLT/API/std/libast/nodes/test_generic_param_exception_001.cj
+index c325718f3e32a172d6db6104ed59b14bf7c20e0d..5d19143d4dad2037d7d234ceb6c485cab4f09c77 100644
+--- a/testsuites/LLT/API/std/libast/nodes/test_generic_param_exception_001.cj
++++ b/testsuites/LLT/API/std/libast/nodes/test_generic_param_exception_001.cj
+@@ -69,7 +69,6 @@ main(): Int64 {
+     return 0
+ }
+ 
+-<<<<<<< HEAD
+ // ASSERT: scan GenericParam {
+ // ASSERT: scan 3
+ // ASSERT: scan description: less, token_id: 53, token_literal_value: <
+@@ -84,56 +83,3 @@ main(): Int64 {
+ // ASSERT: scan description: newline, token_id: 143, token_literal_value: \\n
+ // ASSERT: scan description: greater, token_id: 54, token_literal_value: >
+ // ASSERT: scan cnt = 2
+-||||||| constructed merge base
+-/* SCAN
+-GenericParam {
+-}
+-3
+-description: less, token_id: 53, token_literal_value: <, fileID: 13, line: 257, column: 34
+-Illegal TokenKind, TokenKind should be LT
+-description: greater, token_id: 54, token_literal_value: >, fileID: 13, line: 259, column: 34
+-Illegal TokenKind, TokenKind should be GT
+-description: less, token_id: 53, token_literal_value: <, fileID: 13, line: 257, column: 34
+-description: and, token_id: 16, token_literal_value: &&, fileID: 1, line: 53, column: 66
+-description: comma, token_id: 1, token_literal_value: ,, fileID: 13, line: 295, column: 17
+-description: or, token_id: 17, token_literal_value: ||, fileID: 1, line: 53, column: 78
+-description: comma, token_id: 1, token_literal_value: ,, fileID: 13, line: 295, column: 17
+-description: newline, token_id: 143, token_literal_value: \n, fileID: 1, line: 53, column: 89
+-description: greater, token_id: 54, token_literal_value: >, fileID: 13, line: 259, column: 34
+-cnt = 2
+-*/
+-
+-/*
+- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+- * This source file is part of the Cangjie project, licensed under Apache-2.0
+- * with Runtime Library Exception.
+- *
+- * See https://cangjie-lang.cn/pages/LICENSE for license information.
+- */
+-=======
+-/* SCAN
+-GenericParam {
+-}
+-3
+-description: less, token_id: 53, token_literal_value: <, fileID: 14, line: 257, column: 34
+-Illegal TokenKind, TokenKind should be LT
+-description: greater, token_id: 54, token_literal_value: >, fileID: 14, line: 259, column: 34
+-Illegal TokenKind, TokenKind should be GT
+-description: less, token_id: 53, token_literal_value: <, fileID: 14, line: 257, column: 34
+-description: and, token_id: 16, token_literal_value: &&, fileID: 1, line: 53, column: 66
+-description: comma, token_id: 1, token_literal_value: ,, fileID: 14, line: 295, column: 17
+-description: or, token_id: 17, token_literal_value: ||, fileID: 1, line: 53, column: 78
+-description: comma, token_id: 1, token_literal_value: ,, fileID: 14, line: 295, column: 17
+-description: newline, token_id: 143, token_literal_value: \n, fileID: 1, line: 53, column: 89
+-description: greater, token_id: 54, token_literal_value: >, fileID: 14, line: 259, column: 34
+-cnt = 2
+-*/
+-
+-/*
+- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+- * This source file is part of the Cangjie project, licensed under Apache-2.0
+- * with Runtime Library Exception.
+- *
+- * See https://cangjie-lang.cn/pages/LICENSE for license information.
+- */
+->>>>>>> feat: local mode
+diff --git a/testsuites/LLT/API/std/libast/tokens/toTokens/test_primitive_totokens_001.cj b/testsuites/LLT/API/std/libast/tokens/toTokens/test_primitive_totokens_001.cj
+index f0eda1e40259c3c09a1885122ddeb74ccf8334dc..cddd6ea538745bc6c5c99a376a7fa3c88eab7297 100644
+--- a/testsuites/LLT/API/std/libast/tokens/toTokens/test_primitive_totokens_001.cj
++++ b/testsuites/LLT/API/std/libast/tokens/toTokens/test_primitive_totokens_001.cj
+@@ -72,7 +72,6 @@ main(): Int64 {
+     return 0
+ }
+ 
+-<<<<<<< HEAD
+ // ASSERT: scan description: integer_literal, token_id: 139, token_literal_value: 3
+ // ASSERT: scan description: integer_literal, token_id: 139, token_literal_value: 3
+ // ASSERT: scan description: integer_literal, token_id: 139, token_literal_value: 3
+@@ -99,78 +98,3 @@ main(): Int64 {
+ // ASSERT: scan description: sub, token_id: 13, token_literal_value: -
+ // ASSERT: scan description: float_literal, token_id: 141, token_literal_value: 3.140625
+ // ASSERT: scan description: char_literal, token_id: 146, token_literal_value: a
+-||||||| constructed merge base
+-/* SCAN
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 26, line: 40, column: 26
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 26, line: 50, column: 26
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 26, line: 60, column: 26
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 26, line: 70, column: 26
+-description: sub, token_id: 13, token_literal_value: -, fileID: 26, line: 38, column: 36
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 26, line: 38, column: 65
+-description: sub, token_id: 13, token_literal_value: -, fileID: 26, line: 48, column: 36
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 26, line: 48, column: 65
+-description: sub, token_id: 13, token_literal_value: -, fileID: 26, line: 58, column: 36
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 26, line: 58, column: 65
+-description: sub, token_id: 13, token_literal_value: -, fileID: 26, line: 68, column: 36
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 26, line: 68, column: 65
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 26, line: 77, column: 26
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 26, line: 84, column: 26
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 26, line: 91, column: 26
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 26, line: 98, column: 26
+-description: float_literal, token_id: 141, token_literal_value: 3.14, fileID: 26, line: 114, column: 26
+-description: float_literal, token_id: 141, token_literal_value: 3.140000, fileID: 26, line: 124, column: 26
+-description: float_literal, token_id: 141, token_literal_value: 3.140625, fileID: 26, line: 134, column: 26
+-description: sub, token_id: 13, token_literal_value: -, fileID: 26, line: 112, column: 36
+-description: float_literal, token_id: 141, token_literal_value: 3.14, fileID: 26, line: 112, column: 65
+-description: sub, token_id: 13, token_literal_value: -, fileID: 26, line: 122, column: 36
+-description: float_literal, token_id: 141, token_literal_value: 3.140000, fileID: 26, line: 122, column: 65
+-description: sub, token_id: 13, token_literal_value: -, fileID: 26, line: 132, column: 36
+-description: float_literal, token_id: 141, token_literal_value: 3.140625, fileID: 26, line: 132, column: 65
+-description: char_literal, token_id: 146, token_literal_value: a, fileID: 26, line: 148, column: 26
+-*/
+-
+-/*
+- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+- * This source file is part of the Cangjie project, licensed under Apache-2.0
+- * with Runtime Library Exception.
+- *
+- * See https://cangjie-lang.cn/pages/LICENSE for license information.
+- */
+-=======
+-/* SCAN
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 27, line: 40, column: 26
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 27, line: 50, column: 26
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 27, line: 60, column: 26
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 27, line: 70, column: 26
+-description: sub, token_id: 13, token_literal_value: -, fileID: 27, line: 38, column: 36
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 27, line: 38, column: 65
+-description: sub, token_id: 13, token_literal_value: -, fileID: 27, line: 48, column: 36
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 27, line: 48, column: 65
+-description: sub, token_id: 13, token_literal_value: -, fileID: 27, line: 58, column: 36
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 27, line: 58, column: 65
+-description: sub, token_id: 13, token_literal_value: -, fileID: 27, line: 68, column: 36
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 27, line: 68, column: 65
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 27, line: 77, column: 26
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 27, line: 84, column: 26
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 27, line: 91, column: 26
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 27, line: 98, column: 26
+-description: float_literal, token_id: 141, token_literal_value: 3.14, fileID: 27, line: 114, column: 26
+-description: float_literal, token_id: 141, token_literal_value: 3.140000, fileID: 27, line: 124, column: 26
+-description: float_literal, token_id: 141, token_literal_value: 3.140625, fileID: 27, line: 134, column: 26
+-description: sub, token_id: 13, token_literal_value: -, fileID: 27, line: 112, column: 36
+-description: float_literal, token_id: 141, token_literal_value: 3.14, fileID: 27, line: 112, column: 65
+-description: sub, token_id: 13, token_literal_value: -, fileID: 27, line: 122, column: 36
+-description: float_literal, token_id: 141, token_literal_value: 3.140000, fileID: 27, line: 122, column: 65
+-description: sub, token_id: 13, token_literal_value: -, fileID: 27, line: 132, column: 36
+-description: float_literal, token_id: 141, token_literal_value: 3.140625, fileID: 27, line: 132, column: 65
+-description: char_literal, token_id: 146, token_literal_value: a, fileID: 27, line: 148, column: 26
+-*/
+-
+-/*
+- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+- * This source file is part of the Cangjie project, licensed under Apache-2.0
+- * with Runtime Library Exception.
+- *
+- * See https://cangjie-lang.cn/pages/LICENSE for license information.
+- */
+->>>>>>> feat: local mode
+diff --git a/testsuites/LLT/API/std/libast/tokens/toTokens/test_string_totokens_001.cj b/testsuites/LLT/API/std/libast/tokens/toTokens/test_string_totokens_001.cj
+index 2c30cbe455ac9351f2bb065c6141465f39d81e0f..0706185c0753a163bc6fde9d32ef541c5cc95e10 100644
+--- a/testsuites/LLT/API/std/libast/tokens/toTokens/test_string_totokens_001.cj
++++ b/testsuites/LLT/API/std/libast/tokens/toTokens/test_string_totokens_001.cj
+@@ -52,47 +52,9 @@ string
+     return 0
+ }
+ 
+-<<<<<<< HEAD
+ // ASSERT: scan description: multiline_string, token_id: 149, token_literal_value: Here
+ // ASSERT: scan is
+ // ASSERT: scan a
+ // ASSERT: scan multi
+ // ASSERT: scan line
+ // ASSERT: scan string
+-||||||| constructed merge base
+-/* SCAN-IN
+-description: multiline_string, token_id: 149, token_literal_value: Here
+-is
+-a
+-multi
+-line
+-string
+-.
+-, fileID: 26, line: 204, column: 16
+- */
+-/*
+- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+- * This source file is part of the Cangjie project, licensed under Apache-2.0
+- * with Runtime Library Exception.
+- *
+- * See https://cangjie-lang.cn/pages/LICENSE for license information.
+- */
+-=======
+-/* SCAN-IN
+-description: multiline_string, token_id: 149, token_literal_value: Here
+-is
+-a
+-multi
+-line
+-string
+-.
+-, fileID: 27, line: 204, column: 16
+- */
+-/*
+- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+- * This source file is part of the Cangjie project, licensed under Apache-2.0
+- * with Runtime Library Exception.
+- *
+- * See https://cangjie-lang.cn/pages/LICENSE for license information.
+- */
+->>>>>>> feat: local mode
+diff --git a/testsuites/LLT/API/std/libast/types/reftype/test_exception_001.cj b/testsuites/LLT/API/std/libast/types/reftype/test_exception_001.cj
+index 354b8769bfc1f6e224f0a8c7159657941d60394d..0888d42638be3ccf8f8274f0583a1d4a9dc33a15 100644
+--- a/testsuites/LLT/API/std/libast/types/reftype/test_exception_001.cj
++++ b/testsuites/LLT/API/std/libast/types/reftype/test_exception_001.cj
+@@ -60,45 +60,9 @@ main(): Int64 {
+     return 0
+ }
+ 
+-<<<<<<< HEAD
+ // ASSERT: scan Cannot construct the 'RefType' node.
+ // ASSERT: scan description: less, token_id: 53, token_literal_value: <
+ // ASSERT: scan description: greater, token_id: 54, token_literal_value: >
+ // ASSERT: scan description: colon, token_id: 28, token_literal_value: :
+ // ASSERT: scan Illegal token kind: expected 'COMMA', got 'AND'.
+ // ASSERT: scan cnt = 3
+-||||||| constructed merge base
+-/* SCAN-IN
+-Cannot construct the 'RefType' node.
+-parsing type error.
+-description: less, token_id: 53, token_literal_value: <, fileID: 1, line: 33, column: 38
+-description: greater, token_id: 54, token_literal_value: >, fileID: 1, line: 33, column: 44
+-description: colon, token_id: 28, token_literal_value: :, fileID: 27, line: 23, column: 33
+-Illegal TokenKind, TokenKind should be COMMA
+-cnt = 3
+-*/
+-/*
+- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+- * This source file is part of the Cangjie project, licensed under Apache-2.0
+- * with Runtime Library Exception.
+- *
+- * See https://cangjie-lang.cn/pages/LICENSE for license information.
+- */
+-=======
+-/* SCAN-IN
+-Cannot construct the 'RefType' node.
+-parsing type error.
+-description: less, token_id: 53, token_literal_value: <, fileID: 1, line: 33, column: 38
+-description: greater, token_id: 54, token_literal_value: >, fileID: 1, line: 33, column: 44
+-description: colon, token_id: 28, token_literal_value: :, fileID: 28, line: 23, column: 33
+-Illegal TokenKind, TokenKind should be COMMA
+-cnt = 3
+-*/
+-/*
+- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+- * This source file is part of the Cangjie project, licensed under Apache-2.0
+- * with Runtime Library Exception.
+- *
+- * See https://cangjie-lang.cn/pages/LICENSE for license information.
+- */
+->>>>>>> feat: local mode
+diff --git a/testsuites/LLT/Runtime/CJNative/debuginfo_zero_size_static_var.cj b/testsuites/LLT/Runtime/CJNative/debuginfo_zero_size_static_var.cj
+index 590e2ada1d016cc6e012fdeb8dec99e4e192d30a..de4496fcae70feda2a1da399cf5626a0adecf8d5 100644
+--- a/testsuites/LLT/Runtime/CJNative/debuginfo_zero_size_static_var.cj
++++ b/testsuites/LLT/Runtime/CJNative/debuginfo_zero_size_static_var.cj
+@@ -1,4 +1,3 @@
+-<<<<<<< HEAD
+ // Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+ // This source file is part of the Cangjie project, licensed under Apache-2.0
+ // with Runtime Library Exception.
+@@ -26,33 +25,3 @@ main() {
+     println("${t}")
+     0
+ }
+-||||||| constructed merge base
+-=======
+-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+-// This source file is part of the Cangjie project, licensed under Apache-2.0
+-// with Runtime Library Exception.
+-//
+-// See https://cangjie-lang.cn/pages/LICENSE for license information.
+-
+-// A zero-sized (Unit-typed) static variable occupies no storage at all. When
+-// it happens to be the last .bss fragment after linking, its symbol address
+-// equals the end of the output section, so no section covers it and the
+-// debugger fails to inspect it with "read memory failed".
+-
+-// EXEC: %compiler %cmp_opt -g --apc=5 %n.cj -o %n.%suffix
+-// EXEC: %run %run_opt %n.%suffix
+-// (DEBUG_OPTION)EXEC: %frontendCompiler %dump-ir-to-screen %cmp_opt %enableCompileDebug --apc=5 %n.cj 2>&1 | compare %f
+-// ASSERT: regex-1 @_CN7default1A1uE = global %Unit.Type zeroinitializer, align 8, !dbg
+-// ASSERT: regex-auto @.cjzsguard = internal global i8 0
+-
+-public class A {
+-    public static var u: Unit = ()
+-    public static var x: Int64 = 42
+-}
+-
+-main() {
+-    let t = A.x + 1
+-    println("${t}")
+-    0
+-}
+->>>>>>> feat: local mode
+diff --git a/testsuites/LLT/compiler/Macro/nested/inQuoteDollarInterpolate/test_macro_1.cj b/testsuites/LLT/compiler/Macro/nested/inQuoteDollarInterpolate/test_macro_1.cj
+index c69087473b350fcbbb089a5f313197002d549d4f..6b4c43224f13b703df04c5b4b08d9e36b65b32ef 100644
+--- a/testsuites/LLT/compiler/Macro/nested/inQuoteDollarInterpolate/test_macro_1.cj
++++ b/testsuites/LLT/compiler/Macro/nested/inQuoteDollarInterpolate/test_macro_1.cj
+@@ -12,17 +12,9 @@ main(): Int64 {
+     0
+ }
+ 
+-/* SCAN
+-description: integer_literal, token_id: 139, token_literal_value: 1, fileID: 1, line: 10, column: 19
+-description: add, token_id: 12, token_literal_value: +, fileID: 1, line: 10, column: 21
+-<<<<<<< HEAD
+-description: integer_literal, token_id: 139, token_literal_value: 2, fileID: 20, line: 40, column: 26
+-||||||| constructed merge base
+-description: integer_literal, token_id: 139, token_literal_value: 2, fileID: 26, line: 40, column: 26
+-=======
+-description: integer_literal, token_id: 139, token_literal_value: 2, fileID: 27, line: 40, column: 26
+->>>>>>> feat: local mode
+-*/
++// ASSERT: scan description: integer_literal, token_id: 139, token_literal_value: 1
++// ASSERT: scan description: add, token_id: 12, token_literal_value: +
++// ASSERT: scan description: integer_literal, token_id: 139, token_literal_value: 2
+ // Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ // This source file is part of the Cangjie project, licensed under Apache-2.0
+ // with Runtime Library Exception.
+diff --git a/testsuites/LLT/compiler/Macro/nested/inQuoteDollarInterpolate/test_macro_2.cj b/testsuites/LLT/compiler/Macro/nested/inQuoteDollarInterpolate/test_macro_2.cj
+index 79fed6ca80bdb9e0caaeda56b6dc9d46997dee74..12e9ee7b8bb30803651836adf05464821e50b646 100644
+--- a/testsuites/LLT/compiler/Macro/nested/inQuoteDollarInterpolate/test_macro_2.cj
++++ b/testsuites/LLT/compiler/Macro/nested/inQuoteDollarInterpolate/test_macro_2.cj
+@@ -12,17 +12,9 @@ main(): Int64 {
+     0
+ }
+ 
+-/* SCAN
+-description: integer_literal, token_id: 139, token_literal_value: 1, fileID: 1, line: 10, column: 19
+-description: add, token_id: 12, token_literal_value: +, fileID: 1, line: 10, column: 21
+-<<<<<<< HEAD
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 20, line: 40, column: 26
+-||||||| constructed merge base
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 26, line: 40, column: 26
+-=======
+-description: integer_literal, token_id: 139, token_literal_value: 3, fileID: 27, line: 40, column: 26
+->>>>>>> feat: local mode
+-*/
++// ASSERT: scan description: integer_literal, token_id: 139, token_literal_value: 1
++// ASSERT: scan description: add, token_id: 12, token_literal_value: +
++// ASSERT: scan description: integer_literal, token_id: 139, token_literal_value: 3
+ // Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ // This source file is part of the Cangjie project, licensed under Apache-2.0
+ // with Runtime Library Exception.
+diff --git a/testsuites/LLT/compiler/Macro/nested/inQuoteDollarInterpolate/test_macro_3.cj b/testsuites/LLT/compiler/Macro/nested/inQuoteDollarInterpolate/test_macro_3.cj
+index 002d3252109c11a8b50f2bb54da84125998757d8..54d2a09e927ca5016f9c7380301b01a886c645f7 100644
+--- a/testsuites/LLT/compiler/Macro/nested/inQuoteDollarInterpolate/test_macro_3.cj
++++ b/testsuites/LLT/compiler/Macro/nested/inQuoteDollarInterpolate/test_macro_3.cj
+@@ -12,17 +12,9 @@ main(): Int64 {
+     0
+ }
+ 
+-/* SCAN
+-description: integer_literal, token_id: 139, token_literal_value: 1, fileID: 1, line: 10, column: 19
+-description: add, token_id: 12, token_literal_value: +, fileID: 1, line: 10, column: 21
+-<<<<<<< HEAD
+-description: integer_literal, token_id: 139, token_literal_value: 1, fileID: 20, line: 40, column: 26
+-||||||| constructed merge base
+-description: integer_literal, token_id: 139, token_literal_value: 1, fileID: 26, line: 40, column: 26
+-=======
+-description: integer_literal, token_id: 139, token_literal_value: 1, fileID: 27, line: 40, column: 26
+->>>>>>> feat: local mode
+-*/
++// ASSERT: scan description: integer_literal, token_id: 139, token_literal_value: 1
++// ASSERT: scan description: add, token_id: 12, token_literal_value: +
++// ASSERT: scan description: integer_literal, token_id: 139, token_literal_value: 1
+ // Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ // This source file is part of the Cangjie project, licensed under Apache-2.0
+ // with Runtime Library Exception.
+diff --git a/testsuites/LLT/compiler/Macro/nested/inQuoteDollarInterpolate/test_macro_6.cj b/testsuites/LLT/compiler/Macro/nested/inQuoteDollarInterpolate/test_macro_6.cj
+index f1aea6e371432cda0f7fdd34feb04e627ca71fd0..cf77441522ddab6b1d06c89f73c862adbafe0820 100644
+--- a/testsuites/LLT/compiler/Macro/nested/inQuoteDollarInterpolate/test_macro_6.cj
++++ b/testsuites/LLT/compiler/Macro/nested/inQuoteDollarInterpolate/test_macro_6.cj
+@@ -12,17 +12,9 @@ main(): Int64 {
+     0
+ }
+ 
+-/* SCAN
+-description: integer_literal, token_id: 139, token_literal_value: 1, fileID: 1, line: 10, column: 19
+-description: add, token_id: 12, token_literal_value: +, fileID: 1, line: 10, column: 21
+-<<<<<<< HEAD
+-description: integer_literal, token_id: 139, token_literal_value: 4, fileID: 20, line: 40, column: 26
+-||||||| constructed merge base
+-description: integer_literal, token_id: 139, token_literal_value: 4, fileID: 26, line: 40, column: 26
+-=======
+-description: integer_literal, token_id: 139, token_literal_value: 4, fileID: 27, line: 40, column: 26
+->>>>>>> feat: local mode
+-*/
++// ASSERT: scan description: integer_literal, token_id: 139, token_literal_value: 1
++// ASSERT: scan description: add, token_id: 12, token_literal_value: +
++// ASSERT: scan description: integer_literal, token_id: 139, token_literal_value: 4
+ // Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ // This source file is part of the Cangjie project, licensed under Apache-2.0
+ // with Runtime Library Exception.

@@ -1,0 +1,24 @@
+From 4914f156062674e19d57a4d3c58799d744991a15 Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Wed, 4 Nov 2026 03:02:50 +0000
+Subject: [PATCH] [patch 06] fix: reject negative indices when decoding UTF-8
+ runes
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ stdlib/libs/std/core/char_extension.cj | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/stdlib/libs/std/core/char_extension.cj b/stdlib/libs/std/core/char_extension.cj
+index f348c417dea7530a979f70e838412280afe61f47..0f6f3548e24b0d6de9c8196e6529ed33eec5bdb5 100644
+--- a/stdlib/libs/std/core/char_extension.cj
++++ b/stdlib/libs/std/core/char_extension.cj
+@@ -160,7 +160,7 @@ extend Rune {
+      */
+     @OverflowWrapping
+     public static func fromUtf8(arr: Array<UInt8>, index: Int64): (Rune, Int64) {
+-        if (index >= arr.size) {
++        if (index < 0 || index >= arr.size) {
+             throw IllegalArgumentException("Invalid UTF-8 byte sequence: index '${index}' is out of bounds, size is '${arr.size}'.")
+         }
+         return fromUtf8(arr.rawptr, arr.start + index, arr.start + arr.len)

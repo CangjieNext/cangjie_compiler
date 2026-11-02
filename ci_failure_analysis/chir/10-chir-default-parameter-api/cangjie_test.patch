@@ -1,0 +1,40 @@
+From 1c8cc4fa9242d8d2f619256ebec3bde2f37d97e6 Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Wed, 4 Nov 2026 03:02:52 +0000
+Subject: [PATCH] [patch 10] test: migrate CHIR lambda default parameter
+ ownership checks
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ .../stdx/chir/function/Expr_try_kinds_props_base_eq.cj    | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/testsuites/LLT/API/stdx/chir/function/Expr_try_kinds_props_base_eq.cj b/testsuites/LLT/API/stdx/chir/function/Expr_try_kinds_props_base_eq.cj
+index 6cd1fac97017cfc886e6cde29cca1682dcc648a8..4450950fb66793fe0a5dacaf228d60a234298f3d 100644
+--- a/testsuites/LLT/API/stdx/chir/function/Expr_try_kinds_props_base_eq.cj
++++ b/testsuites/LLT/API/stdx/chir/function/Expr_try_kinds_props_base_eq.cj
+@@ -7,7 +7,7 @@
+  */
+ // EXEC: %compiler %import-cangjie-stdx %cmp_opt -o %n.%suffix %f
+ // RUN-EXEC: %set_stdx_path %run %run_opt %n.%suffix %run_args | compare %f
+-// Try* all try-capable kinds, public getters, *Base Equatable, Lambda.paramDftValHostFunc
++// Try* all try-capable kinds, public getters, *Base Equatable, Lambda.paramDftValHostParam
+ 
+ /* SCAN
+ try kinds props: true
+@@ -180,12 +180,12 @@ main() {
+     child.initParameters()
+     child.initBody()
+     child.body.entryBlock.appendExpr(Exit.create())
+-    child.paramDftValHostFunc = hostLam
+-    let got = child.paramDftValHostFunc
++    child.paramDftValHostParam = hostLam.parameters[0]
++    let got = child.paramDftValHostParam
+     let dump = child.toString()
+     let emptyDump = hostLam.toString()
+     bbLam.appendExpr(Exit.create())
+-    println("lambda dft host: ${got.isSome() && dump.contains("paramDftValHostFunc") && emptyDump.size >= 0}")
++    println("lambda dft host: ${got == Some(hostLam.parameters[0]) && dump.contains("paramDftValHostParam") && emptyDump.size >= 0}")
+ 
+     var rejected = false
+     try {

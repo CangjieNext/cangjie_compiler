@@ -1,0 +1,36 @@
+From 73a56bb60f321d88a361801c8ed20c29403032b5 Mon Sep 17 00:00:00 2001
+From: yuqiaoyu <yujunqiang1@h-partners.com>
+Date: Wed, 4 Nov 2026 14:41:51 +0800
+Subject: [PATCH] [patch 15] fix: remote gc-leaf-function for finaluzer
+
+Signed-off-by: yuqiaoyu <yujunqiang1@h-partners.com>
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ llvm/lib/Transforms/Scalar/CJInsertRemoveLocalFinalizer.cpp | 1 -
+ llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp            | 1 -
+ 2 files changed, 2 deletions(-)
+
+diff --git a/llvm/lib/Transforms/Scalar/CJInsertRemoveLocalFinalizer.cpp b/llvm/lib/Transforms/Scalar/CJInsertRemoveLocalFinalizer.cpp
+index 3529288807db439c3da8317669c7b721b7d8707f..9065d44a1d7b6e6bc26420240b9be2f381fabbbd 100644
+--- a/llvm/lib/Transforms/Scalar/CJInsertRemoveLocalFinalizer.cpp
++++ b/llvm/lib/Transforms/Scalar/CJInsertRemoveLocalFinalizer.cpp
+@@ -454,7 +454,6 @@ bool LocalFinalizerRemover::run() {
+     FunctionType *FT =
+         FunctionType::get(Decl.getVoidTy(), {Decl.getInt8PtrTy(1)}, false);
+     RemoveFunc = M.declareCJRuntimeFunc(RemoveLocalFinalizerName, FT, false);
+-    RemoveFunc->addFnAttr(Attribute::get(F.getContext(), "gc-leaf-function"));
+   }
+ 
+   for (Instruction *Obj : Objs)
+diff --git a/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
+index 0ad1acdc41a6c8c8bf224566e2319d321873c3e4..9374212087c60779181a213d1e6a79c36f6d7b70 100644
+--- a/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
++++ b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
+@@ -408,7 +408,6 @@ public:
+     if (AddFunc == nullptr) {
+       FunctionType *FT = FunctionType::get(Bdr.getVoidTy(), {Bdr.getInt8PtrTy(1)}, false);
+       AddFunc = M.declareCJRuntimeFunc("CJ_MCC_AddLocalFinalizer", FT, false);
+-      AddFunc->addFnAttr(Attribute::get(CI->getContext(), "gc-leaf-function"));
+     }
+     if (auto *II = dyn_cast<InvokeInst>(CI)) {
+       // For an InvokeInst the result is only valid on the normal path, so

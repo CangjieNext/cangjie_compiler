@@ -1,0 +1,33 @@
+From e24a2af641d099317ca9065384b7388bb77d7189 Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Wed, 4 Nov 2026 03:02:51 +0000
+Subject: [PATCH] [patch 07] fix: enforce ArrayList logical bounds for closed
+ slices
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ stdlib/libs/std/collection/array_list.cj | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/stdlib/libs/std/collection/array_list.cj b/stdlib/libs/std/collection/array_list.cj
+index 86b0c0ed8e796ceee0d4199dca9542e540da5e03..aa99dc6c3bba98336b0d4302b2b061290710b859 100644
+--- a/stdlib/libs/std/collection/array_list.cj
++++ b/stdlib/libs/std/collection/array_list.cj
+@@ -1468,8 +1468,8 @@ public class ArrayList<T> <: List<T> {
+ 
+         if (range.hasEnd) {
+             if (range.isClosed) {
+-                if (range.end > size) {
+-                    throw IndexOutOfBoundsException("Closed range end '${range.end}' is greater than size '${size}'.")
++                if (range.end >= size) {
++                    throw IndexOutOfBoundsException("Closed range end '${range.end}' is greater than or equal to size '${size}'.")
+                 }
+                 end = range.end + 1
+             } else {
+@@ -3115,4 +3115,4 @@ extend<T> ArrayList<T> where T <: Copyable {
+         newArr.mySize = mySize
+         newArr
+     }
+-}
+\ No newline at end of file
++}

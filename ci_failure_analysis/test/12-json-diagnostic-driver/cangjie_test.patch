@@ -1,0 +1,98 @@
+From 0ef5c93c24fdf1c0899e98e2118a07dc7c2340b7 Mon Sep 17 00:00:00 2001
+From: Mr_Kang_Yi <kangyi9@h-partners.com>
+Date: Wed, 4 Nov 2026 03:02:56 +0000
+Subject: [PATCH] [patch 12] test: refresh frontend array diagnostic SCAN
+ baseline
+
+Signed-off-by: Mr_Kang_Yi <kangyi9@h-partners.com>
+---
+ .../compiler/Sema/array/array_invalid_api.cj  | 48 ++-----------------
+ 1 file changed, 5 insertions(+), 43 deletions(-)
+
+diff --git a/testsuites/LLT/compiler/Sema/array/array_invalid_api.cj b/testsuites/LLT/compiler/Sema/array/array_invalid_api.cj
+index 407a1eb0fdbbf5acc31d5ccb8590d12f29feb6dd..bc93844bb32d0e30ce57826e62249a2b41405460 100644
+--- a/testsuites/LLT/compiler/Sema/array/array_invalid_api.cj
++++ b/testsuites/LLT/compiler/Sema/array/array_invalid_api.cj
+@@ -4,7 +4,7 @@
+ //
+ // See https://cangjie-lang.cn/pages/LICENSE for license information.
+ 
+-// (CJNATIVE)EXEC-PIPE-1: %frontendCompiler %diag_json %f 2>&1 | compare %f
++// (CJNATIVE)EXEC-PIPE-1: %frontendCompiler %cmp_opt %f 2>&1 | compare %f
+ 
+ 
+ main(): Int64 {
+@@ -15,7 +15,6 @@ main(): Int64 {
+     return 0
+ }
+ 
+-<<<<<<< HEAD
+ /* SCAN
+ error: ambiguous use of 'clone'
+   ==> array_invalid_api.cj:12:13:
+@@ -24,40 +23,18 @@ error: ambiguous use of 'clone'
+    |             ^^^^^^^ 
+    | 
+ note: found function member of 'Struct-Array<Generics-T>'
+-   ==> (package std.core)array.cj:275:17:
++   ==> (package std.core)array.cj:632:17:
+ note: found function member of 'Struct-Array<Generics-T>'
+-   ==> (package std.core)array.cj:289:17:
+-
+-error: cannot convert an integer literal to type 'Struct-Range<Int64>'
+-  ==> array_invalid_api.cj:14:21:
+-   | 
+-14 |     var x = a.clone(2)
+-   |                     ^ 
+-   | 
++   ==> (package std.core)array.cj:677:17:
+ 
+ error: cannot assign to immutable value
+   ==> array_invalid_api.cj:13:5:
+    | 
+ 13 |     a.size = 1
+-   |     ^^^^^^^^^^ 
++   |     ^^^^^^ 
+    | 
+ note: property 'size' is immutable
+-  ==> (package std.core)array_common.cj:60:17:
+-
+-3 errors generated, 3 errors printed.
+-*/
+-||||||| constructed merge base
+-/* SCAN
+-error: ambiguous use of 'clone'
+-  ==> array_invalid_api.cj:12:13:
+-   | 
+-12 |     var z = a.clone
+-   |             ^^^^^^^ 
+-   | 
+-note: found function member of 'Struct-Array<Generics-T>'
+-   ==> (package std.core)array.cj:273:17:
+-note: found function member of 'Struct-Array<Generics-T>'
+-   ==> (package std.core)array.cj:287:17:
++  ==> (package std.core)array_common.cj:86:17:
+ 
+ error: cannot convert an integer literal to type 'Struct-Range<Int64>'
+   ==> array_invalid_api.cj:14:21:
+@@ -66,20 +43,5 @@ error: cannot convert an integer literal to type 'Struct-Range<Int64>'
+    |                     ^ 
+    | 
+ 
+-error: cannot assign to immutable value
+-  ==> array_invalid_api.cj:13:5:
+-   | 
+-13 |     a.size = 1
+-   |     ^^^^^^^^^^ 
+-   | 
+-note: property 'size' is immutable
+-  ==> (package std.core)array_common.cj:60:17:
+-
+ 3 errors generated, 3 errors printed.
+ */
+-=======
+-// ASSERT: scan-1 "DiagKind": "sema_cannot_convert_literal",
+-// ASSERT: scan-1 "DiagKind": "sema_cannot_assign_to_immutable",
+-// ASSERT: scan-1 "DiagKind": "sema_ambiguous_use",
+-// ASSERT: scan "Errors": 3,
+->>>>>>> feat: local mode
