@@ -28,7 +28,6 @@ TEST(DemangleTest, PackageNameColonDelimiter)
     Demangler<StdString> demangler_3("7abc:xyz");
     auto result_3 = demangler_3.DemanglePackageName();
     EXPECT_STREQ("abc::xyz", result_3.pkgName.Str());
-<<<<<<< HEAD
 }
 
 TEST(DemangleTest, PackageNameTrailingModuleSplit)
@@ -79,10 +78,6 @@ TEST(DemangleTest, GenericConstraintsNameTrailingArgs)
     DemangleInfo<StdString> plainArgs{ "C", TypeKind::NAME };
     plainArgs.args = StdString("a,b");
     EXPECT_STREQ(", C <: a &b", plainArgs.GetGenericConstraintsName().Str());
-}
-||||||| constructed merge base
-}
-=======
 }
 
 TEST(DemangleTest, LocalParam)
@@ -402,4 +397,3 @@ TEST(DemangleTest, WrappedFunctionSuffixBeforeSingleParamList)
     EXPECT_STREQ("std.deriving::LoggerImpl::log<compiler generated>(std.ast::Tokens, std.core::String, Bool)",
         full.c_str());
 }
->>>>>>> feat: local mode
