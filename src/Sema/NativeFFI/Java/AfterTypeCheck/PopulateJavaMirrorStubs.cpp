@@ -18,7 +18,6 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CheckUtils.h"
-#include "TypeCheckUtil.h"
 #include "ExclusiveScope.h"
 
 namespace Cangjie::Native::FFI::Java {
@@ -79,7 +78,7 @@ void PopulateJavaMirrorStubs::PopulateJArrayMethod(AfterTypeCheckContext& ctx,
 
     auto methodCall = ilib.CreateCFFICallArrayMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
         CreateJavaRefCall(jarray, curFile), paramList, genericParam, GetArrayOperationKind(userMethod));
-    methodCall = ilib.ConvertJavaResultToCJ(std::move(methodCall), retTy, &jarray);
+    methodCall = ilib.ConvertJavaResultToCJ(std::move(methodCall), retTy.Ty(), &jarray);
     auto scopeBody = CreateBlock(Nodes(std::move(jniEnvVar), std::move(methodCall)), retTy);
     scopeBody->curFile = curFile;
     auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, std::move(scopeBody), retTy);
@@ -201,7 +200,7 @@ void PopulateJavaMirrorStubs::InsertPropGetter(AfterTypeCheckContext& ctx, Class
 void PopulateJavaMirrorStubs::InsertPropSetter(AfterTypeCheckContext& ctx,
     ClassLikeDecl& mirror, PropDecl& prop) const
 {
-    static auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    static ModalTy unitTy{DataTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT))};
 
     auto curFile = prop.curFile;
 

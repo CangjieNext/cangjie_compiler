@@ -155,7 +155,6 @@ MemberSignature StructInheritanceChecker::UpdateInheritedMemberIfNeeded(
                 child, parent, updated, {shouldUpdate, inheritedInterfaces}, inconsistentTypes);
             inconsistentType = inconsistentType && !consistent;
         } else if (parent.decl->astKind == ASTKind::PROP_DECL) {
-            ComputeInconsistentPropTypes(child, parent, inconsistentTypes);
             shouldUpdate = parent.ty == child.ty && parent.thisMode == child.thisMode;
             if (!inconsistentTypes.empty()) {
                 UpdateInconsistentTypes(it->second, parent, inconsistentTypes);

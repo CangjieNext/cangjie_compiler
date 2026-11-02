@@ -87,7 +87,9 @@ Value* TypeCastCopyableTypeIfNeeded(
         return &value;
     }
     auto targetType = builder.WithModal(valueType, modal);
-    return TypeCastOrBoxIfNeeded(value, *targetType, builder, parentBlock, loc);
+    auto [res, newExprs] = TypeCastOrBoxIfNeeded(value, *targetType, builder, parentBlock, loc);
+    parentBlock.AppendExpressions(newExprs);
+    return res;
 }
 
 DebugLocation GetDeclLoc(const CHIRContext& cctx, const AST::Decl& decl)

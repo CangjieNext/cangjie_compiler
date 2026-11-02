@@ -52,8 +52,6 @@ private:
     std::pair<MemberMap, MemberMap> GetVisibleExtendMembersForExtend(const InheritableDecl& decl);
     void CheckExtendExportDependence(
         const InheritableDecl& curExtend, const MemberSignature& interface, const MemberMap& implDecl);
-    void ComputeInconsistentPropTypes(const MemberSignature& child, const MemberSignature& parent,
-        std::vector<ModalTy>& inconsistentTypes) const;
     MemberSignature UpdateInheritedMemberIfNeeded(
         MemberMap& inheritedMembers, const MemberSignature& child, bool inheritedInterfaces = false);
     bool ComputeInconsistentTypes(const MemberSignature& child, const MemberSignature& parent, MemberSignature& updated,

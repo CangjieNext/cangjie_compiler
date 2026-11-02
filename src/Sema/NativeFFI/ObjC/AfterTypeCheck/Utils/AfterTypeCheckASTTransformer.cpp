@@ -241,7 +241,7 @@ void AfterTypeCheckASTTransformer::TransformToObjCImplBaseCtorBody(
     std::vector<OwnedPtr<FuncArg>> getFromRegistryByIdArgs;
     getFromRegistryByIdArgs.emplace_back(CreateFuncArg(std::move(regIdParamRef)));
 
-    getFromRegistryByIdExpr->instTys.emplace_back(regComp.GetTy());
+    getFromRegistryByIdExpr->instTys.emplace_back(regComp.DataTy());
     getFromRegistryByIdExpr->SetTy(typeManager.GetInstantiatedTy(getFromRegistryByIdDecl->GetTy(),
         TypeCheckUtil::GenerateTypeMapping(*getFromRegistryByIdDecl, getFromRegistryByIdExpr->instTys)));
     getFromRegistryByIdExpr->typeArguments.push_back(CreateRefType(regComp));

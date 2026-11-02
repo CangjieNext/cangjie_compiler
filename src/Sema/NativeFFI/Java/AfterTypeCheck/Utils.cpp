@@ -33,7 +33,7 @@ Utils::Utils(ImportManager& importManager, TypeManager& typeManager)
 
 ModalTy Utils::GetOptionTy(ModalTy ty)
 {
-    return Native::FFI::GetOptionTy(importManager, typeManager, ty);
+    return ModalTy{typeManager.GetEnumTy(*GetOptionDecl(), {ty.Ty()})};
 }
 
 Ptr<EnumDecl> Utils::GetOptionDecl()

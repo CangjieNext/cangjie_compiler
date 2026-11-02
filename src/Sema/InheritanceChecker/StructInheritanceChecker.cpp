@@ -423,7 +423,7 @@ MemberMap StructInheritanceChecker::GetAndCheckInheritedInterfaces(const Inherit
     for (auto iTy : interfaceTys) {
         auto interfaceDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(iTy);
         if (auto it = structInheritedMembers.find(interfaceDecl); it != structInheritedMembers.end()) {
-            MergeInheritedMembers(members, it->second, *iTy, true);
+            MergeInheritedMembers(members, it->second, iTy.Ty(), true);
         }
     }
     DiagnoseForConflictInheritance(decl, members);

@@ -441,7 +441,7 @@ bool TypeChecker::TypeCheckerImpl::CheckReturnThisInFuncBody(const FuncBody& fb)
 void TypeChecker::TypeCheckerImpl::CheckCtorFuncBody(ASTContext& ctx, FuncBody& fb)
 {
     CJC_ASSERT(fb.funcDecl); // Ctor must have related funcDecl.
-    DataTy ctorTy = TypeManager::GetInvalidTy();
+    ModalTy ctorTy = {TypeManager::GetInvalidTy()};
     if (fb.funcDecl->TestAttr(Attribute::STATIC)) {
         // Static init always has type of 'Unit' as return type.
         ctorTy = {TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)};

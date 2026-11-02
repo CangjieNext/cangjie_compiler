@@ -113,7 +113,7 @@ OwnedPtr<Expr> ASTFactory::CreateNativeHandleExpr(OwnedPtr<Expr> entity)
 OwnedPtr<Expr> ASTFactory::CreateNativeHandleExpr(ClassLikeTy& ty, Ptr<File> curFile)
 {
     CJC_ASSERT(IsObjCForeign(ty) || IsObjCExport(ty) || IsObjCForeignInterfaceHandleWrapper(ty));
-    auto thisRef = CreateThisRef(ty.commonDecl, &ty, curFile);
+    auto thisRef = CreateThisRef(ty.commonDecl, DataTy(&ty), curFile);
 
     return CreateNativeHandleExpr(std::move(thisRef));
 }

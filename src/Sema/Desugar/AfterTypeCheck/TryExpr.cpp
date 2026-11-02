@@ -122,7 +122,7 @@ OwnedPtr<TryExpr> TypeChecker::TypeCheckerImpl::CreateTryInFinally(
     // access resolution does for such a type.
     auto getFieldDecls = [this, &ctx, &x](const std::string& fieldName) -> std::vector<Ptr<Decl>> {
         LookupInfo info{x.GetTy(), x.curFile, true, true, false};
-        auto genericTy = DynamicCast<GenericsTy*>(x.GetTy());
+        auto genericTy = DynamicCast<GenericsTy*>(x.GetTy().get());
         if (genericTy == nullptr) {
             return FieldLookup(ctx, Ty::GetDeclPtrOfTy(x.GetTy()), fieldName, info);
         }
