@@ -98,35 +98,9 @@ void CheckObjCFuncTypeArguments::HandleImpl(InteropContext& ctx)
             if (Ptr<Type> typeUsage = As<ASTKind::TYPE>(node)) {
                 CheckTypeUsage(ctx, *typeUsage);
             }
-<<<<<<< HEAD
 
             if (Ptr<CallExpr> constructorCall = As<ASTKind::CALL_EXPR>(node)) {
                 CheckConstructorCall(ctx, *constructorCall);
-||||||| constructed merge base
-            if (typeUsage && typeUsage->GetTy() && typeUsage->GetTy()->typeArgs.size() == 1 &&
-                ctx.typeMapper.IsObjCFuncOrBlock(*typeUsage->GetTy())) {
-                auto tyArg = typeUsage->GetTy()->typeArgs[0];
-                auto valid = tyArg->IsFunc();
-                valid &= !tyArg->IsCFunc();
-                for (auto subTy : tyArg->typeArgs) {
-                    valid &= ctx.typeMapper.IsObjCCompatible(*subTy);
-                }
-                if (!valid) {
-                    ReportObjCIncompatibleType(ctx, typeUsage);
-                }
-=======
-            if (typeUsage && typeUsage->GetTy() && typeUsage->DataTy()->typeArgs.size() == 1 &&
-                ctx.typeMapper.IsObjCFuncOrBlock(*typeUsage->GetTy())) {
-                auto tyArg = typeUsage->DataTy()->TyArg(0);
-                auto valid = tyArg->IsFunc();
-                valid &= !tyArg->IsCFunc();
-                for (auto subTy : tyArg->typeArgs) {
-                    valid &= ctx.typeMapper.IsObjCCompatible(*subTy);
-                }
-                if (!valid) {
-                    ReportObjCIncompatibleType(ctx, typeUsage);
-                }
->>>>>>> feat: local mode
             }
 
             return VisitAction::WALK_CHILDREN;

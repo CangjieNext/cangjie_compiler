@@ -86,7 +86,6 @@ void DesugarMirrors::HandleImpl(InteropContext& ctx)
 
 namespace {
 
-<<<<<<< HEAD
 /**
  * Nodes instantiating an Objective-C object along with the temporary holding it, @see CreateCheckedAllocInit.
  */
@@ -100,13 +99,6 @@ struct CheckedAllocInit {
      */
     Ptr<VarDecl> entity;
 };
-||||||| constructed merge base
-    auto& generatedCtor = *ctx.factory.GetGeneratedBaseCtor(mirror);
-    auto thisCall = CreateThisCall(mirror, generatedCtor, generatedCtor.GetTy(), curFile);
-=======
-    auto& generatedCtor = *ctx.factory.GetGeneratedBaseCtor(mirror);
-    auto thisCall = CreateThisCall(mirror, generatedCtor, generatedCtor.DataTy(), curFile);
->>>>>>> feat: local mode
 
 /**
  * Creates the nodes instantiating an Objective-C object and rejecting a nil result:
@@ -135,30 +127,14 @@ CheckedAllocInit CreateCheckedAllocInit(InteropContext& ctx, FuncDecl& ctor)
     // ObjCInitException
     auto throwExpr = ctx.factory.CreateObjCInitException(*curFile, mirror);
 
-<<<<<<< HEAD
     auto body = CreateBlock(Nodes(std::move(throwExpr)));
     CopyBasicInfo(&mirror, body);
     body->curFile = curFile;
-    body->SetTy(ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_NOTHING));
-||||||| constructed merge base
-    std::vector<OwnedPtr<Node>> throwBody;
-    throwBody.emplace_back(std::move(throwExpr));
-    auto body = CreateBlock(std::move(throwBody));
-    CopyBasicInfo(ctor.outerDecl, body);
-    body->curFile = mirror.curFile;
-    body->SetTy(TypeManager::GetNothingTy());
-=======
-    std::vector<OwnedPtr<Node>> throwBody;
-    throwBody.emplace_back(std::move(throwExpr));
-    auto body = CreateBlock(std::move(throwBody));
-    CopyBasicInfo(ctor.outerDecl, body);
-    body->curFile = mirror.curFile;
-    body->SetTy({TypeManager::GetNothingTy()});
->>>>>>> feat: local mode
+    body->SetTy({ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_NOTHING)});
     auto ifExpr = CreateIfExpr(std::move(checkForNull), std::move(body)); // if (tmp.isNull()) { throw ... }
     CopyBasicInfo(&mirror, ifExpr);
     ifExpr->curFile = curFile;
-    ifExpr->SetTy(ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT));
+    ifExpr->SetTy({ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT)});
 
     CheckedAllocInit res;
     res.entity = tempVar;
@@ -179,7 +155,7 @@ void DesugarMirrors::DesugarCtor(InteropContext& ctx, ClassLikeDecl& mirror, Fun
         "Expected ASTKind::CLASS_DECL instead of " + ASTKIND_TO_STR.at(mirror.astKind));
     auto mirrorClass = StaticAs<ASTKind::CLASS_DECL>(&mirror);
     auto& baseCtor = *GetObjCMirrorBaseCtor(*mirrorClass);
-    auto thisCall = CreateThisCall(mirror, baseCtor, baseCtor.GetTy(), curFile);
+    auto thisCall = CreateThisCall(mirror, baseCtor, baseCtor.DataTy(), curFile);
 
     auto allocInit = CreateCheckedAllocInit(ctx, ctor);
     allocInit.nodes.push_back(WithinFile(CreateRefExpr(*allocInit.entity), curFile));
@@ -205,20 +181,10 @@ void DesugarMirrors::DesugarStaticMethodInitializer(InteropContext& ctx, FuncDec
     // return wrap(tmp)
     auto wrappedInit = ctx.factory.WrapEntity(WithinFile(CreateRefExpr(*allocInit.entity), curFile), *retTy);
     auto returnExpr = WithinFile(CreateReturnExpr(std::move(wrappedInit)), curFile);
-<<<<<<< HEAD
-    returnExpr->SetTy(TypeManager::GetNothingTy());
+    returnExpr->SetTy({TypeManager::GetNothingTy()});
     allocInit.nodes.push_back(std::move(returnExpr));
 
     initializer.funcBody->body = CreateBlock(std::move(allocInit.nodes), retTy);
-||||||| constructed merge base
-    returnExpr->SetTy(TypeManager::GetNothingTy());
-    initializer.funcBody->body = CreateBlock({}, retTy);
-    initializer.funcBody->body->body.emplace_back(std::move(returnExpr));
-=======
-    returnExpr->SetTy({TypeManager::GetNothingTy()});
-    initializer.funcBody->body = CreateBlock({}, retTy);
-    initializer.funcBody->body->body.emplace_back(std::move(returnExpr));
->>>>>>> feat: local mode
 }
 
 void DesugarMirrors::DesugarMethod(InteropContext& ctx, ClassLikeDecl& mirror, FuncDecl& method)
@@ -351,14 +317,7 @@ void DesugarSetter(InteropContext& ctx, ClassLikeDecl& mirror, PropDecl& prop)
     auto unitTy = ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT);
     if (mirror.astKind == ASTKind::INTERFACE_DECL && prop.TestAttr(Attribute::STATIC)) {
         // We are unable to provide a default implementation for the static property setter of an interface
-<<<<<<< HEAD
-        setter->funcBody->body =
-            CreateBlock(Nodes(ctx.factory.CreateThrowUnreachableCodeExpr(*curFile)), unitTy);
-||||||| constructed merge base
-        setter->funcBody->body = CreateBlock(Nodes(ctx.factory.CreateThrowUnreachableCodeExpr(*curFile)), unitTy);
-=======
         setter->funcBody->body = CreateBlock(Nodes(ctx.factory.CreateThrowUnreachableCodeExpr(*curFile)), {unitTy});
->>>>>>> feat: local mode
         return;
     }
     setter->funcBody->body = CreateBlock({}, {unitTy});

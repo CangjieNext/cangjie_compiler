@@ -567,20 +567,6 @@ std::vector<Ptr<ClassLikeDecl>> InheritableDecl::GetAllSuperDecls(bool obtainSpe
         auto curDecl = workList.front();
         workList.pop();
         for (auto& it : curDecl->inheritedTypes) {
-<<<<<<< HEAD
-            if (!Ty::IsTyCorrect(it->GetTy())) {
-                continue;
-||||||| constructed merge base
-            if (auto clsTy = DynamicCast<ClassTy*>(it->GetTy()); clsTy && visited.count(clsTy->declPtr) == 0) {
-                workList.push(clsTy->declPtr);
-                visited.emplace(clsTy->declPtr);
-                ret.emplace_back(clsTy->declPtr);
-            } else if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->GetTy());
-                interfaceTy && visited.count(interfaceTy->declPtr) == 0) {
-                workList.push(interfaceTy->declPtr);
-                visited.emplace(interfaceTy->declPtr);
-                ret.emplace_back(interfaceTy->declPtr);
-=======
             if (!Ty::IsTyCorrect(it->DataTy())) {
                 continue;
             }
@@ -596,31 +582,10 @@ std::vector<Ptr<ClassLikeDecl>> InheritableDecl::GetAllSuperDecls(bool obtainSpe
             }
             if (declPtr == nullptr || visited.count(declPtr) != 0) {
                 continue;
->>>>>>> feat: local mode
-            }
-<<<<<<< HEAD
-            Ptr<ClassLikeDecl> declPtr = nullptr;
-            if (obtainSpecific && (it->GetTy()->IsClass() || it->GetTy()->IsInterface())) {
-                // If the declaration contains a specific version, 'GetDeclPtrOfTy' will by default obtain the specific
-                // version.
-                declPtr = Ty::GetDeclPtrOfTy<ClassLikeDecl>(it->GetTy());
-            } else if (auto clsTy = DynamicCast<ClassTy*>(it->GetTy())) {
-                declPtr = clsTy->declPtr;
-            } else if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->GetTy())) {
-                declPtr = interfaceTy->declPtr;
-            }
-            if (declPtr == nullptr || visited.count(declPtr) != 0) {
-                continue;
             }
             workList.push(declPtr);
             visited.emplace(declPtr);
             ret.emplace_back(declPtr);
-||||||| constructed merge base
-=======
-            workList.push(declPtr);
-            visited.emplace(declPtr);
-            ret.emplace_back(declPtr);
->>>>>>> feat: local mode
         }
     }
     return ret;

@@ -77,10 +77,6 @@ public:
 
     MemberFuncSet GetTopOverriddenFuncs(AST::Ty& instBaseTy, const AST::FuncDecl& funcDecl);
 
-    bool IsImplementationFunc(const AST::FuncDecl& srcFunc, const AST::FuncDecl& superFunc);
-
-    MemberFuncSet GetTopOverriddenFuncs(AST::Ty& instBaseTy, const AST::FuncDecl& funcDecl);
-
     /**
      * Clear the global cache.
      */

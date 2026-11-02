@@ -30,15 +30,9 @@ bool RequireInstantiation(const AST::Decl& decl);
 
 using VisitFunc = std::function<void(AST::Node&, AST::Node&)>;
 void DefaultVisitFunc(const AST::Node& source, const AST::Node& target);
-<<<<<<< HEAD
 OwnedPtr<AST::Generic> InstantiateGeneric(const AST::Generic& generic, const VisitFunc& visitor);
-||||||| constructed merge base
-AST::MacroInvocation InstantiateMacroInvocation(const AST::MacroInvocation& me);
-OwnedPtr<AST::Generic> InstantiateGeneric(const AST::Generic& generic, const VisitFunc& visitor);
-=======
 AST::MacroInvocation InstantiateMacroInvocation(const AST::MacroInvocation& me);
 
->>>>>>> feat: local mode
 class PartialInstantiation {
 public:
     template <typename T> static OwnedPtr<T> Instantiate(Ptr<T> node, const VisitFunc& visitFunc)
@@ -188,39 +182,6 @@ private:
     static OwnedPtr<AST::Decl> InstantiateEnumDecl(const AST::EnumDecl& ed, const VisitFunc& visitor);
     static OwnedPtr<AST::Decl> InstantiateTypeAliasDecl(const AST::TypeAliasDecl& tad, const VisitFunc& visitor);
 };
-<<<<<<< HEAD
-||||||| constructed merge base
-
-class TypeManager;
-using ReversedTypeSubst = std::map<Ptr<AST::Ty>, Ptr<TyVar>>;
-class TyGeneralizer {
-public:
-    TyGeneralizer(TypeManager& tyMgr, const ReversedTypeSubst& mapping) : tyMgr(tyMgr), typeMapping(mapping)
-    {
-    }
-
-    ~TyGeneralizer() = default;
-
-    inline Ptr<AST::Ty> Generalize(Ptr<AST::Ty> ty)
-    {
-        return AST::Ty::IsTyCorrect(ty) ? Generalize(*ty) : ty;
-    }
-
-private:
-    Ptr<AST::Ty> Generalize(AST::Ty& ty);
-    Ptr<AST::Ty> GetGeneralizedStructTy(AST::StructTy& structTy);
-    Ptr<AST::Ty> GetGeneralizedClassTy(AST::ClassTy& classTy);
-    Ptr<AST::Ty> GetGeneralizedInterfaceTy(AST::InterfaceTy& interfaceTy);
-    Ptr<AST::Ty> GetGeneralizedEnumTy(AST::EnumTy& enumTy);
-    Ptr<AST::Ty> GetGeneralizedArrayTy(AST::ArrayTy& arrayTy);
-    Ptr<AST::Ty> GetGeneralizedPointerTy(AST::PointerTy& cptrTy);
-    // Get instantiated ty of set type 'IntersectionTy' and 'UnionTy'.
-    template <typename SetTy> Ptr<AST::Ty> GetGeneralizedSetTy(SetTy& ty);
-
-    TypeManager& tyMgr;
-    const ReversedTypeSubst& typeMapping;
-};
-=======
 
 class TypeManager;
 using ReversedTypeSubst = std::map<AST::DataTy, Ptr<TyVar>>;
@@ -247,6 +208,5 @@ private:
     TypeManager& tyMgr;
     const ReversedTypeSubst& typeMapping;
 };
->>>>>>> feat: local mode
 } // namespace Cangjie
 #endif

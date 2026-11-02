@@ -119,30 +119,16 @@ void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
     CJC_NULLPTR_CHECK(curFile);
     CJC_ASSERT(!expr.desugarExpr);
 
-    auto castTy = expr.asType->GetTy();
-<<<<<<< HEAD
-    auto type = static_cast<ClassTy*>(expr.asType->GetTy().get());
-    if (IsObjCId(*type->decl)) {
-||||||| constructed merge base
-    auto type = static_cast<ClassTy*>(expr.asType->GetTy().get());
-    if (ctx.typeMapper.IsObjCId(*type->decl)) {
-=======
+    auto castTy = expr.asType->DataTy();
     auto type = StaticCast<ClassTy>(expr.asType->DataTy());
-    if (ctx.typeMapper.IsObjCId(*type->decl)) {
->>>>>>> feat: local mode
+    if (IsObjCId(*type->decl)) {
         return;
     }
 
     auto objCIdDecl = ctx.bridge.GetObjCIdDecl();
     CJC_ASSERT(objCIdDecl);
 
-<<<<<<< HEAD
     auto castResultTy = GetOptionTy(ctx.importManager, ctx.typeManager, castTy);
-||||||| constructed merge base
-    auto castResultTy = ctx.factory.GetOptionTy(castTy);
-=======
-    auto castResultTy = ctx.factory.GetOptionTy(castTy.Ty());
->>>>>>> feat: local mode
     auto targetName = ctx.nameGenerator.GetObjCDeclName(*type->decl);
 
     // match (x)
@@ -151,21 +137,9 @@ void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
     // case x: Class => Some(x)
     auto ogVarPattern = WithinFile(CreateVarPattern(V_COMPILER, castTy), curFile);
 
-<<<<<<< HEAD
     OwnedPtr<Expr> originalBranch = Native::FFI::CreateOptionSomeCall(
         ctx.importManager, ctx.typeManager, WithinFile(CreateRefExpr(*ogVarPattern->varDecl), curFile), castTy);
     auto originalTypePattern = CreateTypePattern(std::move(ogVarPattern), CreateType(castTy), *expr.leftExpr);
-||||||| constructed merge base
-    OwnedPtr<Expr> originalBranch = ctx.factory.CreateOptionSomeCall(
-        WithinFile(CreateRefExpr(*ogVarPattern->varDecl), curFile), castTy
-    );
-    auto originalTypePattern = CreateTypePattern(std::move(ogVarPattern),
-        CreateType(castTy), *expr.leftExpr);
-=======
-    OwnedPtr<Expr> originalBranch =
-        ctx.factory.CreateOptionSomeCall(WithinFile(CreateRefExpr(*ogVarPattern->varDecl), curFile), castTy.Ty());
-    auto originalTypePattern = CreateTypePattern(std::move(ogVarPattern), CreateType(castTy.Ty()), *expr.leftExpr);
->>>>>>> feat: local mode
     originalTypePattern->needRuntimeTypeCheck = true;
     originalTypePattern->matchBeforeRuntime = false;
     auto originalMatchCase = CreateMatchCase(std::move(originalTypePattern), std::move(originalBranch));
@@ -214,11 +188,11 @@ void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
 
     // case _ => false
     auto wildcardMatchCase = CreateMatchCase(
-        MakeOwned<WildcardPattern>(), Native::FFI::CreateOptionNoneRef(ctx.importManager, ctx.typeManager, type));
+        MakeOwned<WildcardPattern>(), Native::FFI::CreateOptionNoneRef(ctx.importManager, ctx.typeManager, {type}));
     matchCases.emplace_back(std::move(wildcardMatchCase));
 
     expr.desugarExpr =
-        WithinFile(CreateMatchExpr(std::move(expr.leftExpr), std::move(matchCases), {castResultTy}), curFile);
+        WithinFile(CreateMatchExpr(std::move(expr.leftExpr), std::move(matchCases), castResultTy), curFile);
 }
 
 std::vector<Ptr<TypePattern>> CollectTypePatternWithObjCClass(Ptr<Pattern> pat)
@@ -292,17 +266,9 @@ OwnedPtr<Block> CastAndSubstitudeVars(
         auto nativeHandle = ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*varDecl), curFile));
         // We use objc_retain here, because a successfull typecast creates a new @ObjCMirror object that will call
         // objCRelease in its finalizer.
-<<<<<<< HEAD
         OwnedPtr<Expr> initializer =
             ctx.factory.WrapEntity(std::move(nativeHandle), *castTy, Retain::RETAINED);
-        auto castedVar = WithinFile(CreateTmpVarDecl(CreateType(castDecl->GetTy()), std::move(initializer)), curFile);
-||||||| constructed merge base
-        OwnedPtr<Expr> initializer = ctx.factory.WrapEntity(std::move(nativeHandle), *castTy, Retain::RETAINED);
-        auto castedVar = WithinFile(CreateTmpVarDecl(CreateType(castDecl->GetTy()), std::move(initializer)), curFile);
-=======
-        OwnedPtr<Expr> initializer = ctx.factory.WrapEntity(std::move(nativeHandle), *castTy, Retain::RETAINED);
         auto castedVar = WithinFile(CreateTmpVarDecl(CreateType(castDecl->DataTy()), std::move(initializer)), curFile);
->>>>>>> feat: local mode
         varsMapping[varDecl] = castedVar;
         varsBlock->body.emplace_back(std::move(castedVar));
     }

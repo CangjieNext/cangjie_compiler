@@ -32,7 +32,7 @@ void PopulateJavaMirrorStubs::PopulateUserConstructor(AfterTypeCheckContext& ctx
     auto curFile = userCtor.curFile;
     CJC_ASSERT(userCtor.TestAttr(Attribute::CONSTRUCTOR));
     userCtor.constructorCall = ConstructorCall::OTHER_INIT;
-    auto thisCall = CreateThisCall(*userCtor.outerDecl, wrappingCtor, wrappingCtor.GetTy(), curFile);
+    auto thisCall = CreateThisCall(*userCtor.outerDecl, wrappingCtor, wrappingCtor.DataTy(), curFile);
     CJC_ASSERT(userCtor.funcBody);
     CJC_ASSERT(userCtor.funcBody->paramLists.size() == 1);
     auto& body = userCtor.funcBody->body->body;

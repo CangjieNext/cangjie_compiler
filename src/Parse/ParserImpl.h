@@ -1048,21 +1048,11 @@ private:
     void DiagAnnotationMoreThanOneArgs(const AST::Annotation& node, const std::string& annotationName,
         const std::string& argInfo);
     void DiagAnnotationShouldNotHaveArgs(const Annotation& node, const std::string& annotationName);
-<<<<<<< HEAD
-||||||| constructed merge base
-
-    // Cangjie Native & Java/ObjC FFI
-    void CheckObjCMirrorAnnotation(const AST::Annotation& anno) const;
-=======
     AST::ASTModalInfo ParseModalInfo();
     bool ParseModeSpecifier(AST::ASTModalInfo& out);
     bool SeeingModalInfo();
     bool IsTokenAdjacent(const Token& first, const Token& second) const;
     bool SeeingPrimitiveType();
-
-    // Cangjie Native & Java/ObjC FFI
-    void CheckObjCMirrorAnnotation(const AST::Annotation& anno) const;
->>>>>>> feat: local mode
     // Check whether member decl can be abstract
     bool CanBeAbstract(const AST::Decl& decl, ScopeKind scopeKind) const;
     void CheckConstructorBody(AST::FuncDecl& ctor, ScopeKind scopeKind, bool inMacro = false);

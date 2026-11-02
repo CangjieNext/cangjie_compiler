@@ -89,7 +89,7 @@ bool IsValidTy(ModalTy ty)
     return true;
 }
 
-inline bool IsSuperTypeForFFI(ModalTy ty)
+inline bool IsSuperTypeForFFI(Ptr<const Ty> ty)
 {
     return ty->IsCType();
 }
@@ -116,26 +116,19 @@ bool HasVisibleInit(const ClassDecl& cd)
 bool IsSealedLike(ModalTy ty)
 {
     if (ty->IsClass()) {
-        auto& classTy = StaticCast<const ClassTy>(*ty);
+        auto& classTy = StaticCast<ClassTy>(*ty.Ty());
         CJC_NULLPTR_CHECK(classTy.declPtr);
         return IsSealedLikeCommon(classTy) || !HasVisibleInit(*classTy.declPtr);
     }
     if (ty->IsInterface()) {
-        return IsSealedLikeCommon(StaticCast<const InterfaceTy>(*ty));
+        return IsSealedLikeCommon(StaticCast<InterfaceTy>(*ty.Ty()));
     }
     // Other types cannot be inherited, they are all sealed-like.
     return true;
 }
 
-<<<<<<< HEAD
 bool IsCurrentPackageDecl(const ClassLikeDecl& decl, const Package& currentPackage)
-||||||| constructed merge base
-Ptr<ClassLikeTy> AsSealedLikeClassLikeTy(Ty& ty)
-=======
-Ptr<ClassLikeTy> AsSealedLikeClassLikeTy(ModalTy ty)
->>>>>>> feat: local mode
 {
-<<<<<<< HEAD
     return decl.curFile && decl.curFile->curPackage == &currentPackage &&
         decl.fullPackageName == currentPackage.fullPackageName;
 }
@@ -161,47 +154,20 @@ bool IsClosedSealedHierarchy(const ClassLikeTy& ty, const Package& currentPackag
 {
     // Closure is valid only for declarations fully owned by this package. Generic, FFI, and common/specific
     // declarations are excluded because their complete subtype set may not be visible here.
-    if (!ty.commonDecl || !ty.typeArgs.empty() || IsSuperTypeForFFI(ty)) {
+    if (!ty.commonDecl || !ty.typeArgs.empty() || IsSuperTypeForFFI(&ty)) {
         return false;
-||||||| constructed merge base
-    if (!ty.IsClassLike()) {
-        return nullptr;
-=======
-    if (!ty->IsClassLike()) {
-        return nullptr;
->>>>>>> feat: local mode
     }
-<<<<<<< HEAD
     const ClassLikeDecl& decl = *ty.commonDecl;
     if (decl.TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC, Attribute::FROM_COMMON_PART) ||
         !IsCurrentPackageDecl(decl, currentPackage) || decl.TestAttr(Attribute::FOREIGN) ||
         (isRoot ? !IsClosedSealedRoot(ty, decl) : !IsClosedSealedLeaf(ty, decl))) {
         return false;
-||||||| constructed merge base
-    ClassLikeTy& clt = StaticCast<ClassLikeTy&>(ty);
-    // Generic types are not supported so far.
-    if (!clt.typeArgs.empty()) {
-        return nullptr;
-=======
-    ClassLikeTy& clt = StaticCast<ClassLikeTy>(*ty);
-    // Generic types are not supported so far.
-    if (!clt.typeArgs.empty()) {
-        return nullptr;
->>>>>>> feat: local mode
     }
-<<<<<<< HEAD
     for (Ptr<Ty> subTy : ty.directSubtypes) {
         if (!Ty::IsTyCorrect(subTy) || !subTy->IsClassLike() ||
             !IsClosedSealedHierarchy(StaticCast<ClassLikeTy&>(*subTy), currentPackage, false)) {
             return false;
         }
-||||||| constructed merge base
-    if (IsSealedLike(clt)) {
-        return &clt;
-=======
-    if (IsSealedLike(ty)) {
-        return &clt;
->>>>>>> feat: local mode
     }
     return true;
 }
@@ -473,13 +439,7 @@ public:
             // And we don't care about the name for binding.
             case ASTKind::WILDCARD_PATTERN:
             case ASTKind::VAR_PATTERN: {
-<<<<<<< HEAD
-                return {Constructor::Wildcard(), {}, *goal, &pattern};
-||||||| constructed merge base
-                return {Constructor::Wildcard(), {}, *pattern.GetTy(), &pattern};
-=======
-                return {Constructor::Wildcard(), {}, pattern.GetTy().With(goal.Mode()), &pattern};
->>>>>>> feat: local mode
+                return {Constructor::Wildcard(), {}, goal, &pattern};
             }
             case ASTKind::VAR_OR_ENUM_PATTERN: {
                 return FromPattern(typeManager, goal, *static_cast<VarOrEnumPattern&>(pattern).pattern);
@@ -952,11 +912,10 @@ public:
 private:
     static std::vector<Constructor> SplitWildcardForClosedSealed(ClassLikeTy& sealedTy)
     {
-        std::set<Ptr<Ty>, CmpTyByName> directSubtypes(
-            sealedTy.directSubtypes.cbegin(), sealedTy.directSubtypes.cend());
+        std::set<DataTy, CmpTyByName> directSubtypes(sealedTy.directSubtypes.cbegin(), sealedTy.directSubtypes.cend());
         std::vector<Constructor> ctors;
-        for (Ptr<Ty> subTy : directSubtypes) {
-            ctors.emplace_back(Constructor::Type(*subTy));
+        for (DataTy subTy : directSubtypes) {
+            ctors.emplace_back(Constructor::Type({subTy}));
         }
         return ctors;
     }
@@ -969,22 +928,15 @@ private:
      *     }
      * The missing cases are `Some(true)` and `Some(false)`, but `Some(_)` is preferred.
      */
-<<<<<<< HEAD
     static std::vector<Constructor> SplitWildcard(
-        TypeManager& typeManager, Ty& ty, Matrix& matrix, const Package* currentPackage)
-||||||| constructed merge base
-    static std::vector<Constructor> SplitWildcard(TypeManager& typeManager, Ty& ty, Matrix& matrix, bool isABIStable)
-=======
-    static std::vector<Constructor> SplitWildcard(
-        TypeManager& typeManager, ModalTy ty, Matrix& matrix, bool isABIStable)
->>>>>>> feat: local mode
+        TypeManager& typeManager, ModalTy ty, Matrix& matrix, const Package* currentPackage)
     {
         if (matrix.MissingAll()) {
             return {Constructor::Wildcard()};
         }
-        if (ty.IsClassLike() && currentPackage &&
-            IsClosedSealedHierarchy(StaticCast<ClassLikeTy&>(ty), *currentPackage, true)) {
-            return SplitWildcardForClosedSealed(StaticCast<ClassLikeTy&>(ty));
+        if (ty->IsClassLike() && currentPackage &&
+            IsClosedSealedHierarchy(StaticCast<ClassLikeTy&>(*ty), *currentPackage, true)) {
+            return SplitWildcardForClosedSealed(StaticCast<ClassLikeTy&>(*ty));
         }
         if (!Ty::IsTyCorrect(ty)) {
             return {Constructor::Missing()};
@@ -1019,51 +971,6 @@ private:
         return {Constructor::Missing()};
     }
 
-<<<<<<< HEAD
-||||||| constructed merge base
-    static void SplitWildcardForSealed(std::vector<Constructor>& ctors, ClassLikeTy& sealedTy)
-    {
-        std::set<Ptr<Ty>, CmpTyByName> directSubtypes(sealedTy.directSubtypes.cbegin(), sealedTy.directSubtypes.cend());
-        for (Ptr<Ty> subTy : directSubtypes) {
-            CJC_ASSERT(Ty::IsTyCorrect(subTy));
-            if (auto subSealed = AsSealedLikeClassLikeTy(*subTy); subSealed && !IsSuperTypeForFFI(*subTy)) {
-                SplitWildcardForSealed(ctors, *subSealed);
-            } else {
-                (void)ctors.emplace_back(Constructor::Type(*subTy));
-            }
-        }
-        if (sealedTy.IsClass()) {
-            auto& ct = StaticCast<ClassTy&>(sealedTy);
-            CJC_NULLPTR_CHECK(ct.declPtr);
-            if (!ct.declPtr->TestAttr(Attribute::ABSTRACT)) {
-                ctors.emplace_back(Constructor::Type(sealedTy));
-            }
-        }
-    }
-
-=======
-    static void SplitWildcardForSealed(std::vector<Constructor>& ctors, ClassLikeTy& sealedTy)
-    {
-        std::set<ModalTy, CmpTyByNameModal> directSubtypes(
-            sealedTy.directSubtypes.cbegin(), sealedTy.directSubtypes.cend());
-        for (ModalTy subTy : directSubtypes) {
-            CJC_ASSERT(Ty::IsTyCorrect(subTy));
-            if (auto subSealed = AsSealedLikeClassLikeTy(subTy); subSealed && !IsSuperTypeForFFI(subTy)) {
-                SplitWildcardForSealed(ctors, *subSealed);
-            } else {
-                (void)ctors.emplace_back(Constructor::Type(subTy));
-            }
-        }
-        if (sealedTy.IsClass()) {
-            auto& ct = StaticCast<ClassTy&>(sealedTy);
-            CJC_NULLPTR_CHECK(ct.declPtr);
-            if (!ct.declPtr->TestAttr(Attribute::ABSTRACT)) {
-                ctors.emplace_back(Constructor::Type(ModalTy(static_cast<Ty*>(&sealedTy))));
-            }
-        }
-    }
-
->>>>>>> feat: local mode
     std::vector<PatternStack> FindWitnessesForWildcard(PatternStack& vec)
     {
         DestructedPattern& head = vec.Head();
@@ -1157,28 +1064,10 @@ bool CheckMatchExprHasSelectorExhaustivenessAndReachability(
             continue;
         }
         for (auto& pattern : mc->patterns) {
-<<<<<<< HEAD
-            CJC_ASSERT(!Ty::IsInitialTy(pattern->GetTy()));
-||||||| constructed merge base
-            if (Ty::IsInitialTy(pattern->GetTy())) {
-                pattern->SetTy(typeManager.TryGreedySubst(me.selector->GetTy()));
-            }
-=======
-            if (Ty::IsInitialTy(pattern->DataTy())) {
-                pattern->SetTy(typeManager.TryGreedySubst(me.selector->GetTy()));
-            }
->>>>>>> feat: local mode
+            CJC_ASSERT(!Ty::IsInitialTy(pattern->DataTy()));
         }
         // The PatternStack vec contains only one item in the beginning.
-<<<<<<< HEAD
-        PatternStack vec(DestructedPattern::FromPatterns(typeManager, *selectorTy, mc->patterns));
-||||||| constructed merge base
-        PatternStack vec(DestructedPattern::FromPatterns(
-            typeManager, *typeManager.TryGreedySubst(me.selector->GetTy()), mc->patterns));
-=======
-        PatternStack vec(DestructedPattern::FromPatterns(
-            typeManager, typeManager.TryGreedySubst(me.selector->GetTy()), mc->patterns));
->>>>>>> feat: local mode
+        PatternStack vec(DestructedPattern::FromPatterns(typeManager, selectorTy, mc->patterns));
         std::vector<PatternStack> witnesses = checker.FindWitnesses(vec);
         if (!witnesses.empty()) {
             // Add the witnesses to the matrix only if the match case doesn't have guard.
@@ -1192,15 +1081,7 @@ bool CheckMatchExprHasSelectorExhaustivenessAndReachability(
                 MakeRange(mc->patterns.front()->begin, mc->patterns.back()->end));
         }
     }
-<<<<<<< HEAD
-    auto stack = PatternStack(DestructedPattern(Constructor::Wildcard(), {}, *selectorTy, nullptr));
-||||||| constructed merge base
-    auto stack = PatternStack(
-        DestructedPattern(Constructor::Wildcard(), {}, *typeManager.TryGreedySubst(me.selector->GetTy()), nullptr));
-=======
-    auto stack = PatternStack(
-        DestructedPattern(Constructor::Wildcard(), {}, typeManager.TryGreedySubst(me.selector->GetTy()), nullptr));
->>>>>>> feat: local mode
+    auto stack = PatternStack(DestructedPattern(Constructor::Wildcard(), {}, selectorTy, nullptr));
     std::vector<PatternStack> witnesses = checker.FindWitnesses(stack);
     if (witnesses.empty()) {
         return true;

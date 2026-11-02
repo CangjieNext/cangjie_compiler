@@ -117,38 +117,7 @@ bool StructInheritanceChecker::ComputeInconsistentTypes(const MemberSignature& c
     return hasConsistentReturnTy;
 }
 
-<<<<<<< HEAD
-||||||| constructed merge base
-void StructInheritanceChecker::UpdateOverriddenFuncDeclCache(Ptr<Decl> child, Ptr<Decl> parent)
-{
-    if (checkingDecls.empty()) {
-        return;
-    }
 
-    if (child->outerDecl == checkingDecls.back()) {
-        typeManager.UpdateTopOverriddenFuncDeclMap(child, parent);
-    }
-}
-
-=======
-void StructInheritanceChecker::ComputeInconsistentPropTypes(const MemberSignature& child, const MemberSignature& parent,
-    std::vector<ModalTy>& inconsistentTypes) const
-{
-    if (parent.thisMode != child.thisMode) {
-        return;
-    }
-    auto parentTy = parent.ty;
-    auto childTy = child.ty;
-    if (!Ty::IsTyCorrect(parentTy) || !Ty::IsTyCorrect(childTy)) {
-        return;
-    }
-    if (!typeManager.IsTyEqual(parentTy, childTy)) {
-        inconsistentTypes.emplace_back(parent.ty, parent.thisMode);
-        inconsistentTypes.emplace_back(child.ty, child.thisMode);
-    }
-}
-
->>>>>>> feat: local mode
 /**
  * Update @p child value into the @p members
  * NOTE: Do not report error here.

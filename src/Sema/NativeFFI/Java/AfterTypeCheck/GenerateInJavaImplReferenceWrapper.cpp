@@ -262,7 +262,6 @@ void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorInitializa
     
     // NOTE: No global reference is created here:
     // it is wrapped into global reference in `super` constructors chain call: within `JObject`.
-<<<<<<< HEAD
     // NOTE: marker is used to distinguish between two types of `@JavaImpl` constructors
     // running the same user-defined logics within it:
     // 1. Constructor directly callable in cangjie code.
@@ -270,11 +269,6 @@ void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorInitializa
     auto javaCtorExpr = factory.CreateNewJavaObjectCall(ctx, *curFile,
         JavaMemberSignature::FromConstructor(ctor, /* withMarker = */ true),
         std::move(args));
-||||||| constructed merge base
-    auto javaCtorExpr = ilib.CreateJavaConstructorBlock(refWrapper.GetTy(), paramList, curFile, false);
-=======
-    auto javaCtorExpr = ilib.CreateJavaConstructorBlock(refWrapper.DataTy(), paramList, curFile, false);
->>>>>>> feat: local mode
     if (!javaCtorExpr) {
         ctor.EnableAttr(Attribute::IS_BROKEN);
         companion.EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);

@@ -75,7 +75,6 @@ enum class Attribute {
 
     ATTR_END
 };
-
 constexpr uint64_t ATTR_SIZE = 64;
 
 class AttributeInfo {
