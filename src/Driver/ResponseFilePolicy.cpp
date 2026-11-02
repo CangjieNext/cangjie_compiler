@@ -16,24 +16,11 @@
 #include <cctype>
 #include <sstream>
 #include <unordered_map>
-#ifndef _WIN32
-#include <unistd.h>
-#endif
 
 #include "cangjie/Utils/FileUtil.h"
 
 namespace Cangjie {
 namespace {
-#ifndef _WIN32
-// POSIX fallback used only when sysconf fails or returns a nonsensical value.
-constexpr size_t POSIX_FALLBACK_THRESHOLD = 128 * 1024;
-
-// Cap the POSIX threshold at 128 KB so we trigger earlier than ARG_MAX/2 in
-// practice (a typical ARG_MAX is 2 MB; 128 KB is well below it and avoids
-// surprising E2BIG on weird systems).
-constexpr size_t POSIX_THRESHOLD_CAP = 128 * 1024;
-#endif
-
 std::string NormalizeToolName(const std::string& toolName)
 {
     // 1. basename
@@ -51,15 +38,6 @@ std::string NormalizeToolName(const std::string& toolName)
     }
     return base;
 }
-
-#ifndef _WIN32
-size_t PosixThreshold()
-{
-    long argMax = sysconf(_SC_ARG_MAX);
-    size_t threshold = (argMax > 0) ? static_cast<size_t>(argMax) / 2 : POSIX_FALLBACK_THRESHOLD;
-    return std::min(threshold, POSIX_THRESHOLD_CAP);
-}
-#endif
 
 // Quotes a single argument with CRT (CommandLineToArgvW) rules — the inverse
 // of the tokenizer Windows-hosted ld.lld applies to command lines and rsp
@@ -190,20 +168,16 @@ ResponseFilePolicy LookupResponseFilePolicy(const std::string& toolName)
     // cjc itself spawns the child (CreateProcessA vs posix_spawn), not the
     // target being built, so cross compilation picks the right strategy
     // automatically.
+    //
+    // Scope: only Windows hosts register a policy for now (MinGW linker
+    // ld.lld; CreateProcessA caps lpCommandLine at 32767 chars, threshold
+    // 32000 keeps a margin). POSIX hosts keep the original spawn path; to
+    // extend support, register the host linkers here (Linux: ld.lld/ld,
+    // macOS: ld64.lld) with a posix_spawn-based threshold.
     static const std::unordered_map<std::string, ResponseFilePolicy> policyTable = []() {
         std::unordered_map<std::string, ResponseFilePolicy> table;
 #if defined(_WIN32)
-        // TEMP gate test (revert before commit): threshold shrunk to force
-        // the rsp path. Real value: 32000 (CreateProcessA cap 32767, margin).
-        table["ld.lld"] = {true, 128};
-#elif defined(__APPLE__)
-        // TEMP gate test (revert before commit). Real value: PosixThreshold().
-        table["ld64.lld"] = {true, std::min(PosixThreshold(), size_t{128})};
-#else
-        // TEMP gate test (revert before commit). Real value: PosixThreshold().
-        const size_t threshold = std::min(PosixThreshold(), size_t{128});
-        table["ld.lld"] = {true, threshold};
-        table["ld"]     = {true, threshold};
+        table["ld.lld"] = {true, 32000};
 #endif
         return table;
     }();

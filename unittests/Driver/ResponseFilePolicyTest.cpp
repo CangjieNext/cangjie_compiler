@@ -181,12 +181,10 @@ TEST(ResponseFilePolicyTest, UnknownToolsKeepOriginalPath)
 #if defined(_WIN32)
 TEST(ResponseFilePolicyTest, RegisteredLinkersMatchHostToolchain)
 {
-    // Host = Windows: MinGW linker ld.lld.
-    // TEMP gate test (revert before commit): threshold shrunk to 128; real
-    // value is 32000 (CreateProcessA cap 32767, margin).
+    // Host = Windows: MinGW linker ld.lld, CreateProcessA cap 32767.
     const ResponseFilePolicy policy = LookupResponseFilePolicy("C:\\cangjie\\bin\\ld.lld.exe");
     ASSERT_TRUE(policy.supported);
-    EXPECT_EQ(policy.threshold, size_t{128});
+    EXPECT_EQ(policy.threshold, size_t{32000});
     EXPECT_TRUE(LookupResponseFilePolicy("C:\\Bin\\LD.LLD.EXE").supported);
     EXPECT_FALSE(LookupResponseFilePolicy("C:\\bin\\ld.exe").supported);
     EXPECT_FALSE(LookupResponseFilePolicy("C:\\bin\\ld64.lld.exe").supported);
@@ -194,25 +192,17 @@ TEST(ResponseFilePolicyTest, RegisteredLinkersMatchHostToolchain)
 #elif defined(__APPLE__)
 TEST(ResponseFilePolicyTest, RegisteredLinkersMatchHostToolchain)
 {
-    // Host = macOS: Mach-O linker ld64.lld, posix_spawn (ARG_MAX).
-    const ResponseFilePolicy policy = LookupResponseFilePolicy("/usr/bin/ld64.lld");
-    ASSERT_TRUE(policy.supported);
-    EXPECT_GT(policy.threshold, size_t{0});
-    EXPECT_LE(policy.threshold, size_t{128 * 1024});
+    // Host = macOS: no linker registered yet; keep the original spawn path.
+    EXPECT_FALSE(LookupResponseFilePolicy("/usr/bin/ld64.lld").supported);
     EXPECT_FALSE(LookupResponseFilePolicy("/usr/bin/ld.lld").supported);
-    EXPECT_FALSE(LookupResponseFilePolicy("/usr/bin/ld").supported);
 }
 #else
 TEST(ResponseFilePolicyTest, RegisteredLinkersMatchHostToolchain)
 {
-    // Host = Linux: ld.lld (LTO/HwAsan) + system ld, posix_spawn (ARG_MAX).
-    const ResponseFilePolicy policy = LookupResponseFilePolicy("/usr/bin/ld.lld");
-    ASSERT_TRUE(policy.supported);
-    EXPECT_GT(policy.threshold, size_t{0});
-    EXPECT_LE(policy.threshold, size_t{128 * 1024});
-    EXPECT_TRUE(LookupResponseFilePolicy("/usr/bin/ld").supported);
+    // Host = Linux: no linker registered yet; keep the original spawn path.
+    EXPECT_FALSE(LookupResponseFilePolicy("/usr/bin/ld.lld").supported);
+    EXPECT_FALSE(LookupResponseFilePolicy("/usr/bin/ld").supported);
     EXPECT_FALSE(LookupResponseFilePolicy("/usr/bin/ld64.lld").supported);
-    // Cross-compilation prefixed ld is not matched (design doc §4.6, plan A).
     EXPECT_FALSE(LookupResponseFilePolicy("/usr/bin/x86_64-linux-gnu-ld").supported);
 }
 
