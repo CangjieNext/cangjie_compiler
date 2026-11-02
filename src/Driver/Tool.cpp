@@ -234,13 +234,14 @@ bool Tool::InternalImplementedCommandExec() const
 std::unique_ptr<ToolFuture> Tool::Execute(bool verbose) const
 {
     // Resolve exec args: full args, or name + @rsp when the command line is
-    // oversized.
+    // oversized. Only Windows hosts register an rsp policy for now
     std::vector<std::string> execArgs;
     execArgs.push_back(name);
     std::vector<std::string> expandedArgs = ExpandArgs();
 
-    const ResponseFilePolicy policy = LookupResponseFilePolicy(name);
     bool useRsp = false;
+#ifdef _WIN32
+    const ResponseFilePolicy policy = LookupResponseFilePolicy(name);
     if (policy.supported) {
         std::vector<std::string> fullArgs = execArgs;
         fullArgs.insert(fullArgs.end(), expandedArgs.begin(), expandedArgs.end());
@@ -248,18 +249,21 @@ std::unique_ptr<ToolFuture> Tool::Execute(bool verbose) const
     }
 
     if (useRsp) {
-        // Serialize with argv[0] skipped; style follows the host OS.
+        // Serialize with argv[0] skipped; the style matches the rsp reader of
+        // the host toolchain (see SerializeRspForHost).
         std::vector<std::string> fullArgs = execArgs;
         fullArgs.insert(fullArgs.end(), expandedArgs.begin(), expandedArgs.end());
         std::string content = SerializeRspForHost(fullArgs);
         std::string rspPath = TempFileManager::Instance().CreateRspFile(content);
-        if (rspPath.empty()) {
-            // Write failed; fall back to the original args.
+        if (content.empty() || rspPath.empty()) {
+            // No serializer on this host, or write failed; fall back to the
+            // original args.
             useRsp = false;
         } else {
             execArgs.push_back("@" + rspPath);
         }
     }
+#endif
     if (!useRsp) {
         execArgs.insert(execArgs.end(), expandedArgs.begin(), expandedArgs.end());
     }
