@@ -103,7 +103,6 @@ void GlobalVariableGeneratorImpl::EmitIR()
                 cgMod.GetLLVMContext(), {llvm::MDString::get(cgMod.GetLLVMContext(), MangleType(*chirGV->GetType()))});
             rawGV->setMetadata(GC_GLOBAL_VAR_TYPE, fieldMeta);
         }
-<<<<<<< HEAD
         const auto& dl = cgMod.GetLLVMModule()->getDataLayout();
         // Latch semantics: once the module has contained any zero-sized
         // zero-initialized (i.e. .bss) global, a guard is wanted for the rest
@@ -114,22 +113,6 @@ void GlobalVariableGeneratorImpl::EmitIR()
     }
     if (splitNum > 1 && needZeroSizeGuard) {
         AppendZeroSizeGVGuard(cgMod);
-||||||| constructed merge base
-=======
-        const auto& dl = cgMod.GetLLVMModule()->getDataLayout();
-        // Only the last zero-initialized (i.e. .bss) global of the module can
-        // end up as the final .bss fragment after linking; earlier zero-sized
-        // globals are backed by the zero-initialized storage that follows them.
-        // Globals with non-zero initializers (.data), string globals whose
-        // initializer is set later, and constants (.rodata) do not extend .bss
-        // and must not refresh this flag.
-        if (!rawGV->isConstant() && rawGV->hasInitializer() && rawGV->getInitializer()->isZeroValue()) {
-            needZeroSizeGuard = dl.getTypeAllocSize(rawGV->getValueType()) == 0;
-        }
-    }
-    if (needZeroSizeGuard) {
-        AppendZeroSizeGVGuard(cgMod);
->>>>>>> feat: local mode
     }
 }
 #endif
