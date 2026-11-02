@@ -117,6 +117,20 @@ bool StructInheritanceChecker::ComputeInconsistentTypes(const MemberSignature& c
     return hasConsistentReturnTy;
 }
 
+void StructInheritanceChecker::ComputeInconsistentPropTypes(const MemberSignature& child, const MemberSignature& parent,
+    std::vector<ModalTy>& inconsistentTypes) const
+{
+    auto parentTy = parent.ty;
+    auto childTy = child.ty;
+    if (!Ty::IsTyCorrect(parentTy) || !Ty::IsTyCorrect(childTy)) {
+        return;
+    }
+    if (parentTy != childTy) {
+        inconsistentTypes.emplace_back(parent.ty, parent.thisMode);
+        inconsistentTypes.emplace_back(child.ty, child.thisMode);
+    }
+}
+
 
 /**
  * Update @p child value into the @p members
@@ -155,9 +169,15 @@ MemberSignature StructInheritanceChecker::UpdateInheritedMemberIfNeeded(
                 child, parent, updated, {shouldUpdate, inheritedInterfaces}, inconsistentTypes);
             inconsistentType = inconsistentType && !consistent;
         } else if (parent.decl->astKind == ASTKind::PROP_DECL) {
-            shouldUpdate = parent.ty == child.ty && parent.thisMode == child.thisMode;
-            if (!inconsistentTypes.empty()) {
-                UpdateInconsistentTypes(it->second, parent, inconsistentTypes);
+            if (opts.enableLocalMode) {
+                ComputeInconsistentPropTypes(child, parent, inconsistentTypes);
+                shouldUpdate = parent.ty == child.ty && parent.thisMode == child.thisMode;
+                if (!inconsistentTypes.empty()) {
+                    UpdateInconsistentTypes(it->second, parent, inconsistentTypes);
+                }
+            } else if (inconsistentType) {
+                // Without local mode properties cannot be overloaded, keep the original behavior.
+                SetPossibleInconsistentType(parent, child, inconsistentTypes);
             }
         } else if (inconsistentType) {
             SetPossibleInconsistentType(parent, child, inconsistentTypes);

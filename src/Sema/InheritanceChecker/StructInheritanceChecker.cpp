@@ -738,7 +738,12 @@ void StructInheritanceChecker::CheckInheritedMember(
         return;
     }
     if (parent.decl->astKind == ASTKind::PROP_DECL) {
-        if (CheckPropImplRelation(parent, child)) {
+        if (!opts.enableLocalMode) {
+            // Property overload is a local-mode feature. Without it, keep the original
+            // override/implement check and report the property type conflict.
+            CheckInheritanceAttributes(parent, *child.decl);
+            CheckPropertyInheritance(parent, child);
+        } else if (CheckPropImplRelation(parent, child)) {
             CheckInheritanceAttributes(parent, *child.decl);
             CheckPropertyInheritance(parent, child);
         } else {
@@ -778,11 +783,11 @@ void StructInheritanceChecker::DiagnoseForConflictInheritance(
         std::string identifier = *it;
         auto found = members.equal_range(identifier);
         auto count = static_cast<size_t>(std::distance(found.first, found.second));
-        // Only function and prop allow overloading.
+        // Only function and prop allow overloading. Prop overload is a local-mode feature.
         bool allFunc = std::all_of(found.first, found.second, [](auto& it) { return it.second.decl->IsFunc(); }) ||
-            std::all_of(found.first, found.second, [](auto it) {
+            (opts.enableLocalMode && std::all_of(found.first, found.second, [](auto it) {
                 return it.second.decl->astKind == ASTKind::PROP_DECL;
-            });
+            }));
         if (count > 1 && !allFunc) {
             auto diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::sema_inherit_super_member_kind_inconsistent,
                 decl, MakeRange(decl.identifier), identifier);
@@ -915,7 +920,7 @@ void StructInheritanceChecker::CheckInheritedInterfaces(
             continue;
         }
         if (interface.decl->astKind == ASTKind::PROP_DECL) {
-            if (CheckPropImplRelation(interface, child)) {
+            if (!opts.enableLocalMode || CheckPropImplRelation(interface, child)) {
                 CheckInheritanceForInterface(interface, child);
                 CheckPropertyInheritance(interface, child);
             } else {

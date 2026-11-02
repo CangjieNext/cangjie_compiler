@@ -56,6 +56,8 @@ private:
         MemberMap& inheritedMembers, const MemberSignature& child, bool inheritedInterfaces = false);
     bool ComputeInconsistentTypes(const MemberSignature& child, const MemberSignature& parent, MemberSignature& updated,
         const std::pair<bool, bool>& status, std::vector<AST::ModalTy>& inconsistentTypes) const;
+    void ComputeInconsistentPropTypes(const MemberSignature& child, const MemberSignature& parent,
+        std::vector<AST::ModalTy>& inconsistentTypes) const;
     void MergeInheritedMembers(
         MemberMap& members, const MemberMap& otherMembers, DataTy structTy, bool inheritedInterfaces = false);
     void DiagnoseForOverriddenMember(const MemberSignature& child) const;
