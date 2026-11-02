@@ -191,28 +191,8 @@ void MergeBlocks::RunOnFunc(const BlockGroup& body, CHIRBuilder& builder, const 
     bool isStable;
     do {
         isStable = true;
-<<<<<<< HEAD
         Visitor::Visit(const_cast<BlockGroup&>(body), [&](Block& block) {
             if (block.Get<GeneratedFromForIn>()) {
-||||||| constructed merge base
-        for (auto block : body.GetBlocks()) {
-            for (auto expr : block->GetExpressions()) {
-                if (expr->GetExprKind() == ExprKind::LAMBDA) {
-                    RunOnFunc(*StaticCast<const Lambda*>(expr)->GetBody(), builder, opts);
-                }
-            }
-            if (block->Get<GeneratedFromForIn>()) {
-=======
-        for (auto block : body.GetBlocks()) {
-            for (auto expr : block->GetExpressions()) {
-                if (expr->GetExprKind() == ExprKind::LAMBDA) {
-                    RunOnFunc(*StaticCast<const Lambda*>(expr)->GetBody(), builder, opts);
-                } else if (expr->GetExprKind() == ExprKind::EXCLAVE) {
-                    RunOnFunc(*StaticCast<const Exclave*>(expr)->GetBody(), builder, opts);
-                }
-            }
-            if (block->Get<GeneratedFromForIn>()) {
->>>>>>> feat: local mode
                 isStable = false;
                 MergeForInCondBlock(builder, block);
             } else if (checkSingleEntrySingleExit(block, opts)) {

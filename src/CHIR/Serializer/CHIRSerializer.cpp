@@ -369,14 +369,8 @@ template <> flatbuffers::Offset<CHIRFormat::Type> CHIRSerializer::CHIRSerializer
 {
     auto kind = CHIRFormat::CHIRTypeKind(obj.GetTypeKind());
     auto argTys = GetId<Type>(obj.GetTypeArgs());
-<<<<<<< HEAD
-    return CHIRFormat::CreateTypeDirect(builder, kind, argTys.empty() ? nullptr : &argTys);
-||||||| constructed merge base
-    return PackageFormat::CreateTypeDirect(builder, kind, argTys.empty() ? nullptr : &argTys);
-=======
-    auto modal = PackageFormat::CreateModalInfo(builder, PackageFormat::Mode(obj.GetModalInfo().Local()));
-    return PackageFormat::CreateTypeDirect(builder, kind, argTys.empty() ? nullptr : &argTys, modal);
->>>>>>> feat: local mode
+    auto modal = CHIRFormat::CreateModalInfo(builder, CHIRFormat::Mode(obj.GetModalInfo().Local()));
+    return CHIRFormat::CreateTypeDirect(builder, kind, argTys.empty() ? nullptr : &argTys, modal);
 }
 
 template <>
@@ -467,23 +461,13 @@ flatbuffers::Offset<CHIRFormat::Parameter> CHIRSerializer::CHIRSerializerImpl::S
     auto ownedFunc = GetId<Value>(obj.GetOwnerFunc());
     auto ownedLambda = GetId<Expression>(obj.GetOwnerLambda());
     auto srcCodeIdentifier = obj.GetSrcCodeIdentifier();
-<<<<<<< HEAD
     auto annoInfo = Serialize<CHIRFormat::AnnoInfo>(obj.GetAnnoInfo());
-    return CHIRFormat::CreateParameterDirect(
-        builder, base, ownedFunc, ownedLambda, srcCodeIdentifier.data(), annoInfo);
-||||||| constructed merge base
-    auto annoInfo = Serialize<PackageFormat::AnnoInfo>(obj.GetAnnoInfo());
-    return PackageFormat::CreateParameterDirect(
-        builder, base, ownedFunc, ownedLambda, srcCodeIdentifier.data(), annoInfo);
-=======
-    auto annoInfo = Serialize<PackageFormat::AnnoInfo>(obj.GetAnnoInfo());
     uint32_t paramDftValFunc = 0;
     if (auto* dftFunc = DynamicCast<Function*>(obj.GetParamDftValFunc())) {
         paramDftValFunc = GetId<Value>(dftFunc);
     }
-    return PackageFormat::CreateParameterDirect(
+    return CHIRFormat::CreateParameterDirect(
         builder, base, ownedFunc, ownedLambda, srcCodeIdentifier.data(), annoInfo, paramDftValFunc);
->>>>>>> feat: local mode
 }
 
 template <>
@@ -652,7 +636,6 @@ flatbuffers::Offset<CHIRFormat::NullLiteral> CHIRSerializer::CHIRSerializerImpl:
 static CHIRFormat::CHIRExprKind ToPackageExprKind(const Expression& expr)
 {
     switch (expr.GetExprKind()) {
-<<<<<<< HEAD
         case ExprKind::GOTO:                    return CHIRFormat::CHIRExprKind_Goto;
         case ExprKind::BRANCH:                  return CHIRFormat::CHIRExprKind_Branch;
         case ExprKind::MULTIBRANCH:             return CHIRFormat::CHIRExprKind_MultiBranch;
@@ -732,173 +715,9 @@ static CHIRFormat::CHIRExprKind ToPackageExprKind(const Expression& expr)
         case ExprKind::INTRINSIC:               return CHIRFormat::CHIRExprKind_Intrinsic;
         case ExprKind::GET_RTTI:                return CHIRFormat::CHIRExprKind_GetRtti;
         case ExprKind::GET_RTTI_STATIC:         return CHIRFormat::CHIRExprKind_GetRttiStatic;
-||||||| constructed merge base
-        case ExprKind::GOTO:                    return PackageFormat::CHIRExprKind_Goto;
-        case ExprKind::BRANCH:                  return PackageFormat::CHIRExprKind_Branch;
-        case ExprKind::MULTIBRANCH:             return PackageFormat::CHIRExprKind_MultiBranch;
-        case ExprKind::EXIT:                    return PackageFormat::CHIRExprKind_Exit;
-        case ExprKind::TRY_APPLY:               return PackageFormat::CHIRExprKind_TryApply;
-        case ExprKind::TRY_INVOKE:              return PackageFormat::CHIRExprKind_TryInvoke;
-        case ExprKind::TRY_INVOKESTATIC:        return PackageFormat::CHIRExprKind_TryInvoke;
-        case ExprKind::RAISE_EXCEPTION:         return PackageFormat::CHIRExprKind_RaiseException;
-        case ExprKind::TRY_NEG:                 return PackageFormat::CHIRExprKind_TryNeg;
-        case ExprKind::TRY_ADD:                 return PackageFormat::CHIRExprKind_TryAdd;
-        case ExprKind::TRY_SUB:                 return PackageFormat::CHIRExprKind_TrySub;
-        case ExprKind::TRY_MUL:                 return PackageFormat::CHIRExprKind_TryMul;
-        case ExprKind::TRY_DIV:                 return PackageFormat::CHIRExprKind_TryDiv;
-        case ExprKind::TRY_MOD:                 return PackageFormat::CHIRExprKind_TryMod;
-        case ExprKind::TRY_EXP:                 return PackageFormat::CHIRExprKind_TryExp;
-        case ExprKind::TRY_LSHIFT:              return PackageFormat::CHIRExprKind_TryLShift;
-        case ExprKind::TRY_RSHIFT:              return PackageFormat::CHIRExprKind_TryRShift;
-        case ExprKind::TRY_SPAWN:               return PackageFormat::CHIRExprKind_TrySpawn;
-        case ExprKind::TRY_NUMERIC_CAST:        return PackageFormat::CHIRExprKind_TryNumericCast;
-        case ExprKind::TRY_INTRINSIC:           return PackageFormat::CHIRExprKind_TryIntrinsic;
-        case ExprKind::TRY_ALLOCATE:            return PackageFormat::CHIRExprKind_TryAllocate;
-        case ExprKind::TRY_RAW_ARRAY_ALLOCATE:  return PackageFormat::CHIRExprKind_TryRawArrayAllocate;
-        case ExprKind::NEG:                     return PackageFormat::CHIRExprKind_Neg;
-        case ExprKind::NOT:                     return PackageFormat::CHIRExprKind_Not;
-        case ExprKind::BITNOT:                  return PackageFormat::CHIRExprKind_BitNot;
-        case ExprKind::ADD:                     return PackageFormat::CHIRExprKind_Add;
-        case ExprKind::SUB:                     return PackageFormat::CHIRExprKind_Sub;
-        case ExprKind::MUL:                     return PackageFormat::CHIRExprKind_Mul;
-        case ExprKind::DIV:                     return PackageFormat::CHIRExprKind_Div;
-        case ExprKind::MOD:                     return PackageFormat::CHIRExprKind_Mod;
-        case ExprKind::EXP:                     return PackageFormat::CHIRExprKind_Exp;
-        case ExprKind::LSHIFT:                  return PackageFormat::CHIRExprKind_LShift;
-        case ExprKind::RSHIFT:                  return PackageFormat::CHIRExprKind_RShift;
-        case ExprKind::BITAND:                  return PackageFormat::CHIRExprKind_BitAnd;
-        case ExprKind::BITOR:                   return PackageFormat::CHIRExprKind_BitOr;
-        case ExprKind::BITXOR:                  return PackageFormat::CHIRExprKind_BitXor;
-        case ExprKind::LT:                      return PackageFormat::CHIRExprKind_LT;
-        case ExprKind::GT:                      return PackageFormat::CHIRExprKind_GT;
-        case ExprKind::LE:                      return PackageFormat::CHIRExprKind_LE;
-        case ExprKind::GE:                      return PackageFormat::CHIRExprKind_GE;
-        case ExprKind::EQUAL:                   return PackageFormat::CHIRExprKind_Equal;
-        case ExprKind::NOTEQUAL:                return PackageFormat::CHIRExprKind_NotEqual;
-        case ExprKind::AND:                     return PackageFormat::CHIRExprKind_And;
-        case ExprKind::OR:                      return PackageFormat::CHIRExprKind_Or;
-        case ExprKind::CLASS_STATIC_CAST:       return PackageFormat::CHIRExprKind_StaticCast;
-        case ExprKind::NUMERIC_CAST:            return PackageFormat::CHIRExprKind_NumericCast;
-        case ExprKind::BOX:                     return PackageFormat::CHIRExprKind_Box;
-        case ExprKind::UNBOX_TO_VALUE:          return PackageFormat::CHIRExprKind_UnboxToValue;
-        case ExprKind::UNBOX_TO_REF:            return PackageFormat::CHIRExprKind_UnboxToRef;
-        case ExprKind::CAST_TO_GENERIC:         return PackageFormat::CHIRExprKind_CastToGeneric;
-        case ExprKind::CAST_TO_CONCRETE:        return PackageFormat::CHIRExprKind_CastToConcrete;
-        case ExprKind::ALLOCATE:                return PackageFormat::CHIRExprKind_Allocate;
-        case ExprKind::LOAD:                    return PackageFormat::CHIRExprKind_Load;
-        case ExprKind::STORE:                   return PackageFormat::CHIRExprKind_Store;
-        case ExprKind::GET_ELEMENT_BY_NAME:     return PackageFormat::CHIRExprKind_GetElementByName;
-        case ExprKind::GET_ELEMENT_REF:         return PackageFormat::CHIRExprKind_GetElementRef;
-        case ExprKind::STORE_ELEMENT_BY_NAME:   return PackageFormat::CHIRExprKind_StoreElementByName;
-        case ExprKind::STORE_ELEMENT_REF:       return PackageFormat::CHIRExprKind_StoreElementRef;
-        case ExprKind::FIELD:                   return PackageFormat::CHIRExprKind_Field;
-        case ExprKind::FIELD_BY_NAME:           return PackageFormat::CHIRExprKind_FieldByName;
-        case ExprKind::RAW_ARRAY_ALLOCATE:      return PackageFormat::CHIRExprKind_RawArrayAllocate;
-        case ExprKind::RAW_ARRAY_LITERAL_INIT:  return PackageFormat::CHIRExprKind_RawArrayLiteralInit;
-        case ExprKind::RAW_ARRAY_INIT_BY_VALUE: return PackageFormat::CHIRExprKind_RawArrayInitByValue;
-        case ExprKind::VARRAY:                  return PackageFormat::CHIRExprKind_VArrayExpr;
-        case ExprKind::VARRAY_BUILDER:          return PackageFormat::CHIRExprKind_VArrayBuilder;
-        case ExprKind::CONSTANT:                return PackageFormat::CHIRExprKind_Constant;
-        case ExprKind::DEBUGEXPR:               return PackageFormat::CHIRExprKind_Debug;
-        case ExprKind::TUPLE:                   return PackageFormat::CHIRExprKind_Tuple;
-        case ExprKind::INSTANCEOF:              return PackageFormat::CHIRExprKind_InstanceOf;
-        case ExprKind::GET_EXCEPTION:           return PackageFormat::CHIRExprKind_GetException;
-        case ExprKind::SPAWN:                   return PackageFormat::CHIRExprKind_Spawn;
-        case ExprKind::LAMBDA:                  return PackageFormat::CHIRExprKind_Lambda;
-        case ExprKind::GET_INSTANTIATE_VALUE:   return PackageFormat::CHIRExprKind_GetInstantiateValue;
-        case ExprKind::APPLY:                   return PackageFormat::CHIRExprKind_Apply;
-        case ExprKind::INVOKE:                  return PackageFormat::CHIRExprKind_Invoke;
-        case ExprKind::INVOKESTATIC:            return PackageFormat::CHIRExprKind_Invoke;
-        case ExprKind::INTRINSIC:               return PackageFormat::CHIRExprKind_Intrinsic;
-        case ExprKind::GET_RTTI:                return PackageFormat::CHIRExprKind_GetRtti;
-        case ExprKind::GET_RTTI_STATIC:         return PackageFormat::CHIRExprKind_GetRttiStatic;
-=======
-        case ExprKind::GOTO:                    return PackageFormat::CHIRExprKind_Goto;
-        case ExprKind::BRANCH:                  return PackageFormat::CHIRExprKind_Branch;
-        case ExprKind::MULTIBRANCH:             return PackageFormat::CHIRExprKind_MultiBranch;
-        case ExprKind::EXIT:                    return PackageFormat::CHIRExprKind_Exit;
-        case ExprKind::TRY_APPLY:               return PackageFormat::CHIRExprKind_TryApply;
-        case ExprKind::TRY_INVOKE:              return PackageFormat::CHIRExprKind_TryInvoke;
-        case ExprKind::TRY_INVOKESTATIC:        return PackageFormat::CHIRExprKind_TryInvoke;
-        case ExprKind::RAISE_EXCEPTION:         return PackageFormat::CHIRExprKind_RaiseException;
-        case ExprKind::TRY_NEG:                 return PackageFormat::CHIRExprKind_TryNeg;
-        case ExprKind::TRY_ADD:                 return PackageFormat::CHIRExprKind_TryAdd;
-        case ExprKind::TRY_SUB:                 return PackageFormat::CHIRExprKind_TrySub;
-        case ExprKind::TRY_MUL:                 return PackageFormat::CHIRExprKind_TryMul;
-        case ExprKind::TRY_DIV:                 return PackageFormat::CHIRExprKind_TryDiv;
-        case ExprKind::TRY_MOD:                 return PackageFormat::CHIRExprKind_TryMod;
-        case ExprKind::TRY_EXP:                 return PackageFormat::CHIRExprKind_TryExp;
-        case ExprKind::TRY_LSHIFT:              return PackageFormat::CHIRExprKind_TryLShift;
-        case ExprKind::TRY_RSHIFT:              return PackageFormat::CHIRExprKind_TryRShift;
-        case ExprKind::TRY_SPAWN:               return PackageFormat::CHIRExprKind_TrySpawn;
-        case ExprKind::TRY_NUMERIC_CAST:        return PackageFormat::CHIRExprKind_TryNumericCast;
-        case ExprKind::TRY_INTRINSIC:           return PackageFormat::CHIRExprKind_TryIntrinsic;
-        case ExprKind::TRY_ALLOCATE:            return PackageFormat::CHIRExprKind_TryAllocate;
-        case ExprKind::TRY_RAW_ARRAY_ALLOCATE:  return PackageFormat::CHIRExprKind_TryRawArrayAllocate;
-        case ExprKind::NEG:                     return PackageFormat::CHIRExprKind_Neg;
-        case ExprKind::NOT:                     return PackageFormat::CHIRExprKind_Not;
-        case ExprKind::BITNOT:                  return PackageFormat::CHIRExprKind_BitNot;
-        case ExprKind::ADD:                     return PackageFormat::CHIRExprKind_Add;
-        case ExprKind::SUB:                     return PackageFormat::CHIRExprKind_Sub;
-        case ExprKind::MUL:                     return PackageFormat::CHIRExprKind_Mul;
-        case ExprKind::DIV:                     return PackageFormat::CHIRExprKind_Div;
-        case ExprKind::MOD:                     return PackageFormat::CHIRExprKind_Mod;
-        case ExprKind::EXP:                     return PackageFormat::CHIRExprKind_Exp;
-        case ExprKind::LSHIFT:                  return PackageFormat::CHIRExprKind_LShift;
-        case ExprKind::RSHIFT:                  return PackageFormat::CHIRExprKind_RShift;
-        case ExprKind::BITAND:                  return PackageFormat::CHIRExprKind_BitAnd;
-        case ExprKind::BITOR:                   return PackageFormat::CHIRExprKind_BitOr;
-        case ExprKind::BITXOR:                  return PackageFormat::CHIRExprKind_BitXor;
-        case ExprKind::LT:                      return PackageFormat::CHIRExprKind_LT;
-        case ExprKind::GT:                      return PackageFormat::CHIRExprKind_GT;
-        case ExprKind::LE:                      return PackageFormat::CHIRExprKind_LE;
-        case ExprKind::GE:                      return PackageFormat::CHIRExprKind_GE;
-        case ExprKind::EQUAL:                   return PackageFormat::CHIRExprKind_Equal;
-        case ExprKind::NOTEQUAL:                return PackageFormat::CHIRExprKind_NotEqual;
-        case ExprKind::AND:                     return PackageFormat::CHIRExprKind_And;
-        case ExprKind::OR:                      return PackageFormat::CHIRExprKind_Or;
-        case ExprKind::CLASS_STATIC_CAST:       return PackageFormat::CHIRExprKind_StaticCast;
-        case ExprKind::NUMERIC_CAST:            return PackageFormat::CHIRExprKind_NumericCast;
-        case ExprKind::BOX:                     return PackageFormat::CHIRExprKind_Box;
-        case ExprKind::UNBOX_TO_VALUE:          return PackageFormat::CHIRExprKind_UnboxToValue;
-        case ExprKind::UNBOX_TO_REF:            return PackageFormat::CHIRExprKind_UnboxToRef;
-        case ExprKind::CAST_TO_GENERIC:         return PackageFormat::CHIRExprKind_CastToGeneric;
-        case ExprKind::CAST_TO_CONCRETE:        return PackageFormat::CHIRExprKind_CastToConcrete;
-        case ExprKind::ALLOCATE:                return PackageFormat::CHIRExprKind_Allocate;
-        case ExprKind::LOAD:                    return PackageFormat::CHIRExprKind_Load;
-        case ExprKind::STORE:                   return PackageFormat::CHIRExprKind_Store;
-        case ExprKind::GET_ELEMENT_BY_NAME:     return PackageFormat::CHIRExprKind_GetElementByName;
-        case ExprKind::GET_ELEMENT_REF:         return PackageFormat::CHIRExprKind_GetElementRef;
-        case ExprKind::STORE_ELEMENT_BY_NAME:   return PackageFormat::CHIRExprKind_StoreElementByName;
-        case ExprKind::STORE_ELEMENT_REF:       return PackageFormat::CHIRExprKind_StoreElementRef;
-        case ExprKind::FIELD:                   return PackageFormat::CHIRExprKind_Field;
-        case ExprKind::FIELD_BY_NAME:           return PackageFormat::CHIRExprKind_FieldByName;
-        case ExprKind::RAW_ARRAY_ALLOCATE:      return PackageFormat::CHIRExprKind_RawArrayAllocate;
-        case ExprKind::RAW_ARRAY_LITERAL_INIT:  return PackageFormat::CHIRExprKind_RawArrayLiteralInit;
-        case ExprKind::RAW_ARRAY_INIT_BY_VALUE: return PackageFormat::CHIRExprKind_RawArrayInitByValue;
-        case ExprKind::VARRAY:                  return PackageFormat::CHIRExprKind_VArrayExpr;
-        case ExprKind::VARRAY_BUILDER:          return PackageFormat::CHIRExprKind_VArrayBuilder;
-        case ExprKind::CONSTANT:                return PackageFormat::CHIRExprKind_Constant;
-        case ExprKind::DEBUGEXPR:               return PackageFormat::CHIRExprKind_Debug;
-        case ExprKind::TUPLE:                   return PackageFormat::CHIRExprKind_Tuple;
-        case ExprKind::INSTANCEOF:              return PackageFormat::CHIRExprKind_InstanceOf;
-        case ExprKind::GET_EXCEPTION:           return PackageFormat::CHIRExprKind_GetException;
-        case ExprKind::SPAWN:                   return PackageFormat::CHIRExprKind_Spawn;
-        case ExprKind::LAMBDA:                  return PackageFormat::CHIRExprKind_Lambda;
-        case ExprKind::GET_INSTANTIATE_VALUE:   return PackageFormat::CHIRExprKind_GetInstantiateValue;
-        case ExprKind::APPLY:                   return PackageFormat::CHIRExprKind_Apply;
-        case ExprKind::INVOKE:                  return PackageFormat::CHIRExprKind_Invoke;
-        case ExprKind::INVOKESTATIC:            return PackageFormat::CHIRExprKind_Invoke;
-        case ExprKind::INTRINSIC:               return PackageFormat::CHIRExprKind_Intrinsic;
-        case ExprKind::GET_RTTI:                return PackageFormat::CHIRExprKind_GetRtti;
-        case ExprKind::GET_RTTI_STATIC:         return PackageFormat::CHIRExprKind_GetRttiStatic;
-        case ExprKind::EXCLAVE:
-            return PackageFormat::CHIRExprKind_Exclave;
-        case ExprKind::START_REGION:
-            return PackageFormat::CHIRExprKind_StartRegion;
-        case ExprKind::END_REGION:
-            return PackageFormat::CHIRExprKind_EndRegion;
->>>>>>> feat: local mode
+        case ExprKind::EXCLAVE:                 return CHIRFormat::CHIRExprKind_Exclave;
+        case ExprKind::START_REGION:            return CHIRFormat::CHIRExprKind_StartRegion;
+        case ExprKind::END_REGION:              return CHIRFormat::CHIRExprKind_EndRegion;
         case ExprKind::FORIN_RANGE:
         case ExprKind::FORIN_ITER:
         case ExprKind::FORIN_CLOSED_RANGE:
@@ -1159,15 +978,9 @@ flatbuffers::Offset<CHIRFormat::Lambda> CHIRSerializer::CHIRSerializerImpl::Seri
     auto body = GetId<Value>(obj.GetBody());
     auto retVal = GetId<Value>(obj.GetReturnValue());
     auto isConst = obj.IsCompileTimeValue();
-<<<<<<< HEAD
-    return CHIRFormat::CreateLambdaDirect(builder, base, funcTy, isLocalFunc, identifier.data(),
-||||||| constructed merge base
-    return PackageFormat::CreateLambdaDirect(builder, base, funcTy, isLocalFunc, identifier.data(),
-=======
     auto paramDftValHostParam = GetId<Value>(obj.GetParamDftValHostParam());
     auto genericDecl = GetId<Expression>(obj.GetGenericDecl());
-    return PackageFormat::CreateLambdaDirect(builder, base, funcTy, isLocalFunc, identifier.data(),
->>>>>>> feat: local mode
+    return CHIRFormat::CreateLambdaDirect(builder, base, funcTy, isLocalFunc, identifier.data(),
         srcCodeIdentifier.data(), params.empty() ? nullptr : &params,
         genericTypeParams.empty() ? nullptr : &genericTypeParams, body, retVal, isConst, paramDftValHostParam,
         genericDecl);

@@ -420,13 +420,8 @@ template <> ExtendDef* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const
 
 // =========================== Type Deserializer ==============================
 
-<<<<<<< HEAD
-template <> Type* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const CHIRFormat::Type* obj)
-||||||| constructed merge base
-template <> Type* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const PackageFormat::Type* obj)
-=======
 namespace {
-ModalInfo ReadModalInfo(const PackageFormat::Type* base)
+ModalInfo ReadModalInfo(const CHIRFormat::Type* base)
 {
     if (base->modal() != nullptr) {
         return ModalInfo(static_cast<Mode>(base->modal()->local()));
@@ -435,8 +430,7 @@ ModalInfo ReadModalInfo(const PackageFormat::Type* base)
 }
 } // namespace
 
-template <> Type* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const PackageFormat::Type* obj)
->>>>>>> feat: local mode
+template <> Type* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const CHIRFormat::Type* obj)
 {
     CJC_NULLPTR_CHECK(obj);
     auto kind = static_cast<Type::TypeKind>(obj->kind());

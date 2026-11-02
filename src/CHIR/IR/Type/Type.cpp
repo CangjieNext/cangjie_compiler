@@ -1762,7 +1762,6 @@ bool Type::SatisfyGenericConstraints(const GenericType& type, CHIRBuilder& build
     }
     return true;
 }
-<<<<<<< HEAD
 
 bool Type::CanBeInherited() const
 {
@@ -1772,8 +1771,6 @@ bool Type::CanBeInherited() const
     }
     return customType->GetCustomTypeDef()->CanBeInherited();
 }
-||||||| constructed merge base
-=======
 
 bool Type::IsValueType() const
 {
@@ -1846,5 +1843,4 @@ std::string ModalInfo::ToString() const
             return "";
     }
 }
->>>>>>> feat: local mode
 } // namespace Cangjie::CHIR

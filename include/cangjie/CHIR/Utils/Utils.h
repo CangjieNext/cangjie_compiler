@@ -847,7 +847,6 @@ std::string GetBinaryExprKindLiteral(BinaryExprKind kind);
  * @return The non-debug users of the value.
  */
 std::vector<Expression*> GetNonDebugUsers(const Value& val);
-<<<<<<< HEAD
 
 /**
  * @brief Retrieves the callee in src parent type.
@@ -861,21 +860,7 @@ Function* GetCalleeInSrcParentType(
     Function& callee, const std::string& methodName, std::optional<size_t> expectedOffset = std::nullopt);
 
 void AddTypeCastForReturnVal(Expression& expr, Type& expectedTy, CHIRBuilder& builder);
-||||||| constructed merge base
-=======
-
-/**
- * @brief Retrieves the callee in src parent type.
- *
- * @param callee The callee to retrieve in src parent type.
- * @param methodName The method name to retrieve in src parent type.
- * @param expectedOffset The expected offset of the callee in src parent type.
- * @return The callee in src parent type.
- */
-Function* GetCalleeInSrcParentType(
-    Function& callee, const std::string& methodName, std::optional<size_t> expectedOffset = std::nullopt);
 
 bool LambdaIsUnused(const Lambda& lambda);
->>>>>>> feat: local mode
 } // namespace Cangjie::CHIR
 #endif

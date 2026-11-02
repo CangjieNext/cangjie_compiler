@@ -340,123 +340,7 @@ bool Devirtualization::RewriteToBuiltinOp(const RewriteInfo& info)
     return true;
 }
 
-<<<<<<< HEAD
 Type* Devirtualization::AddRefIfNeeded(Type& thisType, Function& callee)
-||||||| constructed merge base
-void Devirtualization::RewriteToApply(CHIRBuilder& builder, std::vector<RewriteInfo>& rewriteInfos, bool isDebug)
-{
-    for (auto rewriteInfo = rewriteInfos.rbegin(); rewriteInfo != rewriteInfos.rend(); ++rewriteInfo) {
-        if (RewriteToBuiltinOp(builder, *rewriteInfo, isDebug)) {
-            continue;
-        }
-        auto invoke = rewriteInfo->invoke;
-        auto parent = invoke->GetParentBlock();
-
-        // get this type from rewrite info
-        Type* thisType = builder.GetType<RefType>(rewriteInfo->thisType);
-        auto& realFunc = rewriteInfo->realCallee;
-
-        if ((rewriteInfo->thisType->IsStruct() || rewriteInfo->thisType->IsEnum()) &&
-            rewriteInfo->realCallee->Get<WrappedRawMethod>()) {
-            thisType = rewriteInfo->thisType;
-            bool isMutFunc =
-                realFunc->TestAttr(Attribute::MUT) || IsConstructor(*realFunc) || IsInstanceVarInit(*realFunc);
-            if (isMutFunc) {
-                thisType = builder.GetType<RefType>(thisType);
-            }
-            realFunc = rewriteInfo->realCallee->Get<WrappedRawMethod>();
-        }
-        auto args = invoke->GetArgs();
-        auto thisDerefType = thisType->StripAllRefs();
-        auto instThisType = GetInstParentType(
-            *thisDerefType, *realFunc->GetFuncType()->GetParamTypes()[0]->StripAllRefs(), builder);
-        if (thisDerefType->IsClassOrArray() || realFunc->TestAttr(Attribute::MUT)) {
-            instThisType = builder.GetType<RefType>(instThisType);
-        }
-        if (rewriteInfo->thisType->IsBuiltinType()) {
-            instThisType = builder.GetType<RefType>(builder.GetAnyTy());
-        }
-        auto instRetTy = invoke->GetResultType();
-        auto typecastRes = TypeCastOrBoxIfNeeded(*args[0], *instThisType, builder, *parent, INVALID_LOCATION);
-        if (typecastRes != args[0]) {
-            StaticCast<LocalVar*>(typecastRes)->GetExpr()->MoveBefore(invoke);
-            args[0] = typecastRes;
-        }
-        auto loc = invoke->GetDebugLocation();
-        auto apply = builder.CreateExpression<Apply>(loc, instRetTy, realFunc, FuncCallContext{
-            .args = args,
-            .instTypeArgs = rewriteInfo->typeArgs,
-            .thisType = thisType}, invoke->GetParentBlock());
-        rewriteInfo->newApply = apply;
-        invoke->ReplaceWith(*apply);
-        invoke->GetResult()->ReplaceWith(*apply->GetResult(), parent->GetParentBlockGroup());
-        if (isDebug) {
-            std::string message = "[Devirtualization] The function call to " + invoke->GetMethodName() +
-                ToPosInfo(invoke->GetDebugLocation()) + " was optimized.";
-            std::cout << message << std::endl;
-        }
-    }
-}
-
-const std::vector<Function*>& Devirtualization::GetFrozenInstFuns() const
-=======
-void Devirtualization::RewriteToApply(CHIRBuilder& builder, std::vector<RewriteInfo>& rewriteInfos, bool isDebug)
-{
-    for (auto rewriteInfo = rewriteInfos.rbegin(); rewriteInfo != rewriteInfos.rend(); ++rewriteInfo) {
-        if (RewriteToBuiltinOp(builder, *rewriteInfo, isDebug)) {
-            continue;
-        }
-        auto invoke = rewriteInfo->invoke;
-        auto parent = invoke->GetParentBlock();
-
-        // get this type from rewrite info
-        Type* thisType = builder.GetType<RefType>(rewriteInfo->thisType);
-        auto& realFunc = rewriteInfo->realCallee;
-
-        if ((rewriteInfo->thisType->IsStruct() || rewriteInfo->thisType->IsEnum()) &&
-            rewriteInfo->realCallee->Get<WrappedRawMethod>()) {
-            thisType = rewriteInfo->thisType;
-            bool isMutFunc =
-                realFunc->TestAttr(Attribute::MUT) || IsConstructor(*realFunc) || IsInstanceVarInit(*realFunc);
-            if (isMutFunc) {
-                thisType = builder.GetType<RefType>(thisType);
-            }
-            realFunc = rewriteInfo->realCallee->Get<WrappedRawMethod>();
-        }
-        auto args = invoke->GetArgs();
-        auto thisDerefType = thisType->StripAllRefs();
-        auto instThisType = GetInstParentType(
-            *thisDerefType, *realFunc->GetFuncType()->GetParamTypes()[0]->StripAllRefs(), builder);
-        if (thisDerefType->IsReferenceType() || realFunc->TestAttr(Attribute::MUT)) {
-            instThisType = builder.GetType<RefType>(instThisType);
-        }
-        if (rewriteInfo->thisType->IsBuiltinType()) {
-            instThisType = builder.GetType<RefType>(builder.GetAnyTy());
-        }
-        auto instRetTy = invoke->GetResultType();
-        auto typecastRes = TypeCastOrBoxIfNeeded(*args[0], *instThisType, builder, *parent, INVALID_LOCATION);
-        if (typecastRes != args[0]) {
-            StaticCast<LocalVar*>(typecastRes)->GetExpr()->MoveBefore(invoke);
-            args[0] = typecastRes;
-        }
-        auto loc = invoke->GetDebugLocation();
-        auto apply = builder.CreateExpression<Apply>(loc, instRetTy, realFunc, FuncCallContext{
-            .args = args,
-            .instTypeArgs = rewriteInfo->typeArgs,
-            .thisType = thisType}, invoke->GetParentBlock());
-        rewriteInfo->newApply = apply;
-        invoke->ReplaceWith(*apply);
-        invoke->GetResult()->ReplaceWith(*apply->GetResult(), parent->GetParentBlockGroup());
-        if (isDebug) {
-            std::string message = "[Devirtualization] The function call to " + invoke->GetMethodName() +
-                ToPosInfo(invoke->GetDebugLocation()) + " was optimized.";
-            std::cout << message << std::endl;
-        }
-    }
-}
-
-const std::vector<Function*>& Devirtualization::GetFrozenInstFuns() const
->>>>>>> feat: local mode
 {
     if (thisType.IsReferenceType()) {
         return builder.GetType<RefType>(&thisType);
@@ -510,7 +394,6 @@ void Devirtualization::RewriteToApply(std::vector<RewriteInfo>& infos)
             }
         }
 
-<<<<<<< HEAD
         // 3. rewrite to apply
         Expression* newCall = nullptr;
         auto loc = invoke->GetDebugLocation();
@@ -520,102 +403,6 @@ void Devirtualization::RewriteToApply(std::vector<RewriteInfo>& infos)
                 loc, instRetTy, realFunc, context, successBlock, errorBlock, parent);
         } else {
             newCall = builder.CreateExpression<Apply>(loc, instRetTy, realFunc, context, parent);
-||||||| constructed merge base
-Function* FindFunctionInVtable(const ClassType* parentTy, const std::vector<VirtualMethodInfo>& infos,
-    const Devirtualization::FuncSig& method, CHIRBuilder& builder)
-{
-    std::unordered_map<const GenericType*, Type*> parentReplaceTable;
-    auto paramTypes = method.types;
-    paramTypes.erase(paramTypes.begin());
-    if (!parentTy->GetTypeArgs().empty()) {
-        auto instParentTypeArgs = parentTy->GetTypeArgs();
-        auto genericParentTypeArgs = parentTy->GetCustomTypeDef()->GetGenericTypeParams();
-        for (size_t i = 0; i < genericParentTypeArgs.size(); ++i) {
-            parentReplaceTable.emplace(genericParentTypeArgs[i], instParentTypeArgs[i]);
-        }
-    }
-
-    for (auto& info : infos) {
-        if (info.GetMethodName() != method.name) {
-            continue;
-        }
-        auto sigParamTys = info.GetMethodSigType()->GetParamTypes();
-        if (sigParamTys.size() != paramTypes.size()) {
-            continue;
-        }
-        if (info.GetGenericTypeParams().size() != method.typeArgs.size()) {
-            continue;
-        }
-        bool isSigSame = true;
-        std::unordered_map<const GenericType*, Type*> freeGenericReplaceTable;
-        for (size_t i = 0; i < sigParamTys.size(); ++i) {
-            BuildOrphanTypeReplaceTable(sigParamTys[i], freeGenericReplaceTable);
-            BuildOrphanTypeReplaceTable(paramTypes[i], freeGenericReplaceTable);
-        }
-        auto methodGenerics = info.GetGenericTypeParams();
-        for (size_t i{0}; i < methodGenerics.size(); ++i) {
-            freeGenericReplaceTable.emplace(methodGenerics[i], method.typeArgs[i]);
-        }
-        for (size_t i = 0; i < paramTypes.size(); ++i) {
-            if (isSigSame) {
-                auto lhs = ReplaceRawGenericArgType(*sigParamTys[i], freeGenericReplaceTable, builder);
-                auto rhs = ReplaceRawGenericArgType(*paramTypes[i], parentReplaceTable, builder);
-                rhs = ReplaceRawGenericArgType(*rhs, freeGenericReplaceTable, builder);
-                isSigSame = lhs == rhs;
-            } else {
-                break;
-            }
-        }
-        if (!isSigSame) {
-            continue;
-=======
-Function* FindFunctionInVtable(const ClassType* parentTy, const std::vector<VirtualMethodInfo>& infos,
-    const Devirtualization::FuncSig& method, CHIRBuilder& builder)
-{
-    std::unordered_map<const GenericType*, Type*> parentReplaceTable;
-    auto paramTypes = method.types;
-    if (!parentTy->GetTypeArgs().empty()) {
-        auto instParentTypeArgs = parentTy->GetTypeArgs();
-        auto genericParentTypeArgs = parentTy->GetCustomTypeDef()->GetGenericTypeParams();
-        for (size_t i = 0; i < genericParentTypeArgs.size(); ++i) {
-            parentReplaceTable.emplace(genericParentTypeArgs[i], instParentTypeArgs[i]);
-        }
-    }
-
-    for (auto& info : infos) {
-        if (info.GetMethodName() != method.name) {
-            continue;
-        }
-        auto sigParamTys = info.GetMethodSigType()->GetParamTypes();
-        if (sigParamTys.size() != paramTypes.size()) {
-            continue;
-        }
-        if (info.GetGenericTypeParams().size() != method.typeArgs.size()) {
-            continue;
-        }
-        bool isSigSame = true;
-        std::unordered_map<const GenericType*, Type*> freeGenericReplaceTable;
-        for (size_t i = 0; i < sigParamTys.size(); ++i) {
-            BuildOrphanTypeReplaceTable(sigParamTys[i], freeGenericReplaceTable);
-            BuildOrphanTypeReplaceTable(paramTypes[i], freeGenericReplaceTable);
-        }
-        auto methodGenerics = info.GetGenericTypeParams();
-        for (size_t i{0}; i < methodGenerics.size(); ++i) {
-            freeGenericReplaceTable.emplace(methodGenerics[i], method.typeArgs[i]);
-        }
-        for (size_t i = 0; i < paramTypes.size(); ++i) {
-            if (isSigSame) {
-                auto lhs = ReplaceRawGenericArgType(*sigParamTys[i], freeGenericReplaceTable, builder);
-                auto rhs = ReplaceRawGenericArgType(*paramTypes[i], parentReplaceTable, builder);
-                rhs = ReplaceRawGenericArgType(*rhs, freeGenericReplaceTable, builder);
-                isSigSame = lhs == rhs;
-            } else {
-                break;
-            }
-        }
-        if (!isSigSame) {
-            continue;
->>>>>>> feat: local mode
         }
         invoke->ReplaceWith(*newCall);
         AddTypeCastForReturnVal(*newCall, *expectedRetTy, builder);
@@ -638,41 +425,9 @@ Function* Devirtualization::CreateInstFuncIfPossible(Function* func, FuncCallCon
         if (thisType.IsGenericRelated()) {
             return false;
         }
-<<<<<<< HEAD
         for (auto typeArg : typeArgs) {
             if (typeArg->IsGenericRelated()) {
                 return false;
-||||||| constructed merge base
-
-        Function* target = nullptr;
-        for (auto def : extendsOrImplements) {
-            auto [typeMatched, replaceTable] = def->GetType()->CalculateGenericTyMapping(*specificType);
-            if (!typeMatched) {
-                continue;
-            }
-            auto paramTypes = method.types;
-            paramTypes.erase(paramTypes.begin());
-            auto funcType = builder.GetType<FuncType>(paramTypes, builder.GetUnitTy());
-            FuncCallType funcCallType{method.name, funcType, method.typeArgs};
-            auto res = def->GetFuncIndexInVTable(funcCallType, replaceTable, builder);
-            if (!res.empty() && !res[0].instance->IsPureAbstract()) {
-                target = res[0].instance;
-                break;
-=======
-
-        Function* target = nullptr;
-        for (auto def : extendsOrImplements) {
-            auto [typeMatched, replaceTable] = def->GetType()->CalculateGenericTyMapping(*specificType);
-            if (!typeMatched) {
-                continue;
-            }
-            auto funcType = builder.GetType<FuncType>(method.types, builder.GetUnitTy());
-            FuncCallType funcCallType{method.name, funcType, method.typeArgs};
-            auto res = def->GetFuncIndexInVTable(funcCallType, replaceTable, builder);
-            if (!res.empty() && !res[0].instance->IsPureAbstract()) {
-                target = res[0].instance;
-                break;
->>>>>>> feat: local mode
             }
         }
         return true;

@@ -37,18 +37,8 @@ public:
         const ElementList<Ptr<const AST::FuncDecl>>& localConstFuncs, const IncreKind& kind,
         const std::unordered_map<std::string, Value*>& deserializedVals,
         std::vector<std::pair<const AST::Decl*, Function*>>& annoFactories,
-<<<<<<< HEAD
         bool computeAnnotations,
         std::vector<CHIR::Function*>& initFuncForAnnoFactory, Cangjie::TypeManager& typeManager)
-||||||| constructed merge base
-        std::unordered_map<Block*, Expression*>& maybeUnreachable,
-        bool computeAnnotations,
-        std::vector<CHIR::Function*>& initFuncForAnnoFactory,
-        const Cangjie::TypeManager& typeManager)
-=======
-        std::unordered_map<Block*, Expression*>& maybeUnreachable, bool computeAnnotations,
-        std::vector<CHIR::Function*>& initFuncForAnnoFactory, Cangjie::TypeManager& typeManager)
->>>>>>> feat: local mode
         : builder(builder),
           chirTy(chirTy),
           globalSymbolTable(globalSymbolTable),
@@ -126,17 +116,11 @@ public:
         Type* instRetTy{nullptr};
         std::vector<Type*> instantiatedTypeArgs;
         bool isVirtualFuncCall{false};
-<<<<<<< HEAD
         /**
          * AST func decl used as Invoke/InvokeStatic callee via GetSymbolTable.
          * Virtual call: top-overridden decl; non-virtual call: the resolved decl.
          */
         const AST::FuncDecl* originalFuncDecl{nullptr};
-||||||| constructed merge base
-=======
-        /** Top-overridden AST func decl; Invoke/InvokeStatic callee is GetSymbolTable of this. */
-        const AST::FuncDecl* originalFuncDecl{nullptr};
->>>>>>> feat: local mode
     };
 
     // === static helper functions ==
@@ -726,14 +710,8 @@ private:
     std::vector<Type*> GetFuncInstArgs(const AST::CallExpr& expr);
 
     Expression* CreateAndAppendApplyCallFromCallExpr(
-<<<<<<< HEAD
-        Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::CallExpr& expr);
-    void FinalizeNothingCallArguments(Expression& call, const DebugLocation& callLoc, const DebugLocation& warningLoc);
-||||||| constructed merge base
-        Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::CallExpr& expr);
-=======
         Value& callee, FuncCallContext& context, Type& instRetType, const AST::CallExpr& expr);
->>>>>>> feat: local mode
+    void FinalizeNothingCallArguments(Expression& call, const DebugLocation& callLoc, const DebugLocation& warningLoc);
     Expression* CreateAndAppendApplyCallFromArray(
         Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::Expr& array);
     Expression* CreateAndAppendGVInitFuncCall(Value& callee);
@@ -971,18 +949,10 @@ private:
     static uint64_t GetJumpablePatternVal(const AST::Pattern& pattern);
     bool CanOptimizeMatchToSwitch(const AST::MatchExpr& matchExpr);
 
-<<<<<<< HEAD
-    std::vector<Type*> TranslateASTTypes(const std::vector<Ptr<AST::Ty>>& genericInfos);
-    /// Return the first Nothing-typed argument index, or no value when all arguments return normally.
-    std::optional<size_t> GetFirstNothingTypeArgIndex(const std::vector<Value*>& args) const;
-||||||| constructed merge base
-    std::vector<Type*> TranslateASTTypes(const std::vector<Ptr<AST::Ty>>& genericInfos);
-    bool HasNothingTypeArg(std::vector<Value*>& args) const;
-=======
     std::vector<Type*> TranslateASTTypes(const std::vector<AST::ModalTy>& genericInfos);
     std::vector<Type*> TranslateASTTypes(const std::vector<AST::DataTy>& genericInfos);
-    bool HasNothingTypeArg(std::vector<Value*>& args) const;
->>>>>>> feat: local mode
+    /// Return the first Nothing-typed argument index, or no value when all arguments return normally.
+    std::optional<size_t> GetFirstNothingTypeArgIndex(const std::vector<Value*>& args) const;
     // ============= memberaccess expr ====================
     Ptr<Value> TranslateStaticTargetOrPackageMemberAccess(const AST::MemberAccess& member);
     Ptr<Value> TranslateInstanceMemberMemberAccess(const AST::MemberAccess& member);
@@ -1016,21 +986,11 @@ private:
     /** Entrance of translating multiple outermost or-pattern case. */
     // return value -> {false block, true block}
     std::pair<Ptr<Block>, Ptr<Block>> TranslateOrPattern(
-<<<<<<< HEAD
         const std::vector<OwnedPtr<AST::Pattern>>& patterns, Ptr<Value> selectorVal, const DebugLocation& originLoc,
         SourceExpr sourceExpr);
     std::pair<Ptr<Block>, Ptr<Block>> TranslateConstantMultiOr(
         const std::vector<uint64_t> values, Ptr<Value> value, SourceExpr sourceExpr);
-    Ptr<Value> GetEnumIDValue(Ptr<AST::Ty> ty, Ptr<Value> selectorVal);
-||||||| constructed merge base
-        const std::vector<OwnedPtr<AST::Pattern>>& patterns, Ptr<Value> selectorVal, const DebugLocation& originLoc);
-    std::pair<Ptr<Block>, Ptr<Block>> TranslateConstantMultiOr(const std::vector<uint64_t> values, Ptr<Value> value);
-    Ptr<Value> GetEnumIDValue(Ptr<AST::Ty> ty, Ptr<Value> selectorVal);
-=======
-        const std::vector<OwnedPtr<AST::Pattern>>& patterns, Ptr<Value> selectorVal, const DebugLocation& originLoc);
-    std::pair<Ptr<Block>, Ptr<Block>> TranslateConstantMultiOr(const std::vector<uint64_t> values, Ptr<Value> value);
     Ptr<Value> GetEnumIDValue(AST::ModalTy ty, Ptr<Value> selectorVal);
->>>>>>> feat: local mode
     /* Translate or patterns except constant and enum patterns. */
     std::pair<Ptr<Block>, Ptr<Block>> TranslateComplicatedOrPattern(
         const std::vector<OwnedPtr<AST::Pattern>>& patterns,

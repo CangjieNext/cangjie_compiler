@@ -143,7 +143,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromVarInit(const AST::R
      *  maybe we are translating `foo` in static member var `x`'s initializer, its initializer is a global func
      *  which added by CHIR, and this `foo` can't be from class A's sub type, must be from class A or its parent type
      */
-    auto funcType = StaticCast<FuncType*>(TranslateType(*expr.GetTy()));
+    auto funcType = StaticCast<FuncType*>(TranslateType(expr.GetTy()));
     auto paramTys = funcType->GetParamTypes();
     auto funcDecl = StaticCast<AST::FuncDecl*>(expr.ref.target);
     CJC_NULLPTR_CHECK(funcDecl->outerDecl);
@@ -163,47 +163,24 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromVarInit(const AST::R
 Translator::InstCalleeInfo Translator::GetInstCalleeInfoInGeneral(
     const AST::NameReferenceExpr& expr, AST::FuncDecl& resolvedFuncDecl, Type* thisType, bool isVirtualFuncCall)
 {
-<<<<<<< HEAD
     CJC_NULLPTR_CHECK(thisType);
-    auto funcType = StaticCast<FuncType*>(TranslateType(*expr.GetTy()));
-||||||| constructed merge base
-    auto funcType = StaticCast<FuncType*>(TranslateType(*expr.GetTy()));
-=======
+    // virtual call: top-overridden decl as Invoke callee; non-virtual: use the resolved decl
+    auto originalFuncDecl =
+        isVirtualFuncCall ? typeManager.GetTopOverriddenFuncDecl(&resolvedFuncDecl) : &resolvedFuncDecl;
+    CJC_NULLPTR_CHECK(originalFuncDecl);
     auto funcType = StaticCast<FuncType*>(TranslateType(expr.GetTy()));
->>>>>>> feat: local mode
     auto paramTys = funcType->GetParamTypes();
-<<<<<<< HEAD
     if (!resolvedFuncDecl.TestAttr(AST::Attribute::STATIC)) {
-        paramTys.insert(paramTys.begin(), thisType);
-||||||| constructed merge base
-    if (!funcDecl.TestAttr(AST::Attribute::STATIC)) {
-        paramTys.insert(paramTys.begin(), &thisType);
-=======
-    if (!funcDecl.TestAttr(AST::Attribute::STATIC)) {
-        paramTys.insert(paramTys.begin(), GetThisTypeWithModal(thisType, funcDecl));
->>>>>>> feat: local mode
+        paramTys.insert(paramTys.begin(), GetThisTypeWithModal(*thisType, *originalFuncDecl));
         funcType = builder.GetType<FuncType>(paramTys, funcType->GetReturnType());
     }
     std::vector<Type*> funcInstArgs;
     for (auto ty : expr.instTys) {
         funcInstArgs.emplace_back(TranslateType(ty));
     }
-<<<<<<< HEAD
     auto thisDerefTy = thisType->StripAllRefs();
-    // virtual call: top-overridden decl as Invoke callee; non-virtual: use the resolved decl
-    auto originalFuncDecl =
-        isVirtualFuncCall ? typeManager.GetTopOverriddenFuncDecl(&resolvedFuncDecl) : &resolvedFuncDecl;
-    CJC_NULLPTR_CHECK(originalFuncDecl);
     // Result parentType is the instantiated parent custom type used as InstCalleeInfo::instParentCustomTy.
     auto parentType = GetExactParentType(*thisDerefTy, *originalFuncDecl, *funcType, funcInstArgs, isVirtualFuncCall);
-||||||| constructed merge base
-    auto thisDerefTy = thisType.StripAllRefs();
-    auto parentType = GetExactParentType(*thisDerefTy, funcDecl, *funcType, funcInstArgs, isVirtualFuncCall);
-=======
-    auto thisDerefTy = thisType.StripAllRefs();
-    // Result parentType is the instantiated parent custom type used as InstCalleeInfo::instParentCustomTy.
-    auto parentType = GetExactParentType(*thisDerefTy, funcDecl, *funcType, funcInstArgs, isVirtualFuncCall);
->>>>>>> feat: local mode
     /** we can't find a parent type in following case:
         interface I { func foo(): Unit }
         class A<T> where T <: I {}
@@ -225,8 +202,8 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoInGeneral(
         CJC_NULLPTR_CHECK(parentType);
         isVirtualFuncCall = true;
     }
-<<<<<<< HEAD
-    if (!originalFuncDecl->TestAttr(AST::Attribute::STATIC)) {
+    if (!originalFuncDecl->TestAttr(AST::Attribute::STATIC) &&
+        !(thisDerefTy->IsStruct() && originalFuncDecl->TestAttr(AST::Attribute::MUT))) {
         CJC_ASSERT(!paramTys.empty());
         /**
             interface I {
@@ -240,111 +217,20 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoInGeneral(
                       // because `S&` is a memory in stack, but `I&` is a memory in heap, so if typecast happened,
                       // `S()` will be copied to heap, that will not implement `mut` semantic correctly.
         */
-        if (thisDerefTy->IsStruct() && parentType != thisDerefTy && originalFuncDecl->TestAttr(AST::Attribute::MUT)) {
-            paramTys[0] = thisType;
-        } else if (parentType->IsClass()) {
-            paramTys[0] = AddRefIfFuncIsMutOrClass(*parentType, *originalFuncDecl, builder);
-            funcType = builder.GetType<FuncType>(paramTys, funcType->GetReturnType());
-||||||| constructed merge base
-    if (!funcDecl.TestAttr(AST::Attribute::STATIC)) {
-        CJC_ASSERT(!paramTys.empty());
-        /**
-            interface I {
-                mut func foo() { goo() }
-                mut func goo() {}
-            }
-            struct S <: I {
-                mut func goo() {}
-            }
-            S().foo() // even if foo's parent type is `I`, we shouldn't typecast `S()` from `S&` to `I&`,
-                      // because `S&` is a memory in stack, but `I&` is a memory in heap, so if typecast happened,
-                      // `S()` will be copied to heap, that will not implement `mut` semantic correctly.
-        */
-        if (thisDerefTy->IsStruct() && parentType != thisDerefTy && funcDecl.TestAttr(AST::Attribute::MUT)) {
-            paramTys[0] = &thisType;
-        } else if (parentType->IsClass()) {
-            paramTys[0] = AddRefIfFuncIsMutOrClass(*parentType, funcDecl, builder);
-            funcType = builder.GetType<FuncType>(paramTys, funcType->GetReturnType());
-=======
-    /**
-        interface I {
-            mut func foo() { goo() }
-            mut func goo() {}
->>>>>>> feat: local mode
-        }
-        struct S <: I {
-            mut func goo() {}
-        }
-        S().foo() // even if foo's parent type is `I`, we shouldn't typecast `S()` from `S&` to `I&`,
-                    // because `S&` is a memory in stack, but `I&` is a memory in heap, so if typecast happened,
-                    // `S()` will be copied to heap, that will not implement `mut` semantic correctly.
-    */
-    if (!funcDecl.TestAttr(AST::Attribute::STATIC) &&
-        !(thisDerefTy->IsStruct() && funcDecl.TestAttr(AST::Attribute::MUT))) {
-        CJC_ASSERT(!paramTys.empty());
-        paramTys[0] = GetThisTypeWithModal(*parentType, funcDecl);
+        paramTys[0] = GetThisTypeWithModal(*parentType, *originalFuncDecl);
         funcType = builder.GetType<FuncType>(paramTys, funcType->GetReturnType());
     }
-<<<<<<< HEAD
     if (isVirtualFuncCall && Is<AST::RefExpr>(expr)) {
-        thisType = builder.GetType<RefType>(builder.GetType<ThisType>());
+        thisType = GetThisTypeWithModal(*builder.GetType<ThisType>(), resolvedFuncDecl);
     }
-||||||| constructed merge base
-    return {parentType, FuncCallType{funcDecl.identifier.Val(), funcType, funcInstArgs}};
-}
-
-Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromVarInit(const AST::RefExpr& expr)
-{
-    /**
-     *  class A {
-     *      static func foo() {}
-     *      static let x = if (...) { foo }
-     *  }
-     *  maybe we are translating `foo` in static member var `x`'s initializer, its initializer is a global func
-     *  which added by CHIR, and this `foo` can't be from class A's sub type, must be from class A or its parent type
-     */
-    auto funcType = StaticCast<FuncType*>(TranslateType(*expr.GetTy()));
-    auto paramTys = funcType->GetParamTypes();
-    auto funcDecl = StaticCast<AST::FuncDecl*>(expr.ref.target);
-    CJC_NULLPTR_CHECK(funcDecl->outerDecl);
-    CJC_ASSERT(funcDecl->TestAttr(AST::Attribute::STATIC));
-    auto parentType = GetNominalSymbolTable(*funcDecl->outerDecl)->GetType();
-=======
-    return {parentType, FuncCallType{funcDecl.identifier.Val(), funcType, funcInstArgs}};
-}
-
-Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromVarInit(const AST::RefExpr& expr)
-{
-    /**
-     *  class A {
-     *      static func foo() {}
-     *      static let x = if (...) { foo }
-     *  }
-     *  maybe we are translating `foo` in static member var `x`'s initializer, its initializer is a global func
-     *  which added by CHIR, and this `foo` can't be from class A's sub type, must be from class A or its parent type
-     */
-    auto funcType = StaticCast<FuncType*>(TranslateType(expr.GetTy()));
-    auto paramTys = funcType->GetParamTypes();
-    auto funcDecl = StaticCast<AST::FuncDecl*>(expr.ref.target);
-    CJC_NULLPTR_CHECK(funcDecl->outerDecl);
-    CJC_ASSERT(funcDecl->TestAttr(AST::Attribute::STATIC));
-    auto parentType = GetNominalSymbolTable(*funcDecl->outerDecl)->GetType();
->>>>>>> feat: local mode
     return InstCalleeInfo {
         .instParentCustomTy = parentType,
         .thisType = thisType,
         .instParamTys = paramTys,
         .instRetTy = funcType->GetReturnType(),
-<<<<<<< HEAD
         .instantiatedTypeArgs = std::move(funcInstArgs),
         .isVirtualFuncCall = isVirtualFuncCall,
         .originalFuncDecl = originalFuncDecl
-||||||| constructed merge base
-        .isVirtualFuncCall = false
-=======
-        .isVirtualFuncCall = false,
-        .originalFuncDecl = funcDecl
->>>>>>> feat: local mode
     };
 }
 
@@ -383,45 +269,8 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromRefExpr(const AST::R
         caller = customType->GetCustomTypeDef();
     }
     auto isVirtualFuncCall = IsVirtualFuncCall(*caller, *funcDecl, false);
-<<<<<<< HEAD
+
     return GetInstCalleeInfoInGeneral(expr, *funcDecl, thisType, isVirtualFuncCall);
-||||||| constructed merge base
-
-    // 3. calculate parent type and func type
-    auto [parentType, funcCallType] = GetExactParentTypeAndFuncType(expr, *thisType, *funcDecl, isVirtualFuncCall);
-    if (isVirtualFuncCall) {
-        thisType = builder.GetType<RefType>(builder.GetType<ThisType>());
-    }
-    return InstCalleeInfo {
-        .instParentCustomTy = parentType,
-        .thisType = thisType,
-        .instParamTys = funcCallType.funcType->GetParamTypes(),
-        .instRetTy = funcCallType.funcType->GetReturnType(),
-        .instantiatedTypeArgs = std::move(funcCallType.genericTypeArgs),
-        .isVirtualFuncCall = isVirtualFuncCall
-    };
-=======
-
-    // 3. real Invoke callee is the top-overridden virtual method
-    auto originalFuncDecl = isVirtualFuncCall ? typeManager.GetTopOverriddenFuncDecl(funcDecl) : funcDecl;
-    CJC_NULLPTR_CHECK(originalFuncDecl);
-
-    // 4. calculate instantiated parent type from originalFuncDecl (vtable src parent of the real callee)
-    auto [parentType, funcCallType] =
-        GetExactParentTypeAndFuncType(expr, *thisType, *originalFuncDecl, isVirtualFuncCall);
-    if (isVirtualFuncCall) {
-        thisType = GetThisTypeWithModal(*builder.GetType<ThisType>(), *funcDecl);
-    }
-    return InstCalleeInfo {
-        .instParentCustomTy = parentType, // instantiated parent type for vtable / casting `this`
-        .thisType = thisType,
-        .instParamTys = funcCallType.funcType->GetParamTypes(),
-        .instRetTy = funcCallType.funcType->GetReturnType(),
-        .instantiatedTypeArgs = std::move(funcCallType.genericTypeArgs),
-        .isVirtualFuncCall = isVirtualFuncCall,
-        .originalFuncDecl = originalFuncDecl.get()
-    };
->>>>>>> feat: local mode
 }
 
 Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromMemberAccess(const AST::MemberAccess& expr)
@@ -451,39 +300,8 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromMemberAccess(const A
             isVirtualFuncCall &= IsVirtualFuncCall(*customDef, *funcDecl, isSuper);
         }
     }
-<<<<<<< HEAD
+
     return GetInstCalleeInfoInGeneral(expr, *funcDecl, thisType, isVirtualFuncCall);
-||||||| constructed merge base
-
-    // 3. calculate parent type and func type
-    auto [parentType, funcCallType] = GetExactParentTypeAndFuncType(expr, *thisType, *funcDecl, isVirtualFuncCall);
-    return InstCalleeInfo {
-        .instParentCustomTy = parentType,
-        .thisType = thisType,
-        .instParamTys = funcCallType.funcType->GetParamTypes(),
-        .instRetTy = funcCallType.funcType->GetReturnType(),
-        .instantiatedTypeArgs = std::move(funcCallType.genericTypeArgs),
-        .isVirtualFuncCall = isVirtualFuncCall
-    };
-=======
-
-    // 3. real Invoke callee is the top-overridden virtual method
-    auto originalFuncDecl = isVirtualFuncCall ? typeManager.GetTopOverriddenFuncDecl(funcDecl) : funcDecl;
-    CJC_NULLPTR_CHECK(originalFuncDecl);
-
-    // 4. calculate instantiated parent type from originalFuncDecl (vtable src parent of the real callee)
-    auto [parentType, funcCallType] =
-        GetExactParentTypeAndFuncType(expr, *thisType, *originalFuncDecl, isVirtualFuncCall);
-    return InstCalleeInfo {
-        .instParentCustomTy = parentType, // instantiated parent type for vtable / casting `this`
-        .thisType = thisType,
-        .instParamTys = funcCallType.funcType->GetParamTypes(),
-        .instRetTy = funcCallType.funcType->GetReturnType(),
-        .instantiatedTypeArgs = std::move(funcCallType.genericTypeArgs),
-        .isVirtualFuncCall = isVirtualFuncCall,
-        .originalFuncDecl = originalFuncDecl.get()
-    };
->>>>>>> feat: local mode
 }
 
 Ptr<Value> Translator::TranslateStaticTargetOrPackageMemberAccess(const AST::MemberAccess& member)
