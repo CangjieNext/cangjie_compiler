@@ -276,8 +276,7 @@ struct ModalTypeChecker {
     /// 5. reference to param of `T` local! is external local!
     /// 6. reference to global/static var is external
     /// 7. if/match/try expr is external if any of its result branches (finally block excluded) is external
-    /// 8. array literal/tuple is external if any of its elements is external
-    /// 9. all other cases are internal
+    /// 8. all other cases are internal
     bool IsExternalLocal(const ASTContext& ctx, const Expr& expr)
     {
         if (IsInExclaveExpr(ctx, expr)) {
@@ -289,11 +288,11 @@ struct ModalTypeChecker {
             return last && IsExternalLocal(ctx, *last);
         }
         if (auto ie = DynamicCast<IfExpr>(&expr)) {
-            // rule 8
+            // rule 7
             return IsExternalLocal(ctx, *ie->thenBody) || (ie->elseBody && IsExternalLocal(ctx, *ie->elseBody));
         }
         if (auto me = DynamicCast<MatchExpr>(&expr)) {
-            // rule 8
+            // rule 7
             for (auto& mc : me->matchCases) {
                 if (mc->exprOrDecls && IsExternalLocal(ctx, *mc->exprOrDecls)) {
                     return true;
@@ -307,7 +306,7 @@ struct ModalTypeChecker {
             return false;
         }
         if (auto te = DynamicCast<TryExpr>(&expr)) {
-            // rule 8, finally block does not contribute to the value of try expr
+            // rule 7, finally block does not contribute to the value of try expr
             if (te->tryBlock && IsExternalLocal(ctx, *te->tryBlock)) {
                 return true;
             }
@@ -318,24 +317,6 @@ struct ModalTypeChecker {
             }
             for (auto& handler : te->handlers) {
                 if (handler.block && IsExternalLocal(ctx, *handler.block)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-        if (auto al = DynamicCast<ArrayLit>(&expr)) {
-            // rule 9
-            for (auto& child : al->children) {
-                if (child && IsExternalLocal(ctx, *child)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-        if (auto tl = DynamicCast<TupleLit>(&expr)) {
-            // rule 9
-            for (auto& child : tl->children) {
-                if (child && IsExternalLocal(ctx, *child)) {
                     return true;
                 }
             }
@@ -389,6 +370,62 @@ struct ModalTypeChecker {
             }
             // rule 3
             return IsExternalLocal(ctx, *ma->baseExpr);
+        }
+        return false;
+    }
+
+    /// True if a result branch of the if/match/try may hold a non copy external @local! value.
+    /// Inside an exclave all local! values are internal, so there is no external branch.
+    bool HasExternalLocalBranch(const ASTContext& ctx, const Expr& expr)
+    {
+        if (IsInExclaveExpr(ctx, expr)) {
+            return false;
+        }
+        auto mayBeExternal = [this, &ctx](Ptr<Expr> e) {
+            if (!e || !e->GetTy().IsCorrect() || e->GetTy()->IsNothing() || type.IsCopyType(e->DataTy())) {
+                return false;
+            }
+            // A branch already inferred as @local? may hold an internal value.
+            return e->TyMode().local == Mode::HALF ||
+                (e->TyMode().local == Mode::FULL && IsExternalLocal(ctx, *e));
+        };
+        // The value of a branch block is its last expr (or decl); else-if keeps its nested if expr.
+        auto branchValue = [](Ptr<Expr> e) {
+            while (auto block = DynamicCast<Block>(e)) {
+                e = DynamicCast<Expr>(block->GetLastExprOrDecl());
+            }
+            return e;
+        };
+        if (auto ie = DynamicCast<IfExpr>(&expr)) {
+            return mayBeExternal(branchValue(ie->thenBody.get())) || mayBeExternal(branchValue(ie->elseBody.get()));
+        }
+        if (auto me = DynamicCast<MatchExpr>(&expr)) {
+            for (auto& mc : me->matchCases) {
+                if (mc && mayBeExternal(branchValue(mc->exprOrDecls.get()))) {
+                    return true;
+                }
+            }
+            for (auto& mco : me->matchCaseOthers) {
+                if (mco && mayBeExternal(branchValue(mco->exprOrDecls.get()))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (auto te = DynamicCast<TryExpr>(&expr)) {
+            if (mayBeExternal(branchValue(te->tryBlock.get()))) {
+                return true;
+            }
+            for (auto& cb : te->catchBlocks) {
+                if (cb && mayBeExternal(branchValue(cb.get()))) {
+                    return true;
+                }
+            }
+            for (auto& h : te->handlers) {
+                if (h.block && mayBeExternal(branchValue(h.block.get()))) {
+                    return true;
+                }
+            }
         }
         return false;
     }
@@ -669,22 +706,23 @@ private:
         if (!body || !body->retType || !body->retType->GetTy().IsCorrect()) {
             return;
         }
-        if (body->retType->GetTy().IsDataType()) {
-            return;
-        }
         auto r = CollectReturnedExpr(*body);
         auto retTy = StaticCast<FuncTy>(func.DataTy())->retTy;
         for (auto& e : r) {
+            auto eTy = e->GetTy();
             // per spec we should check e->ty is non local copy type, but we check retTy because there can be Some box,
             // and it is boxed after Sema.
-            if (IsInExclaveExpr(ctx, *e) || IsExternalLocal(ctx, *e) || retTy.IsDataType() || e->GetTy()->IsNothing() ||
-                !e->GetTy().IsCorrect()) {
+            if (IsInExclaveExpr(ctx, *e) || !eTy.IsCorrect() || eTy->IsNothing() ||
+                (eTy.IsDataType() && retTy.IsDataType())) {
                 continue;
             }
-            if (type.IsCopyType(retTy.Ty()) && !Is<InterfaceTy>(retTy.Ty())) {
-                continue;
+            // The return slot is external, so the value must be external as well. A non copy value
+            // of @local? may hold an internal value, so it only fits a @local? return slot.
+            if ((eTy.Mode().local == Mode::HALF && retTy.Mode().local != Mode::HALF &&
+                !type.IsCopyType(eTy.Ty())) ||
+                (!IsExternalLocal(ctx, *e) && !(type.IsCopyType(retTy.Ty()) && !Is<InterfaceTy>(retTy.Ty())))) {
+                DiagBadInternalLocalReturn(*e);
             }
-            DiagBadInternalLocalReturn(*e);
         }
     }
 
@@ -754,7 +792,7 @@ private:
             }
             // VarDecl ref: local var or implicit-`this` member access.
             if (auto var = DynamicCast<VarDecl>(ref->GetTarget())) {
-                if (var->TestAnyAttr(Attribute::GLOBAL, Attribute::STATIC)) {
+                if (var->TestAnyAttr(Attribute::GLOBAL, Attribute::STATIC, Attribute::ENUM_CONSTRUCTOR)) {
                     return VisitAction::WALK_CHILDREN;
                 }
                 // Implicit-`this` member: flag if `this` is `@local!` non copy type.
@@ -1077,7 +1115,11 @@ private:
             auto ref = StaticCast<RefExpr>(left);
             auto target = ref->GetTarget();
             if (!target || !target->IsMemberDecl()) {
-                return; // whole var assignment: rule does not apply
+                // Whole var assignment: a captured non copy @local? variable only accepts ~local values.
+                if (rLocal != Mode::NOT && IsCapture(ctx, *left) && !type.IsCopyType(left->DataTy())) {
+                    DiagBadAssignment(assign, {rLocal}, left->GetTy());
+                }
+                return;
             }
             if (IsInLocalQuestCtorOrAnyFinalizer()) {
                 return;
@@ -1092,15 +1134,14 @@ private:
             DiagBadAssignment(assign, {lLocal}, assign.rightExpr->GetTy());
             return;
         }
-        // @local!: both @local!, external vs internal
-        if (rLocal == Mode::FULL) {
-            auto lext = IsExternalLocal(ctx, *left);
-            auto rext = IsExternalLocal(ctx, *assign.rightExpr);
-            if (lext != rext) {
-                DiagBadAssignment(assign, left->GetTy(), assign.rightExpr->GetTy(), lext, rext);
-            }
-        } else {
-            DiagBadAssignment(assign, {lLocal}, assign.rightExpr->GetTy());
+        // @local!: external and internal values cannot be assigned to each other.
+        auto& right = *assign.rightExpr;
+        auto lext = IsExternalLocal(ctx, *left);
+        auto rext = IsExternalLocal(ctx, right);
+        if (rLocal == Mode::FULL && lext != rext) {
+            DiagBadAssignment(assign, left->GetTy(), right.GetTy(), lext, rext);
+        } else if (rLocal != Mode::FULL) {
+            DiagBadAssignment(assign, {lLocal}, right.GetTy());
         }
     }
 
@@ -1115,7 +1156,7 @@ private:
             }
             return;
         }
-        // @local? member assignment is allowed only in @local? ctor or finalizer and the ref is this
+        // @local?: member assignment is allowed only in @local? ctor or finalizer and the ref is this
         if (lLocal == Mode::HALF) {
             if (IsThisOrSuper(*ma->baseExpr) && IsInLocalQuestCtorOrAnyFinalizer()) {
                 return;
@@ -1123,17 +1164,19 @@ private:
             DiagBadAssigmentToLocalHalf(assign);
             return;
         }
-        if (rLocal == Mode::FULL) {
-            auto lext = IsExternalLocal(ctx, *left);
-            auto rext = IsExternalLocal(ctx, *assign.rightExpr);
-            if (lext != rext) {
-                DiagBadAssignment(assign, left->GetTy(), assign.rightExpr->GetTy(), lext, rext);
-            }
+        // @local!: external and internal values cannot be assigned to each other.
+        auto& right = *assign.rightExpr;
+        auto lext = IsExternalLocal(ctx, *left);
+        auto rext = IsExternalLocal(ctx, right);
+        if (rLocal == Mode::FULL && lext != rext) {
+            DiagBadAssignment(assign, left->GetTy(), right.GetTy(), lext, rext);
+        } else if (rLocal != Mode::FULL) {
+            DiagBadAssignment(assign, {lLocal}, right.GetTy());
         }
     }
 
     /// VArray `arr[n] = e`: if T is copy, @local! / @local? assign both allowed; if T is non-copy,
-    /// @local? always illegal, @local! only if both arr and e are internal local! (e <: T checked by
+    /// @local? always illegal, @local! only if arr and e are on the same side (e <: T checked by
     /// ordinary assignment typing).
     void CheckAssignExprSub(
         const ASTContext& ctx, const AssignExpr& assign, const Expr* left, Mode lLocal, Mode rLocal)
@@ -1155,14 +1198,50 @@ private:
             }
             return;
         }
-        if (rLocal != Mode::FULL) {
-            DiagBadAssignment(assign, {lLocal}, assign.rightExpr->GetTy());
+        // @local!: external and internal values cannot be assigned to each other.
+        auto& right = *assign.rightExpr;
+        auto lext = IsExternalLocal(ctx, *left);
+        auto rext = IsExternalLocal(ctx, right);
+        if (rLocal == Mode::FULL && lext != rext) {
+            DiagBadAssignment(assign, left->GetTy(), right.GetTy(), lext, rext);
+        } else if (rLocal != Mode::FULL) {
+            DiagBadAssignment(assign, {lLocal}, right.GetTy());
+        }
+    }
+
+    /// A @local! array/tuple literal is allocated in the current region, so its elements must be internal.
+    void CheckLiteralElements(const ASTContext& ctx, const Node& position, const Expr& expr, ModalTy targetTy)
+    {
+        if (expr.TyMode().local != Mode::FULL) {
             return;
         }
-        auto lext = IsExternalLocal(ctx, *left);
-        auto rext = IsExternalLocal(ctx, *assign.rightExpr);
-        if (lext || rext) {
-            DiagBadAssignment(assign, left->GetTy(), assign.rightExpr->GetTy(), lext, rext);
+        if (auto al = DynamicCast<ArrayLit>(&expr)) {
+            // Copy elements can be copied into an array target, but not into other targets such as interfaces.
+            auto arrayTy = DynamicCast<StructTy>(targetTy.Ty());
+            if (arrayTy && arrayTy->IsStructArray() && !arrayTy->typeArgs.empty() &&
+                type.IsCopyType(arrayTy->typeArgs[0].Ty())) {
+                return;
+            }
+            for (auto& element : al->children) {
+                if (element->GetTy().IsCorrect() && IsExternalLocal(ctx, *element)) {
+                    DiagBadAssignment(position, expr.GetTy(), expr.GetTy(), false, true);
+                    return;
+                }
+            }
+        } else if (auto tl = DynamicCast<TupleLit>(&expr)) {
+            auto tupleTy = StaticCast<TupleTy>(targetTy.Ty());
+            if (tupleTy->typeArgs.size() != tl->children.size()) {
+                return;
+            }
+            for (size_t i = 0; i < tl->children.size(); ++i) {
+                if (!tl->children[i]->GetTy().IsCorrect() || type.IsCopyType(tupleTy->typeArgs[i].Ty())) {
+                    continue;
+                }
+                if (IsExternalLocal(ctx, *tl->children[i])) {
+                    DiagBadAssignment(position, expr.GetTy(), expr.GetTy(), false, true);
+                    return;
+                }
+            }
         }
     }
 
@@ -1184,6 +1263,9 @@ private:
             return;
         }
         auto lLocal = GetLvalueLocal(ctx, left);
+        if (lLocal == Mode::FULL) {
+            CheckLiteralElements(ctx, assign, *right, left->GetTy());
+        }
         if (DynamicCast<RefExpr>(left)) {
             CheckAssignExprRef(ctx, assign, left, lLocal, rLocal);
         } else if (DynamicCast<MemberAccess>(left)) {
@@ -1364,12 +1446,15 @@ private:
             return;
         }
         auto& init = *var.initializer;
-        if (!init.GetTy().IsCorrect() || init.TyMode().local != Mode::FULL) {
+        if (!init.GetTy().IsCorrect() || init.GetTy().IsDataType()) {
             return;
         }
+        CheckLiteralElements(ctx, var, init, var.GetTy());
+        // A local var is always internal, so the value must be internal as well.
         if (IsExternalLocal(ctx, init)) {
-            // A local var is always internal, so this is an external-to-internal initialization.
             DiagBadAssignment(var, var.GetTy(), init.GetTy(), false, true);
+        } else if (init.TyMode().local != Mode::FULL) {
+            DiagBadAssignment(var, var.GetTy(), init.GetTy(), false, false);
         }
     }
 
@@ -1450,9 +1535,9 @@ private:
         return false;
     }
 
-    void DiagBadExternalLocalArg(const Node& pos)
+    void DiagBadLocalArg(const Node& pos, const std::string& argMode)
     {
-        d.DiagnoseRefactor(DiagKindRefactor::sema_external_local_arg, pos);
+        d.DiagnoseRefactor(DiagKindRefactor::sema_external_local_arg, pos, argMode);
     }
 
     void DiagBadInternalLocalReturn(const Expr& expr)
@@ -1474,19 +1559,38 @@ private:
         if (call.callKind == CallKind::CALL_OBJECT_CREATION || call.callKind == CallKind::CALL_STRUCT_CREATION) {
             return;
         }
-        if (call.desugarArgs) {
-            for (auto& arg : *call.desugarArgs) {
-                if (arg->TyMode().local == Mode::FULL && arg->expr && IsExternalLocal(ctx, *arg->expr) &&
-                    !type.IsCopyType(arg->expr->DataTy())) {
-                    DiagBadExternalLocalArg(*arg->expr);
+        auto checkArg = [&ctx, this](const FuncArg& arg, ModalTy paramTy) {
+            if (!arg.expr || arg.TyMode().local == Mode::NOT) {
+                return;
+            }
+            if (arg.TyMode().local == Mode::FULL) {
+                if (arg.expr->GetTy().IsCorrect() && !type.IsCopyType(arg.expr->DataTy()) &&
+                    IsExternalLocal(ctx, *arg.expr)) {
+                    DiagBadLocalArg(*arg.expr, arg.TyMode().LocalString());
                 }
+            } else if (paramTy.IsCorrect() && paramTy.Mode().local == Mode::FULL &&
+                !type.IsCopyType(paramTy.Ty())) {
+                // @local? args cannot be passed to non copy @local! params.
+                DiagBadLocalArg(*arg.expr, arg.TyMode().LocalString());
+            }
+        };
+        std::vector<ModalTy> paramTys;
+        if (auto fd = call.resolvedFunction; fd && fd->funcBody && !fd->funcBody->paramLists.empty()) {
+            if (call.desugarArgs) {
+                for (auto& param : fd->funcBody->paramLists[0]->params) {
+                    paramTys.emplace_back(param ? param->GetTy() : ModalTy{});
+                }
+            } else {
+                paramTys = TypeCheckUtil::GetParamTysInArgsOrder(type, call, *fd);
+            }
+        }
+        if (call.desugarArgs) {
+            for (size_t i = 0; i < call.desugarArgs->size(); ++i) {
+                checkArg(*(*call.desugarArgs)[i], i < paramTys.size() ? paramTys[i] : ModalTy{});
             }
         } else {
-            for (auto& arg : call.args) {
-                if (arg->TyMode().local == Mode::FULL && arg->expr && IsExternalLocal(ctx, *arg->expr) &&
-                    !type.IsCopyType(arg->expr->DataTy())) {
-                    DiagBadExternalLocalArg(*arg->expr);
-                }
+            for (size_t i = 0; i < call.args.size(); ++i) {
+                checkArg(*call.args[i], i < paramTys.size() ? paramTys[i] : ModalTy{});
             }
         }
         auto fd = call.resolvedFunction;
@@ -1508,7 +1612,7 @@ private:
                     return;
                 }
             }
-            DiagBadExternalLocalArg(call);
+            DiagBadLocalArg(call, "@local!");
         }
     }
 
@@ -1594,6 +1698,11 @@ void TypeChecker::TypeCheckerImpl::DeleteModalTypeChecker()
 bool TypeChecker::TypeCheckerImpl::IsExternalLocal(const ASTContext& ctx, const Expr& expr)
 {
     return modalTypeChecker->IsExternalLocal(ctx, expr);
+}
+
+bool TypeChecker::TypeCheckerImpl::HasExternalLocalBranch(const ASTContext& ctx, const Expr& expr)
+{
+    return modalTypeChecker->HasExternalLocalBranch(ctx, expr);
 }
 
 void TypeChecker::TypeCheckerImpl::CheckModalType(const ASTContext& ctx, Package& pkg)
