@@ -731,6 +731,19 @@ bool IsDisabledLocalAPI(const Decl& decl)
     if (auto pd = DynamicCast<PropDecl>(&decl)) {
         return pd->TyMode().local == Mode::FULL;
     }
+    // A variable of a function type is as unusable as a function declaration with the same signature.
+    if (DynamicCast<VarDecl>(&decl)) {
+        auto ft = DynamicCast<FuncTy>(decl.DataTy());
+        if (ft == nullptr) {
+            return false;
+        }
+        // Since there is no 'this' here, 'retTy' only carries the declared return modal.
+        if (ft->retTy.IsLocalType()) {
+            return true;
+        }
+        return std::any_of(ft->paramTys.begin(), ft->paramTys.end(),
+            [](const ModalTy& paramTy) { return paramTy.IsLocalType(); });
+    }
     auto fd = DynamicCast<FuncDecl>(&decl);
     if (fd == nullptr || fd->funcBody == nullptr || fd->funcBody->paramLists.empty()) {
         return false;
