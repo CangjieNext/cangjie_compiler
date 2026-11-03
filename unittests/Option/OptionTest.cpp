@@ -9,6 +9,7 @@
 #include "cangjie/Driver/Driver.h"
 #include "cangjie/Utils/FileUtil.h"
 
+#include <algorithm>
 #include <memory>
 
 using namespace Cangjie;
@@ -49,6 +50,79 @@ TEST_F(OptionTest, GlobalOptionParseFromArgsTest)
     succ = gblOpts->ParseFromArgs(argList);
     EXPECT_TRUE(succ);
     EXPECT_EQ(gblOpts->outputMode, GlobalOptions::OutputMode::STATIC_LIB);
+}
+
+TEST_F(OptionTest, CompatVersionOptionTest)
+{
+    std::vector<std::string> argStrs = {"cjc", "--compat-version", "1.3", srcFile};
+    ArgList argList;
+    bool succ = optTbl->ParseArgs(argStrs, argList);
+    EXPECT_TRUE(succ);
+
+    succ = gblOpts->ParseFromArgs(argList);
+    EXPECT_TRUE(succ);
+    ASSERT_TRUE(gblOpts->compatVersion.has_value());
+    EXPECT_EQ(gblOpts->compatVersion->major, 1U);
+    EXPECT_EQ(gblOpts->compatVersion->minor, 3U);
+    EXPECT_TRUE(gblOpts->IsCompatModeEnabled());
+    EXPECT_TRUE(gblOpts->IsCompatAtLeast(1, 3));
+    EXPECT_FALSE(gblOpts->IsCompatBefore(1, 3));
+    EXPECT_TRUE(gblOpts->IsChangeEnabled(CompatChange::TYPE_ALIAS_ILLEGAL_TYPE_ARG_CHECK));
+}
+
+TEST_F(OptionTest, InvalidCompatVersionOptionTest)
+{
+    const std::vector<std::string> invalidVersions = {"1.1", "1.2", "1.3.0", "1.4", "abc"};
+    for (const auto& version : invalidVersions) {
+        ArgList argList;
+        EXPECT_FALSE(optTbl->ParseArgs({"cjc", "--compat-version", version, srcFile}, argList));
+    }
+    ArgList argList;
+    EXPECT_FALSE(optTbl->ParseArgs({"cjc", "--compat-version"}, argList));
+}
+
+TEST_F(OptionTest, SupportedCompatVersionsTest)
+{
+    const auto& versions = GlobalOptions::GetSupportedCompatVersions();
+    ASSERT_EQ(versions.size(), 1U);
+    EXPECT_EQ(versions[0], (VersionInfo{1, 3, 0, true}));
+    EXPECT_TRUE(GlobalOptions::IsSupportedCompatVersion(1, 3));
+    EXPECT_FALSE(GlobalOptions::IsSupportedCompatVersion(1, 2));
+}
+
+TEST_F(OptionTest, DuplicateCompatVersionOptionTest)
+{
+    std::vector<std::string> argStrs = {
+        "cjc", "--compat-version", "1.3", "--compat-version", "1.3", srcFile};
+    ArgList argList;
+    bool succ = optTbl->ParseArgs(argStrs, argList);
+    EXPECT_TRUE(succ);
+    EXPECT_TRUE(gblOpts->ParseFromArgs(argList));
+
+    auto frontendOptions = gblOpts->GenerateFrontendOptions();
+    EXPECT_EQ(std::count(frontendOptions.begin(), frontendOptions.end(), "--compat-version"), 2U);
+}
+
+TEST_F(OptionTest, CompatChangePolicyTest)
+{
+    EXPECT_TRUE(gblOpts->IsChangeEnabled(CompatChange::TYPE_ALIAS_ILLEGAL_TYPE_ARG_CHECK));
+
+    gblOpts->compatVersion = VersionInfo{1, 2, 0, true};
+    EXPECT_FALSE(gblOpts->IsChangeEnabled(CompatChange::TYPE_ALIAS_ILLEGAL_TYPE_ARG_CHECK));
+
+    gblOpts->compatVersion = VersionInfo{1, 3, 0, true};
+    EXPECT_TRUE(gblOpts->IsChangeEnabled(CompatChange::TYPE_ALIAS_ILLEGAL_TYPE_ARG_CHECK));
+}
+
+TEST_F(OptionTest, CompatVersionChangesCachePath)
+{
+    gblOpts->compilationCachedPath = ".";
+    gblOpts->srcFiles = {srcFile};
+    const auto defaultPath = gblOpts->GenerateNamesOfCachedDirAndFile("test");
+
+    gblOpts->compatVersion = VersionInfo{1, 3, 0, true};
+    const auto compatPath = gblOpts->GenerateNamesOfCachedDirAndFile("test");
+    EXPECT_NE(defaultPath, compatPath);
 }
 
 TEST_F(OptionTest, PgoOptionsTest01)

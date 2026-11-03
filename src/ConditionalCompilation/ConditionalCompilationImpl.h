@@ -28,18 +28,7 @@
 
 namespace Cangjie::AST {
 
-/**
- * @brief Version information structure for cjc_version condition compilation.
- * Supports version format: x.y.z (x, y, z: 0-99)
- */
-struct VersionInfo {
-    uint32_t major = 0;
-    uint32_t minor = 0;
-    uint32_t patch = 0;
-
-    bool isValid = false;
-};
-
+using VersionInfo = Cangjie::VersionInfo;
 
 class ConditionalCompilationImpl {
 public:

@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "cangjie/Basic/Version.h"
 #include "cangjie/Driver/TempFileInfo.h"
 #include "cangjie/Option/OptionTable.h"
 #include "cangjie/Utils/FileUtil.h"
@@ -351,6 +352,15 @@ public:
 
     std::unordered_map<std::string, std::string> passedWhenKeyValue;
     std::vector<std::string> passedWhenCfgPaths;
+    std::optional<VersionInfo> compatVersion;
+
+    bool IsCompatModeEnabled() const;
+    VersionInfo GetCompatVersion() const;
+    bool IsCompatAtLeast(uint32_t major, uint32_t minor) const;
+    bool IsCompatBefore(uint32_t major, uint32_t minor) const;
+    bool IsChangeEnabled(CompatChange change) const;
+    static const std::vector<VersionInfo>& GetSupportedCompatVersions();
+    static bool IsSupportedCompatVersion(uint32_t major, uint32_t minor);
 
     /**
      * @brief Get the relative file path related to cache.

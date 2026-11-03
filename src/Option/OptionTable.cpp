@@ -11,6 +11,7 @@
  */
 
 #include "cangjie/Option/OptionTable.h"
+#include "cangjie/Option/Option.h"
 
 #include <algorithm>
 #include <memory>
@@ -53,6 +54,22 @@ static bool CheckValueInFlags(const std::string& value, const OptionTable::Optio
             });
     }
     return true;
+}
+
+static void ReportInvalidOptionValue(const OptionTable::OptionInfo& info, const std::string& value)
+{
+    if (info.GetID() != Options::ID::COMPAT_VERSION) {
+        Errorf("invalid value: '%s'\n", value.c_str());
+        return;
+    }
+    std::string supportedVersions;
+    for (const auto& version : GlobalOptions::GetSupportedCompatVersions()) {
+        if (!supportedVersions.empty()) {
+            supportedVersions += ", ";
+        }
+        supportedVersions += std::to_string(version.major) + "." + std::to_string(version.minor);
+    }
+    Errorf("invalid compat version, supported compatible version: [%s]\n", supportedVersions.c_str());
 }
 
 std::pair<std::string, std::optional<std::string>> OptionTable::ParseArgumentName(const std::string& argStr) const
@@ -160,13 +177,13 @@ std::optional<OptionArgInstance> OptionTable::SetArgValue(
                 arg.name.c_str());
         }
         if (!CheckValueInFlags(value, arg.info)) {
-            Errorf("invalid value: '%s'\n", value.c_str());
+            ReportInvalidOptionValue(arg.info, value);
             return std::nullopt;
         }
         arg.value = value;
     } else if (isSeparatedOptionWithoutSpace) {
         if (!CheckValueInFlags(value, arg.info)) {
-            Errorf("invalid value: '%s'\n", value.c_str());
+            ReportInvalidOptionValue(arg.info, value);
             return std::nullopt;
         }
         arg.value = value;
@@ -226,7 +243,7 @@ bool OptionTable::ParseSeparatedArgValue(
         arg.str = arg.name + " " + argsStrs[idx];
         return true;
     }
-    Errorf("invalid value: '%s'\n", argsStrs[idx].c_str());
+    ReportInvalidOptionValue(arg.info, argsStrs[idx]);
     return false;
 }
 

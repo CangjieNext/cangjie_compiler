@@ -13,7 +13,40 @@
 #include "cangjie/Basic/Print.h"
 #include "cangjie/Basic/Version.h"
 
+#include <exception>
+#include <regex>
+
 namespace Cangjie {
+namespace {
+VersionInfo ParseVersion(const std::string& version)
+{
+    VersionInfo info;
+    static const std::regex pattern("^([0-9]+)[.]([0-9]+)(?:[.]([0-9]+))?");
+    std::smatch match;
+    if (!std::regex_search(version, match, pattern)) {
+        return info;
+    }
+    try {
+        info.major = static_cast<uint32_t>(std::stoul(match[1].str()));
+        info.minor = static_cast<uint32_t>(std::stoul(match[2].str()));
+        info.patch = match[3].matched ? static_cast<uint32_t>(std::stoul(match[3].str())) : 0;
+    } catch (const std::exception&) {
+        return info;
+    }
+    info.isValid = true;
+    return info;
+}
+} // namespace
+
+VersionInfo VersionInfo::Current()
+{
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    return ParseVersion(CANGJIE_VERSION);
+#else
+    return {};
+#endif
+}
+
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 const std::string CANGJIE_VERSION = CJ_SDK_VERSION;
 

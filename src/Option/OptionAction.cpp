@@ -12,6 +12,8 @@
 
 #include "cangjie/Option/Option.h"
 
+#include <exception>
+#include <regex>
 #include <string>
 #include <unordered_map>
 
@@ -118,6 +120,24 @@ const std::unordered_map<std::string, uint8_t> PRINT_BCHIR_MODE_MAP = {
     {"ce-chir2bchir", uint8_t(GlobalOptions::PrintBCHIROption::CE_CHIR2BCHIR)},
     {"all", uint8_t(GlobalOptions::PrintBCHIROption::ALL)},
 };
+
+bool ParseCompatVersion(const std::string& value, VersionInfo& version)
+{
+    static const std::regex pattern("^([0-9]+)[.]([0-9]+)$");
+    std::smatch match;
+    if (!std::regex_match(value, match, pattern)) {
+        return false;
+    }
+    try {
+        version.major = static_cast<uint32_t>(std::stoul(match[1].str()));
+        version.minor = static_cast<uint32_t>(std::stoul(match[2].str()));
+    } catch (const std::exception&) {
+        return false;
+    }
+    version.patch = 0;
+    version.isValid = true;
+    return true;
+}
 
 bool SeeingTomlComment(const std::string& inputLine)
 {
@@ -605,6 +625,24 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
     }},
     { Options::ID::PACKAGE_COMPILE, OPTION_TRUE_ACTION(opts.compilePackage = true) },
     { Options::ID::NO_PRELUDE, OPTION_TRUE_ACTION(opts.implicitPrelude = false) },
+    { Options::ID::COMPAT_VERSION, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+        VersionInfo version;
+        if (!ParseCompatVersion(arg.value, version) ||
+            !GlobalOptions::IsSupportedCompatVersion(version.major, version.minor)) {
+            return false;
+        }
+        if (!opts.compatVersion.has_value()) {
+            opts.compatVersion = version;
+            return true;
+        }
+        if (opts.compatVersion.value() == version) {
+            return true;
+        }
+        DiagnosticEngine diag;
+        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_conflicting_compat_versions, DEFAULT_POSITION,
+            arg.value, std::to_string(opts.compatVersion->major) + "." + std::to_string(opts.compatVersion->minor));
+        return false;
+    }},
     { Options::ID::INT_OVERFLOW_MODE, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         CJC_ASSERT(ValidOverflowStrategy(arg.value));
         if (!ValidOverflowStrategy(arg.value)) { return false; }

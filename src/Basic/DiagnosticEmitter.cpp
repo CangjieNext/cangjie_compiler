@@ -885,7 +885,8 @@ void DiagnosticEmitterImpl::ConstructAndEmitSourceCode(std::vector<CollectedInfo
 namespace {
 bool IsTextOnlyWarning(const WarnGroup& warnGroup)
 {
-    return (warnGroup == WarnGroup::DRIVER_ARG || warnGroup == WarnGroup::UNSUPPORT_COMPILE_SOURCE);
+    return (warnGroup == WarnGroup::DRIVER_ARG || warnGroup == WarnGroup::UNSUPPORT_COMPILE_SOURCE ||
+        warnGroup == WarnGroup::COMPAT);
 }
 
 /**
