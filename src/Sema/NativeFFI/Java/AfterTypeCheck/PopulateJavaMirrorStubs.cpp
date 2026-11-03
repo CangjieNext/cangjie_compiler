@@ -45,8 +45,7 @@ void PopulateJavaMirrorStubs::PopulateUserConstructor(AfterTypeCheckContext& ctx
         userCtor.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
-    auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, std::move(constructorExpr),
-        userCtor.funcBody->retType->GetTy());
+    auto exclusiveScopeCall = WrapWithExclusiveScope(ctx, std::move(constructorExpr), ilib.GetJavaEntityTy());
     if (!exclusiveScopeCall) {
         userCtor.EnableAttr(Attribute::IS_BROKEN);
         return;
