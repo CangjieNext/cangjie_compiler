@@ -567,6 +567,28 @@ void GetOrderedParentTypesRecusively(
         parents.emplace_back(instType);
         GetOrderedParentTypesRecusively(*instType, parents, builder);
     }
+    // A subclass also needs ExtensionDef entries for interfaces that a non-generic ancestor
+    // implements through an unconditional extension. Otherwise interface dispatch can fall back to
+    // the ancestor's function table and skip an override in the subclass. Generic and conditional
+    // extensions keep their existing handling: propagating their constraints is a separate problem.
+    for (auto extend : classDef->GetExtends()) {
+        if (!classDef->GetGenericTypeParams().empty() || !extend->GetGenericTypeParams().empty()) {
+            continue;
+        }
+        if (!type.IsEqualOrInstantiatedTypeOf(*extend->GetExtendedType(), builder)) {
+            continue;
+        }
+        for (auto ty : extend->GetImplementedInterfaceTys()) {
+            auto instType = StaticCast<CHIR::ClassType*>(ReplaceRawGenericArgType(*ty, replaceTable, builder));
+            if (std::find(parents.begin(), parents.end(), instType) != parents.end()) {
+                continue;
+            }
+            parents.emplace_back(instType);
+            if (!extend->TestAttr(CHIR::Attribute::COMPILER_ADD)) {
+                GetOrderedParentTypesRecusively(*instType, parents, builder);
+            }
+        }
+    }
 }
 
 /** @brief the order is {grandparent class, parent class, sub class ... , interface1, interface2, ... interfaceN}
