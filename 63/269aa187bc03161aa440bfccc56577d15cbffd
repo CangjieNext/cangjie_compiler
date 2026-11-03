@@ -1,0 +1,36 @@
+include/cangjie/Option/Options.inc
+  s_91516876c7969c::t_e9731824647f97 349-350,354
+src/Parse/ParserImpl.h
+  s_b226f30d233db5::t_e19101a2323b3e 244-246,248
+src/Sema/TypeCheckUtil.cpp
+  s_b226f30d233db5::t_cde735542bf128 726-729,751
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "63269aa187bc03161aa440bfccc56577d15cbffd",
+  "prompts": {},
+  "humans": {
+    "h_7fa24ec5a32f2d": {
+      "author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    }
+  },
+  "sessions": {
+    "s_91516876c7969c": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6ae833165d9c5b6f1f6ba4f4",
+        "model": "DeepSeek-V4.1-Flash-1017__dev"
+      },
+      "human_author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    },
+    "s_b226f30d233db5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "07612a53-a5ab-40d0-858e-86fbaa3f5d09",
+        "model": "unknown"
+      },
+      "human_author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    }
+  }
+}
