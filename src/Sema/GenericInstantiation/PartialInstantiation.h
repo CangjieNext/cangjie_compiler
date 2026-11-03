@@ -31,7 +31,6 @@ bool RequireInstantiation(const AST::Decl& decl);
 using VisitFunc = std::function<void(AST::Node&, AST::Node&)>;
 void DefaultVisitFunc(const AST::Node& source, const AST::Node& target);
 OwnedPtr<AST::Generic> InstantiateGeneric(const AST::Generic& generic, const VisitFunc& visitor);
-AST::MacroInvocation InstantiateMacroInvocation(const AST::MacroInvocation& me);
 
 class PartialInstantiation {
 public:
@@ -181,32 +180,6 @@ private:
     static OwnedPtr<AST::Decl> InstantiateInterfaceDecl(const AST::InterfaceDecl& id, const VisitFunc& visitor);
     static OwnedPtr<AST::Decl> InstantiateEnumDecl(const AST::EnumDecl& ed, const VisitFunc& visitor);
     static OwnedPtr<AST::Decl> InstantiateTypeAliasDecl(const AST::TypeAliasDecl& tad, const VisitFunc& visitor);
-};
-
-class TypeManager;
-using ReversedTypeSubst = std::map<AST::DataTy, Ptr<TyVar>>;
-class TyGeneralizer {
-public:
-    TyGeneralizer(TypeManager& tyMgr, const ReversedTypeSubst& mapping) : tyMgr(tyMgr), typeMapping(mapping)
-    {
-    }
-
-    ~TyGeneralizer() = default;
-
-    AST::DataTy Generalize(AST::DataTy ty);
-
-private:
-    AST::DataTy GetGeneralizedStructTy(AST::StructTy& structTy);
-    AST::DataTy GetGeneralizedClassTy(AST::ClassTy& classTy);
-    AST::DataTy GetGeneralizedInterfaceTy(AST::InterfaceTy& interfaceTy);
-    AST::DataTy GetGeneralizedEnumTy(AST::EnumTy& enumTy);
-    AST::DataTy GetGeneralizedArrayTy(AST::ArrayTy& arrayTy);
-    AST::DataTy GetGeneralizedPointerTy(AST::PointerTy& cptrTy);
-    // Get instantiated ty of set type 'IntersectionTy' and 'UnionTy'.
-    template <typename SetTy> AST::DataTy GetGeneralizedSetTy(SetTy& ty);
-
-    TypeManager& tyMgr;
-    const ReversedTypeSubst& typeMapping;
 };
 } // namespace Cangjie
 #endif

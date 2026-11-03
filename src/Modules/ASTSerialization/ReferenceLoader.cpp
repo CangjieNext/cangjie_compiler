@@ -17,7 +17,6 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Utils/CheckUtils.h"
-#include "flatbuffers/NodeFormat_generated.h"
 
 using namespace Cangjie;
 using namespace AST;

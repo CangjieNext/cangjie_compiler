@@ -189,11 +189,6 @@ private:
      */
     void InstantiateGenericDeclWithInstTys(AST::Decl& decl, const std::vector<AST::DataTy>& instTys);
     void InstantiateGenericDeclWithInstTys(AST::Decl& decl, const std::vector<AST::ModalTy>& instTys);
-    /**
-     * Walk inherited types which are used by non-generic be boxed extend decls.
-     * Used to guarantee all related generic types are instantiated.
-     */
-    void WalkNonGenericExtendedType();
     /** Helper functions during clone instantiated decl. */
     void PerformTyInstantiationDuringClone(
         const AST::Node& genericNode, AST::Node& clonedNode, const GenericInfo& info, const TypeSubst& g2gTyMap);

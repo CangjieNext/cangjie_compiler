@@ -229,7 +229,6 @@ public:
     MultiTypeSubst GenerateStructDeclTypeMapping(const AST::Decl& decl);
     AST::DataTy ReplaceIdealTy(AST::DataTy ty);
     AST::ModalTy ReplaceIdealTy(AST::ModalTy ty);
-    void RestoreJavaGenericsTy(AST::Decl& decl) const;
 
     /**
      * Get all extend interface types.
