@@ -955,7 +955,7 @@ TEST(ActiveStatePoolExtraTest, JoinCopyMoveAndDuplicateInsert)
     EXPECT_NE(pool.Begin(), pool.End());
     EXPECT_FALSE(pool.At(&v0).IsTop());
 
-    // Join: existing key change + new non-ref insert; ref keys forced top
+    // Join existing keys; values missing from either pool remain unknown.
     ActiveStatePool<ValueDomain<FakeAbs>> lhs;
     ActiveStatePool<ValueDomain<FakeAbs>> rhs;
     PoolTestValue a("a");
@@ -970,7 +970,7 @@ TEST(ActiveStatePoolExtraTest, JoinCopyMoveAndDuplicateInsert)
     bool changed = lhs.Join(rhs);
     EXPECT_TRUE(changed);
     EXPECT_TRUE(lhs.At(&b).IsRef());
-    EXPECT_NE(lhs.Find(&c), lhs.End());
+    EXPECT_TRUE(lhs.At(&c).IsTop());
 
     // copy / move assign
     ActiveStatePool<ValueDomain<FakeAbs>> copied;
