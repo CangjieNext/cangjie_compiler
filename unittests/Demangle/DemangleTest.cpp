@@ -60,8 +60,8 @@ TEST(DemangleTest, ThisParam)
 
 TEST(DemangleTest, ClassTypeModal)
 {
-    // A modal class type: body `CN5hello1AE` + <type-mode> `QLE` (@local!). The closing 'E' of the
-    // class body is consumed before the mode-set, so the modal attaches to the class itself.
+    // A modal class type: body `CN5hello1AE` + <type-modal> `QLE` (@local!). The closing 'E' of the
+    // class body is consumed before the modal-set, so the modal attaches to the class itself.
     Demangler<StdString> demangler("CN5hello1AEQLE", ".");
     auto di = demangler.Demangle(true);
     ASSERT_TRUE(di.IsValid());
@@ -120,18 +120,18 @@ TEST(DemangleTest, CallOperatorKeepsParamList)
 }
 
 // ---------------------------------------------------------------------------
-// Modal (local-mode) demangling.
+// Modal (local-modal) demangling.
 //
 // Symbol shapes below are the exact defines emitted by
 // cjc --save-temps for a package with `class Box { mut prop pA: Int64; func touch(): Unit }`
 // compiled with modal this/param annotations, i.e. real-world linkage names.
 // ---------------------------------------------------------------------------
 
-TEST(DemangleTest, ThisModeOverloads)
+TEST(DemangleTest, ThisModalOverloads)
 {
-    // <this-mode> ::= W<payload>E. The three this-locality overloads of one member must
+    // <this-modal> ::= W<payload>E. The three this-locality overloads of one member must
     // demangle to distinct readable names, and the W payload must not leak into the
-    // parameter list (empty `()` is rendered from `v`, not from the mode-set).
+    // parameter list (empty `()` is rendered from `v`, not from the modal-set).
     struct Case {
         const char* mangled;
         const char* expected;
@@ -150,7 +150,7 @@ TEST(DemangleTest, ThisModeOverloads)
 
 TEST(DemangleTest, ModalConstructor)
 {
-    // Init without param modes: `6<init>HWLEv` must render as `.init(this @ local!)`.
+    // Init without param modals: `6<init>HWLEv` must render as `.init(this @ local!)`.
     const char* mangled = "_CN7default3Box6<init>HWLEv";
     Demangler<StdString> demangler(mangled, ".");
     auto di = demangler.Demangle();
@@ -184,8 +184,8 @@ TEST(DemangleTest, ModalPropertyAccessors)
 
 TEST(DemangleTest, ModalParamList)
 {
-    // Both <type-mode> encodings in one parameter list: (Int64 @local?, Int64 @local!).
-    // The arg list must render each mode in place and keep the comma separation intact.
+    // Both <type-modal> encodings in one parameter list: (Int64 @local?, Int64 @local!).
+    // The arg list must render each modal in place and keep the comma separation intact.
     const char* mangled = "_CN7default14withLocalParamHlQlElQLE";
     Demangler<StdString> demangler(mangled, ".");
     auto di = demangler.Demangle();
@@ -198,18 +198,18 @@ TEST(DemangleTest, ModalParamList)
 
 TEST(DemangleTest, ModalTupleType)
 {
-    // Tuple body `T1_lE` + <type-mode> `QlE`: the mode-set attaches to the whole tuple.
+    // Tuple body `T1_lE` + <type-modal> `QlE`: the modal-set attaches to the whole tuple.
     Demangler<StdString> demangler("T1_lEQlE", ".");
     auto di = demangler.Demangle(true);
     ASSERT_TRUE(di.IsValid());
     EXPECT_STREQ("Tuple<Int64> @ local?", di.GetFullName(demangler.ScopeResolution()).Str());
 }
 
-// For RawArray/VArray/CPointer the bodies are not 'E'-terminated: the <type-mode> directly
+// For RawArray/VArray/CPointer the bodies are not 'E'-terminated: the <type-modal> directly
 // follows the element body and belongs to the container (WithModal placement).
 TEST(DemangleTest, ModalRawArrayType)
 {
-    // RawArray body `A0_l` (dims-1 = 0, element Int64, no 'E') + array mode `QLE`.
+    // RawArray body `A0_l` (dims-1 = 0, element Int64, no 'E') + array modal `QLE`.
     Demangler<StdString> demangler("A0_lQLE", ".");
     auto di = demangler.Demangle(true);
     ASSERT_TRUE(di.IsValid());
@@ -218,7 +218,7 @@ TEST(DemangleTest, ModalRawArrayType)
 
 TEST(DemangleTest, ModalVArrayType)
 {
-    // VArray body `V3_l` (size-1 = 3, element Int64, no 'E') + array mode `QlE`.
+    // VArray body `V3_l` (size-1 = 3, element Int64, no 'E') + array modal `QlE`.
     Demangler<StdString> demangler("V3_lQlE", ".");
     auto di = demangler.Demangle(true);
     ASSERT_TRUE(di.IsValid());
@@ -227,7 +227,7 @@ TEST(DemangleTest, ModalVArrayType)
 
 TEST(DemangleTest, ModalCPointerType)
 {
-    // CPointer body `Pl` (prefix P, element Int64, no 'E') + pointer mode `QLE`.
+    // CPointer body `Pl` (prefix P, element Int64, no 'E') + pointer modal `QLE`.
     Demangler<StdString> demangler("PlQLE", ".");
     auto di = demangler.Demangle(true);
     ASSERT_TRUE(di.IsValid());
@@ -236,7 +236,7 @@ TEST(DemangleTest, ModalCPointerType)
 
 TEST(DemangleTest, ModalContainerKeepsElementAndContainerModalDistinct)
 {
-    // The mode-set after the element body always belongs to the container.
+    // The modal-set after the element body always belongs to the container.
     Demangler<StdString> demangler("A0_lQlE", ".");
     auto di = demangler.Demangle(true);
     ASSERT_TRUE(di.IsValid());
@@ -246,7 +246,7 @@ TEST(DemangleTest, ModalContainerKeepsElementAndContainerModalDistinct)
 TEST(DemangleTest, ModalRawArrayOfNestedArrays)
 {
     // 1-dim array of 2-dim arrays: the inner array keeps its own `[]`, the outer one carries
-    // the mode-set (`A0_` + inner body `A1_l` + outer mode `QLE`).
+    // the modal-set (`A0_` + inner body `A1_l` + outer modal `QLE`).
     Demangler<StdString> demangler("A0_A1_lQLE", ".");
     auto di = demangler.Demangle(true);
     ASSERT_TRUE(di.IsValid());
@@ -257,7 +257,7 @@ TEST(DemangleTest, ModalRawArrayOfNestedArrays)
 TEST(DemangleTest, ModalRawArrayOfFunctionType)
 {
     // Array of a modal-return function type: the inner modal stays on the return type, the
-    // array's own mode-set lands on the container.
+    // array's own modal-set lands on the container.
     Demangler<StdString> demangler("A0_F0lQlEiEQLE", ".");
     auto di = demangler.Demangle(true);
     ASSERT_TRUE(di.IsValid());
@@ -267,11 +267,34 @@ TEST(DemangleTest, ModalRawArrayOfFunctionType)
 
 TEST(DemangleTest, ModalFunctionTypeKeepsMode)
 {
-    // A modal function type keeps its mode-set in the rendering.
+    // A modal function type keeps its modal-set in the rendering, wrapped in parentheses to
+    // stay distinct from a modal return type.
     Demangler<StdString> demangler("F0ilEQlE", ".");
     auto di = demangler.Demangle(true);
     ASSERT_TRUE(di.IsValid());
-    EXPECT_STREQ("(Int64) -> Int32 @ local?", di.GetFullName(demangler.ScopeResolution()).Str());
+    EXPECT_STREQ("((Int64) -> Int32) @ local?", di.GetFullName(demangler.ScopeResolution()).Str());
+}
+
+TEST(DemangleTest, ModalVArrayOfFunctionType)
+{
+    // The container-owned modal-set does not alter the element text: `V3_F0ilE` renders
+    // `VArray<(Int64) -> Int32,$4>`, and `V3_F0ilEQlE` appends the modal-set to the VArray.
+    Demangler<StdString> demanglerNonModal("V3_F0ilE", ".");
+    auto di = demanglerNonModal.Demangle(true);
+    ASSERT_TRUE(di.IsValid());
+    EXPECT_STREQ("VArray<(Int64) -> Int32,$4>", di.GetFullName(demanglerNonModal.ScopeResolution()).Str());
+    Demangler<StdString> demanglerModal("V3_F0ilEQlE", ".");
+    di = demanglerModal.Demangle(true);
+    ASSERT_TRUE(di.IsValid());
+    EXPECT_STREQ("VArray<(Int64) -> Int32,$4> @ local?", di.GetFullName(demanglerModal.ScopeResolution()).Str());
+}
+
+TEST(DemangleTest, ModalCPointerOfFunctionType)
+{
+    Demangler<StdString> demangler("PF0ilEQlE", ".");
+    auto di = demangler.Demangle(true);
+    ASSERT_TRUE(di.IsValid());
+    EXPECT_STREQ("CPointer<(Int64) -> Int32> @ local?", di.GetFullName(demangler.ScopeResolution()).Str());
 }
 
 TEST(DemangleTest, InvalidModalPayloadRejected)
@@ -285,7 +308,7 @@ TEST(DemangleTest, InvalidModalPayloadRejected)
 
 TEST(DemangleTest, UnterminatedModalEncodingRejected)
 {
-    // A mode-set missing its terminating `E` must be rejected: a truncated symbol that
+    // A modal-set missing its terminating `E` must be rejected: a truncated symbol that
     // silently demangled would make obfuscation configs and stack traces misleading.
     Demangler<StdString> demangler("Ql", ".");
     auto di = demangler.Demangle(true);

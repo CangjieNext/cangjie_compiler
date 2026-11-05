@@ -7,7 +7,7 @@
 /**
  * @file
  *
- * Decides, at CodeGen time, whether a store to an instance member variable needs a local-mode
+ * Decides, at CodeGen time, whether a store to an instance member variable needs a local-modal
  * aware write barrier instead of the ordinary GC write barrier.
  *
  */

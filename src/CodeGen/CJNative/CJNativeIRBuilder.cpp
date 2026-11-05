@@ -1522,7 +1522,7 @@ llvm::Value* IRBuilder2::CreateStringLiteral(const std::string& str)
 
 llvm::Value* IRBuilder2::CreateLocalStringLiteral(const std::string& str)
 {
-    // A `String @local!` cannot be the read-only global built by `CreateStringLiteral`: the mode of a
+    // A `String @local!` cannot be the read-only global built by `CreateStringLiteral`: the modal of a
     // struct is deeply applied to its instance members, so `myData` has to live in the region as well.
     // Materialize a fresh `RawArray<UInt8>` in the current region and copy the literal bytes into it.
     CJC_ASSERT(GetInsertFunction() && "a local string literal can only be materialized inside a function");

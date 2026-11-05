@@ -7,9 +7,9 @@
 /**
  * @file
  *
- * Unit tests for the modal (local-mode) part of the mangling pipeline:
- *  - MangleUtils::MangleModePayload / MangleTypeMode / MangleThisMode / WithModal
- *    (the <mode-set> encoding `Q<payload>E` / `W<payload>E` of scheme B in
+ * Unit tests for the modal (local-modal) part of the mangling pipeline:
+ *  - MangleUtils::MangleModalPayload / MangleTypeModal / MangleThisModal / WithModal
+ *    (the <modal-set> encoding `Q<payload>E` / `W<payload>E` of scheme B in
  *    cangjie-mangling-modal-design.md),
  *  - modal suffixes appended by the CHIR type mangler (CHIRTypeManglingUtils.cpp) for
  *    every type kind, including the direct-dispatch MangleArraySliceType,
@@ -38,65 +38,65 @@ std::string MangleArraySliceType(
 using Cangjie::CHIR::MangleArraySliceType;
 
 // ---------------------------------------------------------------------------
-// <payload> / <type-mode> / <this-mode> encoding (scheme B).
+// <payload> / <type-modal> / <this-modal> encoding (scheme B).
 // ---------------------------------------------------------------------------
 
-TEST(MangleModeSetTest, PayloadForASTModal)
+TEST(MangleModalSetTest, PayloadForASTModal)
 {
     // Only the local axis is implemented: NOT emits nothing, HALF emits 'l', FULL emits 'L'.
-    EXPECT_EQ(MangleModePayload(Cangjie::ModalInfo{Cangjie::Mode::NOT}), "");
-    EXPECT_EQ(MangleModePayload(Cangjie::ModalInfo{Cangjie::Mode::HALF}), "l");
-    EXPECT_EQ(MangleModePayload(Cangjie::ModalInfo{Cangjie::Mode::FULL}), "L");
+    EXPECT_EQ(MangleModalPayload(Cangjie::ModalInfo{Cangjie::Mode::NOT}), "");
+    EXPECT_EQ(MangleModalPayload(Cangjie::ModalInfo{Cangjie::Mode::HALF}), "l");
+    EXPECT_EQ(MangleModalPayload(Cangjie::ModalInfo{Cangjie::Mode::FULL}), "L");
 }
 
-TEST(MangleModeSetTest, PayloadForCHIRModal)
+TEST(MangleModalSetTest, PayloadForCHIRModal)
 {
     // The CHIR entry points convert into the payload letters internally, so verify the
-    // same L/l mapping through the <type-mode> leader form.
-    EXPECT_EQ(MangleTypeMode(CHIR::ModalInfo{CHIR::Mode::NONE}), "");
-    EXPECT_EQ(MangleTypeMode(CHIR::ModalInfo{CHIR::Mode::MAYBE}), "QlE");
-    EXPECT_EQ(MangleTypeMode(CHIR::ModalInfo{CHIR::Mode::MUST}), "QLE");
+    // same L/l mapping through the <type-modal> leader form.
+    EXPECT_EQ(MangleTypeModal(CHIR::ModalInfo{CHIR::Mode::NONE}), "");
+    EXPECT_EQ(MangleTypeModal(CHIR::ModalInfo{CHIR::Mode::MAYBE}), "QlE");
+    EXPECT_EQ(MangleTypeModal(CHIR::ModalInfo{CHIR::Mode::MUST}), "QLE");
 }
 
-TEST(MangleModeSetTest, TypeModeEncodesAsQLeader)
+TEST(MangleModalSetTest, TypeModalEncodesAsQLeader)
 {
-    // <type-mode> ::= Q<payload>E; empty when every axis is at its default degree so that
+    // <type-modal> ::= Q<payload>E; empty when every axis is at its default degree so that
     // the mangled names of non-modal code stay byte-for-byte identical (ABI compat).
-    EXPECT_EQ(MangleTypeMode(Cangjie::ModalInfo{Cangjie::Mode::NOT}), "");
-    EXPECT_EQ(MangleTypeMode(Cangjie::ModalInfo{Cangjie::Mode::HALF}), "QlE");
-    EXPECT_EQ(MangleTypeMode(Cangjie::ModalInfo{Cangjie::Mode::FULL}), "QLE");
+    EXPECT_EQ(MangleTypeModal(Cangjie::ModalInfo{Cangjie::Mode::NOT}), "");
+    EXPECT_EQ(MangleTypeModal(Cangjie::ModalInfo{Cangjie::Mode::HALF}), "QlE");
+    EXPECT_EQ(MangleTypeModal(Cangjie::ModalInfo{Cangjie::Mode::FULL}), "QLE");
 }
 
-TEST(MangleModeSetTest, ThisModeEncodesAsWLeader)
+TEST(MangleModalSetTest, ThisModalEncodesAsWLeader)
 {
-    // <this-mode> ::= W<payload>E; the W leader distinguishes a `this` mode from a data
-    // type mode inside the H-separated parameter list of a function symbol.
-    EXPECT_EQ(MangleThisMode(Cangjie::ModalInfo{Cangjie::Mode::NOT}), "");
-    EXPECT_EQ(MangleThisMode(Cangjie::ModalInfo{Cangjie::Mode::HALF}), "WlE");
-    EXPECT_EQ(MangleThisMode(Cangjie::ModalInfo{Cangjie::Mode::FULL}), "WLE");
+    // <this-modal> ::= W<payload>E; the W leader distinguishes a `this` modal from a data
+    // type modal inside the H-separated parameter list of a function symbol.
+    EXPECT_EQ(MangleThisModal(Cangjie::ModalInfo{Cangjie::Mode::NOT}), "");
+    EXPECT_EQ(MangleThisModal(Cangjie::ModalInfo{Cangjie::Mode::HALF}), "WlE");
+    EXPECT_EQ(MangleThisModal(Cangjie::ModalInfo{Cangjie::Mode::FULL}), "WLE");
 }
 
-TEST(MangleModeSetTest, WithModalAppendsTypeModeOnly)
+TEST(MangleModalSetTest, WithModalAppendsTypeModalOnly)
 {
     // WithModal is the single append point used by every type mangler: default modal
-    // keeps the base intact, non-default appends the <type-mode> (never <this-mode>).
+    // keeps the base intact, non-default appends the <type-modal> (never <this-modal>).
     EXPECT_EQ(WithModal(std::string("l"), Cangjie::ModalInfo{Cangjie::Mode::NOT}), "l");
     EXPECT_EQ(WithModal(std::string("l"), Cangjie::ModalInfo{Cangjie::Mode::HALF}), "lQlE");
     EXPECT_EQ(WithModal(std::string("CN1a5AlphaE"), Cangjie::ModalInfo{Cangjie::Mode::FULL}), "CN1a5AlphaEQLE");
     EXPECT_EQ(WithModal(std::string("T2_asiE"), CHIR::ModalInfo{CHIR::Mode::MUST}), "T2_asiEQLE");
 }
 
-TEST(MangleModeSetTest, PayloadCharactersStayInPortableSubset)
+TEST(MangleModalSetTest, PayloadCharactersStayInPortableSubset)
 {
     // The design forbids `?`/`!` in mangled names (POSIX glob metacharacter hazard for
     // linker version scripts / objcopy --wildcard): only [A-Za-z0-9_$.] may appear.
     for (auto modal :
         {CHIR::ModalInfo{CHIR::Mode::NONE}, CHIR::ModalInfo{CHIR::Mode::MAYBE}, CHIR::ModalInfo{CHIR::Mode::MUST}}) {
-        auto mode = MangleTypeMode(modal);
-        for (auto ch : mode) {
+        auto modalSet = MangleTypeModal(modal);
+        for (auto ch : modalSet) {
             EXPECT_TRUE((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') ||
                 ch == '_' || ch == '$' || ch == '.')
-                << "illegal character '" << ch << "' in mode-set " << mode;
+                << "illegal character '" << ch << "' in modal-set " << modalSet;
         }
     }
 }
@@ -126,7 +126,7 @@ TEST_F(MangleTypeTest, StructTypeWithModal)
 
 TEST_F(MangleTypeTest, PrimitiveTypeWithModal)
 {
-    // `l` is Int64; the dispatcher appends the mode after the primitive body.
+    // `l` is Int64; the dispatcher appends the modal after the primitive body.
     auto mustI64 = builder.GetType<IntType>(Type::TypeKind::TYPE_INT64, CHIR::ModalInfo{CHIR::Mode::MUST});
     EXPECT_EQ(MangleType(*mustI64), "lQLE");
     auto maybeI64 = builder.GetType<IntType>(Type::TypeKind::TYPE_INT64, CHIR::ModalInfo{CHIR::Mode::MAYBE});
@@ -167,9 +167,9 @@ TEST_F(MangleTypeTest, RefTypeOfModalTypeKeepsModal)
 
 TEST_F(MangleTypeTest, ArraySliceTypeWithModal)
 {
-    // MangleArraySliceType appends the <type-mode> itself (S_<elem>E<mode>): the historical
+    // MangleArraySliceType appends the <type-modal> itself (S_<elem>E<modal>): the historical
     // encoding emitted the raw `!`/`?` characters here via MangleLocalModifier, which are
-    // forbidden in mangled names; it must now go through MangleTypeMode. The element is
+    // forbidden in mangled names; it must now go through MangleTypeModal. The element is
     // read from GetTypeArgs()[0], so model the slice as a parameterized type.
     auto classDef = builder.CreateClass(defaultLoc, "SliceElem", "_CN1a9SliceElemE", "a", true, true);
     auto mustClassTy = builder.GetType<ClassType>(classDef, std::vector<Type*>{int64Ty}, CHIR::ModalInfo{CHIR::Mode::MUST});
