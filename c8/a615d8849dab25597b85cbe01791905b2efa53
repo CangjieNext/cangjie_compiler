@@ -1,0 +1,23 @@
+include/cangjie/CHIR/Analysis/ActiveStatePool.h
+  s_ba36fb69a4a157::t_f49933aa771e02 389-390,393,398,492
+  s_ba36fb69a4a157::t_bcede128535999 399-400,402-403
+unittests/CHIR/AnalysisFrameworkTest.cpp
+  s_ba36fb69a4a157::t_754e6acf1755ba 958,973
+  s_ba36fb69a4a157::t_82ca91867e679a 984-1012
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c8a615d8849dab25597b85cbe01791905b2efa53",
+  "prompts": {},
+  "sessions": {
+    "s_ba36fb69a4a157": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a610-8b1c-7332-b55e-f26fa7a3fa1d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}
