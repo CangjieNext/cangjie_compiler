@@ -822,7 +822,7 @@ public:
             if (row.IsEmpty()) {
                 return false;
             }
-            return row.Head().AllWildcard();
+            return row.Head().Ctor().Kind() == ConstructorKind::WILDCARD;
         });
     }
 
