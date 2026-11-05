@@ -560,6 +560,10 @@ public:
      */
     std::vector<DestructedPattern> Specialize(const Constructor& otherCtor) const
     {
+        // Wildcard specialization removes the whole pattern without expanding its fields.
+        if (otherCtor.Kind() == ConstructorKind::WILDCARD) {
+            return {};
+        }
         if (ctor_.Kind() == ConstructorKind::WILDCARD) {
             return SpecializeWildcard(goalTy_, otherCtor);
         }
@@ -816,6 +820,9 @@ public:
         return Utils::All(rows, [](const PatternStack& row) { return row.IsEmpty(); });
     }
 
+    /**
+     * Checks whether every row's head matches all values, including tuples of wildcards.
+     */
     bool HeadsAllWildcard()
     {
         return std::all_of(rows.begin(), rows.end(), [](PatternStack& row) {
@@ -831,7 +838,8 @@ public:
         Matrix newMatrix;
         for (auto& row : rows) {
             CJC_ASSERT(!row.IsEmpty());
-            if (ctor.IsCoveredBy(typeManager, row.Head().Ctor())) {
+            if (ctor.IsCoveredBy(typeManager, row.Head().Ctor()) ||
+                (ctor.Kind() == ConstructorKind::WILDCARD && row.Head().AllWildcard())) {
                 PatternStack newRow = row.Specialize(ctor);
                 newMatrix.rows.emplace_back(newRow);
             }
