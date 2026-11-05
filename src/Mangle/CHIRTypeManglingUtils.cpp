@@ -160,9 +160,7 @@ std::string MangleType(const CHIR::RawArrayType& t, const std::vector<std::strin
 std::string MangleType(const CHIR::RefType& t, const std::vector<std::string>& genericsTypeStack,
     bool useGenericName)
 {
-    std::stringstream ss;
-    ss << MangleType(*t.GetBaseType(), genericsTypeStack, useGenericName);
-    return ss.str();
+    return MangleType(*t.GetBaseType(), genericsTypeStack, useGenericName);
 }
 
 std::string MangleType(const CHIR::VArrayType& t, const std::vector<std::string>& genericsTypeStack,
@@ -214,7 +212,7 @@ std::string MangleArraySliceType(const CHIR::Type& t, const std::vector<std::str
     std::stringstream ss;
     ss << MANGLE_ARRAY_SLICE_PREFIX;
     ss << MangleType(*t.GetTypeArgs()[0], genericsTypeStack, useGenericName);
-    ss << MANGLE_SUFFIX << MangleUtils::MangleTypeMode(t.GetModalInfo());
+    ss << MANGLE_SUFFIX << MangleUtils::MangleTypeModal(t.GetModalInfo());
     return ss.str();
 }
 

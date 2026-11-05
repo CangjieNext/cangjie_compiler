@@ -654,36 +654,36 @@ std::string MangleFilePrivate(const AST::Decl& decl);
 std::string DecimalToManglingNumber(const std::string& decimal);
 
 // Modal-type encoding.
-//   <mode-set> ::= <type-mode>             # normal (data) type mode
-//              ::= <this-mode>             # `this` mode
-//   <type-mode> ::= Q<payload>E            # E terminates the payload
-//               ::=                        # when all axes default
-//   <this-mode> ::= W<payload>E            # E terminates the payload
-//               ::=                        # when all axes default
-//   <payload>   ::= <axis-degree>+
-//   <axis-degree>::= L|l                   # local  axis: ! / ?
+//   <modal-set>   ::= <type-modal>            # modal of a normal (data) type
+//                 ::= <this-modal>            # modal of `this`
+//   <type-modal>  ::= Q<payload>E             # E terminates the payload
+//                 ::=                         # when all axes default
+//   <this-modal>  ::= W<payload>E             # E terminates the payload
+//                 ::=                         # when all axes default
+//   <payload>     ::= <axis-degree>+
+//   <axis-degree> ::= L|l                     # local  axis: ! / ?
 // Axes are emitted in fixed order local -> unique -> immutable; default degrees (~) emit no
 // characters. Only the local axis is implemented today, but the payload builder is structured so
 // further axes can be added without breaking existing encodings.
 
-/// Build the <payload> of the mode-set for \p modal (axis-degree chars only, no leader/terminator).
-std::string MangleModePayload(ModalInfo modal);
+/// Build the <payload> of the modal-set for \p modal (axis-degree chars only, no leader/terminator).
+std::string MangleModalPayload(ModalInfo modal);
 
-/// `<type-mode>`: "Q<payload>E"; empty string when every axis is at its default degree.
-std::string MangleTypeMode(ModalInfo modal);
-std::string MangleTypeMode(CHIR::ModalInfo modal);
-/// `<this-mode>`: "W<payload>E"; empty string when every axis is at its default degree.
-std::string MangleThisMode(ModalInfo modal);
+/// `<type-modal>`: "Q<payload>E"; empty string when every axis is at its default degree.
+std::string MangleTypeModal(ModalInfo modal);
+std::string MangleTypeModal(CHIR::ModalInfo modal);
+/// `<this-modal>`: "W<payload>E"; empty string when every axis is at its default degree.
+std::string MangleThisModal(ModalInfo modal);
 
-/// Append the mangled <type-mode> suffix to \p base. Single source for the
-/// `<base><MangleTypeMode>` pattern used by every type mangler.
+/// Append the mangled <type-modal> suffix to \p base. Single source for the
+/// `<base><MangleTypeModal>` pattern used by every type mangler.
 inline std::string WithModal(std::string base, ModalInfo modal)
 {
-    return base + MangleTypeMode(modal);
+    return base + MangleTypeModal(modal);
 }
 inline std::string WithModal(std::string base, CHIR::ModalInfo modal)
 {
-    return base + MangleTypeMode(modal);
+    return base + MangleTypeModal(modal);
 }
 } // namespace MangleUtils
 } // namespace Cangjie

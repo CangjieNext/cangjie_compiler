@@ -170,7 +170,7 @@ std::string GetTypeRawMangleName(ModalTy ty)
         CJC_ASSERT(ty->IsBuiltin());
         name = ASTMangler::MangleBuiltinType(Ty::KindName(ty.Kind()));
     }
-    return name + MangleUtils::MangleTypeMode(ty.Mode());
+    return name + MangleUtils::MangleTypeModal(ty.Mode());
 }
 
 std::string GetRawMangleOfBoxedType(const InheritableDecl& cd)
