@@ -1,0 +1,45 @@
+include/cangjie/Basic/DiagRefactor/DiagnosticSema.def
+  h_7fa24ec5a32f2d 413-414
+src/Sema/TypeCheckerImpl.h
+  h_7fa24ec5a32f2d 1841-1842
+src/Sema/TypeCheckCall.cpp
+  h_7fa24ec5a32f2d 2713-2717
+src/Sema/TypeCheckExpr/TryExpr.cpp
+  h_7fa24ec5a32f2d 235-251
+src/Sema/TypeCheckExpr/IfExpr.cpp
+  h_7fa24ec5a32f2d 265-276
+src/Sema/TypeCheckMatchExpr.cpp
+  h_7fa24ec5a32f2d 258-264,287-293
+src/Sema/Desugar/DesugarBeforeTypeCheck.cpp
+  h_7fa24ec5a32f2d 393
+src/Sema/TypeCheckModal.cpp
+  h_7fa24ec5a32f2d 151,204,279,291,295,309,377-432,712,715-716,719-724,795,1118-1122,1137-1144,1159,1167-1174,1179,1201-1215,1218-1259,1281-1284,1286,1288,1464,1467-1468,1471-1472,1553,1555,1560,1577-1585,1588,1592,1614,1702-1706
+src/Sema/TypeCheckUtil.cpp
+  s_3ac95f4a653d70::t_a2f03e091c2dc9 758,764
+  h_7fa24ec5a32f2d 708,724-740,748-749,760-761,767
+  s_3ac95f4a653d70::t_953bb238575fc8 741-743
+  s_3ac95f4a653d70::t_30781937277eb4 745-747
+  s_3ac95f4a653d70::t_2edc78e00b55e2 771
+  s_3ac95f4a653d70::t_1c09e4e68a988a 744,759
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "13bde59c6b53be312f46855fd533974cace32dd5",
+  "prompts": {},
+  "humans": {
+    "h_7fa24ec5a32f2d": {
+      "author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    }
+  },
+  "sessions": {
+    "s_3ac95f4a653d70": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cd483d82-2093-4abf-9fcb-f154347332de",
+        "model": "GLM-5.3"
+      },
+      "human_author": "kkkkkkkbbbbbbb <songjian59@huawei.com>"
+    }
+  }
+}
