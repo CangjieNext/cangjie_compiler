@@ -1,0 +1,19 @@
+src/CHIR/CHIR.cpp
+  s_55a4a627dd56e8::t_2ea8e752504874 403
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d30f86e2545d7feadb16b2e91501023d7b71fa82",
+  "prompts": {},
+  "sessions": {
+    "s_55a4a627dd56e8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19b62-74e5-7b81-ba41-6c5b2c92d8f9",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mr_Kang_Yi <kangyi9@h-partners.com>"
+    }
+  }
+}
