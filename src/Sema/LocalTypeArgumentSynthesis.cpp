@@ -58,6 +58,12 @@ std::vector<size_t> GetOrderedCheckingIndexes(const std::vector<Ptr<AST::Ty>>& t
     options.insert(options.end(), ideals.begin(), ideals.end());
     return options;
 }
+
+bool ContainsCoreExternType(const Ty& ty)
+{
+    return ty.IsCoreExternType() ||
+        Utils::In(ty.typeArgs, [](auto arg) { return arg && ContainsCoreExternType(*arg); });
+}
 } // namespace
 
 LocalTypeArgumentSynthesis::~LocalTypeArgumentSynthesis()
@@ -96,6 +102,7 @@ std::optional<TypeSubst> LocalTypeArgumentSynthesis::SynthesizeTypeArguments(boo
             return {};
         }
     }
+    argPack.externConversion = false;
 
     if (Ty::IsTyCorrect(argPack.funcRetTy) && argPack.funcRetTy->HasGeneric() && Ty::IsTyCorrect(argPack.retTyUB)) {
         // Only consider function's return type when the return type contains generic type.
@@ -191,8 +198,8 @@ void LocalTypeArgumentSynthesis::InsertConstraint(Constraint& c, TyVar& tyVar, T
 std::pair<LocalTypeArgumentSynthesis::ConstraintWithMemos, SolvingErrInfo> LocalTypeArgumentSynthesis::Unify(
     const ConstraintWithMemos& newCMS, const Tracked<Ty>& argTTy, const Tracked<Ty>& paramTTy)
 {
-    LocTyArgSynArgPack dummyArgPack = {
-        argPack.tyVarsToSolve, {}, {}, {}, TypeManager::GetInvalidTy(), TypeManager::GetInvalidTy(), Blame()};
+    LocTyArgSynArgPack dummyArgPack = {argPack.tyVarsToSolve, {}, {}, {}, TypeManager::GetInvalidTy(),
+        TypeManager::GetInvalidTy(), Blame(), argPack.externConversion};
     ConstraintWithMemos res;
     SolvingErrInfo msg;
     std::for_each(newCMS.cbegin(), newCMS.cend(), [this, &msg, &res, &argTTy, &paramTTy, &dummyArgPack](auto& cm) {
@@ -280,6 +287,22 @@ bool LocalTypeArgumentSynthesis::UnifyOne(const Tracked<Ty>& argTTy, const Track
         return UnifyOne(argTTy, {*paramTy.typeArgs[0], paramTTy.blames});
     }
 
+    // Extern<T>, and a type without type variables containing it, accept values converted by Check. The parameter and
+    // the argument are matched in either order, e.g. by the invariant type arguments of nominal types.
+    auto isConverted = [](const Ty& externTy, const Ty& other) {
+        if (other.IsNothing() || other.HasPlaceholder()) {
+            return false;
+        }
+        // Extern<R>, where R is to be inferred, is only determined by values of type Extern<T>.
+        if (externTy.HasPlaceholder()) {
+            return externTy.IsCoreExternType() && !other.IsCoreExternType();
+        }
+        return ContainsCoreExternType(externTy);
+    };
+    if (argPack.externConversion && (isConverted(paramTy, argTy) || isConverted(argTy, paramTy))) {
+        return true;
+    }
+
     // Context type variables are first promoted
     if (argTy.IsGeneric() || paramTy.IsGeneric()) {
         return UnifyContextTyVar(argTTy, paramTTy);
@@ -349,7 +372,11 @@ bool LocalTypeArgumentSynthesis::UnifyTyVar(const Tracked<Ty>& argTTy, const Tra
     this->curTyVar = tyVar;
 
     // Recursively constrain existing bounds with the newly added one.
-    return UnifyTyVarCollectConstraints(*tyVar, {*lb, lbBlames}, {*ub, ubBlames});
+    // The bounds of a type variable are matched against each other, where no value is converted.
+    bool externConversion = std::exchange(argPack.externConversion, false);
+    bool res = UnifyTyVarCollectConstraints(*tyVar, {*lb, lbBlames}, {*ub, ubBlames});
+    argPack.externConversion = externConversion;
+    return res;
 }
 
 bool LocalTypeArgumentSynthesis::UnifyTyVarCollectConstraints(

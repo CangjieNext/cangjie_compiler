@@ -27,6 +27,8 @@ struct LocTyArgSynArgPack {
     Ptr<AST::Ty> funcRetTy = nullptr; // Nullable
     Ptr<AST::Ty> retTyUB = nullptr; // Nullable
     Blame retBlame;
+    // Whether Extern<T> accepts values of any other type, which are converted to it.
+    bool externConversion = false;
 };
 
 using MemoForUnifiedTys = std::set<std::pair<Ptr<AST::Ty>, Ptr<AST::Ty>>>;
