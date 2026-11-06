@@ -744,6 +744,22 @@ void GlobalOptions::RefactJobs()
 
 void GlobalOptions::RefactAggressiveParallelCompileOption()
 {
+    // When the user requests a single bitcode output via `-o xxx.bc`, aggressive parallel compile
+    // must be disabled. APC splits CHIR into several LLVM modules and the frontend emits one .bc
+    // per module, which conflicts with the single-file expectation.
+    if (frontendMode && !output.empty() && FileUtil::HasExtension(output, "bc")) {
+        bool requestsParallel =
+            (aggressiveParallelCompile.has_value() && aggressiveParallelCompile.value() > 1) ||
+            aggressiveParallelCompileWithoutArg;
+        if (requestsParallel) {
+            DiagnosticEngine diag;
+            (void)diag.DiagnoseRefactor(
+                DiagKindRefactor::driver_apc_conflicts_with_single_bc_output, DEFAULT_POSITION, output);
+        }
+        aggressiveParallelCompile = 1;
+        return;
+    }
+
     if (target.os == Triple::OSType::WINDOWS || target.os == Triple::OSType::DARWIN ||
         target.os == Triple::OSType::IOS) {
         // When the user's input compile options contain `--apc` and the os is windows or mac,
