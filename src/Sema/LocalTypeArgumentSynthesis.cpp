@@ -64,6 +64,19 @@ bool ContainsCoreExternType(const Ty& ty)
     return ty.IsCoreExternType() ||
         Utils::In(ty.typeArgs, [](auto arg) { return arg && ContainsCoreExternType(*arg); });
 }
+
+/** Whether @p externTy, Extern<T> or a type without type variables containing it, accepts @p other by conversion. */
+bool AcceptsExternConversion(const Ty& externTy, const Ty& other)
+{
+    if (other.IsNothing() || other.HasPlaceholder()) {
+        return false;
+    }
+    // Extern<R>, where R is to be inferred, is only determined by values of type Extern<T>.
+    if (externTy.HasPlaceholder()) {
+        return externTy.IsCoreExternType() && !other.IsCoreExternType();
+    }
+    return ContainsCoreExternType(externTy);
+}
 } // namespace
 
 LocalTypeArgumentSynthesis::~LocalTypeArgumentSynthesis()
@@ -236,6 +249,15 @@ bool LocalTypeArgumentSynthesis::VerifyAndSetCMS(const LocalTypeArgumentSynthesi
     }
 }
 
+bool LocalTypeArgumentSynthesis::IsUnifiedWithoutConstraints(const Ty& argTy, const Ty& paramTy) const
+{
+    // The parameter and the argument may be matched in either order, e.g. by the invariant type arguments of nominal
+    // types.
+    return &argTy == &paramTy ||
+        (argPack.externConversion &&
+            (AcceptsExternConversion(paramTy, argTy) || AcceptsExternConversion(argTy, paramTy)));
+}
+
 bool LocalTypeArgumentSynthesis::UnifyOne(const Tracked<Ty>& argTTy, const Tracked<Ty>& paramTTy)
 {
     auto& argTy = argTTy.ty;
@@ -244,7 +266,7 @@ bool LocalTypeArgumentSynthesis::UnifyOne(const Tracked<Ty>& argTTy, const Track
     if (cms.size() != 1) {
         return false;
     }
-    if (&argTy == &paramTy) {
+    if (IsUnifiedWithoutConstraints(argTy, paramTy)) {
         return true;
     }
     if (argTy.IsQuest() || paramTy.IsQuest()) {
@@ -285,22 +307,6 @@ bool LocalTypeArgumentSynthesis::UnifyOne(const Tracked<Ty>& argTTy, const Track
         }
         memo.insert(inProcessing);
         return UnifyOne(argTTy, {*paramTy.typeArgs[0], paramTTy.blames});
-    }
-
-    // Extern<T>, and a type without type variables containing it, accept values converted by Check. The parameter and
-    // the argument are matched in either order, e.g. by the invariant type arguments of nominal types.
-    auto isConverted = [](const Ty& externTy, const Ty& other) {
-        if (other.IsNothing() || other.HasPlaceholder()) {
-            return false;
-        }
-        // Extern<R>, where R is to be inferred, is only determined by values of type Extern<T>.
-        if (externTy.HasPlaceholder()) {
-            return externTy.IsCoreExternType() && !other.IsCoreExternType();
-        }
-        return ContainsCoreExternType(externTy);
-    };
-    if (argPack.externConversion && (isConverted(paramTy, argTy) || isConverted(argTy, paramTy))) {
-        return true;
     }
 
     // Context type variables are first promoted
