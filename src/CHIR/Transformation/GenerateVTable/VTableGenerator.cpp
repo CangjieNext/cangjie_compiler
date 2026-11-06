@@ -480,6 +480,21 @@ void VTableGenerator::GenerateVTable(CustomTypeDef& customTypeDef)
     for (auto ancestorType : ancestorClassTypes) {
         CollectAncestorConditionalInterfaces(*ancestorType, builder, inheritanceList);
     }
+    // A non-generic class can implement an interface through its own unconditional extension. Such
+    // interfaces must participate in vtable merging; otherwise a default method from a more specific
+    // sibling interface does not replace the inherited implementation. The dispatch result would then
+    // depend on which extension is visited first.
+    if (auto classDef = DynamicCast<const ClassDef*>(&customTypeDef);
+        classDef != nullptr && classDef->GetGenericTypeParams().empty()) {
+        for (auto extend : classDef->GetExtends()) {
+            if (!extend->GetGenericTypeParams().empty()) {
+                continue;
+            }
+            for (auto interface : extend->GetImplementedInterfaceTys()) {
+                GetAllInstantiatedParentType(*interface, builder, inheritanceList);
+            }
+        }
+    }
 
     VTableInDef vtable;
     // 1. merge all parent vtable, from grand-parent to parent
