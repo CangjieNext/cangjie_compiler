@@ -131,8 +131,11 @@ bool MPTypeCheckerImpl::MatchCJMPFunctionParameters(AST::FuncDecl& specificFunc,
     auto specificGenericsCount = specificFunc.GetGenericsCount();
 
     if (commonGenericsCount != specificGenericsCount) {
-        diag.Diagnose(
-            specificFunc, DiagKind::sema_generic_member_type_argument_different, specificFunc.identifier.Val());
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_member_type_argument_different,
+            specificFunc, MakeRange(specificFunc.identifier), "'specific' function",
+            specificFunc.identifier.GetRawText(), std::to_string(specificGenericsCount),
+            "its 'common' declaration", std::to_string(commonGenericsCount))
+            .AddNote(commonFunc, MakeRange(commonFunc.identifier), "'common' declaration is here");
         return false;
     } else if (commonGenericsCount > 0) {
         if (!MatchCJMPFunctionGenerics(specificFunc, commonFunc)) {

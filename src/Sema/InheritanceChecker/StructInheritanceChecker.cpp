@@ -1218,7 +1218,11 @@ void CheckGenericTypeBoundsMapped(const Decl& parent, const Decl& child,
     DiagnosticEngine& diag, TypeManager& typeManager)
 {
     if (parent.GetGenericsCount() != child.GetGenericsCount()) {
-        diag.Diagnose(child, DiagKind::sema_generic_member_type_argument_different, child.identifier.Val());
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_member_type_argument_different,
+            child, MakeRange(child.identifier), DeclKindToString(child), child.identifier.GetRawText(),
+            std::to_string(child.GetGenericsCount()), "its inherited declaration",
+            std::to_string(parent.GetGenericsCount()))
+            .AddNote(parent, MakeRange(parent.identifier), "inherited declaration is here");
         return;
     }
     auto childGeneric = child.GetGeneric();
@@ -1276,7 +1280,11 @@ void StructInheritanceChecker::CheckGenericTypeArgInfo(const Decl& parent, const
     auto childGeneric = child.GetGeneric();
 
     if (parentGeneric->typeParameters.size() != childGeneric->typeParameters.size()) {
-        diag.Diagnose(child, DiagKind::sema_generic_member_type_argument_different, child.identifier.Val());
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_member_type_argument_different,
+            child, MakeRange(child.identifier), DeclKindToString(child), child.identifier.GetRawText(),
+            std::to_string(child.GetGenericsCount()), "its inherited declaration",
+            std::to_string(parent.GetGenericsCount()))
+            .AddNote(parent, MakeRange(parent.identifier), "inherited declaration is here");
         return;
     }
 
