@@ -1,0 +1,19 @@
+src/Driver/Toolchains/CJNATIVE/Ohos_CJNATIVE.cpp
+  s_0a0e285ce01645::t_e3dba2883a45b2 106-110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "168c670ef76f368d47d72452d33cf3de32754fc8",
+  "prompts": {},
+  "sessions": {
+    "s_0a0e285ce01645": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a19f28-3fc2-7307-98e1-872162ddd7aa",
+        "model": "DeepSeek-V4.1-Flash-1017"
+      },
+      "human_author": "yanjs <yejiasheng3@huawei.com>"
+    }
+  }
+}
